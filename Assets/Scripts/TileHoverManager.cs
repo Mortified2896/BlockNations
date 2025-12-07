@@ -2,8 +2,21 @@ using UnityEngine;
 
 public class TileHoverManager : MonoBehaviour
 {
+    public static TileHoverManager Instance { get; private set; }
+
     private TileHighlighter hoveredTile;
     private TileHighlighter selectedTile;
+
+    void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        Instance = this;
+    }
 
     void Update()
     {
@@ -35,6 +48,12 @@ public class TileHoverManager : MonoBehaviour
         // 2) CLICK: toggle selection
         if (Input.GetMouseButtonDown(0))
         {
+            // Inform unit selection logic first (for movement)
+            if (hoveredTile != null && UnitSelectionManager.Instance != null)
+            {
+                UnitSelectionManager.Instance.OnTileClicked(hoveredTile.transform);
+            }
+
             if (hoveredTile == null)
             {
                 // Clicked empty space: deselect current tile
@@ -59,6 +78,21 @@ public class TileHoverManager : MonoBehaviour
                 selectedTile = hoveredTile;
                 selectedTile.SetSelected(true);
             }
+        }
+    }
+
+    public void ClearSelection()
+    {
+        if (selectedTile != null)
+        {
+            selectedTile.SetSelected(false);
+            selectedTile = null;
+        }
+
+        if (hoveredTile != null)
+        {
+            hoveredTile.SetHighlighted(false);
+            hoveredTile = null;
         }
     }
 }

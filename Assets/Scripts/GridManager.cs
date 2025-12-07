@@ -61,30 +61,39 @@ public class GridManager : MonoBehaviour
     }
 
     void SpawnCity(int x, int y, bool isPlayerOwned)
-{
-    if (cityPrefab == null)
     {
-        Debug.LogError("Tried to spawn a city, but cityPrefab is not assigned on GridManager!");
-        return;
+        if (cityPrefab == null)
+        {
+            Debug.LogError("Tried to spawn a city, but cityPrefab is not assigned on GridManager!");
+            return;
+        }
+
+        float offsetX = -(width - 1) * tileSize / 2f;
+        float offsetY = -(height - 1) * tileSize / 2f;
+
+        Vector3 position = new Vector3(
+            offsetX + x * tileSize,
+            offsetY + y * tileSize,
+            0f
+        );
+
+        GameObject cityObject = Instantiate(cityPrefab, position, Quaternion.identity, transform);
+        cityObject.name = (isPlayerOwned ? "PlayerCity_" : "AICity_") + x + "_" + y;
+
+        // Set ownership and grid coordinates on the City component
+        City city = cityObject.GetComponent<City>();
+        if (city != null)
+        {
+            city.isPlayerOwned = isPlayerOwned;
+            city.x = x;
+            city.y = y;
+        }
+
+        // Tell OwnedSprite who owns this city for coloring
+        OwnedSprite owned = cityObject.GetComponent<OwnedSprite>();
+        if (owned != null)
+        {
+            owned.SetOwner(isPlayerOwned);
+        }
     }
-
-    float offsetX = -(width - 1) * tileSize / 2f;
-    float offsetY = -(height - 1) * tileSize / 2f;
-
-    Vector3 position = new Vector3(
-        offsetX + x * tileSize,
-        offsetY + y * tileSize,
-        0f
-    );
-
-    GameObject city = Instantiate(cityPrefab, position, Quaternion.identity, transform);
-    city.name = (isPlayerOwned ? "PlayerCity_" : "AICity_") + x + "_" + y;
-
-    // Tell OwnedSprite who owns this city
-    OwnedSprite owned = city.GetComponent<OwnedSprite>();
-    if (owned != null)
-    {
-        owned.SetOwner(isPlayerOwned);
-    }
-}
 }

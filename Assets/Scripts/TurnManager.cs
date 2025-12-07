@@ -16,6 +16,7 @@ public class TurnManager : MonoBehaviour
 
     void Start()
     {
+        ResetRecruitmentForPlayerCities();
         UpdateTurnText();
         Debug.Log("Game start. Player Turn " + turnNumber);
     }
@@ -63,10 +64,45 @@ public class TurnManager : MonoBehaviour
 
         // Back to player
         turnNumber++;
-        isPlayerTurn = true;
-        UpdateTurnText();
+        BeginPlayerTurn();
+    }
 
+    void BeginPlayerTurn()
+    {
+        isPlayerTurn = true;
+
+        // Allow cities and units to act again
+        ResetRecruitmentForPlayerCities();
+        if (UnitSelectionManager.Instance != null)
+        {
+            UnitSelectionManager.Instance.ResetMovementForPlayerUnits();
+            UnitSelectionManager.Instance.ClearSelection();
+        }
+
+        if (TileHoverManager.Instance != null)
+        {
+            TileHoverManager.Instance.ClearSelection();
+        }
+
+        if (CityUIManager.Instance != null)
+        {
+            CityUIManager.Instance.ClosePanel();
+        }
+
+        UpdateTurnText();
         Debug.Log("Back to Player. Turn " + turnNumber + " begins.");
+    }
+
+    void ResetRecruitmentForPlayerCities()
+    {
+        City[] cities = FindObjectsOfType<City>();
+        foreach (City city in cities)
+        {
+            if (city.isPlayerOwned)
+            {
+                city.hasRecruitedThisTurn = false;
+            }
+        }
     }
 
     void UpdateTurnText()
