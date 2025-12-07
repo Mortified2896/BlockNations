@@ -1,0 +1,90 @@
+using UnityEngine;
+
+public class GridManager : MonoBehaviour
+{
+    [Header("Grid Settings")]
+    public int width = 10;      // Number of tiles in X direction
+    public int height = 10;     // Number of tiles in Y direction
+    public float tileSize = 1f; // Distance between tile centers
+
+    [Header("References")]
+    public GameObject tilePrefab;   // Prefab for a single tile
+
+    [Header("City Settings")]
+    public GameObject cityPrefab;   // Prefab for a city icon
+
+    void Start()
+    {
+        GenerateGrid();
+
+        // Spawn starting cities if a city prefab is assigned
+        if (cityPrefab != null)
+        {
+            // Player city near bottom-left
+            SpawnCity(1, 1, true);
+
+            // AI city near top-right
+            SpawnCity(width - 2, height - 2, false);
+        }
+        else
+        {
+            Debug.LogWarning("City prefab not assigned on GridManager, no cities spawned.");
+        }
+    }
+
+    void GenerateGrid()
+    {
+        if (tilePrefab == null)
+        {
+            Debug.LogError("Tile prefab not assigned on GridManager!");
+            return;
+        }
+
+        // Center the grid around (0,0)
+        float offsetX = -(width - 1) * tileSize / 2f;
+        float offsetY = -(height - 1) * tileSize / 2f;
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                Vector3 position = new Vector3(
+                    offsetX + x * tileSize,
+                    offsetY + y * tileSize,
+                    0f
+                );
+
+                GameObject tile = Instantiate(tilePrefab, position, Quaternion.identity, transform);
+                tile.name = $"Tile_{x}_{y}";
+            }
+        }
+    }
+
+    void SpawnCity(int x, int y, bool isPlayerOwned)
+{
+    if (cityPrefab == null)
+    {
+        Debug.LogError("Tried to spawn a city, but cityPrefab is not assigned on GridManager!");
+        return;
+    }
+
+    float offsetX = -(width - 1) * tileSize / 2f;
+    float offsetY = -(height - 1) * tileSize / 2f;
+
+    Vector3 position = new Vector3(
+        offsetX + x * tileSize,
+        offsetY + y * tileSize,
+        0f
+    );
+
+    GameObject city = Instantiate(cityPrefab, position, Quaternion.identity, transform);
+    city.name = (isPlayerOwned ? "PlayerCity_" : "AICity_") + x + "_" + y;
+
+    // Tell OwnedSprite who owns this city
+    OwnedSprite owned = city.GetComponent<OwnedSprite>();
+    if (owned != null)
+    {
+        owned.SetOwner(isPlayerOwned);
+    }
+}
+}
