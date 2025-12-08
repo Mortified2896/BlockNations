@@ -198,9 +198,14 @@ public class UnitSelectionManager : MonoBehaviour
             Debug.Log("Moved unit to " + newPos);
         }
 
-        // After resolving move/attack, check for city capture
+        // Update fog visibility after movement/attack
         if (turnManager != null)
         {
+            turnManager.RecalculatePlayerVisibility();
+
+            if (turnManager.gameOver)
+                return;
+
             City city = GridUtils.GetCityAtPosition(selectedUnit.transform.position);
             if (city != null && !city.isPlayerOwned && selectedUnit.isPlayerOwned)
             {

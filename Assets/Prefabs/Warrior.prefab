@@ -108,7 +108,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OwnedSprite
   isPlayerOwned: 1
-  playerColor: {r: 0, g: 0, b: 1, a: 1}
+  playerColor: {r: 0, g: 0.52937603, b: 1, a: 1}
   aiColor: {r: 1, g: 0, b: 0, a: 1}
 --- !u!61 &-4409346649789025567
 BoxCollider2D:

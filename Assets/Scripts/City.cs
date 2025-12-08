@@ -51,6 +51,27 @@ public class City : MonoBehaviour
             Debug.Log("Cannot spawn Warrior in city " + name + " because the tile is already occupied by a unit.", this);
             return;
         }
+
+        // Pay the recruitment cost through the TurnManager
+        if (TurnManager.Instance == null)
+        {
+            Debug.LogWarning("Cannot spawn Warrior because TurnManager instance is missing.", this);
+            return;
+        }
+
+        if (!TurnManager.Instance.TrySpendGold(isPlayerOwned, TurnManager.Instance.warriorCost))
+        {
+            if (isPlayerOwned)
+            {
+                Debug.Log("Not enough gold to recruit a Warrior in " + name);
+            }
+            else
+            {
+                Debug.Log("AI lacks gold to recruit a Warrior in " + name);
+            }
+            return;
+        }
+
         GameObject warrior = Instantiate(warriorPrefab, spawnPosition, Quaternion.identity);
         stationedUnit = warrior;
         hasRecruitedThisTurn = true;
@@ -73,5 +94,10 @@ public class City : MonoBehaviour
         }
 
         Debug.Log($"Spawned Warrior from city {name} at world position {spawnPosition}.");
+
+        if (isPlayerOwned && TurnManager.Instance != null)
+        {
+            TurnManager.Instance.RecalculatePlayerVisibility();
+        }
     }
 }

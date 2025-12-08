@@ -48,9 +48,16 @@ public class Unit : MonoBehaviour
     public int attack = 1;
     public int defense = 0;
 
+    private SpriteRenderer spriteRenderer;
+
     void Awake()
     {
         currentHealth = maxHealth;
+        spriteRenderer = GetComponent<SpriteRenderer>();
+        if (spriteRenderer == null)
+        {
+            spriteRenderer = GetComponentInChildren<SpriteRenderer>();
+        }
     }
 
     public bool Attack(Unit target)
@@ -92,5 +99,13 @@ public class Unit : MonoBehaviour
 
         Debug.Log(name + " has died.");
         Object.Destroy(gameObject);
+    }
+
+    public void SetFogVisibility(bool isVisible)
+    {
+        if (spriteRenderer != null && !isPlayerOwned)
+        {
+            spriteRenderer.enabled = isVisible;
+        }
     }
 }

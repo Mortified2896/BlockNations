@@ -11,15 +11,26 @@ public class TurnManager : MonoBehaviour
     public int turnNumber = 1;
     public bool gameOver = false;
 
+    [Header("Economy")]
+    public int playerGold = 0;
+    public int aiGold = 0;
+    public int goldPerCity = 1;
+    public int warriorCost = 2;
+
     [Header("AI Settings")]
     public float aiTurnDelay = 1f; // seconds the AI "thinks" before ending its turn
 
     [Header("UI")]
     public TMP_Text turnText;      // assign in Inspector
+    public TMP_Text goldText;
 
     [Header("Game Over UI")]
     public GameObject gameOverPanel;
     public TMP_Text gameOverText;
+
+    [Header("References")]
+    public GridManager gridManager;
+    public int visibilityRadius = 1;
 
     void Awake()
     {
@@ -35,7 +46,11 @@ public class TurnManager : MonoBehaviour
     void Start()
     {
         ResetRecruitmentForPlayerCities();
+        CollectPlayerIncome();
+        CollectAIGold();
+        UpdateGoldText();
         UpdateTurnText();
+        RecalculatePlayerVisibility();
         Debug.Log("Game start. Player Turn " + turnNumber);
     }
 
@@ -88,6 +103,9 @@ public class TurnManager : MonoBehaviour
         // Simulate thinking time
         yield return new WaitForSeconds(aiTurnDelay);
 
+        // Collect AI income at the start of its turn
+        CollectAIGold();
+
         // AI actions: recruit and move units
         ResetRecruitmentForAICities();
         RunAI();
@@ -127,6 +145,8 @@ public class TurnManager : MonoBehaviour
             CityUIManager.Instance.ClosePanel();
         }
 
+        CollectPlayerIncome();
+        RecalculatePlayerVisibility();
         UpdateTurnText();
         Debug.Log("Back to Player. Turn " + turnNumber + " begins.");
     }
@@ -346,11 +366,164 @@ public class TurnManager : MonoBehaviour
         Debug.Log("Game Over: " + message);
     }
 
+    void CollectPlayerIncome()
+    {
+        if (gameOver) return;
+
+        int income = 0;
+        City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        foreach (City city in cities)
+        {
+            if (city.isPlayerOwned)
+            {
+                income += goldPerCity;
+            }
+        }
+
+        if (income > 0)
+        {
+            AddGold(true, income);
+        }
+    }
+
+    void CollectAIGold()
+    {
+        if (gameOver) return;
+
+        int income = 0;
+        City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        foreach (City city in cities)
+        {
+            if (!city.isPlayerOwned)
+            {
+                income += goldPerCity;
+            }
+        }
+
+        if (income > 0)
+        {
+            AddGold(false, income);
+        }
+    }
+
+    void UpdateGoldText()
+    {
+        if (goldText != null)
+        {
+            goldText.text = $"Gold: {playerGold}";
+        }
+    }
+
+    public void RecalculatePlayerVisibility()
+    {
+        if (gridManager == null)
+            return;
+
+        // Reset all tiles to not visible
+        foreach (TileVisibility tile in gridManager.GetAllTiles())
+        {
+            tile.SetVisible(false);
+        }
+
+        // Reveal around player-owned cities
+        City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        foreach (City city in cities)
+        {
+            if (city.isPlayerOwned)
+            {
+                RevealRadius(city.x, city.y, visibilityRadius);
+            }
+        }
+
+        // Reveal around player-owned units
+        Unit[] units = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
+        foreach (Unit unit in units)
+        {
+            if (!unit.isPlayerOwned)
+                continue;
+
+            if (gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility tile))
+            {
+                RevealRadius(tile.gridX, tile.gridY, visibilityRadius);
+            }
+        }
+
+        // Hide enemy units that are not in visible tiles
+        foreach (Unit unit in units)
+        {
+            bool isVisible = true;
+            if (!unit.isPlayerOwned)
+            {
+                if (gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility tile))
+                {
+                    isVisible = tile.isVisibleNow;
+                }
+            }
+            unit.SetFogVisibility(isVisible || unit.isPlayerOwned);
+        }
+    }
+
+    private void RevealRadius(int centerX, int centerY, int radius)
+    {
+        for (int dx = -radius; dx <= radius; dx++)
+        {
+            for (int dy = -radius; dy <= radius; dy++)
+            {
+                int tx = centerX + dx;
+                int ty = centerY + dy;
+                if (gridManager.TryGetTile(tx, ty, out TileVisibility tile))
+                {
+                    tile.SetVisible(true);
+                }
+            }
+        }
+    }
+
     void UpdateTurnText()
     {
         if (turnText == null) return;
 
         string who = isPlayerTurn ? "Player" : "AI";
         turnText.text = $"Turn {turnNumber} - {who}";
+    }
+
+    public bool TrySpendGold(bool forPlayer, int amount)
+    {
+        if (amount <= 0)
+            return true;
+
+        if (forPlayer)
+        {
+            if (playerGold < amount)
+                return false;
+
+            playerGold -= amount;
+            UpdateGoldText();
+            return true;
+        }
+        else
+        {
+            if (aiGold < amount)
+                return false;
+
+            aiGold -= amount;
+            return true;
+        }
+    }
+
+    public void AddGold(bool forPlayer, int amount)
+    {
+        if (amount <= 0)
+            return;
+
+        if (forPlayer)
+        {
+            playerGold += amount;
+            UpdateGoldText();
+        }
+        else
+        {
+            aiGold += amount;
+        }
     }
 }

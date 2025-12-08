@@ -107,7 +107,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OwnedSprite
   isPlayerOwned: 1
-  playerColor: {r: 0, g: 0, b: 1, a: 1}
+  playerColor: {r: 0, g: 0.5190406, b: 1, a: 1}
   aiColor: {r: 1, g: 0, b: 0, a: 1}
 --- !u!61 &5318463484694013206
 BoxCollider2D:
@@ -171,6 +171,8 @@ MonoBehaviour:
   x: 0
   y: 0
   warriorPrefab: {fileID: 8613717610168908074, guid: 201cae50cac1013489cb65af371b9783, type: 3}
+  stationedUnit: {fileID: 0}
+  hasRecruitedThisTurn: 0
 --- !u!114 &8284032984662288175
 MonoBehaviour:
   m_ObjectHideFlags: 0

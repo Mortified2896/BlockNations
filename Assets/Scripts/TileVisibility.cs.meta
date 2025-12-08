@@ -1,0 +1,13 @@
+fileFormatVersion: 2
+guid: 6a56cff39afc3d848bb386fba579378c
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - fogRenderer: {fileID: 4854466148791588626, guid: 2be13e0894aa0124a856b675a4444c5c, type: 3}
+  - exploredRenderer: {fileID: 1343453136013091492, guid: 46620aad9fc2ec34686a06f843c9b762, type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
