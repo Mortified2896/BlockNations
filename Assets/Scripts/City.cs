@@ -44,8 +44,13 @@ public class City : MonoBehaviour
             return;
         }
 
-        // Spawn at the city position for now
+        // Spawn at the city position for now, but only if no other unit is already there
         Vector3 spawnPosition = transform.position;
+        if (GridUtils.IsTileOccupied(spawnPosition, null))
+        {
+            Debug.Log("Cannot spawn Warrior in city " + name + " because the tile is already occupied by a unit.", this);
+            return;
+        }
         GameObject warrior = Instantiate(warriorPrefab, spawnPosition, Quaternion.identity);
         stationedUnit = warrior;
         hasRecruitedThisTurn = true;
@@ -56,6 +61,8 @@ public class City : MonoBehaviour
         {
             unit.isPlayerOwned = isPlayerOwned;
             unit.currentCity = this;
+            unit.ResetMovementForTurn();
+            unit.UpdateMoveOutline(true);
         }
 
         // Apply ownership color if the unit has an OwnedSprite

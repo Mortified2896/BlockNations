@@ -21,10 +21,15 @@ public class CityClickHandler : MonoBehaviour
     {
         if (city == null) return;
 
+        Debug.Log("CityClickHandler.OnMouseDown on " + city.name);
+
         if (CityUIManager.Instance != null)
         {
             CityUIManager.Instance.OnCityClicked(city);
         }
+        else
+        {
+            Debug.LogWarning("CityClickHandler: CityUIManager.Instance is null, cannot open city UI.");
+        }
     }
 }
-

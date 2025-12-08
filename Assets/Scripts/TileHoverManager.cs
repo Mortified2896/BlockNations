@@ -20,17 +20,49 @@ public class TileHoverManager : MonoBehaviour
 
     void Update()
     {
-        // 1) HOVER: find which tile is under the mouse
-        Vector3 mouseWorld = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        // 1) HOVER / CLICK: find what is under the mouse
+        Camera cam = Camera.main;
+        if (cam == null)
+        {
+            return;
+        }
+
+        Vector3 mouse = Input.mousePosition;
+        if (float.IsNaN(mouse.x) || float.IsNaN(mouse.y) ||
+            float.IsInfinity(mouse.x) || float.IsInfinity(mouse.y))
+        {
+            return;
+        }
+
+        Vector3 mouseWorld = cam.ScreenToWorldPoint(mouse);
         Vector2 mousePos2D = new Vector2(mouseWorld.x, mouseWorld.y);
 
-        RaycastHit2D hit = Physics2D.Raycast(mousePos2D, Vector2.zero);
+        RaycastHit2D[] hits = Physics2D.RaycastAll(mousePos2D, Vector2.zero);
 
         TileHighlighter newHover = null;
+        City clickedCity = null;
+        Unit clickedUnit = null;
 
-        if (hit.collider != null)
+        foreach (var hit in hits)
         {
-            newHover = hit.collider.GetComponent<TileHighlighter>();
+            if (hit.collider == null) continue;
+
+            // First tile we find becomes the hovered tile
+            if (newHover == null)
+            {
+                newHover = hit.collider.GetComponent<TileHighlighter>();
+            }
+
+            // Remember first city and unit under the cursor
+            if (clickedCity == null)
+            {
+                clickedCity = hit.collider.GetComponent<City>();
+            }
+
+            if (clickedUnit == null)
+            {
+                clickedUnit = hit.collider.GetComponent<Unit>();
+            }
         }
 
         // Update hover state if we moved to a different tile
@@ -48,6 +80,70 @@ public class TileHoverManager : MonoBehaviour
         // 2) CLICK: toggle selection
         if (Input.GetMouseButtonDown(0))
         {
+            // Click priority: attack enemy unit (if a friendly is selected and adjacent)
+            // > move into enemy city (if a friendly is selected and in range)
+            // > movable Unit on player city > player City UI > Unit > Tile
+
+            bool hasCity = clickedCity != null;
+            bool hasUnit = clickedUnit != null && UnitSelectionManager.Instance != null;
+
+            // 2a) If a unit is selected and we clicked an enemy unit, try to move/attack onto its tile
+            if (hasUnit && UnitSelectionManager.Instance != null)
+            {
+                Unit selected = UnitSelectionManager.Instance.SelectedUnit;
+                if (selected != null &&
+                    selected.isPlayerOwned &&
+                    !clickedUnit.isPlayerOwned)
+                {
+                    UnitSelectionManager.Instance.TryMoveOrAttackAtPosition(clickedUnit.transform.position);
+                    return;
+                }
+            }
+
+            // 2b) Enemy city clicked while a friendly unit is selected: try to move/attack onto that city tile
+            if (hasCity && UnitSelectionManager.Instance != null && clickedCity != null && !clickedCity.isPlayerOwned)
+            {
+                Unit selected = UnitSelectionManager.Instance.SelectedUnit;
+                if (selected != null && selected.isPlayerOwned)
+                {
+                    UnitSelectionManager.Instance.TryMoveOrAttackAtPosition(clickedCity.transform.position);
+                    return;
+                }
+            }
+
+            // 2c) If both a player city and a movable player unit are under the cursor,
+            //     prefer selecting the unit so it can move out of the city.
+            if (hasCity && clickedCity != null && clickedCity.isPlayerOwned &&
+                hasUnit &&
+                clickedUnit.isPlayerOwned &&
+                clickedUnit.CanMoveThisTurn())
+            {
+                UnitSelectionManager.Instance.SelectUnit(clickedUnit);
+                return;
+            }
+
+            // 2d) Player city clicked (and no movable player unit to prioritize):
+            //     deselect unit and open city UI
+            if (hasCity && clickedCity != null && clickedCity.isPlayerOwned && CityUIManager.Instance != null)
+            {
+                if (UnitSelectionManager.Instance != null)
+                {
+                    UnitSelectionManager.Instance.ClearSelection();
+                }
+
+                CityUIManager.Instance.OnCityClicked(clickedCity);
+                return;
+            }
+
+            // 2e) Unit clicked (not on a city, or city handled above): select/deselect unit
+            if (hasUnit)
+            {
+                UnitSelectionManager.Instance.SelectUnit(clickedUnit);
+                return;
+            }
+
+            // 2f) No city/unit clicked: treat as tile interaction
+
             // Inform unit selection logic first (for movement)
             if (hoveredTile != null && UnitSelectionManager.Instance != null)
             {

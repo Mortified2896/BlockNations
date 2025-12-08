@@ -43,6 +43,8 @@ public class CityUIManager : MonoBehaviour
     {
         if (city == null) return;
 
+        Debug.Log("CityUIManager.OnCityClicked: " + city.name + " (isPlayerOwned=" + city.isPlayerOwned + ")");
+
         // Only open UI for player-owned cities
         if (!city.isPlayerOwned)
         {
@@ -63,6 +65,7 @@ public class CityUIManager : MonoBehaviour
         }
 
         panelRoot.SetActive(true);
+        Debug.Log("CityUIManager.OpenPanel");
 
         if (cityNameText != null && currentCity != null)
         {
