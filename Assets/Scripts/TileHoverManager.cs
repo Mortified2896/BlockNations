@@ -20,6 +20,14 @@ public class TileHoverManager : MonoBehaviour
 
     void Update()
     {
+        if (TurnManager.Instance != null)
+        {
+            if (TurnManager.Instance.gameOver || TurnManager.Instance.IsHotseatHandoff)
+            {
+                return;
+            }
+        }
+
         // 1) HOVER / CLICK: find what is under the mouse
         Camera cam = Camera.main;
         if (cam == null)
@@ -53,15 +61,15 @@ public class TileHoverManager : MonoBehaviour
                 newHover = hit.collider.GetComponent<TileHighlighter>();
             }
 
-            // Remember first city and unit under the cursor
+            // Remember first city and unit under the cursor (support colliders on child objects)
             if (clickedCity == null)
             {
-                clickedCity = hit.collider.GetComponent<City>();
+                clickedCity = hit.collider.GetComponentInParent<City>();
             }
 
             if (clickedUnit == null)
             {
-                clickedUnit = hit.collider.GetComponent<Unit>();
+                clickedUnit = hit.collider.GetComponentInParent<Unit>();
             }
         }
 
@@ -92,8 +100,9 @@ public class TileHoverManager : MonoBehaviour
             {
                 Unit selected = UnitSelectionManager.Instance.SelectedUnit;
                 if (selected != null &&
-                    selected.isPlayerOwned &&
-                    !clickedUnit.isPlayerOwned)
+                    TurnManager.Instance != null &&
+                    TurnManager.Instance.CanControlUnit(selected) &&
+                    selected.isPlayerOwned != clickedUnit.isPlayerOwned)
                 {
                     UnitSelectionManager.Instance.TryMoveOrAttackAtPosition(clickedUnit.transform.position);
                     return;
@@ -101,10 +110,13 @@ public class TileHoverManager : MonoBehaviour
             }
 
             // 2b) Enemy city clicked while a friendly unit is selected: try to move/attack onto that city tile
-            if (hasCity && UnitSelectionManager.Instance != null && clickedCity != null && !clickedCity.isPlayerOwned)
+            if (hasCity && UnitSelectionManager.Instance != null && clickedCity != null && clickedCity.isPlayerOwned != (UnitSelectionManager.Instance.SelectedUnit?.isPlayerOwned ?? clickedCity.isPlayerOwned))
             {
                 Unit selected = UnitSelectionManager.Instance.SelectedUnit;
-                if (selected != null && selected.isPlayerOwned)
+                if (selected != null &&
+                    TurnManager.Instance != null &&
+                    TurnManager.Instance.CanControlUnit(selected) &&
+                    selected.isPlayerOwned != clickedCity.isPlayerOwned)
                 {
                     UnitSelectionManager.Instance.TryMoveOrAttackAtPosition(clickedCity.transform.position);
                     return;
@@ -113,9 +125,11 @@ public class TileHoverManager : MonoBehaviour
 
             // 2c) If both a player city and a movable player unit are under the cursor,
             //     prefer selecting the unit so it can move out of the city.
-            if (hasCity && clickedCity != null && clickedCity.isPlayerOwned &&
+            if (hasCity && clickedCity != null &&
+                TurnManager.Instance != null &&
+                TurnManager.Instance.CanControlCity(clickedCity) &&
                 hasUnit &&
-                clickedUnit.isPlayerOwned &&
+                TurnManager.Instance.CanControlUnit(clickedUnit) &&
                 clickedUnit.CanMoveThisTurn())
             {
                 UnitSelectionManager.Instance.SelectUnit(clickedUnit);
@@ -124,7 +138,10 @@ public class TileHoverManager : MonoBehaviour
 
             // 2d) Player city clicked (and no movable player unit to prioritize):
             //     deselect unit and open city UI
-            if (hasCity && clickedCity != null && clickedCity.isPlayerOwned && CityUIManager.Instance != null)
+            if (hasCity && clickedCity != null &&
+                TurnManager.Instance != null &&
+                TurnManager.Instance.CanControlCity(clickedCity) &&
+                CityUIManager.Instance != null)
             {
                 if (UnitSelectionManager.Instance != null)
                 {

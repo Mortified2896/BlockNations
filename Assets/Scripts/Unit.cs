@@ -31,11 +31,11 @@ public class Unit : MonoBehaviour
     [Header("Visuals")]
     public SpriteRenderer moveOutline;
 
-    public void UpdateMoveOutline(bool isPlayerTurn)
+    public void UpdateMoveOutline(bool isTurnForThisUnit)
     {
         if (moveOutline == null) return;
 
-        bool shouldShow = isPlayerTurn && isPlayerOwned && CanMoveThisTurn();
+        bool shouldShow = isTurnForThisUnit && CanMoveThisTurn();
         moveOutline.enabled = shouldShow;
     }
 
@@ -101,11 +101,21 @@ public class Unit : MonoBehaviour
         Object.Destroy(gameObject);
     }
 
-    public void SetFogVisibility(bool isVisible)
+    /// <summary>
+    /// Controls whether the unit sprite is visible under fog. Current side units stay visible;
+    /// opposing units are only visible when their tile is visible to the active side.
+    /// </summary>
+    public void SetFogVisibility(bool isVisible, bool isCurrentSideUnit)
     {
-        if (spriteRenderer != null && !isPlayerOwned)
+        if (spriteRenderer == null)
+            return;
+
+        if (isCurrentSideUnit)
         {
-            spriteRenderer.enabled = isVisible;
+            spriteRenderer.enabled = true;
+            return;
         }
+
+        spriteRenderer.enabled = isVisible;
     }
 }

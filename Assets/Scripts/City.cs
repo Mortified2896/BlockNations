@@ -83,7 +83,9 @@ public class City : MonoBehaviour
             unit.isPlayerOwned = isPlayerOwned;
             unit.currentCity = this;
             unit.ResetMovementForTurn();
-            unit.UpdateMoveOutline(true);
+
+            bool isActiveTurn = TurnManager.Instance != null && TurnManager.Instance.IsCurrentSideOwner(isPlayerOwned);
+            unit.UpdateMoveOutline(isActiveTurn);
         }
 
         // Apply ownership color if the unit has an OwnedSprite
@@ -98,6 +100,17 @@ public class City : MonoBehaviour
         if (isPlayerOwned && TurnManager.Instance != null)
         {
             TurnManager.Instance.RecalculatePlayerVisibility();
+            TurnManager.Instance.AutoSaveIfEnabled();
+        }
+        else if (!isPlayerOwned && TurnManager.Instance != null)
+        {
+            // For AI units in hotseat, ensure fog respects the active side
+            bool isCurrentSideUnit = TurnManager.Instance.currentMode != TurnManager.GameMode.Hotseat || (TurnManager.Instance.isPlayerTurn == isPlayerOwned);
+            Unit spawned = warrior.GetComponent<Unit>();
+            if (spawned != null)
+            {
+                spawned.SetFogVisibility(true, isCurrentSideUnit);
+            }
         }
     }
 }

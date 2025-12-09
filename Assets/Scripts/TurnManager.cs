@@ -1,10 +1,22 @@
 using System.Collections;
+using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 using TMPro;   // for TMP_Text
 
 public class TurnManager : MonoBehaviour
 {
+    public enum GameMode
+    {
+        None,
+        VsAI,
+        Hotseat
+    }
+
     public static TurnManager Instance { get; private set; }
+
+    [Header("Mode")]
+    public GameMode currentMode = GameMode.None;
 
     [Header("Turn State")]
     public bool isPlayerTurn = true;
@@ -12,7 +24,8 @@ public class TurnManager : MonoBehaviour
     public bool gameOver = false;
 
     [Header("Economy")]
-    public int playerGold = 0;
+    // Base starting gold; income from cities adds on top at game start.
+    public int playerGold = 2;
     public int aiGold = 0;
     public int goldPerCity = 1;
     public int warriorCost = 2;
@@ -31,6 +44,133 @@ public class TurnManager : MonoBehaviour
     [Header("References")]
     public GridManager gridManager;
     public int visibilityRadius = 1;
+    public bool IsHotseatHandoff => isHotseatHandoff;
+
+    [Header("Prefabs")]
+    public GameObject unitPrefab; // used to respawn units on load
+
+    [Header("Saving")]
+    public bool autoSaveEnabled = true;
+    public string autoSaveFileName = "save.json";
+
+    private bool isHotseatHandoff = false;
+    private bool nextHotseatIsPlayer = false;
+    private bool hotseatHandoffAdvancesTurn = false;
+    private bool isLoadingFromSave = false;
+
+    [System.Serializable]
+    private class SavedCity
+    {
+        public int x;
+        public int y;
+        public bool isPlayerOwned;
+        public bool hasRecruitedThisTurn;
+    }
+
+    [System.Serializable]
+    private class SavedUnit
+    {
+        public bool isPlayerOwned;
+        public float x;
+        public float y;
+        public float z;
+        public int currentHealth;
+        public int movesUsedThisTurn;
+    }
+
+    [System.Serializable]
+    private class SavedTile
+    {
+        public int x;
+        public int y;
+        public bool playerSeen;
+        public bool opponentSeen;
+    }
+
+    [System.Serializable]
+    private class GameSave
+    {
+        public string version = "1";
+        public string mode;
+        public bool isPlayerTurn;
+        public int turnNumber;
+        public int playerGold;
+        public int aiGold;
+        public bool gameOver;
+        public int visibilityRadius;
+        public List<SavedCity> cities = new List<SavedCity>();
+        public List<SavedUnit> units = new List<SavedUnit>();
+        public List<SavedTile> tiles = new List<SavedTile>();
+    }
+
+    public bool IsHumanTurn()
+    {
+        if (isHotseatHandoff)
+            return false;
+
+        if (currentMode == GameMode.None)
+            return false;
+
+        if (currentMode == GameMode.VsAI)
+            return isPlayerTurn;
+
+        // Hotseat: both sides are human-controlled
+        return true;
+    }
+
+    public bool IsCurrentSideOwner(bool isPlayerOwned)
+    {
+        if (currentMode == GameMode.Hotseat)
+        {
+            return isPlayerTurn == isPlayerOwned;
+        }
+
+        // Vs AI: only player-owned units/cities are controllable during the player turn
+        return isPlayerTurn && isPlayerOwned;
+    }
+
+    public bool CanControlUnit(Unit unit)
+    {
+        if (unit == null || gameOver || isHotseatHandoff)
+            return false;
+
+        return IsCurrentSideOwner(unit.isPlayerOwned);
+    }
+
+    public bool CanControlCity(City city)
+    {
+        if (city == null || gameOver || isHotseatHandoff)
+            return false;
+
+        return IsCurrentSideOwner(city.isPlayerOwned);
+    }
+
+    public string GetCurrentSideName()
+    {
+        if (currentMode == GameMode.Hotseat)
+        {
+            return isPlayerTurn ? "Player 1" : "Player 2";
+        }
+
+        return isPlayerTurn ? "Player" : "AI";
+    }
+
+    public void SetGameMode(GameMode mode)
+    {
+        if (currentMode != GameMode.None || gameOver)
+            return;
+
+        currentMode = mode;
+        Time.timeScale = 1f;
+        UpdateTurnText();
+        RecalculatePlayerVisibility();
+        Debug.Log("Selected game mode: " + mode);
+
+        if (UnitSelectionManager.Instance != null)
+        {
+            UnitSelectionManager.Instance.RefreshMoveOutlinesForCurrentTurn();
+        }
+    }
 
     void Awake()
     {
@@ -45,22 +185,16 @@ public class TurnManager : MonoBehaviour
 
     void Start()
     {
-        ResetRecruitmentForPlayerCities();
-        CollectPlayerIncome();
-        CollectAIGold();
-        UpdateGoldText();
-        UpdateTurnText();
-        RecalculatePlayerVisibility();
-        Debug.Log("Game start. Player Turn " + turnNumber);
+        StartCoroutine(StartupSequence());
     }
 
     void Update()
     {
-        if (gameOver)
+        if (gameOver || isHotseatHandoff)
             return;
 
         // Optional: keep Space for PC testing
-        if (isPlayerTurn && Input.GetKeyDown(KeyCode.Space))
+        if (IsHumanTurn() && Input.GetKeyDown(KeyCode.Space))
         {
             OnEndTurnButtonPressed();
         }
@@ -69,33 +203,93 @@ public class TurnManager : MonoBehaviour
     // 🚩 This is what the UI Button will call
     public void OnEndTurnButtonPressed()
     {
-        if (!isPlayerTurn || gameOver)
+        if (gameOver || isHotseatHandoff || !IsHumanTurn())
         {
-            // Ignore clicks if it's not the player's turn
+            // Ignore clicks if it's not the current human's turn
             return;
         }
 
-        EndPlayerTurn();
+        EndCurrentTurn();
     }
 
-    void EndPlayerTurn()
+    void EndCurrentTurn()
     {
-        Debug.Log("Player ends Turn " + turnNumber);
-        isPlayerTurn = false;
-        UpdateTurnText();
+        Debug.Log(GetCurrentSideName() + " ends Turn " + turnNumber);
 
         if (UnitSelectionManager.Instance != null)
         {
             UnitSelectionManager.Instance.HideAllMoveOutlines();
         }
 
-        // Start AI turn
-        StartCoroutine(AITurn());
+        if (currentMode == GameMode.VsAI)
+        {
+            isPlayerTurn = false;
+            UpdateTurnText();
+            AutoSaveIfEnabled();
+            StartCoroutine(AITurn());
+            return;
+        }
+
+        // Hotseat: hand control to the other player without AI actions.
+        if (currentMode == GameMode.Hotseat)
+        {
+            isPlayerTurn = !isPlayerTurn;
+            UpdateTurnText();
+
+            ShowHotseatHandoff(isPlayerTurn, true);
+            AutoSaveIfEnabled();
+        }
+    }
+
+    void ShowHotseatHandoff(bool nextIsPlayer, bool advanceTurnAfterReturn)
+    {
+        isHotseatHandoff = true;
+        nextHotseatIsPlayer = nextIsPlayer;
+        hotseatHandoffAdvancesTurn = advanceTurnAfterReturn;
+        Time.timeScale = 0f;
+
+        if (UnitSelectionManager.Instance != null)
+        {
+            UnitSelectionManager.Instance.ClearSelection();
+        }
+
+        if (TileHoverManager.Instance != null)
+        {
+            TileHoverManager.Instance.ClearSelection();
+        }
+
+        if (CityUIManager.Instance != null)
+        {
+            CityUIManager.Instance.ClosePanel();
+        }
+    }
+
+    public void ContinueHotseatTurn()
+    {
+        if (!isHotseatHandoff || currentMode != GameMode.Hotseat)
+            return;
+
+        isHotseatHandoff = false;
+        Time.timeScale = 1f;
+
+        if (nextHotseatIsPlayer)
+        {
+            if (hotseatHandoffAdvancesTurn)
+            {
+                // Completed a full round, advance the turn counter for Player 1.
+                turnNumber++;
+            }
+            BeginPlayerTurn();
+        }
+        else
+        {
+            BeginHotseatOpponentTurn();
+        }
     }
 
     IEnumerator AITurn()
     {
-        if (gameOver)
+        if (gameOver || currentMode != GameMode.VsAI)
             yield break;
 
         Debug.Log("AI Turn " + turnNumber + " started. AI is thinking...");
@@ -115,6 +309,8 @@ public class TurnManager : MonoBehaviour
         if (gameOver)
             yield break;
 
+        AutoSaveIfEnabled();
+
         // Back to player
         turnNumber++;
         BeginPlayerTurn();
@@ -131,7 +327,7 @@ public class TurnManager : MonoBehaviour
         ResetRecruitmentForPlayerCities();
         if (UnitSelectionManager.Instance != null)
         {
-            UnitSelectionManager.Instance.ResetMovementForPlayerUnits();
+            UnitSelectionManager.Instance.ResetMovementForSide(true, IsCurrentSideOwner(true));
             UnitSelectionManager.Instance.ClearSelection();
         }
 
@@ -148,7 +344,93 @@ public class TurnManager : MonoBehaviour
         CollectPlayerIncome();
         RecalculatePlayerVisibility();
         UpdateTurnText();
-        Debug.Log("Back to Player. Turn " + turnNumber + " begins.");
+        Debug.Log(GetCurrentSideName() + " turn " + turnNumber + " begins.");
+    }
+
+    void BeginHotseatOpponentTurn()
+    {
+        if (gameOver)
+            return;
+
+        // Allow cities and units to act again
+        ResetRecruitmentForAICities();
+        if (UnitSelectionManager.Instance != null)
+        {
+            UnitSelectionManager.Instance.ResetMovementForSide(false, IsCurrentSideOwner(false));
+            UnitSelectionManager.Instance.ClearSelection();
+        }
+
+        if (TileHoverManager.Instance != null)
+        {
+            TileHoverManager.Instance.ClearSelection();
+        }
+
+        if (CityUIManager.Instance != null)
+        {
+            CityUIManager.Instance.ClosePanel();
+        }
+
+        CollectAIGold();
+        UpdateGoldText();
+        RecalculatePlayerVisibility();
+        UpdateTurnText();
+        Debug.Log(GetCurrentSideName() + " begins their turn.");
+    }
+
+    System.Collections.IEnumerator StartupSequence()
+    {
+        // Ensure the grid is initialized before applying save or starting a new game.
+        yield return WaitForGridReady();
+
+        // Attempt to load a pending save request before starting a new game.
+        if (SaveLoadRequest.TryConsume(out string loadPath))
+        {
+            bool loaded = LoadFromFile(loadPath);
+            if (loaded)
+            {
+                Debug.Log("Loaded save from " + loadPath + " on scene start.");
+                yield break;
+            }
+
+            Debug.LogWarning("Load request failed; starting a new game. Path: " + loadPath);
+        }
+
+        InitializeNewGame();
+    }
+
+    System.Collections.IEnumerator WaitForGridReady()
+    {
+        while (gridManager == null || gridManager.tileGrid == null || gridManager.tileGrid.Length == 0)
+        {
+            yield return null;
+        }
+    }
+
+    void InitializeNewGame()
+    {
+        ResetRecruitmentForPlayerCities();
+        CollectPlayerIncome();
+        CollectAIGold();
+        UpdateGoldText();
+        UpdateTurnText();
+        RecalculatePlayerVisibility();
+        Debug.Log("Game start. " + GetCurrentSideName() + " Turn " + turnNumber);
+
+        if (GameModeSelection.TryConsume(out GameMode pendingMode))
+        {
+            SetGameMode(pendingMode);
+        }
+        else if (currentMode == GameMode.None)
+        {
+            SetGameMode(GameMode.VsAI);
+            Debug.Log("No mode preselected. Defaulting to Vs AI.");
+        }
+
+        // If we start in Hotseat, show the handoff before the very first turn.
+        if (currentMode == GameMode.Hotseat)
+        {
+            ShowHotseatHandoff(isPlayerTurn, false);
+        }
     }
 
     void ResetRecruitmentForPlayerCities()
@@ -350,7 +632,15 @@ public class TurnManager : MonoBehaviour
             CityUIManager.Instance.ClosePanel();
         }
 
-        string message = capturedByPlayer ? "You Win!" : "You Lose!";
+        string message;
+        if (currentMode == GameMode.Hotseat)
+        {
+            message = capturedByPlayer ? "Player 1 wins!" : "Player 2 wins!";
+        }
+        else
+        {
+            message = capturedByPlayer ? "You Win!" : "You Lose!";
+        }
 
         if (gameOverText != null)
         {
@@ -410,7 +700,15 @@ public class TurnManager : MonoBehaviour
     {
         if (goldText != null)
         {
-            goldText.text = $"Gold: {playerGold}";
+            int displayGold = playerGold;
+
+            if (currentMode == GameMode.Hotseat && !isPlayerTurn)
+            {
+                displayGold = aiGold;
+            }
+
+            // Two-line so the amount is clearly visible in tight header layouts.
+            goldText.text = $"Gold\n{displayGold}";
         }
     }
 
@@ -419,27 +717,34 @@ public class TurnManager : MonoBehaviour
         if (gridManager == null)
             return;
 
-        // Reset all tiles to not visible
-        foreach (TileVisibility tile in gridManager.GetAllTiles())
+        bool currentSideIsPlayerOwned = true;
+        if (currentMode == GameMode.Hotseat)
         {
-            tile.SetVisible(false);
+            // Player 1 uses isPlayerOwned=true, Player 2 uses isPlayerOwned=false
+            currentSideIsPlayerOwned = isPlayerTurn;
         }
 
-        // Reveal around player-owned cities
+        // Reset current visibility for this side (keep per-side explored memory)
+        foreach (TileVisibility tile in gridManager.GetAllTiles())
+        {
+            tile.SetVisibleForSide(false, currentSideIsPlayerOwned);
+        }
+
+        // Reveal around cities owned by the current side
         City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
         foreach (City city in cities)
         {
-            if (city.isPlayerOwned)
+            if (city.isPlayerOwned == currentSideIsPlayerOwned)
             {
                 RevealRadius(city.x, city.y, visibilityRadius);
             }
         }
 
-        // Reveal around player-owned units
+        // Reveal around units owned by the current side
         Unit[] units = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
         foreach (Unit unit in units)
         {
-            if (!unit.isPlayerOwned)
+            if (unit.isPlayerOwned != currentSideIsPlayerOwned)
                 continue;
 
             if (gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility tile))
@@ -451,15 +756,16 @@ public class TurnManager : MonoBehaviour
         // Hide enemy units that are not in visible tiles
         foreach (Unit unit in units)
         {
-            bool isVisible = true;
-            if (!unit.isPlayerOwned)
+            bool isCurrentSideUnit = unit.isPlayerOwned == currentSideIsPlayerOwned;
+            bool isVisible = isCurrentSideUnit;
+            if (!isVisible)
             {
                 if (gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility tile))
                 {
                     isVisible = tile.isVisibleNow;
                 }
             }
-            unit.SetFogVisibility(isVisible || unit.isPlayerOwned);
+            unit.SetFogVisibility(isVisible, isCurrentSideUnit);
         }
     }
 
@@ -473,7 +779,12 @@ public class TurnManager : MonoBehaviour
                 int ty = centerY + dy;
                 if (gridManager.TryGetTile(tx, ty, out TileVisibility tile))
                 {
-                    tile.SetVisible(true);
+                    bool sideIsPlayer = true;
+                    if (currentMode == GameMode.Hotseat)
+                    {
+                        sideIsPlayer = isPlayerTurn;
+                    }
+                    tile.SetVisibleForSide(true, sideIsPlayer);
                 }
             }
         }
@@ -483,8 +794,290 @@ public class TurnManager : MonoBehaviour
     {
         if (turnText == null) return;
 
-        string who = isPlayerTurn ? "Player" : "AI";
+        string who = GetCurrentSideName();
         turnText.text = $"Turn {turnNumber} - {who}";
+    }
+
+    string GetDefaultSavePath()
+    {
+        return Path.Combine(Application.persistentDataPath, autoSaveFileName);
+    }
+
+    public void AutoSaveIfEnabled()
+    {
+        if (!autoSaveEnabled || isLoadingFromSave)
+            return;
+
+        SaveToFile();
+    }
+
+    public void SaveToFile(string path = null)
+    {
+        string targetPath = path;
+        if (string.IsNullOrWhiteSpace(targetPath))
+        {
+            targetPath = GetDefaultSavePath();
+        }
+
+        if (gridManager == null)
+        {
+            Debug.LogWarning("Cannot save: gridManager is null.");
+            return;
+        }
+
+        GameSave save = new GameSave
+        {
+            mode = currentMode.ToString(),
+            isPlayerTurn = isPlayerTurn,
+            turnNumber = turnNumber,
+            playerGold = playerGold,
+            aiGold = aiGold,
+            gameOver = gameOver,
+            visibilityRadius = visibilityRadius
+        };
+
+        // Cities
+        City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        foreach (City city in cities)
+        {
+            save.cities.Add(new SavedCity
+            {
+                x = city.x,
+                y = city.y,
+                isPlayerOwned = city.isPlayerOwned,
+                hasRecruitedThisTurn = city.hasRecruitedThisTurn
+            });
+        }
+
+        // Units
+        Unit[] units = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
+        foreach (Unit unit in units)
+        {
+            Vector3 pos = unit.transform.position;
+            save.units.Add(new SavedUnit
+            {
+                isPlayerOwned = unit.isPlayerOwned,
+                x = pos.x,
+                y = pos.y,
+                z = pos.z,
+                currentHealth = unit.currentHealth,
+                movesUsedThisTurn = unit.movesUsedThisTurn
+            });
+        }
+
+        // Tiles (seen state per side)
+        foreach (TileVisibility tile in gridManager.GetAllTiles())
+        {
+            tile.GetSeenState(out bool playerSeen, out bool opponentSeen);
+            save.tiles.Add(new SavedTile
+            {
+                x = tile.gridX,
+                y = tile.gridY,
+                playerSeen = playerSeen,
+                opponentSeen = opponentSeen
+            });
+        }
+
+        string json = JsonUtility.ToJson(save, true);
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
+            File.WriteAllText(targetPath, json);
+            Debug.Log("Game saved to " + targetPath);
+        }
+        catch (IOException ex)
+        {
+            Debug.LogError("Failed to save game: " + ex.Message);
+        }
+    }
+
+    public bool LoadFromFile(string path = null)
+    {
+        string targetPath = path;
+        if (string.IsNullOrWhiteSpace(targetPath))
+        {
+            targetPath = GetDefaultSavePath();
+        }
+
+        if (!File.Exists(targetPath))
+        {
+            Debug.LogWarning("No save file found at " + targetPath);
+            return false;
+        }
+
+        if (gridManager == null)
+        {
+            Debug.LogWarning("Cannot load: gridManager is null.");
+            return false;
+        }
+
+        string json = File.ReadAllText(targetPath);
+        GameSave save;
+        isLoadingFromSave = true;
+        try
+        {
+            save = JsonUtility.FromJson<GameSave>(json);
+        }
+        catch (System.Exception ex)
+        {
+            isLoadingFromSave = false;
+            Debug.LogError("Failed to parse save: " + ex.Message);
+            return false;
+        }
+
+        // Basic grid validation: ensure saved tiles fit current grid.
+        int maxTileX = -1;
+        int maxTileY = -1;
+        foreach (SavedTile t in save.tiles)
+        {
+            if (t.x > maxTileX) maxTileX = t.x;
+            if (t.y > maxTileY) maxTileY = t.y;
+        }
+        if (maxTileX >= gridManager.width || maxTileY >= gridManager.height)
+        {
+            isLoadingFromSave = false;
+            Debug.LogError($"Save grid ({maxTileX + 1}x{maxTileY + 1}) does not fit current grid ({gridManager.width}x{gridManager.height}). Aborting load.");
+            return false;
+        }
+
+        // Apply basic state
+        if (System.Enum.TryParse(save.mode, out GameMode loadedMode))
+        {
+            currentMode = loadedMode;
+        }
+        isPlayerTurn = save.isPlayerTurn;
+        turnNumber = save.turnNumber;
+        playerGold = save.playerGold;
+        aiGold = save.aiGold;
+        gameOver = save.gameOver;
+        visibilityRadius = save.visibilityRadius;
+        isHotseatHandoff = false;
+        Time.timeScale = 1f;
+
+        // Clear units
+        Unit[] existingUnits = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
+        foreach (Unit u in existingUnits)
+        {
+            if (u != null)
+            {
+                Destroy(u.gameObject);
+            }
+        }
+
+        // Restore cities
+        City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        foreach (City city in cities)
+        {
+            city.stationedUnit = null;
+        }
+
+        foreach (SavedCity c in save.cities)
+        {
+            foreach (City city in cities)
+            {
+                if (city.x == c.x && city.y == c.y)
+                {
+                    city.isPlayerOwned = c.isPlayerOwned;
+                    city.hasRecruitedThisTurn = c.hasRecruitedThisTurn;
+                }
+            }
+        }
+
+        // Restore units
+        GameObject prefab = unitPrefab;
+        if (prefab == null)
+        {
+            // fallback: try grab from any city
+            foreach (City city in cities)
+            {
+                if (city.warriorPrefab != null)
+                {
+                    prefab = city.warriorPrefab;
+                    break;
+                }
+            }
+        }
+
+        if (prefab == null)
+        {
+            isLoadingFromSave = false;
+            Debug.LogError("No unit prefab configured (TurnManager.unitPrefab or any City.warriorPrefab). Cannot restore units; load aborted.");
+            return false;
+        }
+
+        foreach (SavedUnit u in save.units)
+        {
+            Vector3 pos = new Vector3(u.x, u.y, u.z);
+            GameObject go = Instantiate(prefab, pos, Quaternion.identity);
+            Unit unit = go.GetComponent<Unit>();
+            if (unit != null)
+            {
+                unit.isPlayerOwned = u.isPlayerOwned;
+                unit.currentHealth = Mathf.Clamp(u.currentHealth, 1, unit.maxHealth);
+                unit.movesUsedThisTurn = Mathf.Clamp(u.movesUsedThisTurn, 0, unit.maxMovesPerTurn);
+                bool isCurrentSideUnit = currentMode != GameMode.Hotseat || (unit.isPlayerOwned == isPlayerTurn);
+                unit.SetFogVisibility(true, isCurrentSideUnit); // will be updated after visibility recalculation
+            }
+
+            OwnedSprite owned = go.GetComponent<OwnedSprite>();
+            if (owned != null)
+            {
+                owned.SetOwner(u.isPlayerOwned);
+            }
+
+            // Link to city if occupying one
+            foreach (City city in cities)
+            {
+                if (Vector3.SqrMagnitude(city.transform.position - pos) < 0.001f)
+                {
+                    city.stationedUnit = go;
+                    if (unit != null)
+                    {
+                        unit.currentCity = city;
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Update move outlines for the active side based on loaded move state
+        if (UnitSelectionManager.Instance != null)
+        {
+            UnitSelectionManager.Instance.ClearSelection();
+            UnitSelectionManager.Instance.RefreshMoveOutlinesForCurrentTurn();
+        }
+
+        // Restore tile seen state
+        foreach (TileVisibility tile in gridManager.GetAllTiles())
+        {
+            tile.ResetVisibilityState();
+        }
+
+        foreach (SavedTile t in save.tiles)
+        {
+            if (gridManager.TryGetTile(t.x, t.y, out TileVisibility tile))
+            {
+                // Use current side to drive visuals; will be updated next
+                bool activeSideIsPlayer = currentMode != GameMode.Hotseat || isPlayerTurn;
+                tile.SetSeenState(t.playerSeen, t.opponentSeen, activeSideIsPlayer);
+            }
+        }
+
+        // After loading, ensure movement state and outlines are consistent for both sides.
+        if (UnitSelectionManager.Instance != null)
+        {
+            UnitSelectionManager.Instance.ClearSelection();
+            UnitSelectionManager.Instance.ResetMovementForSide(true, IsCurrentSideOwner(true));
+            UnitSelectionManager.Instance.ResetMovementForSide(false, IsCurrentSideOwner(false));
+            UnitSelectionManager.Instance.RefreshMoveOutlinesForCurrentTurn();
+        }
+
+        UpdateGoldText();
+        RecalculatePlayerVisibility();
+        UpdateTurnText();
+        Debug.Log("Game loaded from " + targetPath);
+        isLoadingFromSave = false;
+        return true;
     }
 
     public bool TrySpendGold(bool forPlayer, int amount)
@@ -524,6 +1117,10 @@ public class TurnManager : MonoBehaviour
         else
         {
             aiGold += amount;
+            if (currentMode == GameMode.Hotseat && !isPlayerTurn)
+            {
+                UpdateGoldText();
+            }
         }
     }
 }

@@ -14,11 +14,17 @@ public class TileVisibility : MonoBehaviour
     [HideInInspector] public int gridX;
     [HideInInspector] public int gridY;
 
+    // Visibility for the currently active side
     public bool isVisibleNow { get; private set; }
-    public bool hasBeenSeen { get; private set; }
+    public bool hasBeenSeen => currentSideIsPlayer ? hasBeenSeenPlayer : hasBeenSeenOpponent;
 
     private Color fogBaseColor = Color.black;
     private Color exploredBaseColor = new Color(0f, 0f, 0f, 0.5f);
+
+    // Per-side exploration memory (Player1 = isPlayerOwned=true, Player2/AI = false)
+    private bool hasBeenSeenPlayer = false;
+    private bool hasBeenSeenOpponent = false;
+    private bool currentSideIsPlayer = true;
 
     void Awake()
     {
@@ -37,14 +43,41 @@ public class TileVisibility : MonoBehaviour
         UpdateVisuals();
     }
 
-    public void SetVisible(bool visible)
+    public void SetVisibleForSide(bool visible, bool sideIsPlayer)
     {
+        currentSideIsPlayer = sideIsPlayer;
         isVisibleNow = visible;
+
         if (visible)
         {
-            hasBeenSeen = true;
+            if (sideIsPlayer)
+                hasBeenSeenPlayer = true;
+            else
+                hasBeenSeenOpponent = true;
         }
+
         UpdateVisuals();
+    }
+
+    public void SetCurrentSide(bool sideIsPlayer)
+    {
+        currentSideIsPlayer = sideIsPlayer;
+        UpdateVisuals();
+    }
+
+    public void SetSeenState(bool playerSeen, bool opponentSeen, bool activeSideIsPlayer)
+    {
+        hasBeenSeenPlayer = playerSeen;
+        hasBeenSeenOpponent = opponentSeen;
+        currentSideIsPlayer = activeSideIsPlayer;
+        isVisibleNow = false;
+        UpdateVisuals();
+    }
+
+    public void GetSeenState(out bool playerSeen, out bool opponentSeen)
+    {
+        playerSeen = hasBeenSeenPlayer;
+        opponentSeen = hasBeenSeenOpponent;
     }
 
     public void ForceUpdate()
@@ -52,11 +85,24 @@ public class TileVisibility : MonoBehaviour
         UpdateVisuals();
     }
 
+    /// <summary>
+    /// Clears any visibility/exploration data (used for per-side fog in hotseat).
+    /// </summary>
+    public void ResetVisibilityState()
+    {
+        isVisibleNow = false;
+        hasBeenSeenPlayer = false;
+        hasBeenSeenOpponent = false;
+        UpdateVisuals();
+    }
+
     private void UpdateVisuals()
     {
+        bool seenForThisSide = hasBeenSeen;
+
         if (fogRenderer != null)
         {
-            bool showFog = !hasBeenSeen;
+            bool showFog = !seenForThisSide;
             Color c = fogBaseColor;
             c.a = showFog ? 1f : 0f;
             fogRenderer.color = c;
@@ -65,7 +111,7 @@ public class TileVisibility : MonoBehaviour
 
         if (exploredRenderer != null)
         {
-            bool showExplored = hasBeenSeen && !isVisibleNow;
+            bool showExplored = seenForThisSide && !isVisibleNow;
             Color c = exploredBaseColor;
             c.a = showExplored ? exploredAlpha : 0f;
             exploredRenderer.color = c;

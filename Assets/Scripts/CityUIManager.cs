@@ -33,11 +33,16 @@ public class CityUIManager : MonoBehaviour
         {
             panelRoot.SetActive(false);
         }
+
+        if (turnManager == null)
+        {
+            turnManager = TurnManager.Instance;
+        }
     }
 
     /// <summary>
     /// Called by CityClickHandler when a city is clicked.
-    /// Only opens the UI for player-owned cities during the player's turn.
+    /// Only opens the UI for the side whose turn it currently is.
     /// </summary>
     public void OnCityClicked(City city)
     {
@@ -45,10 +50,15 @@ public class CityUIManager : MonoBehaviour
 
         Debug.Log("CityUIManager.OnCityClicked: " + city.name + " (isPlayerOwned=" + city.isPlayerOwned + ")");
 
-        // Only open UI for player-owned cities
-        if (!city.isPlayerOwned)
+        // Only open UI for cities controlled by the current human side
+        if (turnManager != null && !turnManager.CanControlCity(city))
         {
-            Debug.Log("Clicked on an AI city, city UI remains closed.");
+            Debug.Log("Clicked on a city that cannot act this turn, city UI remains closed.");
+            return;
+        }
+        else if (turnManager == null && !city.isPlayerOwned)
+        {
+            Debug.Log("Clicked on a non-player city but TurnManager is not assigned; UI remains closed.");
             return;
         }
 
@@ -74,7 +84,14 @@ public class CityUIManager : MonoBehaviour
 
         if (ownerText != null && currentCity != null)
         {
-            ownerText.text = currentCity.isPlayerOwned ? "Player City" : "AI City";
+            if (turnManager != null && turnManager.currentMode == TurnManager.GameMode.Hotseat)
+            {
+                ownerText.text = currentCity.isPlayerOwned ? "Player 1 City" : "Player 2 City";
+            }
+            else
+            {
+                ownerText.text = currentCity.isPlayerOwned ? "Player City" : "AI City";
+            }
         }
     }
 
@@ -90,7 +107,7 @@ public class CityUIManager : MonoBehaviour
 
     /// <summary>
     /// Hook this up to the "Recruit Warrior" button.
-    /// For now it just logs; later we will spawn units.
+    /// Spawns a warrior for the selected city if allowed.
     /// </summary>
     public void OnRecruitWarriorButton()
     {
@@ -100,9 +117,9 @@ public class CityUIManager : MonoBehaviour
             return;
         }
 
-        if (turnManager != null && !turnManager.isPlayerTurn)
+        if (turnManager != null && !turnManager.CanControlCity(currentCity))
         {
-            Debug.Log("Ignored Recruit Warrior click because it is not the player's turn.");
+            Debug.Log("Ignored Recruit Warrior click because it is not this city's turn.");
             return;
         }
 

@@ -9,6 +9,7 @@ public static class GridUtils
     public static Unit GetUnitAtPosition(Vector3 tileWorldPosition, Unit unitToIgnore = null)
     {
         Unit[] units = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
+        const float epsilon = 0.25f; // tolerate slight float drift from saves/moves
         foreach (Unit unit in units)
         {
             if (unit == null || unit == unitToIgnore) continue;
@@ -19,7 +20,7 @@ public static class GridUtils
             Vector3 target = tileWorldPosition;
             target.z = 0f;
 
-            if (Vector3.Distance(pos, target) < 0.1f)
+            if ((pos - target).sqrMagnitude < (epsilon * epsilon))
             {
                 return unit;
             }
@@ -35,6 +36,7 @@ public static class GridUtils
     public static City GetCityAtPosition(Vector3 tileWorldPosition)
     {
         City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        const float epsilon = 0.25f;
         foreach (City city in cities)
         {
             if (city == null) continue;
@@ -45,7 +47,7 @@ public static class GridUtils
             Vector3 target = tileWorldPosition;
             target.z = 0f;
 
-            if (Vector3.Distance(pos, target) < 0.1f)
+            if ((pos - target).sqrMagnitude < (epsilon * epsilon))
             {
                 return city;
             }

@@ -24,6 +24,11 @@ public class UnitSelectionManager : MonoBehaviour
         }
 
         Instance = this;
+
+        if (turnManager == null)
+        {
+            turnManager = TurnManager.Instance;
+        }
     }
 
     private void HighlightReachableTiles(Unit unit)
@@ -79,14 +84,9 @@ public class UnitSelectionManager : MonoBehaviour
             return;
         }
 
-        // Only select player units during the player's turn (and not after game over)
-        if (turnManager != null)
-        {
-            if (turnManager.gameOver || !turnManager.isPlayerTurn || !unit.isPlayerOwned)
-            {
-                return;
-            }
-        }
+        // Only select units that belong to the side whose turn it is
+        if (turnManager != null && !turnManager.CanControlUnit(unit))
+            return;
 
         selectedUnit = unit;
         Debug.Log("Selected unit: " + unit.name);
@@ -121,18 +121,15 @@ public class UnitSelectionManager : MonoBehaviour
 
         if (turnManager != null)
         {
-            if (turnManager.gameOver || !turnManager.isPlayerTurn)
+            if (!turnManager.CanControlUnit(selectedUnit))
             {
-                Debug.Log("Cannot move units when it is not the player's turn or the game is over.");
+                Debug.Log("Cannot move units when it is not this side's turn or the game is over.");
                 return;
             }
         }
 
-        if (!selectedUnit.isPlayerOwned)
-        {
-            Debug.Log("Cannot move AI units during the player turn.");
-            return;
-        }
+        bool isActiveTurnForUnit = turnManager == null || turnManager.IsCurrentSideOwner(selectedUnit.isPlayerOwned);
+        string sideLabel = turnManager != null ? turnManager.GetCurrentSideName() : "Player";
 
         if (!selectedUnit.CanMoveThisTurn())
         {
@@ -166,6 +163,8 @@ public class UnitSelectionManager : MonoBehaviour
 
         Unit targetUnit = GridUtils.GetUnitAtPosition(newPos, selectedUnit);
 
+        bool actionPerformed = false;
+
         if (targetUnit != null)
         {
             // Friendly unit: cannot move onto the same tile
@@ -177,16 +176,17 @@ public class UnitSelectionManager : MonoBehaviour
 
             // Enemy unit: attack instead of moving onto the tile
             selectedUnit.RegisterMove();
-            selectedUnit.UpdateMoveOutline(true);
+            selectedUnit.UpdateMoveOutline(isActiveTurnForUnit);
 
             bool killed = selectedUnit.Attack(targetUnit);
-            Debug.Log("Player unit " + selectedUnit.name + " attacked " + targetUnit.name);
+            Debug.Log(sideLabel + " unit " + selectedUnit.name + " attacked " + targetUnit.name);
+            actionPerformed = true;
 
             // If the defender died, move into their tile
             if (killed)
             {
                 selectedUnit.transform.position = newPos;
-                Debug.Log("Player unit moved into defeated enemy tile at " + newPos);
+                Debug.Log(sideLabel + " unit moved into defeated enemy tile at " + newPos);
             }
         }
         else
@@ -194,8 +194,9 @@ public class UnitSelectionManager : MonoBehaviour
             // Tile is empty: move normally
             selectedUnit.transform.position = newPos;
             selectedUnit.RegisterMove();
-            selectedUnit.UpdateMoveOutline(true);
-            Debug.Log("Moved unit to " + newPos);
+            selectedUnit.UpdateMoveOutline(isActiveTurnForUnit);
+            Debug.Log(sideLabel + " unit moved to " + newPos);
+            actionPerformed = true;
         }
 
         // Update fog visibility after movement/attack
@@ -207,9 +208,9 @@ public class UnitSelectionManager : MonoBehaviour
                 return;
 
             City city = GridUtils.GetCityAtPosition(selectedUnit.transform.position);
-            if (city != null && !city.isPlayerOwned && selectedUnit.isPlayerOwned)
+            if (city != null && city.isPlayerOwned != selectedUnit.isPlayerOwned)
             {
-                turnManager.OnCityCaptured(true);
+                turnManager.OnCityCaptured(selectedUnit.isPlayerOwned);
                 return;
             }
         }
@@ -222,6 +223,11 @@ public class UnitSelectionManager : MonoBehaviour
         else
         {
             HighlightReachableTiles(selectedUnit);
+        }
+
+        if (actionPerformed && turnManager != null)
+        {
+            turnManager.AutoSaveIfEnabled();
         }
     }
 
@@ -237,22 +243,44 @@ public class UnitSelectionManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Called at the start of the player's turn to allow units to move again.
+    /// Called at the start of a side's turn to allow its units to move again.
     /// </summary>
-    public void ResetMovementForPlayerUnits()
+    public void ResetMovementForSide(bool isPlayerOwnedSide, bool isActiveTurn)
     {
         Unit[] units = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
         foreach (Unit unit in units)
         {
-            if (unit.isPlayerOwned)
+            bool matchesSide = unit.isPlayerOwned == isPlayerOwnedSide;
+            if (matchesSide)
             {
                 unit.ResetMovementForTurn();
-                unit.UpdateMoveOutline(true);
+                unit.UpdateMoveOutline(isActiveTurn);
             }
             else
             {
                 unit.UpdateMoveOutline(false);
             }
+        }
+    }
+
+    /// <summary>
+    /// Updates move outlines without resetting movement (used when toggling modes).
+    /// </summary>
+    public void RefreshMoveOutlinesForCurrentTurn()
+    {
+        Unit[] units = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
+        foreach (Unit unit in units)
+        {
+            bool isActiveTurn = false;
+            if (turnManager != null)
+            {
+                isActiveTurn = turnManager.IsCurrentSideOwner(unit.isPlayerOwned) && turnManager.IsHumanTurn();
+            }
+            else
+            {
+                isActiveTurn = unit.isPlayerOwned;
+            }
+            unit.UpdateMoveOutline(isActiveTurn);
         }
     }
 
