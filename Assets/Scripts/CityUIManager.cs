@@ -13,6 +13,7 @@ public class CityUIManager : MonoBehaviour
 
     [Header("UI")]
     public GameObject panelRoot;
+    public GameObject bottomButtonsRoot; // e.g. the Next/Menu button row
     public TMP_Text cityNameText;
     public TMP_Text ownerText;
 
@@ -50,6 +51,13 @@ public class CityUIManager : MonoBehaviour
 
         Debug.Log("CityUIManager.OnCityClicked: " + city.name + " (isPlayerOwned=" + city.isPlayerOwned + ")");
 
+        // If the same city is clicked again while its panel is open, toggle it closed.
+        if (currentCity == city && panelRoot != null && panelRoot.activeSelf)
+        {
+            ClosePanel();
+            return;
+        }
+
         // Only open UI for cities controlled by the current human side
         if (turnManager != null && !turnManager.CanControlCity(city))
         {
@@ -75,6 +83,12 @@ public class CityUIManager : MonoBehaviour
         }
 
         panelRoot.SetActive(true);
+
+        // Hide the default bottom HUD buttons while the city panel is open.
+        if (bottomButtonsRoot != null)
+        {
+            bottomButtonsRoot.SetActive(false);
+        }
         Debug.Log("CityUIManager.OpenPanel");
 
         if (cityNameText != null && currentCity != null)
@@ -102,6 +116,12 @@ public class CityUIManager : MonoBehaviour
         if (panelRoot != null)
         {
             panelRoot.SetActive(false);
+        }
+
+        // Restore the default bottom HUD buttons when the city panel closes.
+        if (bottomButtonsRoot != null)
+        {
+            bottomButtonsRoot.SetActive(true);
         }
     }
 

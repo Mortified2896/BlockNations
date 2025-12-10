@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 public class TileHoverManager : MonoBehaviour
 {
@@ -20,6 +21,12 @@ public class TileHoverManager : MonoBehaviour
 
     void Update()
     {
+        // Ignore world interaction when clicking over UI (buttons, panels, etc.).
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+        {
+            return;
+        }
+
         if (TurnManager.Instance != null)
         {
             if (TurnManager.Instance.gameOver || TurnManager.Instance.IsHotseatHandoff)
@@ -124,7 +131,8 @@ public class TileHoverManager : MonoBehaviour
             }
 
             // 2c) If both a player city and a movable player unit are under the cursor,
-            //     prefer selecting the unit so it can move out of the city.
+            //     prefer selecting the unit so it can move out of the city,
+            //     and hide the city panel.
             if (hasCity && clickedCity != null &&
                 TurnManager.Instance != null &&
                 TurnManager.Instance.CanControlCity(clickedCity) &&
@@ -132,6 +140,11 @@ public class TileHoverManager : MonoBehaviour
                 TurnManager.Instance.CanControlUnit(clickedUnit) &&
                 clickedUnit.CanMoveThisTurn())
             {
+                if (CityUIManager.Instance != null)
+                {
+                    CityUIManager.Instance.ClosePanel();
+                }
+
                 UnitSelectionManager.Instance.SelectUnit(clickedUnit);
                 return;
             }
@@ -155,11 +168,22 @@ public class TileHoverManager : MonoBehaviour
             // 2e) Unit clicked (not on a city, or city handled above): select/deselect unit
             if (hasUnit)
             {
+                if (CityUIManager.Instance != null)
+                {
+                    CityUIManager.Instance.ClosePanel();
+                }
+
                 UnitSelectionManager.Instance.SelectUnit(clickedUnit);
                 return;
             }
 
             // 2f) No city/unit clicked: treat as tile interaction
+
+            // Clicking an empty tile should close any open city panel.
+            if (CityUIManager.Instance != null)
+            {
+                CityUIManager.Instance.ClosePanel();
+            }
 
             // Inform unit selection logic first (for movement)
             if (hoveredTile != null && UnitSelectionManager.Instance != null)

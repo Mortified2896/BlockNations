@@ -28,6 +28,7 @@ public class GameMenuActions : MonoBehaviour
 
     public void QuitToMainMenu()
     {
+        Debug.Log("QuitToMainMenu clicked");
         if (!string.IsNullOrEmpty(mainMenuSceneName))
         {
             Time.timeScale = 1f;

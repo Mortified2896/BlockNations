@@ -10,6 +10,7 @@ public class UnitUIManager : MonoBehaviour
 
     [Header("UI")]
     public GameObject panelRoot;
+    public GameObject bottomButtonsRoot; // e.g. the Next/Menu button row
     public TMP_Text unitNameText;
     public TMP_Text healthText;
     public TMP_Text attackText;
@@ -45,9 +46,22 @@ public class UnitUIManager : MonoBehaviour
 
         panelRoot.SetActive(true);
 
+        // Hide the default bottom HUD buttons while the unit panel is open.
+        if (bottomButtonsRoot != null)
+        {
+            bottomButtonsRoot.SetActive(false);
+        }
+
         if (unitNameText != null && unit != null)
         {
-            unitNameText.text = unit.name;
+            // Strip Unity's "(Clone)" suffix so the UI shows a clean unit name.
+            string rawName = unit.name;
+            const string cloneSuffix = "(Clone)";
+            if (rawName.EndsWith(cloneSuffix))
+            {
+                rawName = rawName.Substring(0, rawName.Length - cloneSuffix.Length).TrimEnd();
+            }
+            unitNameText.text = rawName;
         }
 
         if (healthText != null && unit != null)
@@ -74,6 +88,11 @@ public class UnitUIManager : MonoBehaviour
         {
             panelRoot.SetActive(false);
         }
+
+        // Restore the default bottom HUD buttons when the unit panel closes.
+        if (bottomButtonsRoot != null)
+        {
+            bottomButtonsRoot.SetActive(true);
+        }
     }
 }
-

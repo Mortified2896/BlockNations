@@ -4,28 +4,31 @@ using UnityEngine.EventSystems;
 using TMPro;
 
 /// <summary>
-/// Builds a basic main menu UI at runtime so you don't have to wire buttons manually.
+/// Builds a main menu UI at runtime that scales nicely on smartphones.
 /// Attach this to an empty GameObject in the MainMenu scene, disable your old Canvas,
 /// and it will spawn a new Canvas with scalable layout and hook to MainMenuController.
 /// </summary>
 public class MainMenuUIBuilder : MonoBehaviour
 {
     [Header("Layout")]
+    // Portrait reference for smartphones
     public Vector2 referenceResolution = new Vector2(1080, 1920);
-    public float buttonHeight = 120f;
-    public float panelWidth = 900f;
+    public float buttonHeight = 180f;
 
     [Header("Styling")]
-    public Color backgroundColor = new Color(0.07f, 0.09f, 0.12f, 0.9f);
-    public Color panelColor = new Color(0.15f, 0.17f, 0.21f, 0.95f);
-    public Color buttonColor = new Color(0.24f, 0.56f, 0.86f, 1f);
-    public Color buttonHoverColor = new Color(0.3f, 0.65f, 0.95f, 1f);
+    public Color backgroundColor = new Color(0.06f, 0.10f, 0.18f, 1f);   // fullscreen bg
+    public Color panelColor      = new Color(0.09f, 0.11f, 0.16f, 0.96f); // inner card
+    public Color buttonColor     = new Color(0.18f, 0.52f, 0.82f, 1f);
+    public Color buttonHoverColor   = new Color(0.24f, 0.62f, 0.94f, 1f);
+    public Color buttonPressedColor = new Color(0.15f, 0.42f, 0.70f, 1f);
     public Color buttonTextColor = Color.white;
-    public Color titleColor = Color.white;
-    public int titleSize = 48;
-    public int buttonTextSize = 32;
-    public int statusTextSize = 28;
-    public int inputTextSize = 28;
+    public Color titleColor      = Color.white;
+
+    // Slightly larger sizes for mobile readability
+    public int titleSize      = 96;
+    public int buttonTextSize = 56;
+    public int statusTextSize = 42;
+    public int inputTextSize  = 40;
 
     [Header("References")]
     public MainMenuController controller;
@@ -34,7 +37,7 @@ public class MainMenuUIBuilder : MonoBehaviour
     {
         if (controller == null)
         {
-            controller = FindObjectOfType<MainMenuController>();
+            controller = Object.FindFirstObjectByType<MainMenuController>();
         }
 
         if (controller == null)
@@ -49,11 +52,11 @@ public class MainMenuUIBuilder : MonoBehaviour
         RectTransform root = CreateRootPanel(canvas.transform);
         CreateTitle(root, "Main Menu");
 
-        CreateButton(root, "Continue", controller.ContinueLastSave);
-        CreateButton(root, "Play vs AI", controller.PlayVsAI);
-        CreateButton(root, "Hotseat", controller.PlayHotseat);
-        CreateButton(root, "Import JSON", controller.OpenImportPanel);
-        CreateButton(root, "Quit", controller.QuitGame);
+        CreateButton(root, "Continue",     controller.ContinueLastSave);
+        CreateButton(root, "Play vs AI",   controller.PlayVsAI);
+        CreateButton(root, "Hotseat",      controller.PlayHotseat);
+        CreateButton(root, "Import JSON",  controller.OpenImportPanel);
+        CreateButton(root, "Quit",         controller.QuitGame);
 
         // Import panel overlay
         BuildImportPanel(canvas.transform);
@@ -66,57 +69,71 @@ public class MainMenuUIBuilder : MonoBehaviour
         {
             Canvas existingCanvas = existing.GetComponent<Canvas>();
             if (existingCanvas != null)
-            {
                 return existingCanvas;
-            }
         }
 
         GameObject go = new GameObject("NewUI", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         Canvas canvas = go.GetComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.pixelPerfect = true;
 
         CanvasScaler scaler = go.GetComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = referenceResolution;
         scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
         scaler.matchWidthOrHeight = 0.5f;
+        scaler.referencePixelsPerUnit = 100f;
 
         return canvas;
     }
 
     void EnsureEventSystem()
     {
-        if (FindObjectOfType<EventSystem>() != null) return;
-
-        GameObject go = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
-        go.transform.SetAsLastSibling();
+        if (Object.FindFirstObjectByType<EventSystem>() != null) return;
+        new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
     }
 
+    /// <summary>
+    /// Creates a fullscreen background and a centered card panel that fills most
+    /// of the screen. This scales well across smartphone resolutions.
+    /// </summary>
     RectTransform CreateRootPanel(Transform parent)
     {
-        GameObject panel = new GameObject("MenuRoot", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
-        panel.transform.SetParent(parent, false);
+        // Fullscreen background
+        GameObject bgGO = new GameObject("Background", typeof(RectTransform), typeof(Image));
+        bgGO.transform.SetParent(parent, false);
+        RectTransform bgRT = bgGO.GetComponent<RectTransform>();
+        bgRT.anchorMin = Vector2.zero;
+        bgRT.anchorMax = Vector2.one;
+        bgRT.offsetMin = Vector2.zero;
+        bgRT.offsetMax = Vector2.zero;
+        bgRT.pivot = new Vector2(0.5f, 0.5f);
 
-        Image bg = panel.GetComponent<Image>();
-        bg.color = backgroundColor;
+        Image bgImg = bgGO.GetComponent<Image>();
+        bgImg.color = backgroundColor;
+
+        // Centered panel/card for menu
+        GameObject panel = new GameObject("MenuPanel", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup));
+        panel.transform.SetParent(bgGO.transform, false);
 
         RectTransform rt = panel.GetComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0.5f, 0.5f);
-        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        // Fill about 80–90% of the screen, centered
+        rt.anchorMin = new Vector2(0.10f, 0.10f);
+        rt.anchorMax = new Vector2(0.90f, 0.90f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
         rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(panelWidth, 0f);
+
+        Image panelImg = panel.GetComponent<Image>();
+        panelImg.color = panelColor;
 
         VerticalLayoutGroup layout = panel.GetComponent<VerticalLayoutGroup>();
         layout.childControlWidth = true;
         layout.childControlHeight = true;
         layout.childForceExpandWidth = true;
         layout.childForceExpandHeight = false;
-        layout.spacing = 20f;
-        layout.padding = new RectOffset(40, 40, 60, 60);
-
-        ContentSizeFitter fitter = panel.GetComponent<ContentSizeFitter>();
-        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        layout.spacing = 40f; // distance between title / buttons
+        layout.padding = new RectOffset(80, 80, 100, 100); // inner padding of card
 
         return rt;
     }
@@ -125,16 +142,18 @@ public class MainMenuUIBuilder : MonoBehaviour
     {
         GameObject go = new GameObject("Title", typeof(RectTransform), typeof(TextMeshProUGUI), typeof(LayoutElement));
         go.transform.SetParent(parent, false);
+
         RectTransform rt = go.GetComponent<RectTransform>();
         rt.sizeDelta = new Vector2(0f, buttonHeight);
 
         LayoutElement le = go.GetComponent<LayoutElement>();
-        le.minHeight = buttonHeight * 0.9f;
+        le.minHeight = buttonHeight * 1.0f;
+        le.flexibleHeight = 0f;
 
         TextMeshProUGUI tmp = go.GetComponent<TextMeshProUGUI>();
         tmp.text = text;
         tmp.alignment = TextAlignmentOptions.Center;
-        tmp.fontSize = titleSize;
+        ApplyReadableStyle(tmp, titleSize, true);
         tmp.color = titleColor;
 
         return tmp;
@@ -153,17 +172,19 @@ public class MainMenuUIBuilder : MonoBehaviour
 
         LayoutElement le = go.GetComponent<LayoutElement>();
         le.minHeight = buttonHeight;
+        le.flexibleHeight = 0f;
 
         Button btn = go.GetComponent<Button>();
         btn.onClick.AddListener(action);
 
         // Hover effect
         ButtonHoverEffect hover = go.AddComponent<ButtonHoverEffect>();
-        hover.Configure(img, buttonColor, buttonHoverColor);
+        hover.Configure(img, buttonColor, buttonHoverColor, buttonPressedColor);
 
         // Label
         GameObject textGO = new GameObject("Text", typeof(RectTransform), typeof(TextMeshProUGUI));
         textGO.transform.SetParent(go.transform, false);
+
         RectTransform trt = textGO.GetComponent<RectTransform>();
         trt.anchorMin = Vector2.zero;
         trt.anchorMax = Vector2.one;
@@ -173,7 +194,7 @@ public class MainMenuUIBuilder : MonoBehaviour
         TextMeshProUGUI tmp = textGO.GetComponent<TextMeshProUGUI>();
         tmp.text = label;
         tmp.alignment = TextAlignmentOptions.Center;
-        tmp.fontSize = buttonTextSize;
+        ApplyReadableStyle(tmp, buttonTextSize, true);
         tmp.color = buttonTextColor;
 
         return btn;
@@ -181,26 +202,30 @@ public class MainMenuUIBuilder : MonoBehaviour
 
     void BuildImportPanel(Transform parent)
     {
-        // Overlay
+        // Fullscreen overlay
         GameObject overlay = new GameObject("ImportPanel", typeof(RectTransform), typeof(Image));
         overlay.transform.SetParent(parent, false);
+
         RectTransform rt = overlay.GetComponent<RectTransform>();
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
         rt.offsetMin = Vector2.zero;
         rt.offsetMax = Vector2.zero;
+        rt.pivot = new Vector2(0.5f, 0.5f);
 
         Image img = overlay.GetComponent<Image>();
         img.color = new Color(0f, 0f, 0f, 0.6f);
 
-        // Inner panel
+        // Inner panel/card
         GameObject panel = new GameObject("Content", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup));
         panel.transform.SetParent(overlay.transform, false);
+
         RectTransform prt = panel.GetComponent<RectTransform>();
-        prt.anchorMin = new Vector2(0.1f, 0.15f);
-        prt.anchorMax = new Vector2(0.9f, 0.85f);
+        prt.anchorMin = new Vector2(0.08f, 0.18f);
+        prt.anchorMax = new Vector2(0.92f, 0.82f);
         prt.offsetMin = Vector2.zero;
         prt.offsetMax = Vector2.zero;
+        prt.pivot = new Vector2(0.5f, 0.5f);
 
         Image pimg = panel.GetComponent<Image>();
         pimg.color = panelColor;
@@ -210,8 +235,8 @@ public class MainMenuUIBuilder : MonoBehaviour
         layout.childControlHeight = true;
         layout.childForceExpandWidth = true;
         layout.childForceExpandHeight = false;
-        layout.spacing = 16f;
-        layout.padding = new RectOffset(32, 32, 32, 32);
+        layout.spacing = 24f;
+        layout.padding = new RectOffset(40, 40, 40, 40);
 
         CreateTitle(panel.transform, "Import JSON");
 
@@ -225,6 +250,7 @@ public class MainMenuUIBuilder : MonoBehaviour
         // Buttons row
         GameObject row = new GameObject("Buttons", typeof(RectTransform), typeof(HorizontalLayoutGroup));
         row.transform.SetParent(panel.transform, false);
+
         HorizontalLayoutGroup h = row.GetComponent<HorizontalLayoutGroup>();
         h.childControlHeight = true;
         h.childControlWidth = true;
@@ -237,7 +263,7 @@ public class MainMenuUIBuilder : MonoBehaviour
         Button importBtn = CreateButton(row.transform, "Import", controller.ImportFromPastedJson);
         Button cancelBtn = CreateButton(row.transform, "Cancel", controller.CloseImportPanel);
 
-        // Configure controller with created references
+        // Hook into controller
         controller.ConfigureImportUI(overlay, input, status);
         overlay.SetActive(false);
     }
@@ -246,11 +272,19 @@ public class MainMenuUIBuilder : MonoBehaviour
     {
         GameObject go = new GameObject("Status", typeof(RectTransform), typeof(TextMeshProUGUI));
         go.transform.SetParent(parent, false);
+
+        RectTransform rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0f, 0f);
+        rt.anchorMax = new Vector2(1f, 0f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
         TextMeshProUGUI tmp = go.GetComponent<TextMeshProUGUI>();
         tmp.text = string.Empty;
         tmp.alignment = TextAlignmentOptions.MidlineLeft;
         tmp.color = Color.white;
-        tmp.enableWordWrapping = true;
+        ApplyReadableStyle(tmp, statusTextSize, false);
+
         return tmp;
     }
 
@@ -260,6 +294,10 @@ public class MainMenuUIBuilder : MonoBehaviour
         root.transform.SetParent(parent, false);
 
         RectTransform rt = root.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0f, 0f);
+        rt.anchorMax = new Vector2(1f, 1f);
+        rt.offsetMin = new Vector2(0f, 0f);
+        rt.offsetMax = new Vector2(0f, 0f);
         rt.sizeDelta = new Vector2(0f, 600f);
 
         Image bg = root.GetComponent<Image>();
@@ -282,7 +320,7 @@ public class MainMenuUIBuilder : MonoBehaviour
         TextMeshProUGUI placeholder = CreateTMPTextChild(textArea.transform, "Placeholder", placeholderText, TextAlignmentOptions.TopLeft, new Color(1f, 1f, 1f, 0.35f));
         // Text
         TextMeshProUGUI text = CreateTMPTextChild(textArea.transform, "Text", string.Empty, TextAlignmentOptions.TopLeft, Color.white);
-        text.enableWordWrapping = true;
+        text.textWrappingMode = TextWrappingModes.Normal;
         text.richText = false;
 
         TMP_InputField input = root.GetComponent<TMP_InputField>();
@@ -300,6 +338,7 @@ public class MainMenuUIBuilder : MonoBehaviour
     {
         GameObject go = new GameObject(name, typeof(RectTransform), typeof(TextMeshProUGUI));
         go.transform.SetParent(parent, false);
+
         RectTransform rt = go.GetComponent<RectTransform>();
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
@@ -310,8 +349,25 @@ public class MainMenuUIBuilder : MonoBehaviour
         tmp.text = text;
         tmp.alignment = align;
         tmp.color = color;
-        tmp.fontSize = inputTextSize;
+        ApplyReadableStyle(tmp, inputTextSize, false);
 
         return tmp;
+    }
+
+    void ApplyReadableStyle(TextMeshProUGUI tmp, float size, bool bold)
+    {
+        tmp.fontSize = size;
+        tmp.fontStyle = bold ? FontStyles.Bold : FontStyles.Normal;
+        tmp.textWrappingMode = TextWrappingModes.Normal;
+        tmp.enableAutoSizing = false;
+
+        // If the font has an outline/material, use a subtle outline for readability.
+        if (tmp.fontSharedMaterial != null)
+        {
+            tmp.fontMaterial = Instantiate(tmp.fontSharedMaterial); // avoid mutating shared asset
+            var mat = tmp.fontMaterial;
+            mat.SetFloat(ShaderUtilities.ID_OutlineWidth, 0.15f); // thinner than before to avoid blur
+            mat.SetColor(ShaderUtilities.ID_OutlineColor, new Color(0f, 0f, 0f, 0.7f));
+        }
     }
 }

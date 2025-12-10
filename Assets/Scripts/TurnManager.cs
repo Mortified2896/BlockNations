@@ -2,6 +2,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
 using TMPro;   // for TMP_Text
 
 public class TurnManager : MonoBehaviour
@@ -25,6 +27,7 @@ public class TurnManager : MonoBehaviour
 
     [Header("Economy")]
     // Base starting gold; income from cities adds on top at game start.
+    public int startingGold = 2;
     public int playerGold = 2;
     public int aiGold = 0;
     public int goldPerCity = 1;
@@ -189,6 +192,9 @@ public class TurnManager : MonoBehaviour
 
     void Start()
     {
+        EnsureTurnAndGoldTexts();
+        EnsureEventSystemExists();
+        EnsureUIRaycasters();
         StartCoroutine(StartupSequence());
     }
 
@@ -207,6 +213,7 @@ public class TurnManager : MonoBehaviour
     // 🚩 This is what the UI Button will call
     public void OnEndTurnButtonPressed()
     {
+        Debug.Log($"OnEndTurnButtonPressed clicked (gameOver={gameOver}, isHotseatHandoff={isHotseatHandoff}, isHumanTurn={IsHumanTurn()})");
         if (gameOver || isHotseatHandoff || !IsHumanTurn())
         {
             // Ignore clicks if it's not the current human's turn
@@ -214,6 +221,36 @@ public class TurnManager : MonoBehaviour
         }
 
         EndCurrentTurn();
+    }
+
+    void EnsureEventSystemExists()
+    {
+        if (EventSystem.current != null)
+            return;
+
+        GameObject es = new GameObject("EventSystem");
+        es.AddComponent<EventSystem>();
+        es.AddComponent<StandaloneInputModule>();
+    }
+
+    void EnsureUIRaycasters()
+    {
+        var canvases = FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        foreach (var c in canvases)
+        {
+            if (c == null) continue;
+            var gr = c.GetComponent<GraphicRaycaster>();
+            if (gr == null)
+            {
+                c.gameObject.AddComponent<GraphicRaycaster>();
+                Debug.Log($"Added GraphicRaycaster to canvas '{c.name}' so UI can receive clicks.");
+            }
+            else if (!gr.enabled)
+            {
+                gr.enabled = true;
+                Debug.Log($"Enabled GraphicRaycaster on canvas '{c.name}' so UI can receive clicks.");
+            }
+        }
     }
 
     void EndCurrentTurn()
@@ -412,6 +449,13 @@ public class TurnManager : MonoBehaviour
 
     void InitializeNewGame()
     {
+        // Reset core state for a fresh game (important when reloading scenes in-editor).
+        gameOver = false;
+        turnNumber = 1;
+        isPlayerTurn = true;
+        playerGold = startingGold;
+        aiGold = startingGold;
+
         if (string.IsNullOrEmpty(currentGameId))
         {
             currentGameId = System.Guid.NewGuid().ToString();
@@ -705,20 +749,56 @@ public class TurnManager : MonoBehaviour
         }
     }
 
+    void EnsureTurnAndGoldTexts()
+    {
+        if (turnText == null || goldText == null)
+        {
+            var texts = Object.FindObjectsByType<TMP_Text>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            foreach (var t in texts)
+            {
+                if (t == null) continue;
+                string name = t.name.ToLower();
+
+                if (turnText == null && name.Contains("turn"))
+                {
+                    turnText = t;
+                    t.gameObject.SetActive(true);
+                }
+
+                if (goldText == null && name.Contains("gold"))
+                {
+                    goldText = t;
+                    t.gameObject.SetActive(true);
+                }
+            }
+        }
+
+        if (turnText == null)
+        {
+            Debug.LogWarning("TurnManager: No turnText assigned and none found in scene (name containing 'turn').");
+        }
+    }
+
     void UpdateGoldText()
     {
-        if (goldText != null)
+        EnsureTurnAndGoldTexts();
+
+        if (goldText == null)
+            return;
+
+        int displayGold = playerGold;
+
+        if (currentMode == GameMode.Hotseat && !isPlayerTurn)
         {
-            int displayGold = playerGold;
-
-            if (currentMode == GameMode.Hotseat && !isPlayerTurn)
-            {
-                displayGold = aiGold;
-            }
-
-            // Two-line so the amount is clearly visible in tight header layouts.
-            goldText.text = $"Gold\n{displayGold}";
+            displayGold = aiGold;
         }
+
+        // Force single-line display.
+        goldText.enableAutoSizing = false;
+        goldText.textWrappingMode = TextWrappingModes.NoWrap;
+        goldText.overflowMode = TextOverflowModes.Overflow;
+        goldText.richText = false;
+        goldText.text = $"Gold {displayGold}";
     }
 
     public void RecalculatePlayerVisibility()
@@ -801,9 +881,19 @@ public class TurnManager : MonoBehaviour
 
     void UpdateTurnText()
     {
-        if (turnText == null) return;
+        EnsureTurnAndGoldTexts();
+
+        if (turnText == null)
+            return;
 
         string who = GetCurrentSideName();
+
+        // Make sure the turn label is always visible and single-line.
+        turnText.enableAutoSizing = false;
+        turnText.textWrappingMode = TextWrappingModes.NoWrap;
+        turnText.overflowMode = TextOverflowModes.Overflow;
+        turnText.richText = false;
+        turnText.color = Color.white;
         turnText.text = $"Turn {turnNumber} - {who}";
     }
 
@@ -1074,12 +1164,11 @@ public class TurnManager : MonoBehaviour
             }
         }
 
-        // After loading, ensure movement state and outlines are consistent for both sides.
+        // After loading, ensure selection is cleared and move outlines
+        // reflect the loaded movement state (but do NOT reset movement).
         if (UnitSelectionManager.Instance != null)
         {
             UnitSelectionManager.Instance.ClearSelection();
-            UnitSelectionManager.Instance.ResetMovementForSide(true, IsCurrentSideOwner(true));
-            UnitSelectionManager.Instance.ResetMovementForSide(false, IsCurrentSideOwner(false));
             UnitSelectionManager.Instance.RefreshMoveOutlinesForCurrentTurn();
         }
 

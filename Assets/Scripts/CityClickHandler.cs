@@ -23,6 +23,13 @@ public class CityClickHandler : MonoBehaviour
 
         Debug.Log("CityClickHandler.OnMouseDown on " + city.name);
 
+        // If TileHoverManager is active, it handles all click routing (including cities).
+        // Avoid calling CityUIManager twice for a single click.
+        if (TileHoverManager.Instance != null)
+        {
+            return;
+        }
+
         if (CityUIManager.Instance != null)
         {
             CityUIManager.Instance.OnCityClicked(city);
