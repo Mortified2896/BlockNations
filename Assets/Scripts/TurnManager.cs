@@ -91,6 +91,7 @@ public class TurnManager : MonoBehaviour
     private class GameSave
     {
         public string version = "1";
+        public string gameId;
         public string mode;
         public bool isPlayerTurn;
         public int turnNumber;
@@ -102,6 +103,9 @@ public class TurnManager : MonoBehaviour
         public List<SavedUnit> units = new List<SavedUnit>();
         public List<SavedTile> tiles = new List<SavedTile>();
     }
+
+    // Stable id for the current campaign/save chain so exports can be shared
+    private string currentGameId;
 
     public bool IsHumanTurn()
     {
@@ -408,6 +412,11 @@ public class TurnManager : MonoBehaviour
 
     void InitializeNewGame()
     {
+        if (string.IsNullOrEmpty(currentGameId))
+        {
+            currentGameId = System.Guid.NewGuid().ToString();
+        }
+
         ResetRecruitmentForPlayerCities();
         CollectPlayerIncome();
         CollectAIGold();
@@ -827,6 +836,7 @@ public class TurnManager : MonoBehaviour
 
         GameSave save = new GameSave
         {
+            gameId = string.IsNullOrEmpty(currentGameId) ? (currentGameId = System.Guid.NewGuid().ToString()) : currentGameId,
             mode = currentMode.ToString(),
             isPlayerTurn = isPlayerTurn,
             turnNumber = turnNumber,
@@ -945,6 +955,7 @@ public class TurnManager : MonoBehaviour
         {
             currentMode = loadedMode;
         }
+        currentGameId = string.IsNullOrEmpty(save.gameId) ? System.Guid.NewGuid().ToString() : save.gameId;
         isPlayerTurn = save.isPlayerTurn;
         turnNumber = save.turnNumber;
         playerGold = save.playerGold;
