@@ -23,11 +23,22 @@ public class CityClickHandler : MonoBehaviour
 
         Debug.Log("CityClickHandler.OnMouseDown on " + city.name);
 
-        // If TileHoverManager is active, it handles all click routing (including cities).
-        // Avoid calling CityUIManager twice for a single click.
-        if (TileHoverManager.Instance != null)
+        // If there's also a unit under the mouse, let TileHoverManager prioritize the unit.
+        Camera cam = Camera.main;
+        if (cam != null)
         {
-            return;
+            Vector3 mouseWorld = cam.ScreenToWorldPoint(Input.mousePosition);
+            Vector2 mousePos2D = new Vector2(mouseWorld.x, mouseWorld.y);
+            RaycastHit2D[] hits = Physics2D.RaycastAll(mousePos2D, Vector2.zero);
+            foreach (var hit in hits)
+            {
+                if (hit.collider == null) continue;
+                if (hit.collider.GetComponentInParent<Unit>() != null)
+                {
+                    Debug.Log("CityClickHandler: unit under cursor; skipping city UI to allow unit selection.");
+                    return;
+                }
+            }
         }
 
         if (CityUIManager.Instance != null)

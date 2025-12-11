@@ -53,6 +53,17 @@ public class MainMenuController : MonoBehaviour
         }
     }
 
+    public void PlayByPost()
+    {
+        GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
+        SceneManager.LoadScene(gameplaySceneName);
+
+        if (modeSelectionPanel != null)
+        {
+            modeSelectionPanel.SetActive(false);
+        }
+    }
+
     public void ContinueLastSave()
     {
         string path = System.IO.Path.Combine(Application.persistentDataPath, "save.json");
@@ -105,10 +116,13 @@ public class MainMenuController : MonoBehaviour
 
     public void ImportFromPastedJson()
     {
-        string json = importInput != null ? importInput.text : null;
+        Debug.Log("ImportFromPastedJson clicked");
+        // New behavior: read JSON directly from the system clipboard so players
+        // can just copy from their friend and click "Import JSON" on the main menu.
+        string json = GUIUtility.systemCopyBuffer;
         if (string.IsNullOrWhiteSpace(json))
         {
-            SetImportStatus("Paste JSON first.");
+            SetImportStatus("Clipboard is empty. Copy a JSON save first.");
             return;
         }
 

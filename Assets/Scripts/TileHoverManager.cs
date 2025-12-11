@@ -21,7 +21,7 @@ public class TileHoverManager : MonoBehaviour
 
     void Update()
     {
-        // Ignore world interaction when clicking over UI (buttons, panels, etc.).
+        // Ignore world interaction when the pointer is over UI (buttons, panels, overlays).
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
         {
             return;
@@ -130,42 +130,7 @@ public class TileHoverManager : MonoBehaviour
                 }
             }
 
-            // 2c) If both a player city and a movable player unit are under the cursor,
-            //     prefer selecting the unit so it can move out of the city,
-            //     and hide the city panel.
-            if (hasCity && clickedCity != null &&
-                TurnManager.Instance != null &&
-                TurnManager.Instance.CanControlCity(clickedCity) &&
-                hasUnit &&
-                TurnManager.Instance.CanControlUnit(clickedUnit) &&
-                clickedUnit.CanMoveThisTurn())
-            {
-                if (CityUIManager.Instance != null)
-                {
-                    CityUIManager.Instance.ClosePanel();
-                }
-
-                UnitSelectionManager.Instance.SelectUnit(clickedUnit);
-                return;
-            }
-
-            // 2d) Player city clicked (and no movable player unit to prioritize):
-            //     deselect unit and open city UI
-            if (hasCity && clickedCity != null &&
-                TurnManager.Instance != null &&
-                TurnManager.Instance.CanControlCity(clickedCity) &&
-                CityUIManager.Instance != null)
-            {
-                if (UnitSelectionManager.Instance != null)
-                {
-                    UnitSelectionManager.Instance.ClearSelection();
-                }
-
-                CityUIManager.Instance.OnCityClicked(clickedCity);
-                return;
-            }
-
-            // 2e) Unit clicked (not on a city, or city handled above): select/deselect unit
+            // 2c) Unit clicked: select/deselect unit (takes priority over city UI)
             if (hasUnit)
             {
                 if (CityUIManager.Instance != null)
@@ -174,6 +139,22 @@ public class TileHoverManager : MonoBehaviour
                 }
 
                 UnitSelectionManager.Instance.SelectUnit(clickedUnit);
+                return;
+            }
+
+            // 2d) Player city clicked (and no unit was prioritized): open city UI
+            if (hasCity && clickedCity != null &&
+                TurnManager.Instance != null &&
+                TurnManager.Instance.CanControlCity(clickedCity) &&
+                CityUIManager.Instance != null)
+            {
+                Debug.Log($"TileHoverManager: opening city UI for {clickedCity.name}");
+                if (UnitSelectionManager.Instance != null)
+                {
+                    UnitSelectionManager.Instance.ClearSelection();
+                }
+
+                CityUIManager.Instance.OnCityClicked(clickedCity);
                 return;
             }
 

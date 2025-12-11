@@ -51,13 +51,6 @@ public class CityUIManager : MonoBehaviour
 
         Debug.Log("CityUIManager.OnCityClicked: " + city.name + " (isPlayerOwned=" + city.isPlayerOwned + ")");
 
-        // If the same city is clicked again while its panel is open, toggle it closed.
-        if (currentCity == city && panelRoot != null && panelRoot.activeSelf)
-        {
-            ClosePanel();
-            return;
-        }
-
         // Only open UI for cities controlled by the current human side
         if (turnManager != null && !turnManager.CanControlCity(city))
         {

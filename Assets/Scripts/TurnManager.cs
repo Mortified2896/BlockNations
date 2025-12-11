@@ -12,7 +12,8 @@ public class TurnManager : MonoBehaviour
     {
         None,
         VsAI,
-        Hotseat
+        Hotseat,
+        PlayByPost
     }
 
     public static TurnManager Instance { get; private set; }
@@ -44,6 +45,10 @@ public class TurnManager : MonoBehaviour
     public GameObject gameOverPanel;
     public TMP_Text gameOverText;
 
+    [Header("Play By Post")]
+    [Tooltip("Optional panel shown when a Play-by-Post turn is finished (e.g., with a 'Copy JSON' button).")]
+    public GameObject playByPostPopup;
+
     [Header("References")]
     public GridManager gridManager;
     public int visibilityRadius = 1;
@@ -55,6 +60,7 @@ public class TurnManager : MonoBehaviour
     [Header("Saving")]
     public bool autoSaveEnabled = true;
     public string autoSaveFileName = "save.json";
+    public bool playByPostExportPretty = true;
 
     private bool isHotseatHandoff = false;
     private bool nextHotseatIsPlayer = false;
@@ -127,7 +133,7 @@ public class TurnManager : MonoBehaviour
 
     public bool IsCurrentSideOwner(bool isPlayerOwned)
     {
-        if (currentMode == GameMode.Hotseat)
+        if (currentMode == GameMode.Hotseat || currentMode == GameMode.PlayByPost)
         {
             return isPlayerTurn == isPlayerOwned;
         }
@@ -154,7 +160,7 @@ public class TurnManager : MonoBehaviour
 
     public string GetCurrentSideName()
     {
-        if (currentMode == GameMode.Hotseat)
+        if (currentMode == GameMode.Hotseat || currentMode == GameMode.PlayByPost)
         {
             return isPlayerTurn ? "Player 1" : "Player 2";
         }
@@ -271,14 +277,46 @@ public class TurnManager : MonoBehaviour
             return;
         }
 
-        // Hotseat: hand control to the other player without AI actions.
-        if (currentMode == GameMode.Hotseat)
+        // Hotseat / Play-by-Post: no AI, just human sides.
+        if (currentMode == GameMode.Hotseat || currentMode == GameMode.PlayByPost)
         {
+            // Play-by-Post: end local turn and show export popup instead of switching sides.
+            if (currentMode == GameMode.PlayByPost)
+            {
+                AutoSaveIfEnabled();
+
+                if (playByPostPopup != null)
+                {
+                    playByPostPopup.SetActive(true);
+                }
+
+                Debug.Log("Play-by-Post turn finished. Use the Copy JSON button to export this turn.");
+                return;
+            }
+
+            // Hotseat: hand control to the other player without AI actions.
             isPlayerTurn = !isPlayerTurn;
             UpdateTurnText();
 
-            ShowHotseatHandoff(isPlayerTurn, true);
-            AutoSaveIfEnabled();
+            if (currentMode == GameMode.Hotseat)
+            {
+                ShowHotseatHandoff(isPlayerTurn, true);
+                AutoSaveIfEnabled();
+            }
+            else // PlayByPost: immediately start the next side's turn without showing the handoff overlay
+            {
+                if (isPlayerTurn)
+                {
+                    // Completed a full round, advance the turn counter for Player 1
+                    turnNumber++;
+                    BeginPlayerTurn();
+                }
+                else
+                {
+                    BeginHotseatOpponentTurn();
+                }
+                AutoSaveIfEnabled();
+            }
         }
     }
 
@@ -480,6 +518,7 @@ public class TurnManager : MonoBehaviour
         }
 
         // If we start in Hotseat, show the handoff before the very first turn.
+        // PlayByPost should NOT use the hotseat handoff overlay.
         if (currentMode == GameMode.Hotseat)
         {
             ShowHotseatHandoff(isPlayerTurn, false);
@@ -788,7 +827,9 @@ public class TurnManager : MonoBehaviour
 
         int displayGold = playerGold;
 
-        if (currentMode == GameMode.Hotseat && !isPlayerTurn)
+        // In Hotseat and Play-by-Post, the second side's gold
+        // is stored in aiGold, so show that when it's their turn.
+        if ((currentMode == GameMode.Hotseat || currentMode == GameMode.PlayByPost) && !isPlayerTurn)
         {
             displayGold = aiGold;
         }
@@ -807,7 +848,7 @@ public class TurnManager : MonoBehaviour
             return;
 
         bool currentSideIsPlayerOwned = true;
-        if (currentMode == GameMode.Hotseat)
+        if (currentMode == GameMode.Hotseat || currentMode == GameMode.PlayByPost)
         {
             // Player 1 uses isPlayerOwned=true, Player 2 uses isPlayerOwned=false
             currentSideIsPlayerOwned = isPlayerTurn;
@@ -924,6 +965,31 @@ public class TurnManager : MonoBehaviour
             return;
         }
 
+        GameSave save = BuildCurrentSave();
+        if (save == null)
+            return;
+
+        string json = JsonUtility.ToJson(save, true);
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
+            File.WriteAllText(targetPath, json);
+            Debug.Log("Game saved to " + targetPath);
+        }
+        catch (IOException ex)
+        {
+            Debug.LogError("Failed to save game: " + ex.Message);
+        }
+    }
+
+    GameSave BuildCurrentSave()
+    {
+        if (gridManager == null)
+        {
+            Debug.LogWarning("Cannot build save: gridManager is null.");
+            return null;
+        }
+
         GameSave save = new GameSave
         {
             gameId = string.IsNullOrEmpty(currentGameId) ? (currentGameId = System.Guid.NewGuid().ToString()) : currentGameId,
@@ -978,17 +1044,23 @@ public class TurnManager : MonoBehaviour
             });
         }
 
-        string json = JsonUtility.ToJson(save, true);
-        try
+        return save;
+    }
+
+    /// <summary>
+    /// Copy the current game state as JSON into the clipboard (for Play-by-Post).
+    /// </summary>
+    public void CopyCurrentStateToClipboard()
+    {
+        GameSave save = BuildCurrentSave();
+        if (save == null)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
-            File.WriteAllText(targetPath, json);
-            Debug.Log("Game saved to " + targetPath);
+            return;
         }
-        catch (IOException ex)
-        {
-            Debug.LogError("Failed to save game: " + ex.Message);
-        }
+
+        string json = JsonUtility.ToJson(save, playByPostExportPretty);
+        GUIUtility.systemCopyBuffer = json;
+        Debug.Log($"Play-by-Post JSON copied to clipboard ({json.Length} chars).");
     }
 
     public bool LoadFromFile(string path = null)
@@ -998,6 +1070,8 @@ public class TurnManager : MonoBehaviour
         {
             targetPath = GetDefaultSavePath();
         }
+
+        bool isImportedSave = targetPath.ToLowerInvariant().Contains("imported.json");
 
         if (!File.Exists(targetPath))
         {
@@ -1172,6 +1246,42 @@ public class TurnManager : MonoBehaviour
             UnitSelectionManager.Instance.RefreshMoveOutlinesForCurrentTurn();
         }
 
+        // --- Play-by-Post turn handoff handling ---
+        // The JSON snapshot is taken at the END of the sender's turn.
+        // When importing "imported.json", we want to start the next
+        // player's turn locally (reset movement, recruitment, and
+        // award income) while keeping the board state intact.
+        if (currentMode == GameMode.PlayByPost && isImportedSave)
+        {
+            // Flip whose turn it is locally so the receiver controls
+            // the opposite side.
+            isPlayerTurn = !isPlayerTurn;
+
+            if (isPlayerTurn)
+            {
+                // New local player's turn (treat as Player 1 side).
+                turnNumber++;
+                ResetRecruitmentForPlayerCities();
+                if (UnitSelectionManager.Instance != null)
+                {
+                    UnitSelectionManager.Instance.ResetMovementForSide(true, true);
+                    UnitSelectionManager.Instance.ClearSelection();
+                }
+                CollectPlayerIncome();
+            }
+            else
+            {
+                // New remote side on this device (treat as Player 2 side).
+                ResetRecruitmentForAICities();
+                if (UnitSelectionManager.Instance != null)
+                {
+                    UnitSelectionManager.Instance.ResetMovementForSide(false, true);
+                    UnitSelectionManager.Instance.ClearSelection();
+                }
+                CollectAIGold();
+            }
+        }
+
         UpdateGoldText();
         RecalculatePlayerVisibility();
         UpdateTurnText();
@@ -1200,6 +1310,10 @@ public class TurnManager : MonoBehaviour
                 return false;
 
             aiGold -= amount;
+            if ((currentMode == GameMode.Hotseat || currentMode == GameMode.PlayByPost) && !isPlayerTurn)
+            {
+                UpdateGoldText();
+            }
             return true;
         }
     }
@@ -1217,7 +1331,7 @@ public class TurnManager : MonoBehaviour
         else
         {
             aiGold += amount;
-            if (currentMode == GameMode.Hotseat && !isPlayerTurn)
+            if ((currentMode == GameMode.Hotseat || currentMode == GameMode.PlayByPost) && !isPlayerTurn)
             {
                 UpdateGoldText();
             }
