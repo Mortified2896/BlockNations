@@ -135,6 +135,10 @@ PrefabInstance:
       propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_MethodName
       value: PlayByPost
       objectReference: {fileID: 0}
+    - target: {fileID: 84709487891301408, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
+      propertyPath: m_RaycastTarget
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 1265676279035265214, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_SizeDelta.x
       value: 934.5

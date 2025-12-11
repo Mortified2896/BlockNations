@@ -66,6 +66,11 @@ public class TurnManager : MonoBehaviour
     private bool nextHotseatIsPlayer = false;
     private bool hotseatHandoffAdvancesTurn = false;
     private bool isLoadingFromSave = false;
+    // When true in PlayByPost, the current side has ended
+    // their turn and we are only waiting for the player
+    // to copy/export the JSON state. While this is true,
+    // no further actions should be taken in the scene.
+    private bool isPlayByPostWaitingForExport = false;
 
     [System.Serializable]
     private class SavedCity
@@ -85,6 +90,7 @@ public class TurnManager : MonoBehaviour
         public float z;
         public int currentHealth;
         public int movesUsedThisTurn;
+        public bool hasAttackedThisTurn;
     }
 
     [System.Serializable]
@@ -118,7 +124,7 @@ public class TurnManager : MonoBehaviour
 
     public bool IsHumanTurn()
     {
-        if (isHotseatHandoff)
+        if (isHotseatHandoff || isPlayByPostWaitingForExport)
             return false;
 
         if (currentMode == GameMode.None)
@@ -198,6 +204,7 @@ public class TurnManager : MonoBehaviour
 
     void Start()
     {
+        isPlayByPostWaitingForExport = false;
         EnsureTurnAndGoldTexts();
         EnsureEventSystemExists();
         EnsureUIRaycasters();
@@ -278,45 +285,30 @@ public class TurnManager : MonoBehaviour
         }
 
         // Hotseat / Play-by-Post: no AI, just human sides.
-        if (currentMode == GameMode.Hotseat || currentMode == GameMode.PlayByPost)
+        if (currentMode == GameMode.Hotseat)
         {
-            // Play-by-Post: end local turn and show export popup instead of switching sides.
-            if (currentMode == GameMode.PlayByPost)
-            {
-                AutoSaveIfEnabled();
-
-                if (playByPostPopup != null)
-                {
-                    playByPostPopup.SetActive(true);
-                }
-
-                Debug.Log("Play-by-Post turn finished. Use the Copy JSON button to export this turn.");
-                return;
-            }
-
-            // Hotseat: hand control to the other player without AI actions.
+            // Advance to the next side locally and show the handoff overlay.
             isPlayerTurn = !isPlayerTurn;
             UpdateTurnText();
+            ShowHotseatHandoff(isPlayerTurn, true);
+            AutoSaveIfEnabled();
+        }
+        else if (currentMode == GameMode.PlayByPost)
+        {
+            // In Play-by-Post we do NOT start the next side's turn locally,
+            // otherwise the local player would see the opponent's fog-of-war.
+            // Instead we freeze interaction, optionally show a popup, and
+            // let CopyCurrentStateToClipboard() build a snapshot that
+            // represents the *next* side's turn.
+            isPlayByPostWaitingForExport = true;
+            AutoSaveIfEnabled();
 
-            if (currentMode == GameMode.Hotseat)
+            if (playByPostPopup != null)
             {
-                ShowHotseatHandoff(isPlayerTurn, true);
-                AutoSaveIfEnabled();
+                playByPostPopup.SetActive(true);
             }
-            else // PlayByPost: immediately start the next side's turn without showing the handoff overlay
-            {
-                if (isPlayerTurn)
-                {
-                    // Completed a full round, advance the turn counter for Player 1
-                    turnNumber++;
-                    BeginPlayerTurn();
-                }
-                else
-                {
-                    BeginHotseatOpponentTurn();
-                }
-                AutoSaveIfEnabled();
-            }
+
+            Debug.Log("Play-by-Post turn finished. Use the Copy JSON button to export this turn.");
         }
     }
 
@@ -491,6 +483,7 @@ public class TurnManager : MonoBehaviour
         gameOver = false;
         turnNumber = 1;
         isPlayerTurn = true;
+        isPlayByPostWaitingForExport = false;
         playerGold = startingGold;
         aiGold = startingGold;
 
@@ -500,8 +493,10 @@ public class TurnManager : MonoBehaviour
         }
 
         ResetRecruitmentForPlayerCities();
+        // Give income only to the side whose turn it is.
+        // The other side receives income at the start of
+        // its first turn (via Begin*Turn / AITurn).
         CollectPlayerIncome();
-        CollectAIGold();
         UpdateGoldText();
         UpdateTurnText();
         RecalculatePlayerVisibility();
@@ -674,6 +669,7 @@ public class TurnManager : MonoBehaviour
             }
 
             // Enemy: attack
+            unit.hasAttackedThisTurn = true;
             unit.RegisterMove();
             bool killed = unit.Attack(targetUnit);
             Debug.Log("AI unit " + unit.name + " attacked " + targetUnit.name);
@@ -691,6 +687,43 @@ public class TurnManager : MonoBehaviour
             unit.RegisterMove();
 
             Debug.Log("AI moved unit " + unit.name + " to " + newPos);
+        }
+
+        // After moving, if the AI unit has not attacked yet,
+        // look for an adjacent enemy to attack (move-then-attack).
+        if (!unit.hasAttackedThisTurn)
+        {
+            float maxDist = 1.5f * tileSize;
+            float minDist = 0.1f * tileSize;
+            Unit[] allUnits = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
+            Unit bestEnemy = null;
+            float bestDistSq = float.MaxValue;
+
+            foreach (Unit other in allUnits)
+            {
+                if (other == null || other.isPlayerOwned == unit.isPlayerOwned)
+                    continue;
+
+                float dSq = (other.transform.position - unit.transform.position).sqrMagnitude;
+                if (dSq < bestDistSq && dSq >= minDist * minDist && dSq <= maxDist * maxDist)
+                {
+                    bestDistSq = dSq;
+                    bestEnemy = other;
+                }
+            }
+
+            if (bestEnemy != null)
+            {
+                unit.hasAttackedThisTurn = true;
+                bool killed = unit.Attack(bestEnemy);
+                Debug.Log("AI unit " + unit.name + " performed a follow-up attack on " + bestEnemy.name);
+
+                if (killed)
+                {
+                    unit.transform.position = bestEnemy.transform.position;
+                    Debug.Log("AI unit moved into defeated enemy tile at " + bestEnemy.transform.position);
+                }
+            }
         }
 
         // Check for city capture after moving or killing
@@ -910,7 +943,7 @@ public class TurnManager : MonoBehaviour
                 if (gridManager.TryGetTile(tx, ty, out TileVisibility tile))
                 {
                     bool sideIsPlayer = true;
-                    if (currentMode == GameMode.Hotseat)
+                    if (currentMode == GameMode.Hotseat || currentMode == GameMode.PlayByPost)
                     {
                         sideIsPlayer = isPlayerTurn;
                     }
@@ -1027,7 +1060,8 @@ public class TurnManager : MonoBehaviour
                 y = pos.y,
                 z = pos.z,
                 currentHealth = unit.currentHealth,
-                movesUsedThisTurn = unit.movesUsedThisTurn
+                movesUsedThisTurn = unit.movesUsedThisTurn,
+                hasAttackedThisTurn = unit.hasAttackedThisTurn
             });
         }
 
@@ -1052,13 +1086,27 @@ public class TurnManager : MonoBehaviour
     /// </summary>
     public void CopyCurrentStateToClipboard()
     {
-        GameSave save = BuildCurrentSave();
-        if (save == null)
+        GameSave current = BuildCurrentSave();
+        if (current == null)
         {
             return;
         }
 
-        string json = JsonUtility.ToJson(save, playByPostExportPretty);
+        GameSave saveForExport = current;
+
+        // For Play-by-Post we build a snapshot that already
+        // represents the *next* side's turn so the receiving
+        // player can simply load and start playing.
+        if (currentMode == GameMode.PlayByPost)
+        {
+            // Deep-copy via JSON so we don't mutate live state.
+            string tmp = JsonUtility.ToJson(current);
+            saveForExport = JsonUtility.FromJson<GameSave>(tmp);
+
+            PreparePlayByPostNextTurnSnapshot(saveForExport);
+        }
+
+        string json = JsonUtility.ToJson(saveForExport, playByPostExportPretty);
         GUIUtility.systemCopyBuffer = json;
         Debug.Log($"Play-by-Post JSON copied to clipboard ({json.Length} chars).");
     }
@@ -1070,8 +1118,6 @@ public class TurnManager : MonoBehaviour
         {
             targetPath = GetDefaultSavePath();
         }
-
-        bool isImportedSave = targetPath.ToLowerInvariant().Contains("imported.json");
 
         if (!File.Exists(targetPath))
         {
@@ -1127,6 +1173,7 @@ public class TurnManager : MonoBehaviour
         gameOver = save.gameOver;
         visibilityRadius = save.visibilityRadius;
         isHotseatHandoff = false;
+        isPlayByPostWaitingForExport = false;
         Time.timeScale = 1f;
 
         // Clear units
@@ -1190,6 +1237,7 @@ public class TurnManager : MonoBehaviour
                 unit.isPlayerOwned = u.isPlayerOwned;
                 unit.currentHealth = Mathf.Clamp(u.currentHealth, 1, unit.maxHealth);
                 unit.movesUsedThisTurn = Mathf.Clamp(u.movesUsedThisTurn, 0, unit.maxMovesPerTurn);
+                unit.hasAttackedThisTurn = u.hasAttackedThisTurn;
                 bool isCurrentSideUnit = currentMode != GameMode.Hotseat || (unit.isPlayerOwned == isPlayerTurn);
                 unit.SetFogVisibility(true, isCurrentSideUnit); // will be updated after visibility recalculation
             }
@@ -1222,64 +1270,40 @@ public class TurnManager : MonoBehaviour
             UnitSelectionManager.Instance.RefreshMoveOutlinesForCurrentTurn();
         }
 
-        // Restore tile seen state
+        // Restore tile seen state.
+        // For Play-by-Post we keep things simpler and recompute fog
+        // purely from current cities/units, ignoring remembered
+        // exploration from the save to avoid asymmetric artefacts.
         foreach (TileVisibility tile in gridManager.GetAllTiles())
         {
             tile.ResetVisibilityState();
         }
 
-        foreach (SavedTile t in save.tiles)
+        if (currentMode != GameMode.PlayByPost)
         {
-            if (gridManager.TryGetTile(t.x, t.y, out TileVisibility tile))
+            foreach (SavedTile t in save.tiles)
             {
-                // Use current side to drive visuals; will be updated next
-                bool activeSideIsPlayer = currentMode != GameMode.Hotseat || isPlayerTurn;
-                tile.SetSeenState(t.playerSeen, t.opponentSeen, activeSideIsPlayer);
+                if (gridManager.TryGetTile(t.x, t.y, out TileVisibility tile))
+                {
+                    // Use current side to drive visuals; for symmetric modes
+                    // (Hotseat), respect whose turn it is.
+                    bool activeSideIsPlayer = true;
+                    if (currentMode == GameMode.Hotseat)
+                    {
+                        activeSideIsPlayer = isPlayerTurn;
+                    }
+
+                    tile.SetSeenState(t.playerSeen, t.opponentSeen, activeSideIsPlayer);
+                }
             }
         }
 
         // After loading, ensure selection is cleared and move outlines
-        // reflect the loaded movement state (but do NOT reset movement).
+        // reflect the loaded movement state.
         if (UnitSelectionManager.Instance != null)
         {
             UnitSelectionManager.Instance.ClearSelection();
             UnitSelectionManager.Instance.RefreshMoveOutlinesForCurrentTurn();
-        }
-
-        // --- Play-by-Post turn handoff handling ---
-        // The JSON snapshot is taken at the END of the sender's turn.
-        // When importing "imported.json", we want to start the next
-        // player's turn locally (reset movement, recruitment, and
-        // award income) while keeping the board state intact.
-        if (currentMode == GameMode.PlayByPost && isImportedSave)
-        {
-            // Flip whose turn it is locally so the receiver controls
-            // the opposite side.
-            isPlayerTurn = !isPlayerTurn;
-
-            if (isPlayerTurn)
-            {
-                // New local player's turn (treat as Player 1 side).
-                turnNumber++;
-                ResetRecruitmentForPlayerCities();
-                if (UnitSelectionManager.Instance != null)
-                {
-                    UnitSelectionManager.Instance.ResetMovementForSide(true, true);
-                    UnitSelectionManager.Instance.ClearSelection();
-                }
-                CollectPlayerIncome();
-            }
-            else
-            {
-                // New remote side on this device (treat as Player 2 side).
-                ResetRecruitmentForAICities();
-                if (UnitSelectionManager.Instance != null)
-                {
-                    UnitSelectionManager.Instance.ResetMovementForSide(false, true);
-                    UnitSelectionManager.Instance.ClearSelection();
-                }
-                CollectAIGold();
-            }
         }
 
         UpdateGoldText();
@@ -1334,6 +1358,59 @@ public class TurnManager : MonoBehaviour
             if ((currentMode == GameMode.Hotseat || currentMode == GameMode.PlayByPost) && !isPlayerTurn)
             {
                 UpdateGoldText();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Mutates the given save so that it represents the start
+    /// of the next side's turn for Play-by-Post exports.
+    /// </summary>
+    private void PreparePlayByPostNextTurnSnapshot(GameSave save)
+    {
+        // Determine which side will act next.
+        bool nextIsPlayer = !isPlayerTurn; // Player 1 -> Player 2, Player 2 -> Player 1
+        save.isPlayerTurn = nextIsPlayer;
+
+        // Advance the turn counter only when we wrap back to Player 1.
+        save.turnNumber = turnNumber;
+        if (!isPlayerTurn && nextIsPlayer)
+        {
+            // We just finished Player 2 locally; next save is Player 1, new round.
+            save.turnNumber = turnNumber + 1;
+        }
+
+        // Reset recruitment flags for the side whose turn is starting
+        // and compute their income from owned cities.
+        int income = 0;
+        foreach (SavedCity city in save.cities)
+        {
+            if (city.isPlayerOwned == nextIsPlayer)
+            {
+                city.hasRecruitedThisTurn = false;
+                income += goldPerCity;
+            }
+        }
+
+        if (income > 0)
+        {
+            if (nextIsPlayer)
+            {
+                save.playerGold += income;
+            }
+            else
+            {
+                save.aiGold += income;
+            }
+        }
+
+        // Reset movement for units belonging to the side
+        // that will act next so they have fresh moves.
+        foreach (SavedUnit unit in save.units)
+        {
+            if (unit.isPlayerOwned == nextIsPlayer)
+            {
+                unit.movesUsedThisTurn = 0;
             }
         }
     }

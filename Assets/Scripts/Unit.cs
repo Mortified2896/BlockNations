@@ -9,6 +9,7 @@ public class Unit : MonoBehaviour
     public int maxMovesPerTurn = 1;
     [HideInInspector] public int movesUsedThisTurn = 0;
     public bool hasMovedThisTurn => movesUsedThisTurn >= maxMovesPerTurn;
+    [HideInInspector] public bool hasAttackedThisTurn = false;
 
     public bool CanMoveThisTurn()
     {
@@ -18,6 +19,7 @@ public class Unit : MonoBehaviour
     public void ResetMovementForTurn()
     {
         movesUsedThisTurn = 0;
+        hasAttackedThisTurn = false;
     }
 
     public void RegisterMove()
@@ -43,8 +45,8 @@ public class Unit : MonoBehaviour
     public City currentCity;
 
     [Header("Stats")]
-    public int maxHealth = 2;
-    public int currentHealth = 2;
+    public int maxHealth = 1;
+    public int currentHealth = 1;
     public int attack = 1;
     public int defense = 0;
 

@@ -171,10 +171,11 @@ MonoBehaviour:
   isPlayerOwned: 1
   maxMovesPerTurn: 1
   movesUsedThisTurn: 0
+  hasAttackedThisTurn: 0
   moveOutline: {fileID: 1604908280818827660}
   currentCity: {fileID: 0}
-  maxHealth: 2
-  currentHealth: 2
+  maxHealth: 1
+  currentHealth: 1
   attack: 1
   defense: 0
 --- !u!114 &-1158699919067656540

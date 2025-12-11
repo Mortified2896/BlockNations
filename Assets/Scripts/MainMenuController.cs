@@ -73,6 +73,25 @@ public class MainMenuController : MonoBehaviour
             return;
         }
 
+        // Peek at the save header so we can skip PlayByPost saves.
+        try
+        {
+            string json = File.ReadAllText(path);
+            MinimalSaveHeader header = JsonUtility.FromJson<MinimalSaveHeader>(json);
+            if (header != null && !string.IsNullOrEmpty(header.mode))
+            {
+                if (header.mode == TurnManager.GameMode.PlayByPost.ToString())
+                {
+                    Debug.LogWarning("Last save is a Play-by-Post game. Use Import JSON instead of Continue.");
+                    return;
+                }
+            }
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogWarning("Failed to inspect save header; attempting to continue anyway. " + ex.Message);
+        }
+
         Debug.Log("Continue requested. Loading save at " + path);
         SaveLoadRequest.RequestLoad(path);
         SceneManager.LoadScene(gameplaySceneName);

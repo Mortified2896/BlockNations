@@ -16,6 +16,7 @@ public class CityUIManager : MonoBehaviour
     public GameObject bottomButtonsRoot; // e.g. the Next/Menu button row
     public TMP_Text cityNameText;
     public TMP_Text ownerText;
+    public TMP_Text recruitWarriorButtonText;
 
     private City currentCity;
 
@@ -39,6 +40,8 @@ public class CityUIManager : MonoBehaviour
         {
             turnManager = TurnManager.Instance;
         }
+
+        EnsureRecruitWarriorButtonReference();
     }
 
     /// <summary>
@@ -75,6 +78,10 @@ public class CityUIManager : MonoBehaviour
             return;
         }
 
+        // Try to auto-wire the Recruit Warrior button label if it
+        // has not been assigned in the Inspector.
+        EnsureRecruitWarriorButtonReference();
+
         panelRoot.SetActive(true);
 
         // Hide the default bottom HUD buttons while the city panel is open.
@@ -91,13 +98,42 @@ public class CityUIManager : MonoBehaviour
 
         if (ownerText != null && currentCity != null)
         {
-            if (turnManager != null && turnManager.currentMode == TurnManager.GameMode.Hotseat)
+            if (turnManager != null &&
+                (turnManager.currentMode == TurnManager.GameMode.Hotseat ||
+                 turnManager.currentMode == TurnManager.GameMode.PlayByPost))
             {
                 ownerText.text = currentCity.isPlayerOwned ? "Player 1 City" : "Player 2 City";
             }
             else
             {
                 ownerText.text = currentCity.isPlayerOwned ? "Player City" : "AI City";
+            }
+        }
+
+        // Show the cost directly on the Recruit Warrior button label
+        if (recruitWarriorButtonText != null && turnManager != null)
+        {
+            recruitWarriorButtonText.text = $"Recruit Warrior ({turnManager.warriorCost} Gold)";
+        }
+    }
+
+    private void EnsureRecruitWarriorButtonReference()
+    {
+        if (recruitWarriorButtonText != null || panelRoot == null)
+        {
+            return;
+        }
+
+        TMP_Text[] texts = panelRoot.GetComponentsInChildren<TMP_Text>(true);
+        foreach (TMP_Text t in texts)
+        {
+            if (t == null) continue;
+            string lowerName = t.name.ToLower();
+            string lowerText = t.text != null ? t.text.ToLower() : string.Empty;
+            if (lowerName.Contains("recruit") || lowerText.Contains("recruit"))
+            {
+                recruitWarriorButtonText = t;
+                break;
             }
         }
     }

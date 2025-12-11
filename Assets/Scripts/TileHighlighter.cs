@@ -8,10 +8,12 @@ public class TileHighlighter : MonoBehaviour
     public Color hoverColor = Color.yellow;
     public Color selectedColor = Color.green;
     public Color reachableColor = Color.cyan;
+    public Color attackableColor = Color.yellow;
 
     private bool isHovered = false;
     private bool isSelected = false;
     private bool isReachable = false;
+    private bool isAttackable = false;
 
     void Awake()
     {
@@ -38,6 +40,12 @@ public class TileHighlighter : MonoBehaviour
         UpdateColor();
     }
 
+    public void SetAttackable(bool attackable)
+    {
+        isAttackable = attackable;
+        UpdateColor();
+    }
+
     private void UpdateColor()
     {
         if (isSelected)
@@ -48,6 +56,10 @@ public class TileHighlighter : MonoBehaviour
         else if (isHovered)
         {
             spriteRenderer.color = hoverColor;
+        }
+        else if (isAttackable)
+        {
+            spriteRenderer.color = attackableColor;
         }
         else if (isReachable)
         {

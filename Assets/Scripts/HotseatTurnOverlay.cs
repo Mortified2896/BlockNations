@@ -95,8 +95,9 @@ public class HotseatTurnOverlay : MonoBehaviour
         layout.padding = new RectOffset(24, 24, 24, 24);
         layout.spacing = 12f;
 
-        titleText = CreateText(panel.transform, "Title", 28, FontStyle.Bold);
-        infoText = CreateText(panel.transform, "Info", 16, FontStyle.Normal);
+        // Larger font sizes for better readability on devices.
+        titleText = CreateText(panel.transform, "Title", 64, FontStyle.Bold);
+        infoText = CreateText(panel.transform, "Info", 40, FontStyle.Normal);
         infoText.text = "Pass the device to the next player, then continue.";
 
         continueButton = CreateButton(panel.transform, out buttonText);
@@ -141,7 +142,8 @@ public class HotseatTurnOverlay : MonoBehaviour
         RectTransform rect = go.GetComponent<RectTransform>();
         rect.sizeDelta = new Vector2(0f, 72f);
 
-        label = CreateText(go.transform, "Label", 18, FontStyle.Bold);
+        // Larger button label font size as well.
+        label = CreateText(go.transform, "Label", 40, FontStyle.Bold);
         label.color = buttonTextColor;
 
         HorizontalLayoutGroup hLayout = go.AddComponent<HorizontalLayoutGroup>();

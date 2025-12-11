@@ -35,11 +35,13 @@ public class UnitSelectionManager : MonoBehaviour
     {
         ClearReachableTiles();
 
-        if (unit == null || !unit.CanMoveThisTurn())
+        if (unit == null)
             return;
 
         TileHighlighter[] tiles = Object.FindObjectsByType<TileHighlighter>(FindObjectsSortMode.None);
         Vector3 from = unit.transform.position;
+        bool canMove = unit.CanMoveThisTurn();
+        bool canAttack = !unit.hasAttackedThisTurn;
 
         foreach (TileHighlighter tile in tiles)
         {
@@ -53,7 +55,16 @@ public class UnitSelectionManager : MonoBehaviour
             // Adjacent tiles (including diagonals)
             if (dist >= 0.5f * tileSize && dist <= 1.5f * tileSize)
             {
-                tile.SetReachable(true);
+                // Enemy unit on this tile that we can attack?
+                Unit occupant = GridUtils.GetUnitAtPosition(to, unit);
+                if (occupant != null && occupant.isPlayerOwned != unit.isPlayerOwned && canAttack)
+                {
+                    tile.SetAttackable(true);
+                }
+                else if (occupant == null && canMove)
+                {
+                    tile.SetReachable(true);
+                }
             }
         }
     }
@@ -68,8 +79,41 @@ public class UnitSelectionManager : MonoBehaviour
             if (tile != null)
             {
                 tile.SetReachable(false);
+                tile.SetAttackable(false);
             }
         }
+    }
+
+    private bool HasAttackableAdjacentTiles(Unit unit)
+    {
+        if (unit == null || unit.hasAttackedThisTurn)
+        {
+            return false;
+        }
+
+        TileHighlighter[] tiles = Object.FindObjectsByType<TileHighlighter>(FindObjectsSortMode.None);
+        Vector3 from = unit.transform.position;
+
+        foreach (TileHighlighter tile in tiles)
+        {
+            if (tile == null) continue;
+
+            Vector3 to = tile.transform.position;
+            Vector3 delta = to - from;
+            delta.z = 0f;
+
+            float dist = delta.magnitude;
+            if (dist >= 0.5f * tileSize && dist <= 1.5f * tileSize)
+            {
+                Unit occupant = GridUtils.GetUnitAtPosition(to, unit);
+                if (occupant != null && occupant.isPlayerOwned != unit.isPlayerOwned)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     public void SelectUnit(Unit unit)
@@ -131,12 +175,6 @@ public class UnitSelectionManager : MonoBehaviour
         bool isActiveTurnForUnit = turnManager == null || turnManager.IsCurrentSideOwner(selectedUnit.isPlayerOwned);
         string sideLabel = turnManager != null ? turnManager.GetCurrentSideName() : "Player";
 
-        if (!selectedUnit.CanMoveThisTurn())
-        {
-            ClearSelection();
-            return;
-        }
-
         Vector3 from = selectedUnit.transform.position;
         Vector3 to = targetWorldPosition;
         Vector3 delta = to - from;
@@ -157,7 +195,6 @@ public class UnitSelectionManager : MonoBehaviour
             selectedUnit.currentCity = null;
         }
 
-        // Determine what is on the target tile (ally/enemy/empty)
         Vector3 newPos = targetWorldPosition;
         newPos.z = selectedUnit.transform.position.z;
 
@@ -165,6 +202,19 @@ public class UnitSelectionManager : MonoBehaviour
 
         bool actionPerformed = false;
 
+        bool canAttackTarget = targetUnit != null &&
+                               targetUnit.isPlayerOwned != selectedUnit.isPlayerOwned &&
+                               !selectedUnit.hasAttackedThisTurn;
+        bool canMoveToEmpty = targetUnit == null && selectedUnit.CanMoveThisTurn();
+
+        // If we can neither attack nor move, end selection.
+        if (!canAttackTarget && !canMoveToEmpty)
+        {
+            ClearSelection();
+            return;
+        }
+
+        // Determine what is on the target tile (ally/enemy/empty)
         if (targetUnit != null)
         {
             // Friendly unit: cannot move onto the same tile
@@ -174,7 +224,15 @@ public class UnitSelectionManager : MonoBehaviour
                 return;
             }
 
-            // Enemy unit: attack instead of moving onto the tile
+            if (!canAttackTarget)
+            {
+                ClearSelection();
+                return;
+            }
+
+            // Enemy unit: attack instead of moving onto the tile.
+            // Allow this even after moving once this turn, but only once.
+            selectedUnit.hasAttackedThisTurn = true;
             selectedUnit.RegisterMove();
             selectedUnit.UpdateMoveOutline(isActiveTurnForUnit);
 
@@ -189,7 +247,7 @@ public class UnitSelectionManager : MonoBehaviour
                 Debug.Log(sideLabel + " unit moved into defeated enemy tile at " + newPos);
             }
         }
-        else
+        else if (canMoveToEmpty)
         {
             // Tile is empty: move normally
             selectedUnit.transform.position = newPos;
@@ -218,7 +276,17 @@ public class UnitSelectionManager : MonoBehaviour
         // If this unit has no moves left, deselect it. Otherwise, update reachable tiles.
         if (!selectedUnit.CanMoveThisTurn())
         {
-            ClearSelection();
+            // Special case: if the unit cannot move anymore but still
+            // has not attacked and has an enemy adjacent, keep it
+            // selected and show red attack tiles as a reminder.
+            if (!selectedUnit.hasAttackedThisTurn && HasAttackableAdjacentTiles(selectedUnit))
+            {
+                HighlightReachableTiles(selectedUnit);
+            }
+            else
+            {
+                ClearSelection();
+            }
         }
         else
         {
