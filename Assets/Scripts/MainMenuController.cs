@@ -14,8 +14,7 @@ public class MainMenuController : MonoBehaviour
 
     [Header("UI")]
     [SerializeField] private GameObject modeSelectionPanel;
-    [SerializeField] private GameObject importPanel;
-    [SerializeField] private TMP_InputField importInput;
+    [SerializeField] private GameObject aiDifficultyPanel;
     [SerializeField] private TMP_Text importStatusText;
 
     public void NewGame()
@@ -33,12 +32,66 @@ public class MainMenuController : MonoBehaviour
 
     public void PlayVsAI()
     {
+        // Open difficulty selection instead of starting immediately.
+        if (aiDifficultyPanel != null)
+        {
+            aiDifficultyPanel.SetActive(true);
+
+            if (modeSelectionPanel != null)
+            {
+                modeSelectionPanel.SetActive(false);
+            }
+        }
+        else
+        {
+            // Fallback if no difficulty panel is wired.
+            StartVsAIGame(TurnManager.AIDifficulty.Level1);
+        }
+    }
+
+    // Optional: hook dedicated buttons to these for different difficulties.
+    public void PlayVsAI_Level1()
+    {
+        StartVsAIGame(TurnManager.AIDifficulty.Level1);
+    }
+
+    public void PlayVsAI_Level2()
+    {
+        StartVsAIGame(TurnManager.AIDifficulty.Level2);
+    }
+
+    public void PlayVsAI_Level3()
+    {
+        StartVsAIGame(TurnManager.AIDifficulty.Level3);
+    }
+
+    void StartVsAIGame(TurnManager.AIDifficulty difficulty)
+    {
         GameModeSelection.SetPendingMode(TurnManager.GameMode.VsAI);
+        AIDifficultySelection.SetPending(difficulty);
         SceneManager.LoadScene(gameplaySceneName);
 
         if (modeSelectionPanel != null)
         {
             modeSelectionPanel.SetActive(false);
+        }
+
+        if (aiDifficultyPanel != null)
+        {
+            aiDifficultyPanel.SetActive(false);
+        }
+    }
+
+    public void CloseAIDifficultyPanel()
+    {
+        if (aiDifficultyPanel != null)
+        {
+            aiDifficultyPanel.SetActive(false);
+        }
+
+        if (modeSelectionPanel != null)
+        {
+            modeSelectionPanel.SetActive(true);
         }
     }
 
@@ -100,28 +153,14 @@ public class MainMenuController : MonoBehaviour
     // === JSON import (paste-based) ===
     public void OpenImportPanel()
     {
-        if (importPanel != null)
-        {
-            importPanel.SetActive(true);
-        }
-
-        if (importInput != null)
-        {
-            importInput.text = string.Empty;
-        }
-
-        if (importStatusText != null)
-        {
-            importStatusText.text = string.Empty;
-        }
+        // For now we skip a dedicated panel and import directly
+        // from the clipboard when the user clicks "Import JSON".
+        ImportFromPastedJson();
     }
 
     public void CloseImportPanel()
     {
-        if (importPanel != null)
-        {
-            importPanel.SetActive(false);
-        }
+        // No-op: kept for compatibility with any existing buttons.
     }
 
     [System.Serializable]
@@ -191,16 +230,13 @@ public class MainMenuController : MonoBehaviour
         }
     }
 
-    // Allows runtime-built UI to register the import panel and fields.
+    // Allows runtime-built UI to register a status text field.
     public void ConfigureImportUI(GameObject panel, TMP_InputField input, TMP_Text status)
     {
-        importPanel = panel;
-        importInput = input;
         importStatusText = status;
-
-        if (importPanel != null)
+        if (importStatusText != null)
         {
-            importPanel.SetActive(false);
+            importStatusText.text = string.Empty;
         }
     }
 

@@ -17,6 +17,14 @@ public class TurnManager : MonoBehaviour
         PlayByPost
     }
 
+    public enum AIDifficulty
+    {
+        None,
+        Level1,
+        Level2,
+        Level3
+    }
+
     public static TurnManager Instance { get; private set; }
 
     [Header("Mode")]
@@ -37,6 +45,7 @@ public class TurnManager : MonoBehaviour
 
     [Header("AI Settings")]
     public float aiTurnDelay = 1f; // seconds the AI "thinks" before ending its turn
+    public AIDifficulty aiDifficulty = AIDifficulty.Level1;
 
     [Header("UI")]
     public TMP_Text turnText;      // assign in Inspector
@@ -106,9 +115,10 @@ public class TurnManager : MonoBehaviour
     [System.Serializable]
     private class GameSave
     {
-        public string version = "1";
+        public string version = "2";
         public string gameId;
         public string mode;
+        public string aiDifficulty;
         public bool isPlayerTurn;
         public int turnNumber;
         public int playerGold;
@@ -497,21 +507,12 @@ public class TurnManager : MonoBehaviour
         isPlayByPostWaitingForExport = false;
         playerGold = startingGold;
         aiGold = startingGold;
+        aiDifficulty = AIDifficulty.Level1;
 
         if (string.IsNullOrEmpty(currentGameId))
         {
             currentGameId = System.Guid.NewGuid().ToString();
         }
-
-        ResetRecruitmentForPlayerCities();
-        // Give income only to the side whose turn it is.
-        // The other side receives income at the start of
-        // its first turn (via Begin*Turn / AITurn).
-        CollectPlayerIncome();
-        UpdateGoldText();
-        UpdateTurnText();
-        RecalculatePlayerVisibility();
-        Debug.Log("Game start. " + GetCurrentSideName() + " Turn " + turnNumber);
 
         if (GameModeSelection.TryConsume(out GameMode pendingMode))
         {
@@ -522,6 +523,21 @@ public class TurnManager : MonoBehaviour
             SetGameMode(GameMode.VsAI);
             Debug.Log("No mode preselected. Defaulting to Vs AI.");
         }
+
+        if (AIDifficultySelection.TryConsume(out AIDifficulty pendingDifficulty))
+        {
+            aiDifficulty = pendingDifficulty;
+        }
+
+        ResetRecruitmentForPlayerCities();
+        // Give income only to the side whose turn it is.
+        // The other side receives income at the start of
+        // its first turn (via Begin*Turn / AITurn).
+        CollectPlayerIncome();
+        UpdateGoldText();
+        UpdateTurnText();
+        RecalculatePlayerVisibility();
+        Debug.Log("Game start. " + GetCurrentSideName() + " Turn " + turnNumber + " (AI difficulty " + aiDifficulty + ")");
 
         // If we start in Hotseat, show the handoff before the very first turn.
         // PlayByPost should NOT use the hotseat handoff overlay.
@@ -555,75 +571,35 @@ public class TurnManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Collects tiles that would be visible around the given grid center
-    /// using the same radius rule as the fog-of-war system, without
-    /// mutating any TileVisibility state.
-    /// </summary>
-    void CollectVisibleTilesAround(int centerX, int centerY, int radius, HashSet<TileVisibility> buffer)
-    {
-        if (gridManager == null || buffer == null)
-            return;
-
-        for (int dx = -radius; dx <= radius; dx++)
-        {
-            for (int dy = -radius; dy <= radius; dy++)
-            {
-                int tx = centerX + dx;
-                int ty = centerY + dy;
-                if (gridManager.TryGetTile(tx, ty, out TileVisibility tile))
-                {
-                    buffer.Add(tile);
-                }
-            }
-        }
-    }
-
     void RunAI()
     {
         // 1) Recruit from each AI city (one unit per city per AI turn, if the city is empty)
         City[] allCities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        City primaryAICity = null;
         foreach (City city in allCities)
         {
             if (!city.isPlayerOwned && city.CanRecruit())
             {
                 city.SpawnWarrior();
             }
+
+            if (!city.isPlayerOwned && primaryAICity == null)
+            {
+                primaryAICity = city;
+            }
         }
 
         // 2) Move AI units toward the nearest player unit or city,
-        // but only using information it could have under fog-of-war.
+        // using the same fog-of-war rules as any other side.
         Unit[] allUnits = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
 
-        HashSet<TileVisibility> aiVisibleTiles = null;
-        if (gridManager != null)
-        {
-            aiVisibleTiles = new HashSet<TileVisibility>();
+        HashSet<TileVisibility> aiVisibleTiles = ComputeVisibilityForSide(false);
 
-            // Vision from AI-owned cities
-            foreach (City city in allCities)
-            {
-                if (!city.isPlayerOwned)
-                {
-                    CollectVisibleTilesAround(city.x, city.y, visibilityRadius, aiVisibleTiles);
-                }
-            }
-
-            // Vision from AI-owned units
-            foreach (Unit unit in allUnits)
-            {
-                if (unit == null || unit.isPlayerOwned)
-                    continue;
-
-                if (gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility tile))
-                {
-                    CollectVisibleTilesAround(tile.gridX, tile.gridY, visibilityRadius, aiVisibleTiles);
-                }
-            }
-        }
-
-        // Collect player targets (units + cities) that are in AI-visible tiles.
+        // Collect player targets: visible units + known player cities.
         List<Vector3> playerTargets = new List<Vector3>();
+        List<Vector3> playerCityPositions = new List<Vector3>();
+        bool anyVisiblePlayerUnit = false;
+        bool enemyNearAICity = false;
 
         foreach (Unit unit in allUnits)
         {
@@ -634,6 +610,7 @@ public class TurnManager : MonoBehaviour
             if (aiVisibleTiles == null || aiVisibleTiles.Count == 0 || gridManager == null)
             {
                 playerTargets.Add(unit.transform.position);
+                anyVisiblePlayerUnit = true;
                 continue;
             }
 
@@ -641,6 +618,19 @@ public class TurnManager : MonoBehaviour
                 aiVisibleTiles.Contains(tile))
             {
                 playerTargets.Add(unit.transform.position);
+                anyVisiblePlayerUnit = true;
+
+                // Track whether any visible enemy unit is near the AI city.
+                if (primaryAICity != null)
+                {
+                    int dxCity = Mathf.Abs(tile.gridX - primaryAICity.x);
+                    int dyCity = Mathf.Abs(tile.gridY - primaryAICity.y);
+                    int distToAICityTilesForEnemy = Mathf.Max(dxCity, dyCity);
+                    if (distToAICityTilesForEnemy <= 2)
+                    {
+                        enemyNearAICity = true;
+                    }
+                }
             }
         }
 
@@ -649,17 +639,11 @@ public class TurnManager : MonoBehaviour
             if (!city.isPlayerOwned)
                 continue;
 
-            if (aiVisibleTiles == null || aiVisibleTiles.Count == 0 || gridManager == null)
-            {
-                playerTargets.Add(city.transform.position);
-                continue;
-            }
-
-            if (gridManager.TryGetTile(city.x, city.y, out TileVisibility tile) &&
-                aiVisibleTiles.Contains(tile))
-            {
-                playerTargets.Add(city.transform.position);
-            }
+            // Cities are at fixed positions in this map, so
+            // allow the AI to always know their locations.
+            Vector3 cityPos = city.transform.position;
+            playerTargets.Add(cityPos);
+            playerCityPositions.Add(cityPos);
         }
 
         if (playerTargets.Count == 0)
@@ -675,6 +659,171 @@ public class TurnManager : MonoBehaviour
             stepSize = UnitSelectionManager.Instance.tileSize;
         }
 
+        // Level 2 behavior: if no enemy units are currently visible, units that
+        // are closest to the enemy city have a small chance to hold position
+        // instead of always advancing, to make behavior less predictable.
+        bool applyLevel2HoldBehavior = (aiDifficulty == AIDifficulty.Level2) &&
+                                       !anyVisiblePlayerUnit &&
+                                       playerCityPositions.Count > 0;
+
+        bool applyLevel3DefenderBehavior = (aiDifficulty == AIDifficulty.Level3) &&
+                                           (primaryAICity != null);
+
+        // For Level 2 we compute distances in grid coordinates rather than world
+        // space so the logic is stable regardless of tile size.
+        Dictionary<Unit, int> distToEnemyCityTiles = null;
+        int nearestEnemyCityDistTiles = int.MaxValue;
+
+        Dictionary<Unit, int> distToAICityTiles = null;
+        int nearestAICityDistTiles = int.MaxValue;
+        Unit defenderCandidate = null;
+
+        if (applyLevel2HoldBehavior || applyLevel3DefenderBehavior)
+        {
+            distToEnemyCityTiles = applyLevel2HoldBehavior ? new Dictionary<Unit, int>() : null;
+            distToAICityTiles = applyLevel3DefenderBehavior ? new Dictionary<Unit, int>() : null;
+
+            foreach (Unit unit in allUnits)
+            {
+                if (unit == null || unit.isPlayerOwned)
+                    continue;
+
+                if (!gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility originTile))
+                    continue;
+
+                if (applyLevel2HoldBehavior)
+                {
+                    int bestEnemyCityDistTiles = int.MaxValue;
+
+                    foreach (City city in allCities)
+                    {
+                        if (!city.isPlayerOwned)
+                            continue;
+
+                        int dx = Mathf.Abs(originTile.gridX - city.x);
+                        int dy = Mathf.Abs(originTile.gridY - city.y);
+                        int distTiles = Mathf.Max(dx, dy); // Chebyshev distance (diagonal moves allowed)
+
+                        if (distTiles < bestEnemyCityDistTiles)
+                        {
+                            bestEnemyCityDistTiles = distTiles;
+                        }
+                    }
+
+                    if (bestEnemyCityDistTiles < int.MaxValue)
+                    {
+                        distToEnemyCityTiles[unit] = bestEnemyCityDistTiles;
+                        if (bestEnemyCityDistTiles < nearestEnemyCityDistTiles)
+                        {
+                            nearestEnemyCityDistTiles = bestEnemyCityDistTiles;
+                        }
+                    }
+                }
+
+                if (applyLevel3DefenderBehavior && primaryAICity != null)
+                {
+                    int dxAi = Mathf.Abs(originTile.gridX - primaryAICity.x);
+                    int dyAi = Mathf.Abs(originTile.gridY - primaryAICity.y);
+                    int distToAiTiles = Mathf.Max(dxAi, dyAi);
+
+                    distToAICityTiles[unit] = distToAiTiles;
+                    if (distToAiTiles < nearestAICityDistTiles)
+                    {
+                        nearestAICityDistTiles = distToAiTiles;
+                        defenderCandidate = unit;
+                    }
+                    else if (distToAiTiles == nearestAICityDistTiles && defenderCandidate == null)
+                    {
+                        defenderCandidate = unit;
+                    }
+                }
+            }
+        }
+
+        // === Level 3: recruit vs recall defender when city is under visible threat ===
+        if (applyLevel3DefenderBehavior && enemyNearAICity && primaryAICity != null)
+        {
+            // Enemy distance to AI city in tiles (Chebyshev)
+            int enemyTurnsToCity = int.MaxValue;
+            foreach (Unit unit in allUnits)
+            {
+                if (unit == null || !unit.isPlayerOwned)
+                    continue;
+
+                if (!gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility enemyTile))
+                    continue;
+
+                int dxE = Mathf.Abs(enemyTile.gridX - primaryAICity.x);
+                int dyE = Mathf.Abs(enemyTile.gridY - primaryAICity.y);
+                int distEnemy = Mathf.Max(dxE, dyE);
+                if (distEnemy < enemyTurnsToCity)
+                {
+                    enemyTurnsToCity = distEnemy;
+                }
+            }
+
+            // Closest AI unit distance to own city (from distToAICityTiles)
+            int aiTurnsFromFront = nearestAICityDistTiles;
+
+            // Estimate income per turn for AI from owned cities
+            int aiIncomePerTurn = 0;
+            foreach (City city in allCities)
+            {
+                if (!city.isPlayerOwned)
+                {
+                    aiIncomePerTurn += goldPerCity;
+                }
+            }
+
+            int aiGoldNow = aiGold;
+            int turnsUntilCanRecruit;
+            if (aiGoldNow >= warriorCost)
+            {
+                turnsUntilCanRecruit = 0;
+            }
+            else if (aiIncomePerTurn > 0)
+            {
+                turnsUntilCanRecruit = Mathf.CeilToInt((warriorCost - aiGoldNow) / (float)aiIncomePerTurn);
+            }
+            else
+            {
+                turnsUntilCanRecruit = int.MaxValue;
+            }
+
+            bool shouldRecruitDefender =
+                enemyTurnsToCity < int.MaxValue &&
+                turnsUntilCanRecruit <= enemyTurnsToCity;
+
+            if (shouldRecruitDefender)
+            {
+                // Spawn defender at the AI city if the tile is free.
+                Vector3 spawnPosition = primaryAICity.transform.position;
+                if (!GridUtils.IsTileOccupied(spawnPosition, null) && unitPrefab != null)
+                {
+                    // TrySpendGold(false, ...) will also update AI gold and UI when appropriate.
+                    if (TrySpendGold(false, warriorCost))
+                    {
+                        GameObject defender = Instantiate(unitPrefab, spawnPosition, Quaternion.identity);
+                        Unit defenderUnit = defender.GetComponent<Unit>();
+                        if (defenderUnit != null)
+                        {
+                            defenderUnit.isPlayerOwned = false;
+                            defenderUnit.currentCity = primaryAICity;
+                            defenderUnit.ResetMovementForTurn();
+                        }
+
+                        primaryAICity.stationedUnit = defender;
+
+                        OwnedSprite owned = defender.GetComponent<OwnedSprite>();
+                        if (owned != null)
+                        {
+                            owned.SetOwner(false);
+                        }
+                    }
+                }
+            }
+        }
+
         foreach (Unit unit in allUnits)
         {
             if (unit.isPlayerOwned)
@@ -682,6 +831,121 @@ public class TurnManager : MonoBehaviour
 
             // Reset AI unit movement for this AI turn
             unit.ResetMovementForTurn();
+
+            // Level 3: never idle on our own city tile; step off toward the defensive anchor
+            // (or any free/attackable adjacent tile) before making other decisions.
+            if (applyLevel3DefenderBehavior && primaryAICity != null && gridManager != null)
+            {
+                if (gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility unitTile) &&
+                    unitTile.gridX == primaryAICity.x && unitTile.gridY == primaryAICity.y)
+                {
+                    Vector2Int[] offsets = new Vector2Int[]
+                    {
+                        new Vector2Int(1, 1),  // preferred anchor
+                        new Vector2Int(1, 0),
+                        new Vector2Int(0, 1),
+                        new Vector2Int(-1, 0),
+                        new Vector2Int(0, -1),
+                        new Vector2Int(-1, -1),
+                        new Vector2Int(1, -1),
+                        new Vector2Int(-1, 1),
+                    };
+
+                    bool steppedOffCity = false;
+                    foreach (var off in offsets)
+                    {
+                        int tx = primaryAICity.x + off.x;
+                        int ty = primaryAICity.y + off.y;
+                        if (!gridManager.TryGetTile(tx, ty, out TileVisibility anchorTile))
+                            continue;
+
+                        Vector3 targetPos = anchorTile.transform.position;
+                        Unit occupant = GridUtils.GetUnitAtPosition(targetPos, unit);
+                        // Skip if a friendly unit already occupies the tile; allow moving onto enemies.
+                        if (occupant != null && occupant.isPlayerOwned == unit.isPlayerOwned)
+                            continue;
+
+                        MoveAIUnitOneStep(unit, targetPos, stepSize);
+                        steppedOffCity = true;
+                        break;
+                    }
+
+                    if (steppedOffCity)
+                    {
+                        // This unit already used its action to reposition off the city tile.
+                        continue;
+                    }
+                }
+            }
+
+            // Optional Level 2 randomness: closest units to the enemy city
+            // sometimes hold position when no enemies are currently visible.
+            if (applyLevel2HoldBehavior &&
+                distToEnemyCityTiles != null &&
+                distToEnemyCityTiles.TryGetValue(unit, out int unitCityDistTiles))
+            {
+                // Treat as "closest group" if it has the minimum distance in tiles.
+                if (unitCityDistTiles == nearestEnemyCityDistTiles)
+                {
+                    // Do not skip if this unit could capture the enemy city
+                    // in a single tile move (axial or diagonal).
+                    // Chebyshev distance 1 => within one move, 0 => already on the city.
+                    if (unitCityDistTiles > 1 && Random.value < 0.5f)
+                    {
+                        // Skip moving this turn to keep behavior varied.
+                        continue;
+                    }
+                }
+            }
+
+            // Optional Level 3 behavior: always try to keep the closest AI unit
+            // near its own city as a defender when the city is not under visible
+            // threat.
+            if (applyLevel3DefenderBehavior &&
+                !enemyNearAICity &&
+                primaryAICity != null &&
+                unit == defenderCandidate &&
+                distToAICityTiles != null &&
+                distToAICityTiles.TryGetValue(unit, out int unitDistToAiTiles))
+            {
+                // The closest AI unit to its own city acts as the defender.
+                if (unitDistToAiTiles == nearestAICityDistTiles)
+                {
+                    // Prefer to hold one tile "behind" the city toward the corner,
+                    // e.g., at (city.x + 1, city.y + 1) for the default top-right AI city.
+                    if (gridManager != null)
+                    {
+                        int anchorX = primaryAICity.x + 1;
+                        int anchorY = primaryAICity.y + 1;
+
+                        if (gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility unitTile) &&
+                            gridManager.TryGetTile(anchorX, anchorY, out TileVisibility anchorTile))
+                        {
+                            int distToAnchor = Mathf.Max(Mathf.Abs(unitTile.gridX - anchorX), Mathf.Abs(unitTile.gridY - anchorY));
+
+                            // If already on the anchor tile, hold position.
+                            if (distToAnchor == 0)
+                            {
+                                continue;
+                            }
+
+                            // Move toward the defensive anchor tile rather than the city center.
+                            MoveAIUnitOneStep(unit, anchorTile.transform.position, stepSize);
+                            continue;
+                        }
+                    }
+
+                    // Fallback: if we cannot compute an anchor, keep the previous behavior
+                    // of staying within 1 tile of the city.
+                    if (unitDistToAiTiles <= 1)
+                    {
+                        continue;
+                    }
+
+                    MoveAIUnitOneStep(unit, primaryAICity.transform.position, stepSize);
+                    continue;
+                }
+            }
 
             // Find nearest target
             Vector3 from = unit.transform.position;
@@ -961,6 +1225,67 @@ public class TurnManager : MonoBehaviour
         goldText.text = $"Gold {displayGold}";
     }
 
+    /// <summary>
+    /// Computes which tiles are currently visible for a given side
+    /// based on cities and units that side owns, using the same
+    /// radius rules as the fog-of-war visuals.
+    /// This does not mutate any TileVisibility state.
+    /// </summary>
+    HashSet<TileVisibility> ComputeVisibilityForSide(bool sideIsPlayerOwned)
+    {
+        HashSet<TileVisibility> visibleTiles = new HashSet<TileVisibility>();
+
+        if (gridManager == null)
+            return visibleTiles;
+
+        // Reveal around cities owned by this side
+        City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        foreach (City city in cities)
+        {
+            if (city.isPlayerOwned != sideIsPlayerOwned)
+                continue;
+
+            for (int dx = -visibilityRadius; dx <= visibilityRadius; dx++)
+            {
+                for (int dy = -visibilityRadius; dy <= visibilityRadius; dy++)
+                {
+                    int tx = city.x + dx;
+                    int ty = city.y + dy;
+                    if (gridManager.TryGetTile(tx, ty, out TileVisibility tile))
+                    {
+                        visibleTiles.Add(tile);
+                    }
+                }
+            }
+        }
+
+        // Reveal around units owned by this side
+        Unit[] units = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
+        foreach (Unit unit in units)
+        {
+            if (unit.isPlayerOwned != sideIsPlayerOwned)
+                continue;
+
+            if (!gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility originTile))
+                continue;
+
+            for (int dx = -visibilityRadius; dx <= visibilityRadius; dx++)
+            {
+                for (int dy = -visibilityRadius; dy <= visibilityRadius; dy++)
+                {
+                    int tx = originTile.gridX + dx;
+                    int ty = originTile.gridY + dy;
+                    if (gridManager.TryGetTile(tx, ty, out TileVisibility tile))
+                    {
+                        visibleTiles.Add(tile);
+                    }
+                }
+            }
+        }
+
+        return visibleTiles;
+    }
+
     public void RecalculatePlayerVisibility()
     {
         if (gridManager == null)
@@ -979,30 +1304,15 @@ public class TurnManager : MonoBehaviour
             tile.SetVisibleForSide(false, currentSideIsPlayerOwned);
         }
 
-        // Reveal around cities owned by the current side
-        City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
-        foreach (City city in cities)
+        // Compute which tiles should be visible for this side
+        HashSet<TileVisibility> visibleTiles = ComputeVisibilityForSide(currentSideIsPlayerOwned);
+        foreach (TileVisibility tile in visibleTiles)
         {
-            if (city.isPlayerOwned == currentSideIsPlayerOwned)
-            {
-                RevealRadius(city.x, city.y, visibilityRadius);
-            }
-        }
-
-        // Reveal around units owned by the current side
-        Unit[] units = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
-        foreach (Unit unit in units)
-        {
-            if (unit.isPlayerOwned != currentSideIsPlayerOwned)
-                continue;
-
-            if (gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility tile))
-            {
-                RevealRadius(tile.gridX, tile.gridY, visibilityRadius);
-            }
+            tile.SetVisibleForSide(true, currentSideIsPlayerOwned);
         }
 
         // Hide enemy units that are not in visible tiles
+        Unit[] units = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
         foreach (Unit unit in units)
         {
             bool isCurrentSideUnit = unit.isPlayerOwned == currentSideIsPlayerOwned;
@@ -1015,27 +1325,6 @@ public class TurnManager : MonoBehaviour
                 }
             }
             unit.SetFogVisibility(isVisible, isCurrentSideUnit);
-        }
-    }
-
-    private void RevealRadius(int centerX, int centerY, int radius)
-    {
-        for (int dx = -radius; dx <= radius; dx++)
-        {
-            for (int dy = -radius; dy <= radius; dy++)
-            {
-                int tx = centerX + dx;
-                int ty = centerY + dy;
-                if (gridManager.TryGetTile(tx, ty, out TileVisibility tile))
-                {
-                    bool sideIsPlayer = true;
-                    if (currentMode == GameMode.Hotseat || currentMode == GameMode.PlayByPost)
-                    {
-                        sideIsPlayer = isPlayerTurn;
-                    }
-                    tile.SetVisibleForSide(true, sideIsPlayer);
-                }
-            }
         }
     }
 
@@ -1113,6 +1402,7 @@ public class TurnManager : MonoBehaviour
         {
             gameId = string.IsNullOrEmpty(currentGameId) ? (currentGameId = System.Guid.NewGuid().ToString()) : currentGameId,
             mode = currentMode.ToString(),
+            aiDifficulty = aiDifficulty.ToString(),
             isPlayerTurn = isPlayerTurn,
             turnNumber = turnNumber,
             playerGold = playerGold,
@@ -1250,6 +1540,14 @@ public class TurnManager : MonoBehaviour
         if (System.Enum.TryParse(save.mode, out GameMode loadedMode))
         {
             currentMode = loadedMode;
+        }
+
+        // AI difficulty (optional for older saves)
+        aiDifficulty = AIDifficulty.Level1;
+        if (!string.IsNullOrEmpty(save.aiDifficulty) &&
+            System.Enum.TryParse(save.aiDifficulty, out AIDifficulty loadedDifficulty))
+        {
+            aiDifficulty = loadedDifficulty;
         }
         currentGameId = string.IsNullOrEmpty(save.gameId) ? System.Guid.NewGuid().ToString() : save.gameId;
         isPlayerTurn = save.isPlayerTurn;
