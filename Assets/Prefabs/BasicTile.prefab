@@ -278,7 +278,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 49de896b3c00b9043ab7d3ba32d835a2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TileHighlighter
-  hoverColor: {r: 0, g: 0.54509807, b: 0, a: 1}
+  hoverColor: {r: 0, g: 0.54509807, b: 0, a: 0}
   selectedColor: {r: 0, g: 0.5169811, b: 0, a: 1}
   reachableColor: {r: 0, g: 0.70643044, b: 1, a: 1}
   attackableColor: {r: 1, g: 0.9321854, b: 0, a: 1}

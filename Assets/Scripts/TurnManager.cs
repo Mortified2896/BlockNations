@@ -4,6 +4,7 @@ using System.IO;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 using TMPro;   // for TMP_Text
 
 public class TurnManager : MonoBehaviour
@@ -234,6 +235,16 @@ public class TurnManager : MonoBehaviour
         }
 
         EndCurrentTurn();
+    }
+
+    public void OnPlayAgainButtonPressed()
+    {
+        // Preserve the mode (VsAI / Hotseat / PlayByPost) for the next game.
+        GameModeSelection.SetPendingMode(currentMode);
+
+        Time.timeScale = 1f;
+        var currentScene = SceneManager.GetActiveScene();
+        SceneManager.LoadScene(currentScene.name);
     }
 
     void EnsureEventSystemExists()
@@ -544,6 +555,30 @@ public class TurnManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Collects tiles that would be visible around the given grid center
+    /// using the same radius rule as the fog-of-war system, without
+    /// mutating any TileVisibility state.
+    /// </summary>
+    void CollectVisibleTilesAround(int centerX, int centerY, int radius, HashSet<TileVisibility> buffer)
+    {
+        if (gridManager == null || buffer == null)
+            return;
+
+        for (int dx = -radius; dx <= radius; dx++)
+        {
+            for (int dy = -radius; dy <= radius; dy++)
+            {
+                int tx = centerX + dx;
+                int ty = centerY + dy;
+                if (gridManager.TryGetTile(tx, ty, out TileVisibility tile))
+                {
+                    buffer.Add(tile);
+                }
+            }
+        }
+    }
+
     void RunAI()
     {
         // 1) Recruit from each AI city (one unit per city per AI turn, if the city is empty)
@@ -556,21 +591,72 @@ public class TurnManager : MonoBehaviour
             }
         }
 
-        // 2) Move AI units toward the nearest player unit or city
+        // 2) Move AI units toward the nearest player unit or city,
+        // but only using information it could have under fog-of-war.
         Unit[] allUnits = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
 
-        // Collect player targets (units + cities)
-        System.Collections.Generic.List<Vector3> playerTargets = new System.Collections.Generic.List<Vector3>();
+        HashSet<TileVisibility> aiVisibleTiles = null;
+        if (gridManager != null)
+        {
+            aiVisibleTiles = new HashSet<TileVisibility>();
+
+            // Vision from AI-owned cities
+            foreach (City city in allCities)
+            {
+                if (!city.isPlayerOwned)
+                {
+                    CollectVisibleTilesAround(city.x, city.y, visibilityRadius, aiVisibleTiles);
+                }
+            }
+
+            // Vision from AI-owned units
+            foreach (Unit unit in allUnits)
+            {
+                if (unit == null || unit.isPlayerOwned)
+                    continue;
+
+                if (gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility tile))
+                {
+                    CollectVisibleTilesAround(tile.gridX, tile.gridY, visibilityRadius, aiVisibleTiles);
+                }
+            }
+        }
+
+        // Collect player targets (units + cities) that are in AI-visible tiles.
+        List<Vector3> playerTargets = new List<Vector3>();
+
         foreach (Unit unit in allUnits)
         {
-            if (unit.isPlayerOwned)
+            if (!unit.isPlayerOwned)
+                continue;
+
+            // If we could not determine visibility, fall back to the old behavior.
+            if (aiVisibleTiles == null || aiVisibleTiles.Count == 0 || gridManager == null)
+            {
+                playerTargets.Add(unit.transform.position);
+                continue;
+            }
+
+            if (gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility tile) &&
+                aiVisibleTiles.Contains(tile))
             {
                 playerTargets.Add(unit.transform.position);
             }
         }
+
         foreach (City city in allCities)
         {
-            if (city.isPlayerOwned)
+            if (!city.isPlayerOwned)
+                continue;
+
+            if (aiVisibleTiles == null || aiVisibleTiles.Count == 0 || gridManager == null)
+            {
+                playerTargets.Add(city.transform.position);
+                continue;
+            }
+
+            if (gridManager.TryGetTile(city.x, city.y, out TileVisibility tile) &&
+                aiVisibleTiles.Contains(tile))
             {
                 playerTargets.Add(city.transform.position);
             }
@@ -578,7 +664,7 @@ public class TurnManager : MonoBehaviour
 
         if (playerTargets.Count == 0)
         {
-            // Nothing to move toward yet
+            // Nothing visible to move toward this turn (AI does not cheat).
             return;
         }
 
