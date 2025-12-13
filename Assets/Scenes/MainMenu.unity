@@ -213,11 +213,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 642
+      value: 1920
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -1279.4
+      value: -970.4
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -819,11 +819,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 642
+      value: 1920
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -1498.6
+      value: -1189.6
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -1011,7 +1011,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.22398713, g: 0.45335808, b: 0.7283019, a: 1}
+  m_Color: {r: 0.1465645, g: 0.38846788, b: 0.6754716, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -1287,11 +1287,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 642
+      value: 1920
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -1717.7999
+      value: -1408.7999
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -1574,11 +1574,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 642
+      value: 1920
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -1060.2001
+      value: -751.2001
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -1763,7 +1763,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 0}
+  m_Color: {r: 0.14509805, g: 0.3882353, b: 0.6745098, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
