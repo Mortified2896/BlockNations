@@ -31,16 +31,37 @@ public class City : MonoBehaviour
         return true;
     }
 
+    private bool ShouldPlayInvalidForThisCity()
+    {
+        if (TurnManager.Instance == null)
+            return false;
+
+        if (!TurnManager.Instance.IsHumanTurn())
+            return false;
+
+        return TurnManager.Instance.IsCurrentSideOwner(isPlayerOwned);
+    }
+
+    private void PlayInvalidIfHuman()
+    {
+        if (SoundManager.Instance != null && ShouldPlayInvalidForThisCity())
+        {
+            SoundManager.Instance.PlayInvalid();
+        }
+    }
+
     public void SpawnWarrior()
     {
         if (warriorPrefab == null)
         {
             Debug.LogWarning("City has no Warrior prefab assigned.", this);
+            PlayInvalidIfHuman();
             return;
         }
 
         if (!CanRecruit())
         {
+            PlayInvalidIfHuman();
             return;
         }
 
@@ -49,6 +70,7 @@ public class City : MonoBehaviour
         if (GridUtils.IsTileOccupied(spawnPosition, null))
         {
             Debug.Log("Cannot spawn Warrior in city " + name + " because the tile is already occupied by a unit.", this);
+            PlayInvalidIfHuman();
             return;
         }
 
@@ -56,6 +78,7 @@ public class City : MonoBehaviour
         if (TurnManager.Instance == null)
         {
             Debug.LogWarning("Cannot spawn Warrior because TurnManager instance is missing.", this);
+            PlayInvalidIfHuman();
             return;
         }
 
@@ -75,6 +98,11 @@ public class City : MonoBehaviour
         GameObject warrior = Instantiate(warriorPrefab, spawnPosition, Quaternion.identity);
         stationedUnit = warrior;
         hasRecruitedThisTurn = true;
+
+        if (SoundManager.Instance != null)
+        {
+            SoundManager.Instance.PlayRecruit();
+        }
 
         // Set up the Unit component with ownership and city link
         Unit unit = warrior.GetComponent<Unit>();

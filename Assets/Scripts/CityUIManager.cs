@@ -58,11 +58,19 @@ public class CityUIManager : MonoBehaviour
         if (turnManager != null && !turnManager.CanControlCity(city))
         {
             Debug.Log("Clicked on a city that cannot act this turn, city UI remains closed.");
+            if (SoundManager.Instance != null)
+            {
+                SoundManager.Instance.PlayInvalid();
+            }
             return;
         }
         else if (turnManager == null && !city.isPlayerOwned)
         {
             Debug.Log("Clicked on a non-player city but TurnManager is not assigned; UI remains closed.");
+            if (SoundManager.Instance != null)
+            {
+                SoundManager.Instance.PlayInvalid();
+            }
             return;
         }
 
@@ -163,12 +171,20 @@ public class CityUIManager : MonoBehaviour
         if (currentCity == null)
         {
             Debug.LogWarning("Tried to recruit a Warrior but no city is selected.");
+            if (SoundManager.Instance != null)
+            {
+                SoundManager.Instance.PlayInvalid();
+            }
             return;
         }
 
         if (turnManager != null && !turnManager.CanControlCity(currentCity))
         {
             Debug.Log("Ignored Recruit Warrior click because it is not this city's turn.");
+            if (SoundManager.Instance != null)
+            {
+                SoundManager.Instance.PlayInvalid();
+            }
             return;
         }
 

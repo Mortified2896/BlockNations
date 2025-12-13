@@ -1,0 +1,13 @@
+{
+    "asset": "044bcd6c28340ef4db4639724685dca3",
+    "fileName": "019b17b5-9725-708e-8b41-d9a08993271e.wav",
+    "prompt": "Gentle ceremonial wooden tones, quiet sense of victory, refined and calm",
+    "negativePrompt": "",
+    "model": "5de0686a-fb27-40e5-9df0-28ae810d70ca",
+    "modelName": "ElevenLabs Sound Effects V2",
+    "customSeed": -1,
+    "w3CTraceId": "13a3eba9e443c6bd62f5146e2597d5c7",
+    "duration": 10.0,
+    "autoTrim": false,
+    "hasReference": false
+}

@@ -1,0 +1,13 @@
+{
+    "asset": "884b85e921034014083da9f0422502bc",
+    "fileName": "019b17a9-5538-7b3f-9804-be38aeb80ae4.wav",
+    "prompt": "Gentle lacquered wood tap, traditional Japanese feel, soft and precise",
+    "negativePrompt": "",
+    "model": "5de0686a-fb27-40e5-9df0-28ae810d70ca",
+    "modelName": "ElevenLabs Sound Effects V2",
+    "customSeed": -1,
+    "w3CTraceId": "5339abbe43801666d55c90192e59e065",
+    "duration": 1.0,
+    "autoTrim": true,
+    "hasReference": false
+}

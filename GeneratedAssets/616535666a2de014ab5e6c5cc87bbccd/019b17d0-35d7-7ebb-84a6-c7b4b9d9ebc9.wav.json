@@ -1,0 +1,13 @@
+{
+    "asset": "616535666a2de014ab5e6c5cc87bbccd",
+    "fileName": "019b17d0-35d7-7ebb-84a6-c7b4b9d9ebc9.wav",
+    "prompt": "Human dying grunt, wounded warrior, strained breath, rough throat sound, very short",
+    "negativePrompt": "",
+    "model": "5de0686a-fb27-40e5-9df0-28ae810d70ca",
+    "modelName": "ElevenLabs Sound Effects V2",
+    "customSeed": -1,
+    "w3CTraceId": "0ad050ea91ff9c6626bb320f0e990a65",
+    "duration": 1.0,
+    "autoTrim": true,
+    "hasReference": false
+}

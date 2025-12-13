@@ -22,7 +22,8 @@ public class TurnManager : MonoBehaviour
         None,
         Level1,
         Level2,
-        Level3
+        Level3,
+        Unfair
     }
 
     public static TurnManager Instance { get; private set; }
@@ -66,6 +67,10 @@ public class TurnManager : MonoBehaviour
 
     [Header("Prefabs")]
     public GameObject unitPrefab; // used to respawn units on load
+
+    [Header("Audio")]
+    public bool playMusicOnStart = true;
+    public AudioClip gameplayMusic;
 
     [Header("Saving")]
     public bool autoSaveEnabled = true;
@@ -219,6 +224,7 @@ public class TurnManager : MonoBehaviour
         EnsureTurnAndGoldTexts();
         EnsureEventSystemExists();
         EnsureUIRaycasters();
+        TryStartGameplayMusic();
         StartCoroutine(StartupSequence());
     }
 
@@ -291,6 +297,11 @@ public class TurnManager : MonoBehaviour
     {
         Debug.Log(GetCurrentSideName() + " ends Turn " + turnNumber);
 
+        if (SoundManager.Instance != null)
+        {
+            SoundManager.Instance.PlayTurnEnd();
+        }
+
         if (UnitSelectionManager.Instance != null)
         {
             UnitSelectionManager.Instance.HideAllMoveOutlines();
@@ -324,12 +335,30 @@ public class TurnManager : MonoBehaviour
             isPlayByPostWaitingForExport = true;
             AutoSaveIfEnabled();
 
-            if (playByPostPopup != null)
-            {
-                playByPostPopup.SetActive(true);
-            }
+        if (playByPostPopup != null)
+        {
+            playByPostPopup.SetActive(true);
+        }
 
             Debug.Log("Play-by-Post turn finished. Use the Copy JSON button to export this turn.");
+        }
+    }
+
+    void TryStartGameplayMusic()
+    {
+        if (!playMusicOnStart)
+            return;
+
+        if (SoundManager.Instance == null)
+            return;
+
+        if (gameplayMusic != null)
+        {
+            SoundManager.Instance.PlayBackgroundMusic(gameplayMusic);
+        }
+        else
+        {
+            SoundManager.Instance.PlayBackgroundMusic();
         }
     }
 
@@ -386,6 +415,11 @@ public class TurnManager : MonoBehaviour
 
         Debug.Log("AI Turn " + turnNumber + " started. AI is thinking...");
 
+        if (SoundManager.Instance != null)
+        {
+            SoundManager.Instance.PlayTurnStart();
+        }
+
         // Simulate thinking time
         yield return new WaitForSeconds(aiTurnDelay);
 
@@ -415,6 +449,11 @@ public class TurnManager : MonoBehaviour
 
         isPlayerTurn = true;
 
+        if (SoundManager.Instance != null)
+        {
+            SoundManager.Instance.PlayTurnStart();
+        }
+
         // Allow cities and units to act again
         ResetRecruitmentForPlayerCities();
         if (UnitSelectionManager.Instance != null)
@@ -443,6 +482,11 @@ public class TurnManager : MonoBehaviour
     {
         if (gameOver)
             return;
+
+        if (SoundManager.Instance != null)
+        {
+            SoundManager.Instance.PlayTurnStart();
+        }
 
         // Allow cities and units to act again
         ResetRecruitmentForAICities();
@@ -589,15 +633,16 @@ public class TurnManager : MonoBehaviour
             }
         }
 
-        // 2) Move AI units toward the nearest player unit or city,
-        // using the same fog-of-war rules as any other side.
+        // 2) Move AI units toward the nearest player unit or city.
+        bool aiHasPerfectInfo = aiDifficulty == AIDifficulty.Unfair;
         Unit[] allUnits = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
 
-        HashSet<TileVisibility> aiVisibleTiles = ComputeVisibilityForSide(false);
+        HashSet<TileVisibility> aiVisibleTiles = aiHasPerfectInfo ? null : ComputeVisibilityForSide(false);
 
         // Collect player targets: visible units + known player cities.
         List<Vector3> playerTargets = new List<Vector3>();
         List<Vector3> playerCityPositions = new List<Vector3>();
+        List<TileVisibility> playerUnitTiles = new List<TileVisibility>();
         bool anyVisiblePlayerUnit = false;
         bool enemyNearAICity = false;
 
@@ -606,29 +651,35 @@ public class TurnManager : MonoBehaviour
             if (!unit.isPlayerOwned)
                 continue;
 
+            // Unfair AI: always knows all player unit positions. Otherwise, respect visibility.
+            bool unitIsVisible = aiHasPerfectInfo;
+
             // If we could not determine visibility, fall back to the old behavior.
-            if (aiVisibleTiles == null || aiVisibleTiles.Count == 0 || gridManager == null)
+            if (!unitIsVisible && (aiVisibleTiles == null || aiVisibleTiles.Count == 0 || gridManager == null))
             {
                 playerTargets.Add(unit.transform.position);
                 anyVisiblePlayerUnit = true;
                 continue;
             }
 
-            if (gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility tile) &&
-                aiVisibleTiles.Contains(tile))
+            if (gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility tile))
             {
-                playerTargets.Add(unit.transform.position);
-                anyVisiblePlayerUnit = true;
-
-                // Track whether any visible enemy unit is near the AI city.
-                if (primaryAICity != null)
+                if (aiHasPerfectInfo || aiVisibleTiles.Contains(tile))
                 {
-                    int dxCity = Mathf.Abs(tile.gridX - primaryAICity.x);
-                    int dyCity = Mathf.Abs(tile.gridY - primaryAICity.y);
-                    int distToAICityTilesForEnemy = Mathf.Max(dxCity, dyCity);
-                    if (distToAICityTilesForEnemy <= 2)
+                    playerTargets.Add(unit.transform.position);
+                    playerUnitTiles.Add(tile);
+                    anyVisiblePlayerUnit = true;
+
+                    // Track whether any enemy unit is near the AI city.
+                    if (primaryAICity != null)
                     {
-                        enemyNearAICity = true;
+                        int dxCity = Mathf.Abs(tile.gridX - primaryAICity.x);
+                        int dyCity = Mathf.Abs(tile.gridY - primaryAICity.y);
+                        int distToAICityTilesForEnemy = Mathf.Max(dxCity, dyCity);
+                        if (distToAICityTilesForEnemy <= 2)
+                        {
+                            enemyNearAICity = true;
+                        }
                     }
                 }
             }
@@ -659,6 +710,10 @@ public class TurnManager : MonoBehaviour
             stepSize = UnitSelectionManager.Instance.tileSize;
         }
 
+        // For threat checks: a player can move one tile then attack adjacent, so staying
+        // beyond Chebyshev distance 2 avoids being attacked next turn by a fresh unit.
+        const int playerThreatRadiusTiles = 2;
+
         // Level 2 behavior: if no enemy units are currently visible, units that
         // are closest to the enemy city have a small chance to hold position
         // instead of always advancing, to make behavior less predictable.
@@ -666,6 +721,7 @@ public class TurnManager : MonoBehaviour
                                        !anyVisiblePlayerUnit &&
                                        playerCityPositions.Count > 0;
 
+        // Unfair skips the Level 3 defender anchor logic since it has perfect info and prefers full offense.
         bool applyLevel3DefenderBehavior = (aiDifficulty == AIDifficulty.Level3) &&
                                            (primaryAICity != null);
 
@@ -677,6 +733,47 @@ public class TurnManager : MonoBehaviour
         Dictionary<Unit, int> distToAICityTiles = null;
         int nearestAICityDistTiles = int.MaxValue;
         Unit defenderCandidate = null;
+
+        int GetThreatDistanceTiles(Vector3 pos)
+        {
+            if (gridManager == null || playerUnitTiles.Count == 0)
+                return int.MaxValue;
+
+            if (!gridManager.TryGetTileAtWorldPosition(pos, out TileVisibility posTile))
+                return int.MaxValue;
+
+            int minDist = int.MaxValue;
+            foreach (var enemyTile in playerUnitTiles)
+            {
+                int dx = Mathf.Abs(enemyTile.gridX - posTile.gridX);
+                int dy = Mathf.Abs(enemyTile.gridY - posTile.gridY);
+                int dist = Mathf.Max(dx, dy);
+                if (dist < minDist)
+                {
+                    minDist = dist;
+                }
+            }
+            return minDist;
+        }
+
+        Vector3 PredictOneStep(Vector3 from, Vector3 target)
+        {
+            Vector3 delta = target - from;
+            delta.z = 0f;
+
+            float stepX = 0f;
+            float stepY = 0f;
+            if (Mathf.Abs(delta.x) > 0.1f)
+            {
+                stepX = Mathf.Sign(delta.x) * stepSize;
+            }
+            if (Mathf.Abs(delta.y) > 0.1f)
+            {
+                stepY = Mathf.Sign(delta.y) * stepSize;
+            }
+
+            return new Vector3(from.x + stepX, from.y + stepY, from.z);
+        }
 
         if (applyLevel2HoldBehavior || applyLevel3DefenderBehavior)
         {
@@ -964,7 +1061,70 @@ public class TurnManager : MonoBehaviour
 
             if (bestTarget.HasValue)
             {
-                MoveAIUnitOneStep(unit, bestTarget.Value, stepSize);
+                Vector3 chosenTarget = bestTarget.Value;
+
+                // Unfair AI: if the preferred step would end inside the player's move+attack radius,
+                // try to choose a safer adjacent step that still heads toward the goal.
+                // If no safe step exists, only retreat if we are not about to kill an adjacent player unit
+                // by moving onto it.
+                if (aiHasPerfectInfo && playerUnitTiles.Count > 0)
+                {
+                    Vector3 predictedPos = PredictOneStep(from, chosenTarget);
+                    int threatDist = GetThreatDistanceTiles(predictedPos);
+
+                    bool predictedKillsEnemy = false;
+                    if (GridUtils.GetUnitAtPosition(predictedPos, unit) is Unit enemyAtPos &&
+                        enemyAtPos.isPlayerOwned)
+                    {
+                        // If we step onto an enemy tile, treat as a kill attempt; allow it even in danger.
+                        predictedKillsEnemy = true;
+                    }
+
+                    // Also allow entering danger if we will be adjacent and can attack after moving.
+                    bool predictedCanAttackAdjacent = threatDist <= 1;
+
+                    if (!predictedKillsEnemy && !predictedCanAttackAdjacent && threatDist <= playerThreatRadiusTiles)
+                    {
+                        Vector3 bestSafeTarget = chosenTarget;
+                        float bestSafeDistToGoal = float.MaxValue;
+                        bool foundSafe = false;
+
+                        for (int ox = -1; ox <= 1; ox++)
+                        {
+                            for (int oy = -1; oy <= 1; oy++)
+                            {
+                                if (ox == 0 && oy == 0)
+                                    continue;
+
+                                Vector3 altTarget = from + new Vector3(ox * stepSize, oy * stepSize, 0f);
+
+                                // Stay on the board.
+                                if (gridManager != null && !gridManager.TryGetTileAtWorldPosition(altTarget, out _))
+                                    continue;
+
+                                int altThreat = GetThreatDistanceTiles(altTarget);
+                                if (altThreat <= playerThreatRadiusTiles)
+                                    continue;
+
+                                float distToGoal = (chosenTarget - altTarget).sqrMagnitude;
+                                if (distToGoal < bestSafeDistToGoal)
+                                {
+                                    bestSafeDistToGoal = distToGoal;
+                                    bestSafeTarget = altTarget;
+                                    foundSafe = true;
+                                }
+                            }
+                        }
+
+                        if (foundSafe)
+                        {
+                            chosenTarget = bestSafeTarget;
+                        }
+                        // else: no safe tile and not an immediate kill -> fall back to original move (risk it)
+                    }
+                }
+
+                MoveAIUnitOneStep(unit, chosenTarget, stepSize);
             }
         }
     }
@@ -1027,6 +1187,12 @@ public class TurnManager : MonoBehaviour
             if (killed)
             {
                 unit.transform.position = newPos;
+
+                if (SoundManager.Instance != null)
+                {
+                    SoundManager.Instance.PlayMove();
+                }
+
                 Debug.Log("AI unit moved into defeated enemy tile at " + newPos);
             }
         }
@@ -1035,6 +1201,11 @@ public class TurnManager : MonoBehaviour
             // Empty tile: move normally
             unit.transform.position = newPos;
             unit.RegisterMove();
+
+            if (SoundManager.Instance != null)
+            {
+                SoundManager.Instance.PlayMove();
+            }
 
             Debug.Log("AI moved unit " + unit.name + " to " + newPos);
         }
@@ -1115,6 +1286,13 @@ public class TurnManager : MonoBehaviour
         else
         {
             message = capturedByPlayer ? "You Win!" : "You Lose!";
+        }
+
+        if (SoundManager.Instance != null)
+        {
+            // In local Hotseat (and Play-by-Post), both sides are humans, so always treat game-over as a "win" cue.
+            bool playWinCue = (currentMode == GameMode.VsAI) ? capturedByPlayer : true;
+            SoundManager.Instance.PlayGameOver(playWinCue);
         }
 
         if (gameOverText != null)
@@ -1703,10 +1881,37 @@ public class TurnManager : MonoBehaviour
         if (amount <= 0)
             return true;
 
+        bool shouldPlayInvalid = false;
+        if (SoundManager.Instance != null && !gameOver)
+        {
+            if (currentMode == GameMode.VsAI)
+            {
+                // Only play invalid for the human player's gold in Vs AI.
+                shouldPlayInvalid = forPlayer && isPlayerTurn;
+            }
+            else if (currentMode == GameMode.Hotseat || currentMode == GameMode.PlayByPost)
+            {
+                // In Hotseat/Play-by-Post, both banks can be human-controlled depending on whose turn it is.
+                bool spendingSideIsActive = isPlayerTurn == forPlayer;
+                shouldPlayInvalid = spendingSideIsActive && IsHumanTurn();
+            }
+            else
+            {
+                // Fallback: treat "forPlayer" as human.
+                shouldPlayInvalid = forPlayer;
+            }
+        }
+
         if (forPlayer)
         {
             if (playerGold < amount)
+            {
+                if (shouldPlayInvalid)
+                {
+                    SoundManager.Instance.PlayInvalid();
+                }
                 return false;
+            }
 
             playerGold -= amount;
             UpdateGoldText();
@@ -1715,7 +1920,13 @@ public class TurnManager : MonoBehaviour
         else
         {
             if (aiGold < amount)
+            {
+                if (shouldPlayInvalid)
+                {
+                    SoundManager.Instance.PlayInvalid();
+                }
                 return false;
+            }
 
             aiGold -= amount;
             if ((currentMode == GameMode.Hotseat || currentMode == GameMode.PlayByPost) && !isPlayerTurn)

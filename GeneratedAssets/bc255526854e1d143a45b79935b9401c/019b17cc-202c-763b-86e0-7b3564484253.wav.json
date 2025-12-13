@@ -1,0 +1,13 @@
+{
+    "asset": "bc255526854e1d143a45b79935b9401c",
+    "fileName": "019b17cc-202c-763b-86e0-7b3564484253.wav",
+    "prompt": "Short human pain exhale, dying samurai, breathy and rough, low energy, restrained, no speech",
+    "negativePrompt": "",
+    "model": "6be7790d-b2f4-4fe0-8ca2-76ddaaf94361",
+    "modelName": "ElevenLabs Multilingual V2",
+    "customSeed": -1,
+    "w3CTraceId": "f3196504859ea1cca014bfc5f5b226b9",
+    "duration": 2.0,
+    "autoTrim": true,
+    "hasReference": false
+}

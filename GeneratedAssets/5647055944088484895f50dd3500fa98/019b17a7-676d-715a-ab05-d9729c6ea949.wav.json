@@ -1,0 +1,13 @@
+{
+    "asset": "5647055944088484895f50dd3500fa98",
+    "fileName": "019b17a7-676d-715a-ab05-d9729c6ea949.wav",
+    "prompt": "Soft muted UI click, gentle wooden tap, subtle and restrained",
+    "negativePrompt": "",
+    "model": "5de0686a-fb27-40e5-9df0-28ae810d70ca",
+    "modelName": "ElevenLabs Sound Effects V2",
+    "customSeed": -1,
+    "w3CTraceId": "635be8038b826fd0fef7bd769c685d80",
+    "duration": 10.0,
+    "autoTrim": false,
+    "hasReference": false
+}

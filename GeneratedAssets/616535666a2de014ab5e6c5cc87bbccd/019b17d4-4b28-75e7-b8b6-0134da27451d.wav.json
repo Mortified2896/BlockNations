@@ -1,0 +1,13 @@
+{
+    "asset": "616535666a2de014ab5e6c5cc87bbccd",
+    "fileName": "019b17d4-4b28-75e7-b8b6-0134da27451d.wav",
+    "prompt": "Forceful blade strike, sharp cut followed by dull internal impact, short and dry",
+    "negativePrompt": "",
+    "model": "5de0686a-fb27-40e5-9df0-28ae810d70ca",
+    "modelName": "ElevenLabs Sound Effects V2",
+    "customSeed": -1,
+    "w3CTraceId": "6e638ec7bac45bc86d3ff99bd9b40f99",
+    "duration": 1.0,
+    "autoTrim": true,
+    "hasReference": false
+}

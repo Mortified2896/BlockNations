@@ -1,0 +1,13 @@
+{
+    "asset": "8bfcdebbd6b6b1a419b8311e133ca1c9",
+    "fileName": "019b17b9-d4c4-705f-9368-cbed74681fd8.wav",
+    "prompt": "Muted wooden resonance, quiet and reflective, short defeat sound\r\n",
+    "negativePrompt": "",
+    "model": "5de0686a-fb27-40e5-9df0-28ae810d70ca",
+    "modelName": "ElevenLabs Sound Effects V2",
+    "customSeed": -1,
+    "w3CTraceId": "76d519896fbf6e63446c4c71198c799a",
+    "duration": 1.0,
+    "autoTrim": true,
+    "hasReference": false
+}

@@ -1,0 +1,13 @@
+{
+    "asset": "616535666a2de014ab5e6c5cc87bbccd",
+    "fileName": "019b17da-70af-7ea0-b723-15e4b7794d65.wav",
+    "prompt": "Short pain scream",
+    "negativePrompt": "",
+    "model": "5de0686a-fb27-40e5-9df0-28ae810d70ca",
+    "modelName": "ElevenLabs Sound Effects V2",
+    "customSeed": -1,
+    "w3CTraceId": "32c862356421622e562528d97ecac6fa",
+    "duration": 1.0,
+    "autoTrim": true,
+    "hasReference": false
+}

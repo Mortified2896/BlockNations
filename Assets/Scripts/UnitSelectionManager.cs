@@ -133,7 +133,13 @@ public class UnitSelectionManager : MonoBehaviour
             return;
 
         selectedUnit = unit;
-        Debug.Log("Selected unit: " + unit.name);
+        if (SoundManager.Instance != null)
+        {
+            SoundManager.Instance.PlayUnitSelect();
+        }
+
+        string ownerLabel = unit.isPlayerOwned ? "Player" : "AI";
+        Debug.Log($"Selected unit ({ownerLabel}): {unit.name}");
 
         if (UnitUIManager.Instance != null)
         {
@@ -244,6 +250,11 @@ public class UnitSelectionManager : MonoBehaviour
             if (killed)
             {
                 selectedUnit.transform.position = newPos;
+                if (SoundManager.Instance != null)
+                {
+                    SoundManager.Instance.PlayMove();
+                }
+
                 Debug.Log(sideLabel + " unit moved into defeated enemy tile at " + newPos);
             }
         }
@@ -253,6 +264,11 @@ public class UnitSelectionManager : MonoBehaviour
             selectedUnit.transform.position = newPos;
             selectedUnit.RegisterMove();
             selectedUnit.UpdateMoveOutline(isActiveTurnForUnit);
+            if (SoundManager.Instance != null)
+            {
+                SoundManager.Instance.PlayMove();
+            }
+
             Debug.Log(sideLabel + " unit moved to " + newPos);
             actionPerformed = true;
         }

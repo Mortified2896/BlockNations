@@ -65,6 +65,11 @@ public class MainMenuController : MonoBehaviour
         StartVsAIGame(TurnManager.AIDifficulty.Level3);
     }
 
+    public void PlayVsAI_Unfair()
+    {
+        StartVsAIGame(TurnManager.AIDifficulty.Unfair);
+    }
+
     void StartVsAIGame(TurnManager.AIDifficulty difficulty)
     {
         GameModeSelection.SetPendingMode(TurnManager.GameMode.VsAI);

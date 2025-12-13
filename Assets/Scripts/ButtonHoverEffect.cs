@@ -26,6 +26,11 @@ public class ButtonHoverEffect : MonoBehaviour, IPointerEnterHandler, IPointerEx
         {
             targetImage.color = hoverColor;
         }
+
+        if (SoundManager.Instance != null)
+        {
+            SoundManager.Instance.PlayUIHover();
+        }
     }
 
     public void OnPointerExit(PointerEventData eventData)
@@ -41,6 +46,11 @@ public class ButtonHoverEffect : MonoBehaviour, IPointerEnterHandler, IPointerEx
         if (targetImage != null)
         {
             targetImage.color = pressedColor;
+        }
+
+        if (SoundManager.Instance != null)
+        {
+            SoundManager.Instance.PlayUIClick();
         }
     }
 

@@ -1261,6 +1261,8 @@ MonoBehaviour:
   gridManager: {fileID: 575130739}
   visibilityRadius: 1
   unitPrefab: {fileID: 8613717610168908074, guid: 201cae50cac1013489cb65af371b9783, type: 3}
+  playMusicOnStart: 1
+  gameplayMusic: {fileID: 0}
   autoSaveEnabled: 1
   autoSaveFileName: save.json
   playByPostExportPretty: 1

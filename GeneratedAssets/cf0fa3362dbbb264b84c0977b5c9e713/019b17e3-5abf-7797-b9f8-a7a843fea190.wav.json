@@ -1,0 +1,13 @@
+{
+    "asset": "cf0fa3362dbbb264b84c0977b5c9e713",
+    "fileName": "019b17e3-5abf-7797-b9f8-a7a843fea190.wav",
+    "prompt": "Extremly short Samurai exclamation",
+    "negativePrompt": "",
+    "model": "5de0686a-fb27-40e5-9df0-28ae810d70ca",
+    "modelName": "ElevenLabs Sound Effects V2",
+    "customSeed": -1,
+    "w3CTraceId": "003eef2c9375101d685c3f2d3c665ac6",
+    "duration": 1.0,
+    "autoTrim": true,
+    "hasReference": false
+}

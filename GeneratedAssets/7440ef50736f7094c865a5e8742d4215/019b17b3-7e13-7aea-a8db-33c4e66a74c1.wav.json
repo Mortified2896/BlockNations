@@ -1,0 +1,13 @@
+{
+    "asset": "7440ef50736f7094c865a5e8742d4215",
+    "fileName": "019b17b3-7e13-7aea-a8db-33c4e66a74c1.wav",
+    "prompt": "Low wooden tone UI cue, composed and focused, subtle and clean",
+    "negativePrompt": "",
+    "model": "5de0686a-fb27-40e5-9df0-28ae810d70ca",
+    "modelName": "ElevenLabs Sound Effects V2",
+    "customSeed": -1,
+    "w3CTraceId": "884b9f2837dbb6dbd708e84859192f39",
+    "duration": 10.0,
+    "autoTrim": false,
+    "hasReference": false
+}

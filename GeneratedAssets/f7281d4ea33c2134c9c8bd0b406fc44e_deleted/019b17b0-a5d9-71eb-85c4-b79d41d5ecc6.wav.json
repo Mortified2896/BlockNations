@@ -1,0 +1,13 @@
+{
+    "asset": "f7281d4ea33c2134c9c8bd0b406fc44e",
+    "fileName": "019b17b0-a5d9-71eb-85c4-b79d41d5ecc6.wav",
+    "prompt": "ぐああっ！ Japanese male warrior, strained painful cry, breathy and rough, voice breaks slightly, short exhaled shout, natural battle sound, not clean, not calm",
+    "negativePrompt": "",
+    "model": "5de0686a-fb27-40e5-9df0-28ae810d70ca",
+    "modelName": "ElevenLabs Sound Effects V2",
+    "customSeed": -1,
+    "w3CTraceId": "5a19e98c5f711a0335330d19c588b465",
+    "duration": 1.0,
+    "autoTrim": true,
+    "hasReference": false
+}

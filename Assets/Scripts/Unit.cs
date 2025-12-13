@@ -75,6 +75,11 @@ public class Unit : MonoBehaviour
             return false;
         }
 
+        if (SoundManager.Instance != null)
+        {
+            SoundManager.Instance.PlayAttack();
+        }
+
         target.currentHealth -= mitigatedDamage;
         Debug.Log(name + " attacked " + target.name + " for " + mitigatedDamage +
                   " damage. Target HP: " + target.currentHealth + "/" + target.maxHealth);
@@ -100,6 +105,16 @@ public class Unit : MonoBehaviour
         }
 
         Debug.Log(name + " has died.");
+
+        if (SoundManager.Instance != null)
+        {
+            SoundManager.Instance.PlayUnitDown();
+        }
+
+        // Destroy() happens end-of-frame, and visibility updates can re-enable renderers.
+        // Deactivate immediately so the dead unit can't briefly overlap/tint the attacker.
+        gameObject.SetActive(false);
+
         Object.Destroy(gameObject);
     }
 
