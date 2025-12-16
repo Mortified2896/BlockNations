@@ -22,6 +22,8 @@ public class CityUIManager : MonoBehaviour
     public TMP_Text recruitWarriorButtonText;
 
     private City currentCity;
+    private Button cachedBottomMenuButton;
+    private Button cachedBottomEndTurnOrNextButton;
 
     [Header("Tutorial/Debug")]
     public int lastRecruitAttemptFrame = -1;
@@ -111,10 +113,7 @@ public class CityUIManager : MonoBehaviour
         panelRoot.SetActive(true);
 
         // Hide the default bottom HUD buttons while the city panel is open.
-        if (bottomButtonsRoot != null)
-        {
-            bottomButtonsRoot.SetActive(false);
-        }
+        SetBottomHudButtonsActive(false);
         Debug.Log("CityUIManager.OpenPanel");
 
         if (cityNameText != null && currentCity != null)
@@ -178,15 +177,33 @@ public class CityUIManager : MonoBehaviour
 
         // Restore the default bottom HUD buttons when the city panel closes.
         EnsureBottomButtonsRootReference();
+        SetBottomHudButtonsActive(true);
+    }
+
+    private void SetBottomHudButtonsActive(bool active)
+    {
+        // Safety: never hide the city UI itself.
+        if (bottomButtonsRoot != null && panelRoot != null && panelRoot.transform.IsChildOf(bottomButtonsRoot.transform))
+        {
+            bottomButtonsRoot = null;
+        }
+
         if (bottomButtonsRoot != null)
         {
-            bottomButtonsRoot.SetActive(true);
+            bottomButtonsRoot.SetActive(active);
+            return;
         }
+
+        // Fallback: toggle the buttons directly if we can't determine a common root.
+        if (cachedBottomMenuButton != null)
+            cachedBottomMenuButton.gameObject.SetActive(active);
+        if (cachedBottomEndTurnOrNextButton != null)
+            cachedBottomEndTurnOrNextButton.gameObject.SetActive(active);
     }
 
     private void EnsureBottomButtonsRootReference()
     {
-        if (bottomButtonsRoot != null)
+        if (bottomButtonsRoot != null && cachedBottomMenuButton != null && cachedBottomEndTurnOrNextButton != null)
             return;
 
         Button[] buttons = UnityEngine.Object.FindObjectsByType<Button>(FindObjectsInactive.Include, FindObjectsSortMode.None);
@@ -227,6 +244,9 @@ public class CityUIManager : MonoBehaviour
 
         if (menuButton == null || endTurnOrNextButton == null)
             return;
+
+        cachedBottomMenuButton = menuButton;
+        cachedBottomEndTurnOrNextButton = endTurnOrNextButton;
 
         Transform root = FindLowestCommonAncestor(menuButton.transform, endTurnOrNextButton.transform);
         if (root == null)

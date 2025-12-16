@@ -27,7 +27,20 @@ public static class SpeechBubble
         if (worldOffset == default)
             worldOffset = new Vector3(0f, 0.9f, 0f);
 
-        target.gameObject.AddComponent<SpeechBubbleRunner>().ShowInternal(text, seconds, worldOffset);
+        target.gameObject.AddComponent<SpeechBubbleRunner>().ShowInternal(SanitizeForUI(text), seconds, worldOffset);
+    }
+
+    private static string SanitizeForUI(string s)
+    {
+        if (string.IsNullOrEmpty(s))
+            return s;
+
+        s = s.Replace("â€”", "-").Replace("â€“", "-");
+        s = s.Replace('—', '-').Replace('–', '-');
+        s = s.Replace('“', '"').Replace('”', '"').Replace('‘', '\'').Replace('’', '\'');
+        s = s.Replace('\u00A0', ' ');
+        s = s.Replace('ƒ', '-');
+        return s;
     }
 
     private class SpeechBubbleRunner : MonoBehaviour
@@ -50,11 +63,16 @@ public static class SpeechBubble
             Canvas canvas = root.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
             canvas.sortingOrder = 900;
-            root.AddComponent<CanvasScaler>();
+            CanvasScaler scaler = root.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
+            scaler.scaleFactor = 1f;
+            scaler.referencePixelsPerUnit = 100f;
 
             RectTransform rt = root.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(3.2f, 1.2f);
-            rt.localScale = Vector3.one * 0.25f;
+            // Use "pixel-like" canvas units so padding/font sizes behave predictably in world-space.
+            // Then scale the whole bubble down into world units.
+            rt.sizeDelta = new Vector2(320f, 120f);
+            rt.localScale = Vector3.one * 0.0025f; // 320px -> 0.8 world units (at scale 1)
 
             GameObject bg = new GameObject("BG", typeof(RectTransform), typeof(Image));
             bg.transform.SetParent(root.transform, false);
@@ -87,6 +105,7 @@ public static class SpeechBubble
             tmp.color = Color.white;
             tmp.alignment = TextAlignmentOptions.Center;
             tmp.textWrappingMode = TextWrappingModes.Normal;
+            tmp.overflowMode = TextOverflowModes.Overflow;
 
             yield return new WaitForSeconds(seconds);
             if (root != null)

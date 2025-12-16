@@ -110,6 +110,7 @@ public class TutorialOverlay : MonoBehaviour
     private bool pointerArrowPreferRightMiddle;
     private bool pointerArrowEndOverride;
     private Vector2 pointerArrowEndScreen;
+    private bool pointerHighlightYellow;
 
     private Button menuButton;
     private bool menuButtonPrevInteractable;
@@ -526,6 +527,7 @@ public class TutorialOverlay : MonoBehaviour
         pointerArrowPreferRightMiddle = false;
         pointerArrowEndOverride = false;
         pointerShowHighlight = false;
+        pointerHighlightYellow = false;
 
         if (pointerHighlightRect != null) pointerHighlightRect.gameObject.SetActive(false);
         if (pointerArrowHeadRect != null) pointerArrowHeadRect.gameObject.SetActive(false);
@@ -538,7 +540,7 @@ public class TutorialOverlay : MonoBehaviour
         pointerArrowEndScreen = screenPos;
     }
 
-    private void PointAtWorld(Vector3 worldPos, bool showArrow = false, bool arrowFromScreenCenter = false, bool showHighlight = true, bool arrowFromRightMiddle = false)
+    private void PointAtWorld(Vector3 worldPos, bool showArrow = false, bool arrowFromScreenCenter = false, bool showHighlight = true, bool arrowFromRightMiddle = false, bool highlightYellow = false)
     {
         pointerVisible = true;
         pointerWorldMode = true;
@@ -550,15 +552,16 @@ public class TutorialOverlay : MonoBehaviour
         pointerArrowPreferRightMiddle = arrowFromRightMiddle;
         pointerShowHighlight = showHighlight;
         pointerArrowEndOverride = false;
+        pointerHighlightYellow = highlightYellow;
 
         // Use only the highlight rectangle for world targets (avoids missing-glyph squares on some fonts/platforms).
         if (pointerHighlightRect != null) pointerHighlightRect.gameObject.SetActive(pointerShowHighlight);
-        if (pointerHighlightImage != null) pointerHighlightImage.color = new Color(0.18f, 0.52f, 0.82f, 0.18f);
+        ApplyPointerHighlightTheme(isUi: false);
         if (pointerArrowHeadRect != null) pointerArrowHeadRect.gameObject.SetActive(pointerShowArrow);
         if (pointerArrowShaftRect != null) pointerArrowShaftRect.gameObject.SetActive(pointerShowArrow);
     }
 
-    private void PointAtUI(RectTransform target, float padding = 14f, bool showArrow = false, bool arrowFromScreenCenter = false, bool showHighlight = true, bool arrowFromRightMiddle = false)
+    private void PointAtUI(RectTransform target, float padding = 14f, bool showArrow = false, bool arrowFromScreenCenter = false, bool showHighlight = true, bool arrowFromRightMiddle = false, bool highlightYellow = false)
     {
         if (target == null)
         {
@@ -575,17 +578,45 @@ public class TutorialOverlay : MonoBehaviour
         pointerShowHighlight = showHighlight;
         pointerArrowPreferRightMiddle = arrowFromRightMiddle;
         pointerArrowEndOverride = false;
+        pointerHighlightYellow = highlightYellow;
 
         // Use only the highlight rectangle for UI targets (keeps the pointer minimal and clear).
         if (pointerHighlightRect != null) pointerHighlightRect.gameObject.SetActive(pointerShowHighlight);
-        // For UI, use an outline-only pulse so the highlight doesn't obscure button text.
-        if (pointerHighlightImage != null) pointerHighlightImage.color = new Color(0.18f, 0.52f, 0.82f, 0.02f);
+        ApplyPointerHighlightTheme(isUi: true);
         if (pointerArrowHeadRect != null) pointerArrowHeadRect.gameObject.SetActive(pointerShowArrow);
         if (pointerArrowShaftRect != null) pointerArrowShaftRect.gameObject.SetActive(pointerShowArrow);
 
         // Pre-size highlight. Actual positioning is updated every frame.
         if (pointerHighlightRect != null)
             pointerHighlightRect.sizeDelta = target.rect.size + new Vector2(padding * 2f, padding * 2f);
+    }
+
+    private void ApplyPointerHighlightTheme(bool isUi)
+    {
+        if (pointerHighlightImage == null)
+            return;
+
+        Color fill;
+        Color outline;
+
+        if (pointerHighlightYellow)
+        {
+            fill = isUi ? new Color(0.98f, 0.92f, 0.30f, 0.04f) : new Color(0.98f, 0.92f, 0.30f, 0.14f);
+            outline = new Color(0.98f, 0.92f, 0.30f, 0.92f);
+        }
+        else
+        {
+            fill = isUi ? new Color(0.18f, 0.52f, 0.82f, 0.02f) : new Color(0.18f, 0.52f, 0.82f, 0.18f);
+            outline = new Color(0.18f, 0.52f, 0.82f, 0.85f);
+        }
+
+        pointerHighlightImage.color = fill;
+
+        Outline hiOutline = pointerHighlightImage.GetComponent<Outline>();
+        if (hiOutline != null)
+        {
+            hiOutline.effectColor = outline;
+        }
     }
 
     private static Rect GetScreenRect(RectTransform rt)
@@ -786,7 +817,8 @@ public class TutorialOverlay : MonoBehaviour
                     Vector2 headCenter = tipPos - dir * tipToCenter;
 
                     Vector2 shaftStart = start;
-                    Vector2 shaftEnd = headCenter - dir * (headH * 0.15f);
+                    // Stop the shaft far enough before the head so scaling/pulsing never makes it overlap the head.
+                    Vector2 shaftEnd = headCenter - dir * (headH * 0.55f);
                     float shaftLen = Mathf.Max(18f, Vector2.Distance(shaftStart, shaftEnd));
                     Vector2 shaftCenter = (shaftStart + shaftEnd) * 0.5f;
 
@@ -868,7 +900,8 @@ public class TutorialOverlay : MonoBehaviour
             Vector2 headCenter = tipPos - dir * tipToCenter;
 
             Vector2 shaftStart = start;
-            Vector2 shaftEnd = headCenter - dir * (headH * 0.15f);
+            // Stop the shaft far enough before the head so scaling/pulsing never makes it overlap the head.
+            Vector2 shaftEnd = headCenter - dir * (headH * 0.55f);
             float shaftLen = Mathf.Max(18f, Vector2.Distance(shaftStart, shaftEnd));
             Vector2 shaftCenter = (shaftStart + shaftEnd) * 0.5f;
 
@@ -1165,8 +1198,6 @@ public class TutorialOverlay : MonoBehaviour
             onEnter = () =>
             {
                 SetPanelLayoutAvoidTopCenter();
-                if (CityUIManager.Instance != null) CityUIManager.Instance.ClosePanel();
-                if (UnitUIManager.Instance != null) UnitUIManager.Instance.ClosePanel();
                 RectTransform goldRect = GetGoldRectTransform();
                 if (goldRect != null)
                 {
@@ -1264,8 +1295,6 @@ public class TutorialOverlay : MonoBehaviour
             onEnter = () =>
             {
                 SetPanelLayoutAvoidTopCenter();
-                if (CityUIManager.Instance != null) CityUIManager.Instance.ClosePanel();
-                if (UnitUIManager.Instance != null) UnitUIManager.Instance.ClosePanel();
                 RectTransform goldRect = GetGoldRectTransform();
                 if (goldRect != null)
                 {
@@ -1353,11 +1382,7 @@ public class TutorialOverlay : MonoBehaviour
                 {
                     PointAtWorld(warrior1.transform.position);
                 }
-                if (playerCity != null)
-                {
-                    SetPanelLayoutUpperLeft();
-                    LockCameraToWorld(playerCity.transform.position);
-                }
+                SetPanelLayoutUpperLeft();
                 TutorialGate.CanSelectUnit = u => u == warrior1;
                 TutorialGate.CanEndTurn = () => false;
             },
@@ -1381,8 +1406,8 @@ public class TutorialOverlay : MonoBehaviour
                 if (CityUIManager.Instance != null) CityUIManager.Instance.ClosePanel();
                 if (UnitUIManager.Instance != null) UnitUIManager.Instance.ClosePanel();
                 CachePlayerWarriorsIfNeeded();
-                PointAtWorld(tile_22);
-                SetAllowedMove(warrior1, tile_22);
+                PointAtWorld(tile_22, showArrow: false, showHighlight: true, highlightYellow: true);
+                SetAllowedMove(warrior1, tile_22, forceSingleHighlight: false);
             },
             canAdvance = () => IsUnitAt(warrior1, tile_22),
             hintAfterSeconds = defaultHintAfterSeconds,
@@ -1406,7 +1431,7 @@ public class TutorialOverlay : MonoBehaviour
         steps.Add(new TutorialStep
         {
             title = "Next Turn",
-            body = "You have taken all possible actions this turn.\n\nThe next turn starts automatically.",
+            body = "You have taken all possible actions this turn.\n\nIn this case, the game moves to the next turn automatically.",
             nextLabel = "Continue",
             onEnter = () =>
             {
@@ -1459,8 +1484,8 @@ public class TutorialOverlay : MonoBehaviour
                 if (CityUIManager.Instance != null) CityUIManager.Instance.ClosePanel();
                 if (UnitUIManager.Instance != null) UnitUIManager.Instance.ClosePanel();
                 CachePlayerWarriorsIfNeeded();
-                PointAtWorld(tile_33);
-                SetAllowedMove(warrior1, tile_33);
+                PointAtWorld(tile_33, showArrow: false, showHighlight: true, highlightYellow: true);
+                SetAllowedMove(warrior1, tile_33, forceSingleHighlight: false);
             },
             canAdvance = () => IsUnitAt(warrior1, tile_33),
             hintAfterSeconds = defaultHintAfterSeconds,
@@ -1470,7 +1495,7 @@ public class TutorialOverlay : MonoBehaviour
         steps.Add(new TutorialStep
         {
             title = "Turn 2",
-            body = "Nice.\n\nThe next turn starts automatically when you have no actions left.",
+            body = "You have taken all possible actions this turn.\n\nIn this case, the game moves to the next turn automatically.",
             nextLabel = "Next",
             autoAdvance = true,
             onEnter = () =>
@@ -1534,8 +1559,8 @@ public class TutorialOverlay : MonoBehaviour
             onEnter = () =>
             {
                 CachePlayerWarriorsIfNeeded();
-                PointAtWorld(tile_44);
-                SetAllowedMove(warrior1, tile_44);
+                PointAtWorld(tile_44, showArrow: false, showHighlight: true, highlightYellow: true);
+                SetAllowedMove(warrior1, tile_44, forceSingleHighlight: false);
             },
             canAdvance = () => IsUnitAt(warrior1, tile_44),
             hintAfterSeconds = defaultHintAfterSeconds,
@@ -1569,7 +1594,7 @@ public class TutorialOverlay : MonoBehaviour
         steps.Add(new TutorialStep
         {
             title = "Turn 3",
-            body = "You have no more actions.\n\nThe next turn starts automatically.",
+            body = "You have taken all possible actions this turn.\n\nIn this case, the game moves to the next turn automatically.",
             nextLabel = "Next",
             autoAdvance = true,
             onEnter = () =>
@@ -1594,15 +1619,11 @@ public class TutorialOverlay : MonoBehaviour
             autoAdvance = true,
             onEnter = () =>
             {
-                if (CityUIManager.Instance != null) CityUIManager.Instance.ClosePanel();
-                if (UnitUIManager.Instance != null) UnitUIManager.Instance.ClosePanel();
-                RectTransform recruitRect = GetRecruitButtonRectTransform();
-                if (recruitRect != null)
-                {
-                    PointAtUI(recruitRect, padding: 12f, showArrow: true, arrowFromScreenCenter: false, showHighlight: false, arrowFromRightMiddle: false);
-                }
+                // Let the player open the city menu again; don't draw a long arrow through the tutorial text.
+                HidePointer();
                 if (playerCity != null)
                 {
+                    PointAtWorld(playerCity.transform.position, showArrow: true, arrowFromScreenCenter: true, showHighlight: false);
                     TutorialGate.CanClickCity = c => c == playerCity;
                 }
                 TutorialGate.CanRecruitWarrior = () => true;
@@ -1641,8 +1662,8 @@ public class TutorialOverlay : MonoBehaviour
                 if (UnitUIManager.Instance != null) UnitUIManager.Instance.ClosePanel();
                 CachePlayerWarriorsIfNeeded();
                 warrior2 = GetUnitOnCityTile();
-                PointAtWorld(tile_22);
-                SetAllowedMove(warrior2, tile_22);
+                PointAtWorld(tile_22, showArrow: false, showHighlight: true, highlightYellow: true);
+                SetAllowedMove(warrior2, tile_22, forceSingleHighlight: false);
             },
             canAdvance = () => IsUnitAt(warrior2, tile_22),
             hintAfterSeconds = defaultHintAfterSeconds,
@@ -1700,7 +1721,7 @@ public class TutorialOverlay : MonoBehaviour
                 }
                 if (enemy1 != null)
                 {
-                    SpeechBubble.Show(enemy1.transform, "Kind regards from Clan Chief Big Salami!", seconds: 2.6f);
+                    SpeechBubble.Show(enemy1.transform, "Greetings from Clan Chief Salami!", seconds: 2.6f);
                 }
 
                 TutorialGate.CanSelectUnit = _ => false;
@@ -1722,8 +1743,8 @@ public class TutorialOverlay : MonoBehaviour
                 if (CityUIManager.Instance != null) CityUIManager.Instance.ClosePanel();
                 if (UnitUIManager.Instance != null) UnitUIManager.Instance.ClosePanel();
                 CachePlayerWarriorsIfNeeded();
-                PointAtWorld(tile_33);
-                SetAllowedMove(warrior2, tile_33);
+                PointAtWorld(tile_33, showArrow: false, showHighlight: true, highlightYellow: true);
+                SetAllowedMove(warrior2, tile_33, forceSingleHighlight: false);
             },
             canAdvance = () => IsUnitAt(warrior2, tile_33),
             hintAfterSeconds = defaultHintAfterSeconds,
@@ -1760,7 +1781,7 @@ public class TutorialOverlay : MonoBehaviour
         steps.Add(new TutorialStep
         {
             title = "Turn 6",
-            body = "Warrior: Noooooo!\n\nMove your Warrior to the highlighted tile.",
+            body = "Warrior: Noooooo!\n\nSelect Warrior 2.",
             nextLabel = "Next",
             autoAdvance = true,
             onEnter = () =>
@@ -1768,12 +1789,18 @@ public class TutorialOverlay : MonoBehaviour
                 if (CityUIManager.Instance != null) CityUIManager.Instance.ClosePanel();
                 if (UnitUIManager.Instance != null) UnitUIManager.Instance.ClosePanel();
                 CachePlayerWarriorsIfNeeded();
-                PointAtWorld(tile_44);
-                SetAllowedMove(warrior2, tile_44);
+                if (warrior2 != null)
+                {
+                    PointAtWorld(warrior2.transform.position);
+                    TutorialGate.CanSelectUnit = u => u == warrior2;
+                }
+                TutorialGate.CanClickCity = _ => false;
+                TutorialGate.CanRecruitWarrior = () => false;
+                TutorialGate.CanEndTurn = () => false;
             },
-            canAdvance = () => IsUnitAt(warrior2, tile_44),
+            canAdvance = () => UnitSelectionManager.Instance != null && warrior2 != null && UnitSelectionManager.Instance.SelectedUnit == warrior2,
             hintAfterSeconds = defaultHintAfterSeconds,
-            hintText = "Tap the highlighted tile."
+            hintText = "Tap your second Warrior."
         });
 
         steps.Add(new TutorialStep
@@ -1784,19 +1811,26 @@ public class TutorialOverlay : MonoBehaviour
             autoAdvance = true,
             onEnter = () =>
             {
-                HidePointer();
+                if (CityUIManager.Instance != null) CityUIManager.Instance.ClosePanel();
+                if (UnitUIManager.Instance != null) UnitUIManager.Instance.ClosePanel();
+                CachePlayerWarriorsIfNeeded();
+
                 if (enemy1 != null)
                 {
-                    SetAllowedAttack(warrior2, enemy1);
-                    TutorialGate.CanSelectUnit = u => u == warrior2;
+                    // Yellow pulse highlight to differentiate from the blue move tiles.
+                    PointAtWorld(enemy1.transform.position, showArrow: false, showHighlight: true, highlightYellow: true);
+                    SetAllowedAttack(warrior2, enemy1, forceSingleHighlight: true);
+                }
+                else
+                {
+                    HidePointer();
+                    TutorialGate.CanSelectUnit = _ => false;
+                    TutorialGate.CanMoveOrAttackToPosition = null;
+                }
 
-                    // Ensure Warrior 2 is selected so the forced red attack highlight is visible immediately.
-                    if (UnitSelectionManager.Instance != null && warrior2 != null)
-                    {
-                        if (UnitSelectionManager.Instance.SelectedUnit == warrior2)
-                            UnitSelectionManager.Instance.ClearSelection();
-                        UnitSelectionManager.Instance.SelectUnit(warrior2);
-                    }
+                if (UnitSelectionManager.Instance != null && warrior2 != null && UnitSelectionManager.Instance.SelectedUnit != warrior2)
+                {
+                    UnitSelectionManager.Instance.SelectUnit(warrior2);
                 }
             },
             canAdvance = () => enemy1 == null,
@@ -1836,7 +1870,7 @@ public class TutorialOverlay : MonoBehaviour
         steps.Add(new TutorialStep
         {
             title = "Turn 6",
-            body = "Another enemy will show up...\n\nWhen you have no actions left, the next turn starts automatically.",
+            body = "Another enemy will show up...\n\nYou have taken all possible actions this turn.\n\nIn this case, the game moves to the next turn automatically.",
             nextLabel = "Next",
             autoAdvance = true,
             onEnter = () =>
@@ -2153,7 +2187,7 @@ public class TutorialOverlay : MonoBehaviour
         return ApproximatelySameTile(unit.transform.position, worldPos);
     }
 
-    private void SetAllowedMove(Unit unit, Vector3 allowedTargetWorld)
+    private void SetAllowedMove(Unit unit, Vector3 allowedTargetWorld, bool forceSingleHighlight = true)
     {
         TutorialGate.CanSelectUnit = u => u == unit;
         TutorialGate.CanMoveOrAttackToPosition = (u, pos) => u == unit && ApproximatelySameTile(pos, allowedTargetWorld);
@@ -2161,17 +2195,18 @@ public class TutorialOverlay : MonoBehaviour
         TutorialGate.CanRecruitWarrior = () => false;
         TutorialGate.CanEndTurn = () => false;
 
-        TutorialGate.ForceSingleTargetHighlight = true;
-        TutorialGate.ForcedTargetWorldPosition = allowedTargetWorld;
+        TutorialGate.ForceSingleTargetHighlight = forceSingleHighlight;
+        TutorialGate.ForcedTargetWorldPosition = forceSingleHighlight ? allowedTargetWorld : Vector3.zero;
         TutorialGate.ForcedTargetIsAttack = false;
     }
 
-    private void SetAllowedAttack(Unit attacker, Unit target)
+    private void SetAllowedAttack(Unit attacker, Unit target, bool forceSingleHighlight = true)
     {
         if (attacker == null || target == null)
         {
             TutorialGate.CanSelectUnit = _ => false;
             TutorialGate.CanMoveOrAttackToPosition = null;
+            TutorialGate.ForceSingleTargetHighlight = false;
             TutorialGate.CanEndTurn = () => false;
             return;
         }
@@ -2183,8 +2218,8 @@ public class TutorialOverlay : MonoBehaviour
         TutorialGate.CanRecruitWarrior = () => false;
         TutorialGate.CanEndTurn = () => false;
 
-        TutorialGate.ForceSingleTargetHighlight = true;
-        TutorialGate.ForcedTargetWorldPosition = targetPos;
+        TutorialGate.ForceSingleTargetHighlight = forceSingleHighlight;
+        TutorialGate.ForcedTargetWorldPosition = forceSingleHighlight ? targetPos : Vector3.zero;
         TutorialGate.ForcedTargetIsAttack = true;
     }
 
@@ -2446,7 +2481,12 @@ public class TutorialOverlay : MonoBehaviour
 
         if (victim != null)
         {
-            enemy1.Attack(victim);
+            Vector3 victimPos = victim.transform.position;
+            bool killed = enemy1.Attack(victim);
+            if (killed)
+            {
+                enemy1.transform.position = victimPos;
+            }
         }
 
         if (tm != null)
@@ -2659,6 +2699,8 @@ public class TutorialOverlay : MonoBehaviour
         pointerLayer.anchorMax = Vector2.one;
         pointerLayer.offsetMin = Vector2.zero;
         pointerLayer.offsetMax = Vector2.zero;
+        // Keep pointers behind the tutorial panel so arrows don't draw over the tutorial text/buttons.
+        pointer.transform.SetAsFirstSibling();
 
         GameObject highlight = new GameObject("Highlight", typeof(RectTransform), typeof(Image), typeof(Outline));
         highlight.transform.SetParent(pointerLayer, false);

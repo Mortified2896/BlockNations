@@ -20,6 +20,8 @@ public class UnitUIManager : MonoBehaviour
     public TMP_Text defenseText;
 
     private Unit currentUnit;
+    private Button cachedBottomMenuButton;
+    private Button cachedBottomEndTurnOrNextButton;
 
     void Awake()
     {
@@ -53,10 +55,7 @@ public class UnitUIManager : MonoBehaviour
         panelRoot.SetActive(true);
 
         // Hide the default bottom HUD buttons while the unit panel is open.
-        if (bottomButtonsRoot != null)
-        {
-            bottomButtonsRoot.SetActive(false);
-        }
+        SetBottomHudButtonsActive(false);
 
         if (unitNameText != null && unit != null)
         {
@@ -97,15 +96,32 @@ public class UnitUIManager : MonoBehaviour
 
         // Restore the default bottom HUD buttons when the unit panel closes.
         EnsureBottomButtonsRootReference();
+        SetBottomHudButtonsActive(true);
+    }
+
+    private void SetBottomHudButtonsActive(bool active)
+    {
+        // Safety: never hide the unit UI itself.
+        if (bottomButtonsRoot != null && panelRoot != null && panelRoot.transform.IsChildOf(bottomButtonsRoot.transform))
+        {
+            bottomButtonsRoot = null;
+        }
+
         if (bottomButtonsRoot != null)
         {
-            bottomButtonsRoot.SetActive(true);
+            bottomButtonsRoot.SetActive(active);
+            return;
         }
+
+        if (cachedBottomMenuButton != null)
+            cachedBottomMenuButton.gameObject.SetActive(active);
+        if (cachedBottomEndTurnOrNextButton != null)
+            cachedBottomEndTurnOrNextButton.gameObject.SetActive(active);
     }
 
     private void EnsureBottomButtonsRootReference()
     {
-        if (bottomButtonsRoot != null)
+        if (bottomButtonsRoot != null && cachedBottomMenuButton != null && cachedBottomEndTurnOrNextButton != null)
             return;
 
         Button[] buttons = UnityEngine.Object.FindObjectsByType<Button>(FindObjectsInactive.Include, FindObjectsSortMode.None);
@@ -146,6 +162,9 @@ public class UnitUIManager : MonoBehaviour
 
         if (menuButton == null || endTurnOrNextButton == null)
             return;
+
+        cachedBottomMenuButton = menuButton;
+        cachedBottomEndTurnOrNextButton = endTurnOrNextButton;
 
         Transform root = FindLowestCommonAncestor(menuButton.transform, endTurnOrNextButton.transform);
         if (root == null)

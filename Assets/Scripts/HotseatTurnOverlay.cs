@@ -64,7 +64,11 @@ public class HotseatTurnOverlay : MonoBehaviour
         canvas = gameObject.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         canvas.sortingOrder = 500; // above normal UI
-        gameObject.AddComponent<CanvasScaler>();
+        CanvasScaler scaler = gameObject.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(referenceWidth, referenceHeight);
+        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+        scaler.matchWidthOrHeight = 0.5f;
         raycaster = gameObject.AddComponent<GraphicRaycaster>();
 
         overlayRoot = new GameObject("Overlay");
@@ -118,6 +122,14 @@ public class HotseatTurnOverlay : MonoBehaviour
     {
         GameObject go = new GameObject(name);
         go.transform.SetParent(parent, false);
+        RectTransform rt = go.AddComponent<RectTransform>();
+        rt.sizeDelta = new Vector2(0f, 0f);
+
+        LayoutElement le = go.AddComponent<LayoutElement>();
+        le.flexibleWidth = 1f;
+        le.minWidth = 0f;
+        le.flexibleHeight = 0f;
+
         Text text = go.AddComponent<Text>();
         text.alignment = TextAnchor.MiddleCenter;
         text.font = font != null ? font : GetDefaultFont();
