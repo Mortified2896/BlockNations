@@ -52,6 +52,7 @@ public class MainMenuUIBuilder : MonoBehaviour
         RectTransform root = CreateRootPanel(canvas.transform);
         CreateTitle(root, "Main Menu");
 
+        CreateButton(root, "Tutorial",     controller.PlayTutorial);
         CreateButton(root, "Continue",     controller.ContinueLastSave);
         CreateButton(root, "Play vs AI",   controller.PlayVsAI);
         CreateButton(root, "Hotseat",      controller.PlayHotseat);

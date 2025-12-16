@@ -80,13 +80,15 @@ public class TileHoverManager : MonoBehaviour
             }
         }
 
+        bool suppressHoverHighlight = TutorialGate.IsActive;
+
         // Update hover state if we moved to a different tile
         if (newHover != hoveredTile)
         {
             if (hoveredTile != null)
                 hoveredTile.SetHighlighted(false);
 
-            if (newHover != null)
+            if (newHover != null && !suppressHoverHighlight)
                 newHover.SetHighlighted(true);
 
             hoveredTile = newHover;
@@ -133,7 +135,7 @@ public class TileHoverManager : MonoBehaviour
             // 2c) Unit clicked: select/deselect unit (takes priority over city UI)
             if (hasUnit)
             {
-                if (CityUIManager.Instance != null)
+                if (!TutorialGate.IsActive && CityUIManager.Instance != null)
                 {
                     CityUIManager.Instance.ClosePanel();
                 }
@@ -160,11 +162,20 @@ public class TileHoverManager : MonoBehaviour
 
             // 2f) No city/unit clicked: treat as tile interaction
 
+            // During the tutorial, keep tile clicks deterministic and avoid extra visual noise
+            // (no green tile selection, and don't auto-close city panels on misclicks).
+            if (TutorialGate.IsActive)
+            {
+                if (hoveredTile != null && UnitSelectionManager.Instance != null)
+                {
+                    UnitSelectionManager.Instance.OnTileClicked(hoveredTile.transform);
+                }
+                return;
+            }
+
             // Clicking an empty tile should close any open city panel.
             if (CityUIManager.Instance != null)
-            {
                 CityUIManager.Instance.ClosePanel();
-            }
 
             // Inform unit selection logic first (for movement)
             if (hoveredTile != null && UnitSelectionManager.Instance != null)

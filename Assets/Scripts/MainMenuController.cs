@@ -2,6 +2,9 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using TMPro;
 using System.IO;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine.UI;
 
 /// <summary>
 /// Hook this to your MainMenu scene Canvas/buttons to load the gameplay scene
@@ -16,6 +19,28 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private GameObject modeSelectionPanel;
     [SerializeField] private GameObject aiDifficultyPanel;
     [SerializeField] private TMP_Text importStatusText;
+
+    [Header("Tutorial (Optional)")]
+    [SerializeField] private bool autoInjectTutorialButton = true;
+    [SerializeField] private string tutorialButtonLabel = "Tutorial";
+    [SerializeField] private bool autoFitMenuToScreenOnDesktop = true;
+
+    IEnumerator Start()
+    {
+        // Wait one frame so UI objects/panels are fully initialized and active state is stable.
+        yield return null;
+        if (autoInjectTutorialButton)
+        {
+            TryInjectTutorialButtonIntoCanvasMenu();
+        }
+
+        if (autoFitMenuToScreenOnDesktop)
+        {
+            // One more frame so layouts are rebuilt after we potentially injected a button.
+            yield return null;
+            TryAutoFitActiveMenuButtonContainer();
+        }
+    }
 
     public void NewGame()
     {
@@ -47,6 +72,12 @@ public class MainMenuController : MonoBehaviour
             // Fallback if no difficulty panel is wired.
             StartVsAIGame(TurnManager.AIDifficulty.Level1);
         }
+    }
+
+    public void PlayTutorial()
+    {
+        TutorialLaunch.RequestShow(resetCompleted: true);
+        StartVsAIGame(TurnManager.AIDifficulty.Level1);
     }
 
     // Optional: hook dedicated buttons to these for different difficulties.
@@ -85,6 +116,320 @@ public class MainMenuController : MonoBehaviour
         {
             aiDifficultyPanel.SetActive(false);
         }
+    }
+
+    private bool TryInjectTutorialButtonIntoCanvasMenu()
+    {
+        // If you switch to the runtime-built menu, that builder can add its own Tutorial button.
+        // This injection is a convenience for Canvas-based menus so you don't have to wire up
+        // a new button manually during prototyping.
+        if (Object.FindFirstObjectByType<MainMenuUIBuilder>() != null)
+            return false;
+
+        Button[] buttons = Object.FindObjectsByType<Button>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        if (buttons == null || buttons.Length == 0)
+            return false;
+
+        foreach (Button b in buttons)
+        {
+            if (b == null) continue;
+            string label = GetButtonLabel(b);
+            if (!string.IsNullOrEmpty(label) && label.Trim() == tutorialButtonLabel)
+                return false;
+        }
+
+        Button reference = FindActiveButtonByLabelContains(buttons, "Continue") ??
+                           FindActiveButtonByLabelContains(buttons, "Play vs AI") ??
+                           FindActiveButtonByLabelContains(buttons, "Play") ??
+                           FindFirstActiveButton(buttons) ??
+                           FindButtonByLabelContains(buttons, "Continue") ??
+                           FindButtonByLabelContains(buttons, "Play vs AI") ??
+                           FindButtonByLabelContains(buttons, "Play") ??
+                           buttons[0];
+        if (reference == null)
+            return false;
+
+        Transform parent = reference.transform.parent;
+        if (parent == null)
+            return false;
+
+        // Clone an existing menu button so it matches the exact visuals/components (hover effects, sprites, TMP styles).
+        GameObject clone = Instantiate(reference.gameObject, parent, worldPositionStays: false);
+        clone.name = tutorialButtonLabel;
+        clone.SetActive(true);
+
+        // Insert above the first button in this group (but don't jump above titles/backgrounds).
+        int firstButtonIndex = reference.transform.GetSiblingIndex();
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            Transform child = parent.GetChild(i);
+            if (child == null) continue;
+            if (child.GetComponent<Button>() != null)
+            {
+                firstButtonIndex = Mathf.Min(firstButtonIndex, i);
+            }
+        }
+        clone.transform.SetSiblingIndex(firstButtonIndex);
+
+        Button btn = clone.GetComponent<Button>();
+        if (btn == null)
+            return false;
+
+        // Replace the cloned click handler with our tutorial entrypoint.
+        btn.onClick = new Button.ButtonClickedEvent();
+        btn.onClick.AddListener(PlayTutorial);
+
+        // Update label(s).
+        TMP_Text tmp = clone.GetComponentInChildren<TMP_Text>(true);
+        if (tmp != null)
+        {
+            tmp.text = tutorialButtonLabel;
+        }
+        else
+        {
+            Text legacy = clone.GetComponentInChildren<Text>(true);
+            if (legacy != null)
+            {
+                legacy.text = tutorialButtonLabel;
+            }
+        }
+
+        return true;
+    }
+
+    private void TryAutoFitActiveMenuButtonContainer()
+    {
+        // On mobile portrait we want large, finger-friendly buttons; don't auto-shrink.
+        // On desktop/landscape, the CanvasScaler can make vertical stacks too tall.
+        if (Application.isMobilePlatform)
+            return;
+
+        if (Screen.height <= 0)
+            return;
+
+        bool isLandscape = Screen.width > Screen.height;
+        if (!isLandscape && Screen.height >= 1200)
+            return;
+
+        VerticalLayoutGroup[] groups = Object.FindObjectsByType<VerticalLayoutGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        VerticalLayoutGroup best = null;
+        int bestActiveButtons = 0;
+
+        foreach (VerticalLayoutGroup g in groups)
+        {
+            if (g == null || !g.gameObject.activeInHierarchy)
+                continue;
+
+            int count = 0;
+            for (int i = 0; i < g.transform.childCount; i++)
+            {
+                Transform child = g.transform.GetChild(i);
+                if (child == null || !child.gameObject.activeInHierarchy)
+                    continue;
+
+                if (child.GetComponent<Button>() != null)
+                    count++;
+            }
+
+            if (count > bestActiveButtons)
+            {
+                bestActiveButtons = count;
+                best = g;
+            }
+        }
+
+        if (best == null || bestActiveButtons < 4)
+            return;
+
+        RectTransform rt = best.GetComponent<RectTransform>();
+        if (rt == null)
+            return;
+
+        StartCoroutine(AutoFitVerticalLayoutGroupNextFrame(rt, best));
+    }
+
+    private static IEnumerator AutoFitVerticalLayoutGroupNextFrame(RectTransform container, VerticalLayoutGroup group)
+    {
+        // Wait until layout is calculated.
+        yield return new WaitForEndOfFrame();
+        Canvas.ForceUpdateCanvases();
+
+        if (container == null || group == null)
+            yield break;
+
+        // Keep the background/panel at full size. We only shrink spacing/button heights as needed.
+        container.localScale = Vector3.one;
+
+        float available = Screen.safeArea.height * 0.95f;
+        if (available <= 0f)
+            yield break;
+
+        // Consider only visible top-level menu buttons within this container.
+        List<RectTransform> buttonRects = new List<RectTransform>();
+        List<LayoutElement> buttonLayoutElements = new List<LayoutElement>();
+        List<TextMeshProUGUI> buttonLabels = new List<TextMeshProUGUI>();
+
+        for (int i = 0; i < container.childCount; i++)
+        {
+            Transform child = container.GetChild(i);
+            if (child == null || !child.gameObject.activeInHierarchy)
+                continue;
+
+            Button b = child.GetComponent<Button>();
+            if (b == null)
+                continue;
+
+            RectTransform rt = child as RectTransform;
+            if (rt == null)
+                continue;
+
+            buttonRects.Add(rt);
+
+            LayoutElement le = child.GetComponent<LayoutElement>();
+            buttonLayoutElements.Add(le);
+
+            TextMeshProUGUI label = child.GetComponentInChildren<TextMeshProUGUI>(true);
+            buttonLabels.Add(label);
+        }
+
+        int buttonCount = buttonRects.Count;
+        if (buttonCount <= 1)
+            yield break;
+
+        float sumHeights = 0f;
+        for (int i = 0; i < buttonCount; i++)
+        {
+            RectTransform rt = buttonRects[i];
+            float h = Mathf.Max(0f, rt.rect.height);
+            if (h <= 0.01f)
+            {
+                h = Mathf.Abs(rt.sizeDelta.y);
+            }
+            sumHeights += h;
+        }
+
+        float padding = group.padding.top + group.padding.bottom;
+        float requiredWithCurrentSpacing = sumHeights + padding + group.spacing * (buttonCount - 1);
+        if (requiredWithCurrentSpacing <= available)
+            yield break;
+
+        // 1) Reduce spacing first (cheap win).
+        const float minSpacing = 12f;
+        float requiredWithMinSpacing = sumHeights + padding + minSpacing * (buttonCount - 1);
+        group.spacing = minSpacing;
+
+        if (requiredWithMinSpacing <= available)
+            yield break;
+
+        // 2) Still too tall: reduce button heights (and font sizes proportionally).
+        float availableForButtons = available - padding - minSpacing * (buttonCount - 1);
+        if (availableForButtons <= 0f)
+            yield break;
+
+        float targetHeight = Mathf.Floor(availableForButtons / buttonCount);
+        if (targetHeight <= 0f)
+            yield break;
+
+        // Determine baseline from the first button that has a reasonable height.
+        float baselineHeight = 0f;
+        float baselineFontSize = 0f;
+        for (int i = 0; i < buttonCount; i++)
+        {
+            float h = Mathf.Max(0f, buttonRects[i].rect.height);
+            if (h <= 0.01f) h = Mathf.Abs(buttonRects[i].sizeDelta.y);
+            if (h <= 0.01f) continue;
+
+            baselineHeight = h;
+            if (buttonLabels[i] != null)
+            {
+                baselineFontSize = buttonLabels[i].fontSize;
+            }
+            break;
+        }
+
+        float scale = (baselineHeight > 0.01f) ? Mathf.Clamp01(targetHeight / baselineHeight) : 1f;
+
+        for (int i = 0; i < buttonCount; i++)
+        {
+            RectTransform rt = buttonRects[i];
+            Vector2 sd = rt.sizeDelta;
+            sd.y = targetHeight;
+            rt.sizeDelta = sd;
+
+            LayoutElement le = buttonLayoutElements[i];
+            if (le != null)
+            {
+                le.preferredHeight = targetHeight;
+            }
+
+            TextMeshProUGUI label = buttonLabels[i];
+            if (label != null && baselineFontSize > 0.01f)
+            {
+                // Keep readable while shrinking on desktop.
+                label.enableAutoSizing = false;
+                label.fontSize = Mathf.Max(28f, baselineFontSize * scale);
+            }
+        }
+
+        Canvas.ForceUpdateCanvases();
+    }
+
+    private static Button FindActiveButtonByLabelContains(Button[] buttons, string needle)
+    {
+        if (buttons == null || string.IsNullOrEmpty(needle))
+            return null;
+
+        string n = needle.ToLowerInvariant();
+        foreach (Button b in buttons)
+        {
+            if (b == null || !b.gameObject.activeInHierarchy) continue;
+            string label = GetButtonLabel(b);
+            if (string.IsNullOrEmpty(label)) continue;
+            if (label.ToLowerInvariant().Contains(n))
+                return b;
+        }
+        return null;
+    }
+
+    private static Button FindFirstActiveButton(Button[] buttons)
+    {
+        if (buttons == null) return null;
+        foreach (Button b in buttons)
+        {
+            if (b != null && b.gameObject.activeInHierarchy)
+                return b;
+        }
+        return null;
+    }
+
+    private static Button FindButtonByLabelContains(Button[] buttons, string needle)
+    {
+        if (buttons == null || string.IsNullOrEmpty(needle))
+            return null;
+
+        string n = needle.ToLowerInvariant();
+        foreach (Button b in buttons)
+        {
+            if (b == null) continue;
+            string label = GetButtonLabel(b);
+            if (string.IsNullOrEmpty(label)) continue;
+            if (label.ToLowerInvariant().Contains(n))
+                return b;
+        }
+        return null;
+    }
+
+    private static string GetButtonLabel(Button button)
+    {
+        if (button == null) return null;
+
+        TMP_Text tmp = button.GetComponentInChildren<TMP_Text>(true);
+        if (tmp != null) return tmp.text;
+
+        Text uText = button.GetComponentInChildren<Text>(true);
+        if (uText != null) return uText.text;
+
+        return button.name;
     }
 
     public void CloseAIDifficultyPanel()

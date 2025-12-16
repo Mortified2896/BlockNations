@@ -1,5 +1,8 @@
 using UnityEngine;
 using TMPro;
+using UnityEngine.UI;
+using System.Collections.Generic;
+using System;
 
 /// <summary>
 /// Manages the city UI panel and recruitment actions.
@@ -19,6 +22,10 @@ public class CityUIManager : MonoBehaviour
     public TMP_Text recruitWarriorButtonText;
 
     private City currentCity;
+
+    [Header("Tutorial/Debug")]
+    public int lastRecruitAttemptFrame = -1;
+    public bool lastRecruitAttemptSucceeded = false;
 
     void Awake()
     {
@@ -42,6 +49,7 @@ public class CityUIManager : MonoBehaviour
         }
 
         EnsureRecruitWarriorButtonReference();
+        EnsureBottomButtonsRootReference();
     }
 
     /// <summary>
@@ -51,6 +59,15 @@ public class CityUIManager : MonoBehaviour
     public void OnCityClicked(City city)
     {
         if (city == null) return;
+
+        if (TutorialGate.IsActive && TutorialGate.CanClickCity != null && !TutorialGate.CanClickCity(city))
+        {
+            if (SoundManager.Instance != null)
+            {
+                SoundManager.Instance.PlayInvalid();
+            }
+            return;
+        }
 
         Debug.Log("CityUIManager.OnCityClicked: " + city.name + " (isPlayerOwned=" + city.isPlayerOwned + ")");
 
@@ -89,6 +106,7 @@ public class CityUIManager : MonoBehaviour
         // Try to auto-wire the Recruit Warrior button label if it
         // has not been assigned in the Inspector.
         EnsureRecruitWarriorButtonReference();
+        EnsureBottomButtonsRootReference();
 
         panelRoot.SetActive(true);
 
@@ -118,10 +136,12 @@ public class CityUIManager : MonoBehaviour
             }
         }
 
-        // Show the cost directly on the Recruit Warrior button label
+        // Show the cost directly on the button label (cost on a separate line).
         if (recruitWarriorButtonText != null && turnManager != null)
         {
-            recruitWarriorButtonText.text = $"Recruit Warrior ({turnManager.warriorCost} Gold)";
+            recruitWarriorButtonText.text = $"Warrior\n({turnManager.warriorCost} Gold)";
+            recruitWarriorButtonText.alignment = TextAlignmentOptions.Center;
+            recruitWarriorButtonText.textWrappingMode = TextWrappingModes.NoWrap;
         }
     }
 
@@ -138,7 +158,8 @@ public class CityUIManager : MonoBehaviour
             if (t == null) continue;
             string lowerName = t.name.ToLower();
             string lowerText = t.text != null ? t.text.ToLower() : string.Empty;
-            if (lowerName.Contains("recruit") || lowerText.Contains("recruit"))
+            if (lowerName.Contains("recruit") || lowerText.Contains("recruit") ||
+                lowerName.Contains("warrior") || lowerText.Contains("warrior"))
             {
                 recruitWarriorButtonText = t;
                 break;
@@ -156,10 +177,142 @@ public class CityUIManager : MonoBehaviour
         }
 
         // Restore the default bottom HUD buttons when the city panel closes.
+        EnsureBottomButtonsRootReference();
         if (bottomButtonsRoot != null)
         {
             bottomButtonsRoot.SetActive(true);
         }
+    }
+
+    private void EnsureBottomButtonsRootReference()
+    {
+        if (bottomButtonsRoot != null)
+            return;
+
+        Button[] buttons = UnityEngine.Object.FindObjectsByType<Button>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        Button menuButton = null;
+        Button endTurnOrNextButton = null;
+        float bestMenuY = float.PositiveInfinity;
+        float bestNextY = float.PositiveInfinity;
+
+        foreach (Button b in buttons)
+        {
+            if (b == null) continue;
+            if (!b.gameObject.activeInHierarchy) continue;
+
+            string label = GetButtonLabel(b);
+            if (string.IsNullOrWhiteSpace(label))
+                continue;
+
+            float centerY = GetButtonScreenCenterY(b);
+
+            if (string.Equals(label, "Menu", StringComparison.OrdinalIgnoreCase))
+            {
+                if (centerY < bestMenuY)
+                {
+                    bestMenuY = centerY;
+                    menuButton = b;
+                }
+            }
+            else if (string.Equals(label, "End Turn", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(label, "Next", StringComparison.OrdinalIgnoreCase))
+            {
+                if (centerY < bestNextY)
+                {
+                    bestNextY = centerY;
+                    endTurnOrNextButton = b;
+                }
+            }
+        }
+
+        if (menuButton == null || endTurnOrNextButton == null)
+            return;
+
+        Transform root = FindLowestCommonAncestor(menuButton.transform, endTurnOrNextButton.transform);
+        if (root == null)
+            return;
+
+        // Prefer the lowest common parent on the Menu button's path that contains the EndTurn/Next button,
+        // but does NOT contain the city panel root (otherwise we'd accidentally hide the city UI too).
+        Transform refined = root;
+        Transform t = menuButton.transform;
+        while (t != null)
+        {
+            if (endTurnOrNextButton.transform.IsChildOf(t))
+            {
+                bool containsCityPanel = panelRoot != null && panelRoot.transform != null && panelRoot.transform.IsChildOf(t);
+                if (!containsCityPanel)
+                {
+                    refined = t;
+                    break;
+                }
+            }
+            t = t.parent;
+        }
+
+        bottomButtonsRoot = refined.gameObject;
+    }
+
+    private static string GetButtonLabel(Button b)
+    {
+        if (b == null)
+            return null;
+
+        TMP_Text tmp = b.GetComponentInChildren<TMP_Text>(true);
+        if (tmp != null && !string.IsNullOrWhiteSpace(tmp.text))
+            return tmp.text.Trim();
+
+        Text txt = b.GetComponentInChildren<Text>(true);
+        if (txt != null && !string.IsNullOrWhiteSpace(txt.text))
+            return txt.text.Trim();
+
+        return null;
+    }
+
+    private static float GetButtonScreenCenterY(Button b)
+    {
+        if (b == null)
+            return float.PositiveInfinity;
+
+        RectTransform rt = b.GetComponent<RectTransform>();
+        if (rt == null)
+            return float.PositiveInfinity;
+
+        Vector3[] corners = new Vector3[4];
+        rt.GetWorldCorners(corners);
+        Vector2 min = new Vector2(float.PositiveInfinity, float.PositiveInfinity);
+        Vector2 max = new Vector2(float.NegativeInfinity, float.NegativeInfinity);
+        for (int i = 0; i < 4; i++)
+        {
+            Vector2 sp = RectTransformUtility.WorldToScreenPoint(null, corners[i]);
+            min = Vector2.Min(min, sp);
+            max = Vector2.Max(max, sp);
+        }
+        return (min.y + max.y) * 0.5f;
+    }
+
+    private static Transform FindLowestCommonAncestor(Transform a, Transform b)
+    {
+        if (a == null || b == null)
+            return null;
+
+        HashSet<Transform> ancestors = new HashSet<Transform>();
+        Transform t = a;
+        while (t != null)
+        {
+            ancestors.Add(t);
+            t = t.parent;
+        }
+
+        t = b;
+        while (t != null)
+        {
+            if (ancestors.Contains(t))
+                return t;
+            t = t.parent;
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -168,6 +321,18 @@ public class CityUIManager : MonoBehaviour
     /// </summary>
     public void OnRecruitWarriorButton()
     {
+        lastRecruitAttemptFrame = Time.frameCount;
+        lastRecruitAttemptSucceeded = false;
+
+        if (TutorialGate.IsActive && TutorialGate.CanRecruitWarrior != null && !TutorialGate.CanRecruitWarrior())
+        {
+            if (SoundManager.Instance != null)
+            {
+                SoundManager.Instance.PlayInvalid();
+            }
+            return;
+        }
+
         if (currentCity == null)
         {
             Debug.LogWarning("Tried to recruit a Warrior but no city is selected.");
@@ -190,5 +355,6 @@ public class CityUIManager : MonoBehaviour
 
         // Let the city handle spawning the Warrior
         currentCity.SpawnWarrior();
+        lastRecruitAttemptSucceeded = currentCity.stationedUnit != null;
     }
 }

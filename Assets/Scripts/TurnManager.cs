@@ -77,6 +77,17 @@ public class TurnManager : MonoBehaviour
     public string autoSaveFileName = "save.json";
     public bool playByPostExportPretty = true;
 
+    [Header("Tutorial")]
+    public bool disableAI = false;
+
+    [Header("Quality of Life")]
+    [Tooltip("Vs AI only: if the player has no legal moves or recruit actions, automatically end the turn.")]
+    public bool autoEndTurnWhenNoActions = true;
+    [Tooltip("Wait this long (real time) after an action/turn start before auto-ending.")]
+    public float autoEndTurnDelaySeconds = 0.6f;
+    [Tooltip("Don't auto-end within this many seconds of the last player input (real time).")]
+    public float autoEndTurnInputCooldownSeconds = 0.8f;
+
     private bool isHotseatHandoff = false;
     private bool nextHotseatIsPlayer = false;
     private bool hotseatHandoffAdvancesTurn = false;
@@ -87,6 +98,8 @@ public class TurnManager : MonoBehaviour
     // no further actions should be taken in the scene.
     private bool isPlayByPostWaitingForExport = false;
 
+    private Coroutine autoEndTurnRoutine;
+    private float lastHumanInputUnscaledTime = -999f;
     [System.Serializable]
     private class SavedCity
     {
@@ -238,6 +251,41 @@ public class TurnManager : MonoBehaviour
         {
             OnEndTurnButtonPressed();
         }
+
+        RecordHumanInputIfAny();
+
+        // Gameplay UI scaling/offset is handled by GameplayUIScaler.
+    }
+
+    private void RecordHumanInputIfAny()
+    {
+        if (!IsHumanTurn())
+            return;
+
+        // This is only used to prevent surprise auto-end in Vs AI.
+        if (currentMode != GameMode.VsAI || !isPlayerTurn)
+            return;
+
+        bool input = false;
+
+        if (Input.anyKeyDown || Input.anyKey)
+        {
+            input = true;
+        }
+        else if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) ||
+                 Input.GetMouseButton(0) || Input.GetMouseButton(1))
+        {
+            input = true;
+        }
+        else if (Input.touchCount > 0)
+        {
+            input = true;
+        }
+
+        if (input)
+        {
+            lastHumanInputUnscaledTime = Time.unscaledTime;
+        }
     }
 
     // 🚩 This is what the UI Button will call
@@ -247,6 +295,15 @@ public class TurnManager : MonoBehaviour
         if (gameOver || isHotseatHandoff || !IsHumanTurn())
         {
             // Ignore clicks if it's not the current human's turn
+            return;
+        }
+
+        if (TutorialGate.IsActive && TutorialGate.CanEndTurn != null && !TutorialGate.CanEndTurn())
+        {
+            if (SoundManager.Instance != null)
+            {
+                SoundManager.Instance.PlayInvalid();
+            }
             return;
         }
 
@@ -296,6 +353,12 @@ public class TurnManager : MonoBehaviour
     void EndCurrentTurn()
     {
         Debug.Log(GetCurrentSideName() + " ends Turn " + turnNumber);
+
+        if (autoEndTurnRoutine != null)
+        {
+            StopCoroutine(autoEndTurnRoutine);
+            autoEndTurnRoutine = null;
+        }
 
         if (SoundManager.Instance != null)
         {
@@ -352,14 +415,16 @@ public class TurnManager : MonoBehaviour
         if (SoundManager.Instance == null)
             return;
 
-        if (gameplayMusic != null)
-        {
-            SoundManager.Instance.PlayBackgroundMusic(gameplayMusic);
-        }
-        else
-        {
-            SoundManager.Instance.PlayBackgroundMusic();
-        }
+        // If we already have a playlist running from the menu scene,
+        // don't override it unless a specific gameplay track is provided.
+        if (gameplayMusic == null && SoundManager.Instance.HasPlaylistConfigured())
+            return;
+
+        // Avoid restarting music unnecessarily when it is already playing.
+        if (gameplayMusic == null && SoundManager.Instance.IsMusicPlaying())
+            return;
+
+        SoundManager.Instance.PlayBackgroundMusic(gameplayMusic);
     }
 
     void ShowHotseatHandoff(bool nextIsPlayer, bool advanceTurnAfterReturn)
@@ -428,7 +493,10 @@ public class TurnManager : MonoBehaviour
 
         // AI actions: recruit and move units
         ResetRecruitmentForAICities();
-        RunAI();
+        if (!disableAI)
+        {
+            RunAI();
+        }
 
         Debug.Log("AI finished Turn " + turnNumber);
 
@@ -476,6 +544,8 @@ public class TurnManager : MonoBehaviour
         RecalculatePlayerVisibility();
         UpdateTurnText();
         Debug.Log(GetCurrentSideName() + " turn " + turnNumber + " begins.");
+
+        ScheduleAutoEndTurnCheck();
     }
 
     void BeginHotseatOpponentTurn()
@@ -583,12 +653,222 @@ public class TurnManager : MonoBehaviour
         RecalculatePlayerVisibility();
         Debug.Log("Game start. " + GetCurrentSideName() + " Turn " + turnNumber + " (AI difficulty " + aiDifficulty + ")");
 
+        EnsureTutorialOverlayIfNeeded();
+        ScheduleAutoEndTurnCheck();
+
         // If we start in Hotseat, show the handoff before the very first turn.
         // PlayByPost should NOT use the hotseat handoff overlay.
         if (currentMode == GameMode.Hotseat)
         {
             ShowHotseatHandoff(isPlayerTurn, false);
         }
+    }
+
+    void EnsureTutorialOverlayIfNeeded()
+    {
+        // Fallback: make sure the tutorial overlay exists in gameplay even if the runtime bootstrap
+        // didn't run (e.g., due to scene load order differences).
+        bool shouldShow = TutorialLaunch.IsShowRequested();
+        if (!shouldShow)
+            return;
+
+        if (Object.FindFirstObjectByType<TutorialOverlay>() != null)
+            return;
+
+        GameObject go = new GameObject("TutorialOverlay");
+        go.AddComponent<TutorialOverlay>();
+    }
+
+    public void ScheduleAutoEndTurnCheck()
+    {
+        if (!autoEndTurnWhenNoActions)
+            return;
+
+        if (gameOver || isHotseatHandoff || !IsHumanTurn())
+            return;
+
+        // Vs AI player only.
+        if (currentMode != GameMode.VsAI || !isPlayerTurn)
+            return;
+
+        if (autoEndTurnRoutine != null)
+        {
+            StopCoroutine(autoEndTurnRoutine);
+            autoEndTurnRoutine = null;
+        }
+
+        autoEndTurnRoutine = StartCoroutine(AutoEndTurnAfterDelay());
+    }
+
+    IEnumerator AutoEndTurnAfterDelay()
+    {
+        float start = Time.unscaledTime;
+        float earliestCheckTime = start + Mathf.Max(0f, autoEndTurnDelaySeconds);
+
+        while (true)
+        {
+            if (!autoEndTurnWhenNoActions)
+                break;
+
+            if (gameOver || isHotseatHandoff || !IsHumanTurn())
+                break;
+
+            if (currentMode != GameMode.VsAI || !isPlayerTurn)
+                break;
+
+            // If UI panels are visible, wait a bit and check again.
+            if (IsAnyActionPanelOpen())
+            {
+                yield return new WaitForSecondsRealtime(0.25f);
+                continue;
+            }
+
+            float now = Time.unscaledTime;
+            float wait = 0f;
+
+            if (now < earliestCheckTime)
+            {
+                wait = earliestCheckTime - now;
+            }
+
+            float sinceInput = now - lastHumanInputUnscaledTime;
+            if (sinceInput < autoEndTurnInputCooldownSeconds)
+            {
+                float remaining = autoEndTurnInputCooldownSeconds - sinceInput;
+                wait = Mathf.Max(wait, remaining);
+            }
+
+            if (wait > 0f)
+            {
+                yield return new WaitForSecondsRealtime(wait);
+                continue;
+            }
+
+            if (HasAnyAvailableActionForCurrentPlayer())
+                break;
+
+            Debug.Log("Auto-ending turn: no available actions.");
+            EndCurrentTurn();
+            break;
+        }
+
+        autoEndTurnRoutine = null;
+    }
+
+    private bool IsAnyActionPanelOpen()
+    {
+        // If a player is reading a panel, don't auto-end under them.
+        if (CityUIManager.Instance != null &&
+            CityUIManager.Instance.panelRoot != null &&
+            CityUIManager.Instance.panelRoot.activeInHierarchy)
+        {
+            return true;
+        }
+
+        if (UnitUIManager.Instance != null &&
+            UnitUIManager.Instance.panelRoot != null &&
+            UnitUIManager.Instance.panelRoot.activeInHierarchy)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool HasAnyAvailableActionForCurrentPlayer()
+    {
+        if (currentMode != GameMode.VsAI || !isPlayerTurn)
+            return false;
+
+        // 1) Recruitment options
+        if (playerGold >= warriorCost)
+        {
+            City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+            foreach (City city in cities)
+            {
+                if (city == null || !city.isPlayerOwned)
+                    continue;
+
+                // Avoid City.CanRecruit() here because it logs warnings meant for player clicks.
+                if (city.stationedUnit != null || city.hasRecruitedThisTurn)
+                    continue;
+
+                // SpawnWarrior also checks occupancy; match that here.
+                if (GridUtils.IsTileOccupied(city.transform.position, null))
+                    continue;
+
+                return true;
+            }
+        }
+
+        // 2) Unit movement / attacks (adjacent).
+        float tileSize = 1f;
+        if (gridManager != null)
+        {
+            tileSize = Mathf.Max(0.01f, gridManager.tileSize);
+        }
+        else if (UnitSelectionManager.Instance != null)
+        {
+            tileSize = Mathf.Max(0.01f, UnitSelectionManager.Instance.tileSize);
+        }
+
+        Unit[] units = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
+        foreach (Unit unit in units)
+        {
+            if (unit == null || !unit.isPlayerOwned)
+                continue;
+
+            if (HasAnyLegalAdjacentAction(unit, tileSize))
+                return true;
+        }
+
+        return false;
+    }
+
+    private bool HasAnyLegalAdjacentAction(Unit unit, float tileSize)
+    {
+        if (unit == null)
+            return false;
+
+        bool canMove = unit.CanMoveThisTurn();
+        bool canAttack = !unit.hasAttackedThisTurn;
+
+        if (!canMove && !canAttack)
+            return false;
+
+        Vector3 from = unit.transform.position;
+        from.z = 0f;
+
+        for (int dx = -1; dx <= 1; dx++)
+        {
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                if (dx == 0 && dy == 0) continue;
+
+                Vector3 to = new Vector3(from.x + dx * tileSize, from.y + dy * tileSize, 0f);
+
+                // Optional bounds check if we can determine a tile.
+                if (gridManager != null && !gridManager.TryGetTileAtWorldPosition(to, out _))
+                    continue;
+
+                Unit occupant = GridUtils.GetUnitAtPosition(to, unit);
+                if (occupant != null)
+                {
+                    if (canAttack && occupant.isPlayerOwned != unit.isPlayerOwned)
+                        return true;
+
+                    continue;
+                }
+
+                if (canMove)
+                {
+                    // Empty tile: can always move there (city capture is just moving onto the tile).
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     void ResetRecruitmentForPlayerCities()
@@ -1661,8 +1941,15 @@ public class TurnManager : MonoBehaviour
         }
 
         string json = JsonUtility.ToJson(saveForExport, playByPostExportPretty);
-        GUIUtility.systemCopyBuffer = json;
-        Debug.Log($"Play-by-Post JSON copied to clipboard ({json.Length} chars).");
+
+        if (ClipboardUtility.TryCopy(json))
+        {
+            Debug.Log($"Play-by-Post JSON copied to clipboard ({json.Length} chars).");
+        }
+        else
+        {
+            Debug.LogWarning($"Failed to copy Play-by-Post JSON to clipboard ({json.Length} chars). On WebGL this may require user interaction/permissions.");
+        }
     }
 
     public bool LoadFromFile(string path = null)
@@ -1873,6 +2160,8 @@ public class TurnManager : MonoBehaviour
         UpdateTurnText();
         Debug.Log("Game loaded from " + targetPath);
         isLoadingFromSave = false;
+
+        ScheduleAutoEndTurnCheck();
         return true;
     }
 

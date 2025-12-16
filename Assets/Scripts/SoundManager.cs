@@ -49,6 +49,25 @@ public class SoundManager : MonoBehaviour
     private Coroutine playlistRoutine;
     private bool loggedMissingInvalidClip;
 
+    public bool HasPlaylistConfigured()
+    {
+        if (backgroundPlaylist == null || backgroundPlaylist.Length == 0)
+            return false;
+
+        foreach (AudioClip clip in backgroundPlaylist)
+        {
+            if (clip != null)
+                return true;
+        }
+
+        return false;
+    }
+
+    public bool IsMusicPlaying()
+    {
+        return musicSource != null && musicSource.isPlaying;
+    }
+
     void Awake()
     {
         if (Instance != null && Instance != this)
@@ -175,6 +194,37 @@ public class SoundManager : MonoBehaviour
         if (source != null)
         {
             source.Stop();
+            source.clip = null;
+        }
+    }
+
+    void OnApplicationFocus(bool hasFocus)
+    {
+        if (hasFocus)
+        {
+            ResumeMusicIfNeeded();
+        }
+    }
+
+    void OnApplicationPause(bool pauseStatus)
+    {
+        if (!pauseStatus)
+        {
+            ResumeMusicIfNeeded();
+        }
+    }
+
+    void ResumeMusicIfNeeded()
+    {
+        AudioSource source = GetSource(musicSource);
+        if (source == null)
+            return;
+
+        // Web/mobile browsers can suspend audio; when focus/pause returns,
+        // try to resume if music is meant to be playing.
+        if (autoPlayMusic && source.clip != null && !source.isPlaying)
+        {
+            source.Play();
         }
     }
 

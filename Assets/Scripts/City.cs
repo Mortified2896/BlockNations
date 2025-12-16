@@ -92,6 +92,9 @@ public class City : MonoBehaviour
             {
                 Debug.Log("AI lacks gold to recruit a Warrior in " + name);
             }
+
+            // If the player attempted to recruit and still has no actions, auto-end can kick in.
+            TurnManager.Instance.ScheduleAutoEndTurnCheck();
             return;
         }
 
@@ -129,6 +132,7 @@ public class City : MonoBehaviour
         {
             TurnManager.Instance.RecalculatePlayerVisibility();
             TurnManager.Instance.AutoSaveIfEnabled();
+            TurnManager.Instance.ScheduleAutoEndTurnCheck();
         }
         else if (!isPlayerOwned && TurnManager.Instance != null)
         {
