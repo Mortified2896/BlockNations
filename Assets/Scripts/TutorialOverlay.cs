@@ -99,6 +99,8 @@ public class TutorialOverlay : MonoBehaviour
     private Unit enemy1;
     private Unit enemy2;
     private Unit boss;
+    private Vector3 turn7MoveTarget;
+    private Vector2Int turn7MoveDir = new Vector2Int(1, 1);
 
     private Coroutine scriptedRoutine;
     private Coroutine autoAdvanceRoutine;
@@ -255,6 +257,7 @@ public class TutorialOverlay : MonoBehaviour
         nextButton.interactable = canAdvance;
 
         UpdateGameplayHudButtonsVisibility();
+        EnsureGameplayPanelsDontOverlap();
 
         if (!canAdvance && ShouldShowHintForCurrentStep() && !hintDirty)
         {
@@ -1193,6 +1196,7 @@ public class TutorialOverlay : MonoBehaviour
         TutorialGate.ClearAll();
         // Default: block gameplay interaction unless the step explicitly enables it.
         TutorialGate.CanSelectUnit = _ => false;
+        TutorialGate.CanMoveOrAttackToPosition = (_, __) => false;
         TutorialGate.CanClickCity = _ => false;
         TutorialGate.CanRecruitWarrior = () => false;
         TutorialGate.CanEndTurn = () => false;
@@ -1346,7 +1350,6 @@ public class TutorialOverlay : MonoBehaviour
         Vector3 tile_33 = GetTileWorld(cx + 2, cy + 2);
         Vector3 tile_44 = GetTileWorld(cx + 3, cy + 3);
         Vector3 tile_55 = GetTileWorld(cx + 4, cy + 4);
-        Vector3 tile_54 = GetTileWorld(cx + 4, cy + 3);
 
         steps.Add(new TutorialStep
         {
@@ -1430,6 +1433,7 @@ public class TutorialOverlay : MonoBehaviour
                 {
                     PointAtWorld(playerCity.transform.position, showArrow: true, arrowFromScreenCenter: true);
                     LockCameraToWorld(playerCity.transform.position);
+                    SetPointerArrowStartOverride(ClampArrowTailToSafeArea(new Vector2(Screen.width * 0.85f, Screen.height * 0.55f)));
                 }
                 TutorialGate.CanSelectUnit = _ => false;
                 TutorialGate.CanClickCity = _ => false;
@@ -1476,6 +1480,14 @@ public class TutorialOverlay : MonoBehaviour
                     if (recruitRect != null)
                     {
                         PointAtUI(recruitRect, padding: 12f, showArrow: true, arrowFromScreenCenter: false, showHighlight: true, arrowFromRightMiddle: false);
+                        if (playerCity != null)
+                        {
+                            if (cam == null) cam = Camera.main;
+                            Vector3 cityScreen = cam != null ? cam.WorldToScreenPoint(playerCity.transform.position) : Vector3.zero;
+                            Vector2 citySize = GetWorldTargetHighlightSizePixels(playerCity.transform.position);
+                            Vector2 cityBottom = new Vector2(cityScreen.x, cityScreen.y - (citySize.y * 0.5f));
+                            SetPointerArrowStartOverride(cityBottom);
+                        }
                     }
                 }
                 else if (playerCity != null)
@@ -1663,6 +1675,7 @@ public class TutorialOverlay : MonoBehaviour
             autoAdvance = true,
             onEnter = () =>
             {
+                HidePointer();
                 if (CityUIManager.Instance != null) CityUIManager.Instance.ClosePanel();
                 if (UnitUIManager.Instance != null) UnitUIManager.Instance.ClosePanel();
                 TutorialGate.CanSelectUnit = _ => false;
@@ -1853,7 +1866,11 @@ public class TutorialOverlay : MonoBehaviour
                 TutorialGate.CanRecruitWarrior = () => false;
                 TutorialGate.CanEndTurn = () => false;
             },
-            canAdvance = () => tm != null && tm.isPlayerTurn && tm.turnNumber == 4,
+            canAdvance = () =>
+            {
+                HidePointer();
+                return tm != null && tm.isPlayerTurn && tm.turnNumber == 4;
+            },
             hintAfterSeconds = defaultHintAfterSeconds,
             hintText = "Wait a moment — the next turn will start on its own."
         });
@@ -1884,10 +1901,28 @@ public class TutorialOverlay : MonoBehaviour
                 // If the city UI is open, point at the recruit button; otherwise point at the city.
                 if (HasCityPanelOpen())
                 {
-                    RectTransform recruitRect = GetRecruitButtonRectTransform();
+                    RectTransform recruitRect = null;
+                    if (CityUIManager.Instance != null && CityUIManager.Instance.recruitWarriorButtonText != null)
+                        recruitRect = CityUIManager.Instance.recruitWarriorButtonText.GetComponent<RectTransform>();
+                    recruitRect ??= GetRecruitButtonRectTransform();
+
                     if (recruitRect != null)
                     {
-                        PointAtUI(recruitRect, padding: 12f, showArrow: true, arrowFromScreenCenter: true, showHighlight: true, arrowFromRightMiddle: true);
+                        RectTransform recruitLabelRect = CityUIManager.Instance != null && CityUIManager.Instance.recruitWarriorButtonText != null
+                            ? CityUIManager.Instance.recruitWarriorButtonText.GetComponent<RectTransform>()
+                            : null;
+                        RectTransform targetRect = recruitLabelRect != null ? recruitLabelRect : recruitRect;
+
+                        PointAtUI(targetRect, padding: 10f, showArrow: true, arrowFromScreenCenter: true, showHighlight: true, arrowFromRightMiddle: false);
+
+                        if (panelRect != null)
+                        {
+                            Rect panelScreen = GetScreenRect(panelRect);
+                            Rect targetScreen = GetScreenRect(targetRect);
+                            float startX = Mathf.Clamp(targetScreen.center.x, panelScreen.xMin + 24f, panelScreen.xMax - 24f);
+                            SetPointerArrowStartOverride(new Vector2(startX, panelScreen.yMin - 10f));
+                            SetPointerArrowEndOverride(new Vector2(targetScreen.center.x, targetScreen.yMax));
+                        }
                     }
                 }
                 else if (playerCity != null)
@@ -1972,7 +2007,7 @@ public class TutorialOverlay : MonoBehaviour
 
                 if (enemy1 == null)
                 {
-                    enemy1 = SpawnTutorialUnit(tile_55, isPlayerOwned: false, "TutorialEnemy1");
+                    enemy1 = SpawnTutorialUnit(tile_55, isPlayerOwned: false, "Enemy Warrior 1");
                 }
 
                 if (enemy1 != null)
@@ -1982,24 +2017,29 @@ public class TutorialOverlay : MonoBehaviour
 
                 if (warrior1 != null)
                 {
-                    SpeechBubble.Show(warrior1.transform, "Hey, nice to meet you!", seconds: 2.3f);
+                    SpeechBubble.Show(warrior1.transform, "Hey, nice to meet you!", seconds: 9999f);
                 }
                 if (enemy1 != null)
                 {
-                    SpeechBubble.Show(enemy1.transform, "Greetings from Clan Chief Salami!", seconds: 2.6f);
+                    // Greeting happens after the kill later in the scripted AI turn.
                 }
 
                 TutorialGate.CanSelectUnit = _ => false;
                 TutorialGate.CanClickCity = _ => false;
                 TutorialGate.CanRecruitWarrior = () => false;
                 TutorialGate.CanEndTurn = () => false;
+            },
+            onExit = () =>
+            {
+                if (warrior1 != null) SpeechBubble.HideAll(warrior1.transform);
+                if (enemy1 != null) SpeechBubble.HideAll(enemy1.transform);
             }
         });
 
         steps.Add(new TutorialStep
         {
             title = "Turn 5",
-            body = "Move your second Warrior to the highlighted tile.",
+            body = "Move your second Warrior to the highlighted tile. Lets greet Clan Salami properly",
             nextLabel = "Next",
             autoAdvance = true,
             onEnter = () =>
@@ -2045,7 +2085,7 @@ public class TutorialOverlay : MonoBehaviour
         steps.Add(new TutorialStep
         {
             title = "Turn 6",
-            body = "Warrior: Noooooo!\n\nSelect Warrior 2.",
+            body = "Select Warrior 2.",
             nextLabel = "Next",
             autoAdvance = true,
             onEnter = () =>
@@ -2056,11 +2096,17 @@ public class TutorialOverlay : MonoBehaviour
                 if (warrior2 != null)
                 {
                     PointAtWorld(warrior2.transform.position);
+                    SpeechBubble.Show(warrior2.transform, "Noooooo!", seconds: 9999f);
                     TutorialGate.CanSelectUnit = u => u == warrior2;
                 }
                 TutorialGate.CanClickCity = _ => false;
                 TutorialGate.CanRecruitWarrior = () => false;
                 TutorialGate.CanEndTurn = () => false;
+            },
+            onExit = () =>
+            {
+                if (warrior2 != null) SpeechBubble.HideAll(warrior2.transform);
+                if (enemy1 != null) SpeechBubble.HideAll(enemy1.transform);
             },
             canAdvance = () => UnitSelectionManager.Instance != null && warrior2 != null && UnitSelectionManager.Instance.SelectedUnit == warrior2,
             hintAfterSeconds = defaultHintAfterSeconds,
@@ -2070,7 +2116,7 @@ public class TutorialOverlay : MonoBehaviour
         steps.Add(new TutorialStep
         {
             title = "Turn 6",
-            body = "Now attack the enemy!",
+            body = "Even after moving, you can still attack.\n\nNow attack Enemy Warrior 1!",
             nextLabel = "Next",
             autoAdvance = true,
             onEnter = () =>
@@ -2099,24 +2145,208 @@ public class TutorialOverlay : MonoBehaviour
             },
             canAdvance = () => enemy1 == null,
             hintAfterSeconds = defaultHintAfterSeconds,
-            hintText = "Tap the enemy unit."
+            hintText = "Tap Enemy Warrior 1."
+        });
+        steps.Add(new TutorialStep
+        {
+            title = "Turn 7",
+            body = "Keep pressing forward, Clan Salami cant get away with this!\n\nMove Warrior 2 toward the enemy city (top-right).",
+            nextLabel = "Next",
+            autoAdvance = true,
+            onEnter = () =>
+            {
+                if (CityUIManager.Instance != null) CityUIManager.Instance.ClosePanel();
+                if (UnitUIManager.Instance != null) UnitUIManager.Instance.ClosePanel();
+                CachePlayerWarriorsIfNeeded();
+                turn7MoveTarget = Vector3.zero;
+                turn7MoveDir = new Vector2Int(1, 1);
+
+                if (warrior2 != null)
+                {
+                    Vector3 origin = warrior2.transform.position;
+                    if (TryGetFreeNeighborTile(origin, 1, 1, out turn7MoveTarget))
+                    {
+                        turn7MoveDir = new Vector2Int(1, 1);
+                    }
+                    else if (TryGetFreeNeighborTile(origin, 1, 0, out turn7MoveTarget))
+                    {
+                        turn7MoveDir = new Vector2Int(1, 0);
+                    }
+                    else if (TryGetFreeNeighborTile(origin, 0, 1, out turn7MoveTarget))
+                    {
+                        turn7MoveDir = new Vector2Int(0, 1);
+                    }
+                    else if (TryFindFreeNeighborTile(origin, out turn7MoveTarget))
+                    {
+                        turn7MoveDir = GetGridDirection(origin, turn7MoveTarget);
+                    }
+                }
+
+                if (turn7MoveTarget != Vector3.zero)
+                {
+                    PointAtWorld(turn7MoveTarget, showArrow: false, showHighlight: true, highlightYellow: true);
+                    SetAllowedMove(warrior2, turn7MoveTarget, forceSingleHighlight: false);
+                }
+                else
+                {
+                    HidePointer();
+                    TutorialGate.CanSelectUnit = _ => false;
+                    TutorialGate.CanMoveOrAttackToPosition = null;
+                }
+            },
+            canAdvance = () => turn7MoveTarget != Vector3.zero && IsUnitAt(warrior2, turn7MoveTarget),
+            hintAfterSeconds = defaultHintAfterSeconds,
+            hintText = "Select Warrior 2 and tap the highlighted tile."
         });
 
         steps.Add(new TutorialStep
         {
-            title = "Revenge",
-            body = "That's revenge.\n\nNow let's take the fight to their city (red). Capturing it wins the game.",
+            title = "Turn 7",
+            body = "An enemy warrior just arrived from the enemy city.\n\nAfter moving, you can still attack.\n\nDefeat Enemy Warrior 2.",
             nextLabel = "Next",
             autoAdvance = true,
-            autoAdvanceDelaySeconds = 2.25f,
+            onEnter = () =>
+            {
+                if (CityUIManager.Instance != null) CityUIManager.Instance.ClosePanel();
+                if (UnitUIManager.Instance != null) UnitUIManager.Instance.ClosePanel();
+                CachePlayerWarriorsIfNeeded();
+                if (enemy2 == null)
+                {
+                    Vector2Int dir = turn7MoveDir;
+                    if (dir == Vector2Int.zero)
+                    {
+                        dir = new Vector2Int(1, 1);
+                    }
+
+                    Vector3 spawnPos = Vector3.zero;
+                    if (warrior2 != null && TryGetFreeNeighborTile(warrior2.transform.position, dir.x, dir.y, out spawnPos))
+                    {
+                        // Keep the enemy one step further in the same direction.
+                    }
+                    else if (warrior2 != null && TryGetFreeNeighborTile(warrior2.transform.position, 1, 1, out spawnPos))
+                    {
+                        turn7MoveDir = new Vector2Int(1, 1);
+                    }
+                    else if (warrior2 != null && TryFindFreeNeighborTile(warrior2.transform.position, out spawnPos))
+                    {
+                        // Fallback: any adjacent free tile.
+                    }
+
+                    if (spawnPos != Vector3.zero)
+                    {
+                        enemy2 = SpawnTutorialUnit(spawnPos, isPlayerOwned: false, "Enemy Warrior 2");
+                        if (tm != null)
+                        {
+                            tm.RecalculatePlayerVisibility();
+                        }
+                    }
+                }
+
+                if (enemy2 != null)
+                {
+                    PointAtWorld(enemy2.transform.position, showArrow: false, showHighlight: true, highlightYellow: true);
+                    SetAllowedAttack(warrior2, enemy2, forceSingleHighlight: true);
+                }
+                else
+                {
+                    HidePointer();
+                    TutorialGate.CanSelectUnit = _ => false;
+                    TutorialGate.CanMoveOrAttackToPosition = null;
+                }
+
+                if (UnitSelectionManager.Instance != null && warrior2 != null && UnitSelectionManager.Instance.SelectedUnit != warrior2)
+                {
+                    UnitSelectionManager.Instance.SelectUnit(warrior2);
+                }
+            },
+            canAdvance = () => enemy2 == null,
+            hintAfterSeconds = defaultHintAfterSeconds,
+            hintText = "Select Warrior 2 and tap Enemy Warrior 2."
+        });
+
+        steps.Add(new TutorialStep
+        {
+            title = "Turn 7",
+            body = "Lets storm their village!\n\nMove Warrior 2 one step closer to the enemy city.",
+            nextLabel = "Next",
+            autoAdvance = true,
+            onEnter = () =>
+            {
+                if (CityUIManager.Instance != null) CityUIManager.Instance.ClosePanel();
+                if (UnitUIManager.Instance != null) UnitUIManager.Instance.ClosePanel();
+                CacheCitiesAndUnits();
+
+                if (warrior2 != null)
+                {
+                    warrior2.ResetMovementForTurn();
+                    bool isActiveTurn = tm == null || (tm.IsCurrentSideOwner(warrior2.isPlayerOwned) && tm.IsHumanTurn());
+                    warrior2.UpdateMoveOutline(isActiveTurn);
+                }
+
+                turn7MoveTarget = Vector3.zero;
+                turn7MoveDir = new Vector2Int(1, 1);
+
+                if (warrior2 != null)
+                {
+                    Vector3 origin = warrior2.transform.position;
+                    Vector2Int dir = enemyCity != null ? GetGridDirection(origin, enemyCity.transform.position) : new Vector2Int(1, 1);
+                    if (dir == Vector2Int.zero)
+                        dir = new Vector2Int(1, 1);
+
+                    turn7MoveDir = dir;
+
+                    if (TryGetFreeNeighborTile(origin, dir.x, dir.y, out turn7MoveTarget))
+                    {
+                        // Preferred: step toward the enemy city.
+                    }
+                    else if (TryGetFreeNeighborTile(origin, dir.x, 0, out turn7MoveTarget))
+                    {
+                        turn7MoveDir = new Vector2Int(dir.x, 0);
+                    }
+                    else if (TryGetFreeNeighborTile(origin, 0, dir.y, out turn7MoveTarget))
+                    {
+                        turn7MoveDir = new Vector2Int(0, dir.y);
+                    }
+                    else if (TryFindFreeNeighborTile(origin, out turn7MoveTarget))
+                    {
+                        turn7MoveDir = GetGridDirection(origin, turn7MoveTarget);
+                    }
+                }
+
+                if (turn7MoveTarget != Vector3.zero)
+                {
+                    PointAtWorld(turn7MoveTarget, showArrow: false, showHighlight: true, highlightYellow: true);
+                    SetAllowedMove(warrior2, turn7MoveTarget, forceSingleHighlight: false);
+                }
+                else
+                {
+                    HidePointer();
+                    TutorialGate.CanSelectUnit = _ => false;
+                    TutorialGate.CanMoveOrAttackToPosition = null;
+                }
+            },
+            canAdvance = () => turn7MoveTarget != Vector3.zero && IsUnitAt(warrior2, turn7MoveTarget),
+            hintAfterSeconds = defaultHintAfterSeconds,
+            hintText = "Select Warrior 2 and tap the highlighted tile."
+        });
+
+        steps.Add(new TutorialStep
+        {
+            title = "Enemy City",
+            body = "If you move a unit onto the enemy city (red), you capture it and win.",
+            nextLabel = "Next",
             onEnter = () =>
             {
                 CacheCitiesAndUnits();
                 if (enemyCity != null)
                 {
-                    SetPanelLayoutUpperLeft();
-                    PointAtWorld(enemyCity.transform.position, showArrow: true, arrowFromScreenCenter: true, showHighlight: true);
-                    LockCameraToWorld(enemyCity.transform.position);
+                    PointAtWorld(enemyCity.transform.position, showArrow: true, arrowFromScreenCenter: true, showHighlight: true, highlightYellow: true);
+                    if (cam == null) cam = Camera.main;
+                    if (cam != null && warrior2 != null)
+                    {
+                        Vector3 warriorScreen = cam.WorldToScreenPoint(warrior2.transform.position);
+                        SetPointerArrowStartOverride(warriorScreen);
+                    }
                 }
                 else
                 {
@@ -2127,91 +2357,52 @@ public class TutorialOverlay : MonoBehaviour
                 TutorialGate.CanClickCity = _ => false;
                 TutorialGate.CanRecruitWarrior = () => false;
                 TutorialGate.CanEndTurn = () => false;
-            },
-            canAdvance = () => Time.unscaledTime - stepEnterUnscaledTime > 1.8f
+            }
         });
 
         steps.Add(new TutorialStep
         {
-            title = "Turn 6",
-            body = "Another enemy will show up...\n\nYou have taken all possible actions this turn.\n\nIn this case, the game moves to the next turn automatically.",
+            title = "Turn 7",
+            body = "Warrior 2 seems exhausted.",
             nextLabel = "Next",
-            autoAdvance = true,
             onEnter = () =>
             {
-                if (CityUIManager.Instance != null) CityUIManager.Instance.ClosePanel();
-                if (UnitUIManager.Instance != null) UnitUIManager.Instance.ClosePanel();
-                CachePlayerWarriorsIfNeeded();
+                HidePointer();
                 if (warrior2 != null)
-                    LockCameraToWorld(warrior2.transform.position);
-
-                if (scriptedRoutine != null) StopCoroutine(scriptedRoutine);
-                scriptedRoutine = StartCoroutine(ScriptSpawnEnemy2OnAITurn6());
+                {
+                    SpeechBubble.Show(warrior2.transform, "I'm not feeling so well.", seconds: 9999f);
+                }
                 TutorialGate.CanSelectUnit = _ => false;
                 TutorialGate.CanClickCity = _ => false;
                 TutorialGate.CanRecruitWarrior = () => false;
                 TutorialGate.CanEndTurn = () => false;
             },
-            canAdvance = () => tm != null && tm.isPlayerTurn && tm.turnNumber == 7,
-            hintAfterSeconds = defaultHintAfterSeconds,
-            hintText = "Wait a moment — the next turn will start on its own."
+            onExit = () =>
+            {
+                if (warrior2 != null)
+                {
+                    if (UnitSelectionManager.Instance != null)
+                        UnitSelectionManager.Instance.ClearSelection();
+                    SpeechBubble.HideAll(warrior2.transform);
+                    warrior2.Die();
+                    warrior2 = null;
+                }
+            }
         });
 
         steps.Add(new TutorialStep
         {
             title = "Turn 7",
-            body = "The enemy is already adjacent.\n\nAttack it without moving first.",
+            body = "Warrior 2 died of over extortion.\n\nIt is up to you to revenge your fallen comrade.",
             nextLabel = "Next",
-            autoAdvance = true,
             onEnter = () =>
             {
-                CachePlayerWarriorsIfNeeded();
-                if (enemy2 != null)
-                {
-                    HidePointer();
-                    SetAllowedAttack(warrior2, enemy2);
-                    TutorialGate.CanSelectUnit = u => u == warrior2;
-                    if (UnitSelectionManager.Instance != null && warrior2 != null)
-                        UnitSelectionManager.Instance.SelectUnit(warrior2);
-                }
-            },
-            canAdvance = () => enemy2 == null,
-            hintAfterSeconds = defaultHintAfterSeconds,
-            hintText = "Select your Warrior, then tap the enemy next to it."
-        });
-
-        steps.Add(new TutorialStep
-        {
-            title = "Turn 7",
-            body = "After you attack, the yellow ring disappears — that unit has used its action for this turn.",
-            nextLabel = "Next",
-            dynamicBody = () => "After you attack, the yellow ring disappears — that unit has used its action for this turn.",
-            canAdvance = HasAnyPlayerUnitAttackedThisTurn
-        });
-
-        steps.Add(new TutorialStep
-        {
-            title = "Cutscene",
-            body = "End your turn to continue the story...",
-            nextLabel = "Next",
-            autoAdvance = true,
-            onEnter = () =>
-            {
-                RectTransform endTurnRect = FindButtonRectByLabelContains("End Turn");
-                if (endTurnRect != null)
-                {
-                    PointAtUI(endTurnRect);
-                }
-                if (scriptedRoutine != null) StopCoroutine(scriptedRoutine);
-                scriptedRoutine = StartCoroutine(ScriptBossCutsceneOnAITurn7());
+                HidePointer();
                 TutorialGate.CanSelectUnit = _ => false;
                 TutorialGate.CanClickCity = _ => false;
                 TutorialGate.CanRecruitWarrior = () => false;
-                TutorialGate.CanEndTurn = () => true;
-            },
-            canAdvance = () => tm != null && tm.isPlayerTurn && tm.turnNumber == 8,
-            hintAfterSeconds = defaultHintAfterSeconds,
-            hintText = "Press End Turn."
+                TutorialGate.CanEndTurn = () => false;
+            }
         });
 
         steps.Add(new TutorialStep
@@ -2224,13 +2415,16 @@ public class TutorialOverlay : MonoBehaviour
                 if (tm != null)
                 {
                     tm.disableAI = false;
+                    tm.aiDifficulty = TurnManager.AIDifficulty.Level1;
+                    tm.aiGold = 1;
+                    tm.aiTurnDelay = prevAiTurnDelay;
                     tm.autoEndTurnWhenNoActions = prevAutoEndTurnWhenNoActions;
                 }
             },
             dynamicBody = () =>
             {
                 int gold = tm != null ? tm.playerGold : 0;
-                return "Enemy units can also move and then attack.\n\nClan Chief Big Salami wants revenge.\n\nNow you can play freely against the AI. Recruit units, explore, and capture the enemy city (red) to win.\n\n(Current Gold: " + gold + ")";
+                return "From next turn, you can play freely against the AI. Clan Chief Salami wants revenge.\n\nRecruit units, explore, and capture the enemy city (red) to win.\n\n(Current Gold: " + gold + ")";
             }
         });
 
@@ -2350,6 +2544,24 @@ public class TutorialOverlay : MonoBehaviour
             gameplayHudEndTurnOrNextButton.gameObject.SetActive(desiredActive);
 
         gameplayHudHidden = shouldHide;
+    }
+
+    private void EnsureGameplayPanelsDontOverlap()
+    {
+        if (!HasCityPanelOpen() || !HasUnitPanelOpen())
+            return;
+
+        Unit selected = UnitSelectionManager.Instance != null ? UnitSelectionManager.Instance.SelectedUnit : null;
+        if (selected != null)
+        {
+            if (CityUIManager.Instance != null)
+                CityUIManager.Instance.ClosePanel();
+        }
+        else
+        {
+            if (UnitUIManager.Instance != null)
+                UnitUIManager.Instance.ClosePanel();
+        }
     }
 
     private void EnsureGameplayHudButtonsCached()
@@ -2735,7 +2947,7 @@ public class TutorialOverlay : MonoBehaviour
                 return;
         }
 
-        enemy1 = SpawnTutorialUnit(spawnPos, isPlayerOwned: false, "TutorialEnemy1");
+        enemy1 = SpawnTutorialUnit(spawnPos, isPlayerOwned: false, "Enemy Warrior 1");
         if (tm != null)
         {
             tm.RecalculatePlayerVisibility();
@@ -2835,6 +3047,58 @@ public class TutorialOverlay : MonoBehaviour
         return false;
     }
 
+    private bool TryGetNeighborTile(Vector3 originWorld, int dx, int dy, out Vector3 tileWorld)
+    {
+        tileWorld = originWorld;
+
+        if (grid == null || !grid.TryGetTileAtWorldPosition(originWorld, out TileVisibility originTile))
+            return false;
+
+        int nx = originTile.gridX + dx;
+        int ny = originTile.gridY + dy;
+        if (!grid.TryGetTile(nx, ny, out TileVisibility neighbor) || neighbor == null)
+            return false;
+
+        tileWorld = neighbor.transform.position;
+        return true;
+    }
+
+    private bool IsTileFree(Vector3 pos)
+    {
+        if (GridUtils.IsTileOccupied(pos, null))
+            return false;
+        if (GridUtils.GetCityAtPosition(pos) != null)
+            return false;
+
+        return true;
+    }
+
+    private bool TryGetFreeNeighborTile(Vector3 originWorld, int dx, int dy, out Vector3 tileWorld)
+    {
+        tileWorld = originWorld;
+        if (!TryGetNeighborTile(originWorld, dx, dy, out Vector3 candidate))
+            return false;
+        if (!IsTileFree(candidate))
+            return false;
+
+        tileWorld = candidate;
+        return true;
+    }
+
+    private Vector2Int GetGridDirection(Vector3 fromWorld, Vector3 toWorld)
+    {
+        if (grid == null)
+            return Vector2Int.zero;
+        if (!grid.TryGetTileAtWorldPosition(fromWorld, out TileVisibility fromTile))
+            return Vector2Int.zero;
+        if (!grid.TryGetTileAtWorldPosition(toWorld, out TileVisibility toTile))
+            return Vector2Int.zero;
+
+        int dx = Mathf.Clamp(toTile.gridX - fromTile.gridX, -1, 1);
+        int dy = Mathf.Clamp(toTile.gridY - fromTile.gridY, -1, 1);
+        return new Vector2Int(dx, dy);
+    }
+
     private IEnumerator ScriptEnemyKillWarrior1OnAITurn5()
     {
         // Wait for AI turn 5 to start.
@@ -2872,6 +3136,10 @@ public class TutorialOverlay : MonoBehaviour
             if (killed)
             {
                 enemy1.transform.position = victimPos;
+                if (victim == warrior1)
+                {
+                    SpeechBubble.Show(enemy1.transform, "Greetings from Clan Chief Salami!", seconds: 9999f);
+                }
             }
         }
 
@@ -2906,7 +3174,7 @@ public class TutorialOverlay : MonoBehaviour
                 yield break;
         }
 
-        enemy2 = SpawnTutorialUnit(spawnPos, isPlayerOwned: false, "TutorialEnemy2");
+        enemy2 = SpawnTutorialUnit(spawnPos, isPlayerOwned: false, "Enemy Warrior 2");
 
         if (tm != null)
         {

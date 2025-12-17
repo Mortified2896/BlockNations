@@ -45,6 +45,11 @@ public class UnitUIManager : MonoBehaviour
     {
         currentUnit = unit;
 
+        if (CityUIManager.Instance != null)
+        {
+            CityUIManager.Instance.ClosePanel();
+        }
+
         if (panelRoot == null)
         {
             Debug.LogWarning("UnitUIManager panelRoot is not assigned.");

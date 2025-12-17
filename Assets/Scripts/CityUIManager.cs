@@ -110,6 +110,11 @@ public class CityUIManager : MonoBehaviour
         EnsureRecruitWarriorButtonReference();
         EnsureBottomButtonsRootReference();
 
+        if (UnitUIManager.Instance != null)
+        {
+            UnitUIManager.Instance.ClosePanel();
+        }
+
         panelRoot.SetActive(true);
 
         // Hide the default bottom HUD buttons while the city panel is open.

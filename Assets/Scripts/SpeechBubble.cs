@@ -30,6 +30,23 @@ public static class SpeechBubble
         target.gameObject.AddComponent<SpeechBubbleRunner>().ShowInternal(SanitizeForUI(text), seconds, worldOffset);
     }
 
+    public static void HideAll(Transform target)
+    {
+        if (target == null)
+            return;
+
+        SpeechBubbleRunner runner = target.GetComponent<SpeechBubbleRunner>();
+        if (runner != null)
+            Object.Destroy(runner);
+
+        for (int i = target.childCount - 1; i >= 0; i--)
+        {
+            Transform child = target.GetChild(i);
+            if (child != null && child.name == "SpeechBubble")
+                Object.Destroy(child.gameObject);
+        }
+    }
+
     private static string SanitizeForUI(string s)
     {
         if (string.IsNullOrEmpty(s))
@@ -71,7 +88,6 @@ public static class SpeechBubble
             RectTransform rt = root.GetComponent<RectTransform>();
             // Use "pixel-like" canvas units so padding/font sizes behave predictably in world-space.
             // Then scale the whole bubble down into world units.
-            rt.sizeDelta = new Vector2(320f, 120f);
             rt.localScale = Vector3.one * 0.0025f; // 320px -> 0.8 world units (at scale 1)
 
             GameObject bg = new GameObject("BG", typeof(RectTransform), typeof(Image));
@@ -96,8 +112,10 @@ public static class SpeechBubble
             RectTransform txtRt = txt.GetComponent<RectTransform>();
             txtRt.anchorMin = Vector2.zero;
             txtRt.anchorMax = Vector2.one;
-            txtRt.offsetMin = new Vector2(14f, 10f);
-            txtRt.offsetMax = new Vector2(-14f, -10f);
+            float padX = 18f;
+            float padY = 14f;
+            txtRt.offsetMin = new Vector2(padX, padY);
+            txtRt.offsetMax = new Vector2(-padX, -padY);
 
             TextMeshProUGUI tmp = txt.GetComponent<TextMeshProUGUI>();
             tmp.text = text;
@@ -106,6 +124,16 @@ public static class SpeechBubble
             tmp.alignment = TextAlignmentOptions.Center;
             tmp.textWrappingMode = TextWrappingModes.Normal;
             tmp.overflowMode = TextOverflowModes.Overflow;
+
+            // Auto-size the bubble to fit its text.
+            float minWidth = 220f;
+            float maxWidth = 460f;
+            float minHeight = 80f;
+            Vector2 pref = tmp.GetPreferredValues(text, maxWidth - (padX * 2f), 0f);
+            float width = Mathf.Clamp(pref.x + (padX * 2f), minWidth, maxWidth);
+            Vector2 prefWrapped = tmp.GetPreferredValues(text, width - (padX * 2f), 0f);
+            float height = Mathf.Max(minHeight, prefWrapped.y + (padY * 2f));
+            rt.sizeDelta = new Vector2(width, height);
 
             yield return new WaitForSeconds(seconds);
             if (root != null)
