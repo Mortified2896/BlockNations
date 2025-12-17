@@ -16,7 +16,9 @@ public class TutorialOverlay : MonoBehaviour
 {
     [Header("Layout")]
     [Tooltip("Top margin (in reference pixels) so the panel isn't flush with the screen top.")]
-    public float panelTopMargin = 90f;
+    public float panelTopMargin = 25f;
+    [Tooltip("Intro step only: extra top padding so the panel isn't glued to the screen top.")]
+    public float introPanelTopPadding = 50f;
 
     [Header("Scenes")]
     public string mainMenuSceneName = "MainMenu";
@@ -108,12 +110,18 @@ public class TutorialOverlay : MonoBehaviour
     private bool pointerShowArrow;
     private bool pointerArrowFromScreenCenter;
     private bool pointerArrowPreferRightMiddle;
+    private bool pointerArrowPreferTopRight;
     private bool pointerArrowEndOverride;
     private Vector2 pointerArrowEndScreen;
     private bool pointerHighlightYellow;
 
     private Button menuButton;
     private bool menuButtonPrevInteractable;
+
+    // Gameplay HUD buttons (bottom Menu / End Turn / Next) that should hide when a panel (city/unit) is open.
+    private Button gameplayHudMenuButton;
+    private Button gameplayHudEndTurnOrNextButton;
+    private bool gameplayHudHidden;
 
     private bool cameraLockActive;
     private Vector3 cameraLockWorldPosition;
@@ -123,6 +131,7 @@ public class TutorialOverlay : MonoBehaviour
     private Vector2 defaultPanelAnchorMax;
     private Vector2 defaultPanelOffsetMin;
     private Vector2 defaultPanelOffsetMax;
+    private Vector2 defaultPanelPivot;
 
     private static bool IsMobilePlatform()
     {
@@ -231,6 +240,8 @@ public class TutorialOverlay : MonoBehaviour
         TutorialStep step = steps[stepIndex];
         bool canAdvance = step.canAdvance == null || step.canAdvance();
         nextButton.interactable = canAdvance;
+
+        UpdateGameplayHudButtonsVisibility();
 
         if (!canAdvance && ShouldShowHintForCurrentStep() && !hintDirty)
         {
@@ -525,6 +536,7 @@ public class TutorialOverlay : MonoBehaviour
         pointerShowArrow = false;
         pointerArrowFromScreenCenter = false;
         pointerArrowPreferRightMiddle = false;
+        pointerArrowPreferTopRight = false;
         pointerArrowEndOverride = false;
         pointerShowHighlight = false;
         pointerHighlightYellow = false;
@@ -540,7 +552,7 @@ public class TutorialOverlay : MonoBehaviour
         pointerArrowEndScreen = screenPos;
     }
 
-    private void PointAtWorld(Vector3 worldPos, bool showArrow = false, bool arrowFromScreenCenter = false, bool showHighlight = true, bool arrowFromRightMiddle = false, bool highlightYellow = false)
+    private void PointAtWorld(Vector3 worldPos, bool showArrow = false, bool arrowFromScreenCenter = false, bool showHighlight = true, bool arrowFromRightMiddle = false, bool arrowFromTopRight = false, bool highlightYellow = false)
     {
         pointerVisible = true;
         pointerWorldMode = true;
@@ -550,6 +562,7 @@ public class TutorialOverlay : MonoBehaviour
         pointerShowArrow = showArrow;
         pointerArrowFromScreenCenter = arrowFromScreenCenter;
         pointerArrowPreferRightMiddle = arrowFromRightMiddle;
+        pointerArrowPreferTopRight = arrowFromTopRight;
         pointerShowHighlight = showHighlight;
         pointerArrowEndOverride = false;
         pointerHighlightYellow = highlightYellow;
@@ -561,7 +574,7 @@ public class TutorialOverlay : MonoBehaviour
         if (pointerArrowShaftRect != null) pointerArrowShaftRect.gameObject.SetActive(pointerShowArrow);
     }
 
-    private void PointAtUI(RectTransform target, float padding = 14f, bool showArrow = false, bool arrowFromScreenCenter = false, bool showHighlight = true, bool arrowFromRightMiddle = false, bool highlightYellow = false)
+    private void PointAtUI(RectTransform target, float padding = 14f, bool showArrow = false, bool arrowFromScreenCenter = false, bool showHighlight = true, bool arrowFromRightMiddle = false, bool arrowFromTopRight = false, bool highlightYellow = false)
     {
         if (target == null)
         {
@@ -577,6 +590,7 @@ public class TutorialOverlay : MonoBehaviour
         pointerArrowFromScreenCenter = arrowFromScreenCenter;
         pointerShowHighlight = showHighlight;
         pointerArrowPreferRightMiddle = arrowFromRightMiddle;
+        pointerArrowPreferTopRight = arrowFromTopRight;
         pointerArrowEndOverride = false;
         pointerHighlightYellow = highlightYellow;
 
@@ -684,6 +698,7 @@ public class TutorialOverlay : MonoBehaviour
     {
         Vector2 screenCenter = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
         Vector2 rightMiddle = new Vector2(Screen.width - 140f, Screen.height * 0.5f);
+        Vector2 topRight = new Vector2(Screen.width - 140f, Screen.height - 140f);
 
         Rect nextRect = default;
         bool hasNextRect = false;
@@ -700,17 +715,52 @@ public class TutorialOverlay : MonoBehaviour
         float minLen = 320f;
         float margin = 18f;
 
-        Vector2 start = pointerArrowPreferRightMiddle ? rightMiddle : screenCenter;
+        Vector2 start = pointerArrowPreferTopRight ? topRight : (pointerArrowPreferRightMiddle ? rightMiddle : screenCenter);
 
         bool IntersectsNext(Vector2 a, Vector2 b)
         {
             return hasNextRect && SegmentIntersectsRect(a, b, nextRect);
         }
 
-        // If the arrow would pass through the tutorial Next button, start slightly below it (but stay near center).
-        if (IntersectsNext(start, endScreen))
+        if (pointerArrowPreferTopRight)
         {
-            start = new Vector2(start.x, nextRect.yMin - 52f);
+            // For top-right starts, try a few nearby top-right positions first (avoid pushing the start below the panel).
+            Vector2[] candidates =
+            {
+                topRight,
+                new Vector2(Screen.width - 140f, Screen.height - 240f),
+                new Vector2(Screen.width - 240f, Screen.height - 140f),
+                new Vector2(Screen.width - 220f, Screen.height - 320f),
+                new Vector2(Screen.width - 320f, Screen.height - 220f),
+            };
+
+            foreach (Vector2 candidate in candidates)
+            {
+                Vector2 s = new Vector2(
+                    Mathf.Clamp(candidate.x, 12f, Screen.width - 12f),
+                    Mathf.Clamp(candidate.y, 12f, Screen.height - 12f));
+
+                Vector2 d = endScreen - s;
+                float l = d.magnitude;
+                if (l < 0.001f)
+                    continue;
+                if (l < minLen)
+                    s = endScreen - (d / l) * minLen;
+
+                s.x = Mathf.Clamp(s.x, 12f, Screen.width - 12f);
+                s.y = Mathf.Clamp(s.y, 12f, Screen.height - 12f);
+
+                if (!IntersectsNext(s, endScreen))
+                    return s;
+            }
+        }
+        else
+        {
+            // If the arrow would pass through the tutorial Next button, start slightly below it (but stay near center).
+            if (IntersectsNext(start, endScreen))
+            {
+                start = new Vector2(start.x, nextRect.yMin - 52f);
+            }
         }
 
         // Ensure the arrow is long enough to be readable.
@@ -1081,6 +1131,7 @@ public class TutorialOverlay : MonoBehaviour
         defaultPanelAnchorMax = panelRect.anchorMax;
         defaultPanelOffsetMin = panelRect.offsetMin;
         defaultPanelOffsetMax = panelRect.offsetMax;
+        defaultPanelPivot = panelRect.pivot;
     }
 
     private void RestorePanelLayout()
@@ -1092,6 +1143,7 @@ public class TutorialOverlay : MonoBehaviour
         panelRect.anchorMax = defaultPanelAnchorMax;
         panelRect.offsetMin = defaultPanelOffsetMin;
         panelRect.offsetMax = defaultPanelOffsetMax;
+        panelRect.pivot = defaultPanelPivot;
     }
 
     private void SetPanelLayoutAvoidTopCenter()
@@ -1135,6 +1187,33 @@ public class TutorialOverlay : MonoBehaviour
         panelRect.offsetMax = Vector2.zero;
     }
 
+    private void SetPanelLayoutIntroTopLeft()
+    {
+        if (panelRect == null)
+            return;
+
+        // Intro step: keep the city fully visible by placing the panel at the top-left with a bit of pixel padding.
+        // Use "top anchored" layout (y anchors both at 1) so padding is reliable across aspect ratios.
+        panelRect.pivot = new Vector2(panelRect.pivot.x, 1f);
+        panelRect.anchorMin = new Vector2(panelRect.anchorMin.x, 1f);
+        panelRect.anchorMax = new Vector2(panelRect.anchorMax.x, 1f);
+
+        if (IsMobilePlatform())
+        {
+            panelRect.anchorMin = new Vector2(0.04f, 1.0f);
+            panelRect.anchorMax = new Vector2(0.74f, 1.0f);
+        }
+        else
+        {
+            panelRect.anchorMin = new Vector2(0.03f, 1.0f);
+            panelRect.anchorMax = new Vector2(0.58f, 1.0f);
+        }
+
+        panelRect.offsetMin = Vector2.zero;
+        panelRect.offsetMax = Vector2.zero;
+        panelRect.anchoredPosition = new Vector2(0f, -Mathf.Max(0f, introPanelTopPadding));
+    }
+
     private void BuildSteps()
     {
         steps.Clear();
@@ -1155,10 +1234,11 @@ public class TutorialOverlay : MonoBehaviour
             nextLabel = "Next",
             onEnter = () =>
             {
+                SetPanelLayoutIntroTopLeft();
                 CacheCitiesAndUnits();
                 if (playerCity != null)
                 {
-                    PointAtWorld(playerCity.transform.position, showArrow: true, arrowFromScreenCenter: true);
+                    PointAtWorld(playerCity.transform.position, showArrow: true, arrowFromScreenCenter: true, arrowFromTopRight: true);
                     LockCameraToWorld(playerCity.transform.position);
                 }
                 TutorialGate.CanEndTurn = () => false;
@@ -1173,10 +1253,11 @@ public class TutorialOverlay : MonoBehaviour
             autoAdvance = true,
             onEnter = () =>
             {
+                SetPanelLayoutIntroTopLeft();
                 CacheCitiesAndUnits();
                 if (playerCity != null)
                 {
-                    PointAtWorld(playerCity.transform.position);
+                    PointAtWorld(playerCity.transform.position, showArrow: true, arrowFromScreenCenter: true, arrowFromRightMiddle: true);
                     LockCameraToWorld(playerCity.transform.position);
                 }
 
@@ -1290,7 +1371,7 @@ public class TutorialOverlay : MonoBehaviour
         steps.Add(new TutorialStep
         {
             title = "Gold Spent",
-            body = "Recruiting costs Gold, so your amount goes down.\n\nYou gain Gold again at the start of each turn.",
+            body = "Recruiting costs Gold, so now you are broke again.\n\nBut dont worry, you gain Gold again at the start of each turn!",
             nextLabel = "Next",
             onEnter = () =>
             {
@@ -1553,7 +1634,7 @@ public class TutorialOverlay : MonoBehaviour
         steps.Add(new TutorialStep
         {
             title = "Turn 3",
-            body = "Now move your Warrior to the highlighted tile.",
+            body = "Do you remember how to move your Warrior to the highlighted tile?",
             nextLabel = "Next",
             autoAdvance = true,
             onEnter = () =>
@@ -2063,6 +2144,130 @@ public class TutorialOverlay : MonoBehaviour
         if (CityUIManager.Instance == null || CityUIManager.Instance.panelRoot == null)
             return false;
         return CityUIManager.Instance.panelRoot.activeInHierarchy;
+    }
+
+    private bool HasUnitPanelOpen()
+    {
+        if (UnitUIManager.Instance == null || UnitUIManager.Instance.panelRoot == null)
+            return false;
+        return UnitUIManager.Instance.panelRoot.activeInHierarchy;
+    }
+
+    private void UpdateGameplayHudButtonsVisibility()
+    {
+        // While the City/Unit panel is open, hide the gameplay HUD buttons (Menu / End Turn / Next),
+        // just like the normal game UI flow.
+        bool shouldHide = HasCityPanelOpen() || HasUnitPanelOpen();
+        if (shouldHide == gameplayHudHidden)
+            return;
+
+        EnsureGameplayHudButtonsCached();
+
+        if (gameplayHudMenuButton != null)
+            gameplayHudMenuButton.gameObject.SetActive(!shouldHide);
+        if (gameplayHudEndTurnOrNextButton != null)
+            gameplayHudEndTurnOrNextButton.gameObject.SetActive(!shouldHide);
+
+        gameplayHudHidden = shouldHide;
+    }
+
+    private void EnsureGameplayHudButtonsCached()
+    {
+        if (gameplayHudMenuButton != null && gameplayHudEndTurnOrNextButton != null)
+            return;
+
+        Button[] buttons = Object.FindObjectsByType<Button>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        Button bestMenu = null;
+        Button bestNext = null;
+        float bestMenuY = float.PositiveInfinity;
+        float bestNextY = float.PositiveInfinity;
+
+        Transform tutorialRoot = root != null ? root.transform : null;
+        Transform cityPanel = CityUIManager.Instance != null && CityUIManager.Instance.panelRoot != null ? CityUIManager.Instance.panelRoot.transform : null;
+        Transform unitPanel = UnitUIManager.Instance != null && UnitUIManager.Instance.panelRoot != null ? UnitUIManager.Instance.panelRoot.transform : null;
+
+        foreach (Button b in buttons)
+        {
+            if (b == null)
+                continue;
+            if (!b.gameObject.activeInHierarchy)
+                continue;
+
+            // Ignore tutorial UI buttons and panel buttons (recruit/close/etc) so we don't hide the wrong things.
+            if (tutorialRoot != null && b.transform.IsChildOf(tutorialRoot))
+                continue;
+            if (cityPanel != null && b.transform.IsChildOf(cityPanel))
+                continue;
+            if (unitPanel != null && b.transform.IsChildOf(unitPanel))
+                continue;
+
+            string label = GetButtonLabel(b);
+            if (string.IsNullOrWhiteSpace(label))
+                continue;
+
+            float centerY = GetButtonScreenCenterY(b);
+
+            if (string.Equals(label, "Menu", StringComparison.OrdinalIgnoreCase))
+            {
+                if (centerY < bestMenuY)
+                {
+                    bestMenuY = centerY;
+                    bestMenu = b;
+                }
+            }
+            else if (string.Equals(label, "End Turn", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(label, "Next", StringComparison.OrdinalIgnoreCase))
+            {
+                if (centerY < bestNextY)
+                {
+                    bestNextY = centerY;
+                    bestNext = b;
+                }
+            }
+        }
+
+        if (bestMenu != null)
+            gameplayHudMenuButton = bestMenu;
+        if (bestNext != null)
+            gameplayHudEndTurnOrNextButton = bestNext;
+    }
+
+    private static string GetButtonLabel(Button b)
+    {
+        if (b == null)
+            return null;
+
+        TMP_Text tmp = b.GetComponentInChildren<TMP_Text>(true);
+        if (tmp != null && !string.IsNullOrWhiteSpace(tmp.text))
+            return tmp.text.Trim();
+
+        Text txt = b.GetComponentInChildren<Text>(true);
+        if (txt != null && !string.IsNullOrWhiteSpace(txt.text))
+            return txt.text.Trim();
+
+        return null;
+    }
+
+    private static float GetButtonScreenCenterY(Button b)
+    {
+        if (b == null)
+            return float.PositiveInfinity;
+
+        RectTransform rt = b.GetComponent<RectTransform>();
+        if (rt == null)
+            return float.PositiveInfinity;
+
+        Vector3[] corners = new Vector3[4];
+        rt.GetWorldCorners(corners);
+        Vector2 min = new Vector2(float.PositiveInfinity, float.PositiveInfinity);
+        Vector2 max = new Vector2(float.NegativeInfinity, float.NegativeInfinity);
+        for (int i = 0; i < 4; i++)
+        {
+            Vector2 sp = RectTransformUtility.WorldToScreenPoint(null, corners[i]);
+            min = Vector2.Min(min, sp);
+            max = Vector2.Max(max, sp);
+        }
+        return (min.y + max.y) * 0.5f;
     }
 
     private float GetCurrentZoomValue()

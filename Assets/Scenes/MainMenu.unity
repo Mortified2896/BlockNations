@@ -1352,6 +1352,9 @@ MonoBehaviour:
   modeSelectionPanel: {fileID: 1922266463}
   aiDifficultyPanel: {fileID: 971658250}
   importStatusText: {fileID: 0}
+  autoInjectTutorialButton: 1
+  tutorialButtonLabel: Tutorial
+  autoFitMenuToScreenOnDesktop: 1
 --- !u!4 &1678659298
 Transform:
   m_ObjectHideFlags: 0
