@@ -119,6 +119,7 @@ public class TutorialOverlay : MonoBehaviour
     private float pointerPulseT;
     private bool pointerShowArrow;
     private bool pointerHighlightYellow;
+    [SerializeField] private Sprite tutorialArrowSprite;
 
     private enum ArrowAnchorPlacement
     {
@@ -3149,12 +3150,11 @@ public class TutorialOverlay : MonoBehaviour
 
     private void EnsureEventSystem()
     {
-        if (EventSystem.current != null)
+        EventSystem[] systems = Object.FindObjectsByType<EventSystem>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        if (systems != null && systems.Length > 0)
             return;
 
-        GameObject es = new GameObject("EventSystem");
-        es.AddComponent<EventSystem>();
-        es.AddComponent<StandaloneInputModule>();
+        Debug.LogWarning("TutorialOverlay: No EventSystem found. Please add one to the gameplay scene.");
     }
 
     private void BuildUI()
@@ -3298,8 +3298,8 @@ public class TutorialOverlay : MonoBehaviour
         pointerArrowRect.pivot = new Vector2(0.5f, 0.5f);
         pointerArrowRect.sizeDelta = new Vector2(Mathf.Max(2f, pointerArrowThickness), 160f);
         pointerArrowImage = arrow.GetComponent<Image>();
-        pointerArrowImage.sprite = GetPointerArrowSprite();
-        pointerArrowImage.color = new Color(0.98f, 0.92f, 0.30f, 1f);
+        pointerArrowImage.sprite = tutorialArrowSprite != null ? tutorialArrowSprite : GetPointerArrowSprite();
+        pointerArrowImage.color = Color.white;
         pointerArrowImage.raycastTarget = false;
         pointerArrowRect.gameObject.SetActive(false);
 

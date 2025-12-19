@@ -73,9 +73,7 @@ public class GameMenuActions : MonoBehaviour
         if (UnityEngine.EventSystems.EventSystem.current != null)
             return;
 
-        GameObject es = new GameObject("EventSystem");
-        es.AddComponent<UnityEngine.EventSystems.EventSystem>();
-        es.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+        Debug.LogWarning("GameMenuActions: No EventSystem detected. Please add one to the gameplay scene.");
     }
 
     private GameObject BuildTutorialLeaveConfirmUI()

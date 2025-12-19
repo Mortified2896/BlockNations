@@ -325,9 +325,7 @@ public class TurnManager : MonoBehaviour
         if (EventSystem.current != null)
             return;
 
-        GameObject es = new GameObject("EventSystem");
-        es.AddComponent<EventSystem>();
-        es.AddComponent<StandaloneInputModule>();
+        Debug.LogWarning("TurnManager: No EventSystem detected. Please add one to the gameplay scene.");
     }
 
     void EnsureUIRaycasters()

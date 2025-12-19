@@ -41,22 +41,59 @@ public class HotseatTurnOverlay : MonoBehaviour
         DontDestroyOnLoad(go);
     }
 
+    private static bool duplicateEventSystemCheckDone;
+
     void Awake()
     {
         DontDestroyOnLoad(gameObject);
-        EnsureEventSystem();
+        WarnIfEventSystemMissing();
+        CheckForDuplicateEventSystemsOnce();
         BuildCanvas();
     }
 
-    void EnsureEventSystem()
+    void WarnIfEventSystemMissing()
     {
         if (EventSystem.current != null)
             return;
 
-        GameObject es = new GameObject("EventSystem");
-        es.AddComponent<EventSystem>();
-        es.AddComponent<StandaloneInputModule>();
-        DontDestroyOnLoad(es);
+        Debug.LogWarning("HotseatTurnOverlay: No EventSystem detected. Please add one to the gameplay scene.");
+    }
+
+    void CheckForDuplicateEventSystemsOnce()
+    {
+        if (duplicateEventSystemCheckDone)
+            return;
+
+        duplicateEventSystemCheckDone = true;
+
+        EventSystem[] systems = Object.FindObjectsByType<EventSystem>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        if (systems == null || systems.Length <= 1)
+            return;
+
+        var sceneNames = new System.Text.StringBuilder();
+        foreach (EventSystem es in systems)
+        {
+            if (es == null)
+                continue;
+
+            string sceneName = es.gameObject.scene.name;
+            if (sceneNames.Length > 0)
+                sceneNames.Append(", ");
+            sceneNames.Append(string.IsNullOrEmpty(sceneName) ? "<unknown>" : sceneName);
+        }
+
+        Debug.LogError($"HotseatTurnOverlay: Multiple EventSystems detected ({sceneNames}). Destroying DontDestroyOnLoad instance.");
+
+        foreach (EventSystem es in systems)
+        {
+            if (es == null)
+                continue;
+
+            if (es.gameObject.scene.name == "DontDestroyOnLoad")
+            {
+                Destroy(es.gameObject);
+            }
+        }
     }
 
     void BuildCanvas()

@@ -90,8 +90,10 @@ public class MainMenuUIBuilder : MonoBehaviour
 
     void EnsureEventSystem()
     {
-        if (Object.FindFirstObjectByType<EventSystem>() != null) return;
-        new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+        if (Object.FindFirstObjectByType<EventSystem>() != null)
+            return;
+
+        Debug.LogWarning("MainMenuUIBuilder: No EventSystem detected. Please add one to the gameplay scene.");
     }
 
     /// <summary>
