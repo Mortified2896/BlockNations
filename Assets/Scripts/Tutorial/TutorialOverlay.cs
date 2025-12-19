@@ -19,17 +19,14 @@ public class TutorialOverlay : MonoBehaviour
     public float panelTopMargin = 25f;
     [Tooltip("Intro step only: extra top padding so the panel isn't glued to the screen top.")]
     public float introPanelTopPadding = 50f;
+    [Tooltip("Reserved space (in pixels) between the top HUD/safe area and the tutorial panel.")]
+    public float topHudPadding = 120f;
 
     [Header("Pointer Tuning")]
-    [Tooltip("Minimum arrow length in pixels. Reduced automatically if needed to keep the arrow tail visible.")]
-    public float pointerMinArrowLength = 320f;
-    [Tooltip("Minimum distance (in pixels) from the screen safe area for the arrow tail.")]
-    public float pointerTailScreenPadding = 12f;
-    [Tooltip("Minimum normalized viewport Y for arrow tail (prevents it hugging the bottom edge).")]
-    [Range(0f, 0.5f)]
-    public float pointerTailMinViewportY = 0.08f;
-    [Tooltip("Extra clearance (in pixels) above the bottom HUD/panels for the arrow tail.")]
-    public float pointerTailBottomHudClearance = 40f;
+    [Tooltip("Arrow thickness in canvas pixels (length is driven by the distance to the target).")]
+    public float pointerArrowThickness = 26f;
+    [Tooltip("Extra spacing (in pixels) between the arrow tip and the highlight center.")]
+    public float pointerArrowTargetPadding = 20f;
 
     [Header("Scenes")]
     public string mainMenuSceneName = "MainMenu";
@@ -42,7 +39,9 @@ public class TutorialOverlay : MonoBehaviour
 
     private Canvas canvas;
     private GameObject root;
+    private RectTransform safeAreaRoot;
     private RectTransform panelRect;
+    private RectTransform arrowStartRect;
     private TextMeshProUGUI titleText;
     private TextMeshProUGUI bodyText;
     private Button nextButton;
@@ -108,10 +107,8 @@ public class TutorialOverlay : MonoBehaviour
 
     // Pointer UI
     private RectTransform pointerLayer;
-    private RectTransform pointerArrowHeadRect;
-    private Image pointerArrowHeadImage;
-    private RectTransform pointerArrowShaftRect;
-    private Image pointerArrowShaftImage;
+    private RectTransform pointerArrowRect;
+    private Image pointerArrowImage;
     private RectTransform pointerHighlightRect;
     private Image pointerHighlightImage;
     private bool pointerShowHighlight;
@@ -121,14 +118,16 @@ public class TutorialOverlay : MonoBehaviour
     private bool pointerVisible;
     private float pointerPulseT;
     private bool pointerShowArrow;
-    private bool pointerArrowFromScreenCenter;
-    private bool pointerArrowPreferRightMiddle;
-    private bool pointerArrowPreferTopRight;
-    private bool pointerArrowStartOverride;
-    private Vector2 pointerArrowStartScreen;
-    private bool pointerArrowEndOverride;
-    private Vector2 pointerArrowEndScreen;
     private bool pointerHighlightYellow;
+
+    private enum ArrowAnchorPlacement
+    {
+        RightMiddle,
+        TopRight,
+        PanelCenter
+    }
+
+    private ArrowAnchorPlacement arrowAnchorPlacement = ArrowAnchorPlacement.RightMiddle;
 
     private Button menuButton;
     private bool menuButtonPrevInteractable;
@@ -147,6 +146,7 @@ public class TutorialOverlay : MonoBehaviour
     private Vector2 defaultPanelOffsetMin;
     private Vector2 defaultPanelOffsetMax;
     private Vector2 defaultPanelPivot;
+    private Vector2 defaultPanelAnchoredPosition;
 
     private static bool IsMobilePlatform()
     {
@@ -506,7 +506,7 @@ public class TutorialOverlay : MonoBehaviour
     }
 
     private static Sprite cachedWhiteSprite;
-    private static Sprite cachedTriangleSprite;
+    private static Sprite cachedPointerArrowSprite;
 
     private static Sprite GetWhiteSprite()
     {
@@ -520,45 +520,56 @@ public class TutorialOverlay : MonoBehaviour
         return cachedWhiteSprite;
     }
 
-    private static Sprite GetTriangleSpriteDown()
+    private static Sprite GetPointerArrowSprite()
     {
-        if (cachedTriangleSprite != null)
-            return cachedTriangleSprite;
+        if (cachedPointerArrowSprite != null)
+            return cachedPointerArrowSprite;
 
-        const int size = 64;
-        Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false);
+        const int width = 48;
+        const int height = 192;
+        const int headHeight = 48;
+        const int shaftHalfWidth = 6;
+
+        Texture2D tex = new Texture2D(width, height, TextureFormat.RGBA32, mipChain: false);
         tex.filterMode = FilterMode.Bilinear;
 
-        // Transparent background.
         Color clear = new Color(0f, 0f, 0f, 0f);
         Color fill = Color.white;
 
-        for (int y = 0; y < size; y++)
+        for (int y = 0; y < height; y++)
         {
-            for (int x = 0; x < size; x++)
+            for (int x = 0; x < width; x++)
             {
                 tex.SetPixel(x, y, clear);
             }
         }
 
-        // Down-pointing triangle: point at bottom center, wide at top.
-        // Note: Texture2D coordinates have y=0 at the bottom.
-        for (int y = 0; y < size; y++)
+        int cx = width / 2;
+        for (int y = 0; y < height; y++)
         {
-            float t = y / (float)(size - 1); // 0 at bottom (tip), 1 at top (wide)
-            int halfWidth = Mathf.RoundToInt((size * 0.48f) * t);
-            int cx = size / 2;
-            int x0 = Mathf.Clamp(cx - halfWidth, 0, size - 1);
-            int x1 = Mathf.Clamp(cx + halfWidth, 0, size - 1);
-            for (int x = x0; x <= x1; x++)
+            if (y < height - headHeight)
             {
-                tex.SetPixel(x, y, fill);
+                for (int x = cx - shaftHalfWidth; x <= cx + shaftHalfWidth; x++)
+                {
+                    tex.SetPixel(Mathf.Clamp(x, 0, width - 1), y, fill);
+                }
+            }
+            else
+            {
+                float t = (y - (height - headHeight)) / (float)(headHeight - 1);
+                int halfWidth = Mathf.RoundToInt((width * 0.5f) * t);
+                int x0 = Mathf.Clamp(cx - halfWidth, 0, width - 1);
+                int x1 = Mathf.Clamp(cx + halfWidth, 0, width - 1);
+                for (int x = x0; x <= x1; x++)
+                {
+                    tex.SetPixel(x, y, fill);
+                }
             }
         }
 
         tex.Apply();
-        cachedTriangleSprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
-        return cachedTriangleSprite;
+        cachedPointerArrowSprite = Sprite.Create(tex, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f), 100f);
+        return cachedPointerArrowSprite;
     }
 
     private void HidePointer()
@@ -568,29 +579,11 @@ public class TutorialOverlay : MonoBehaviour
         pointerUiTarget = null;
         pointerPulseT = 0f;
         pointerShowArrow = false;
-        pointerArrowFromScreenCenter = false;
-        pointerArrowPreferRightMiddle = false;
-        pointerArrowPreferTopRight = false;
-        pointerArrowStartOverride = false;
-        pointerArrowEndOverride = false;
         pointerShowHighlight = false;
         pointerHighlightYellow = false;
 
         if (pointerHighlightRect != null) pointerHighlightRect.gameObject.SetActive(false);
-        if (pointerArrowHeadRect != null) pointerArrowHeadRect.gameObject.SetActive(false);
-        if (pointerArrowShaftRect != null) pointerArrowShaftRect.gameObject.SetActive(false);
-    }
-
-    private void SetPointerArrowEndOverride(Vector2 screenPos)
-    {
-        pointerArrowEndOverride = true;
-        pointerArrowEndScreen = screenPos;
-    }
-
-    private void SetPointerArrowStartOverride(Vector2 screenPos)
-    {
-        pointerArrowStartOverride = true;
-        pointerArrowStartScreen = ClampArrowTailToSafeArea(screenPos);
+        if (pointerArrowRect != null) pointerArrowRect.gameObject.SetActive(false);
     }
 
     private void PointAtWorld(Vector3 worldPos, bool showArrow = false, bool arrowFromScreenCenter = false, bool showHighlight = true, bool arrowFromRightMiddle = false, bool arrowFromTopRight = false, bool highlightYellow = false)
@@ -601,19 +594,18 @@ public class TutorialOverlay : MonoBehaviour
         pointerUiTarget = null;
         pointerPulseT = 0f;
         pointerShowArrow = showArrow;
-        pointerArrowFromScreenCenter = arrowFromScreenCenter;
-        pointerArrowPreferRightMiddle = arrowFromRightMiddle;
-        pointerArrowPreferTopRight = arrowFromTopRight;
         pointerShowHighlight = showHighlight;
-        pointerArrowStartOverride = false;
-        pointerArrowEndOverride = false;
         pointerHighlightYellow = highlightYellow;
+        ApplyArrowAnchorPlacement(arrowFromScreenCenter, arrowFromTopRight);
 
-        // Use only the highlight rectangle for world targets (avoids missing-glyph squares on some fonts/platforms).
-        if (pointerHighlightRect != null) pointerHighlightRect.gameObject.SetActive(pointerShowHighlight);
-        ApplyPointerHighlightTheme(isUi: false);
-        if (pointerArrowHeadRect != null) pointerArrowHeadRect.gameObject.SetActive(pointerShowArrow);
-        if (pointerArrowShaftRect != null) pointerArrowShaftRect.gameObject.SetActive(pointerShowArrow);
+        if (pointerHighlightRect != null)
+        {
+            pointerHighlightRect.gameObject.SetActive(pointerShowHighlight);
+            ApplyPointerHighlightTheme(isUi: false);
+        }
+
+        if (pointerArrowRect != null)
+            pointerArrowRect.gameObject.SetActive(pointerShowArrow);
     }
 
     private void PointAtUI(RectTransform target, float padding = 14f, bool showArrow = false, bool arrowFromScreenCenter = false, bool showHighlight = true, bool arrowFromRightMiddle = false, bool arrowFromTopRight = false, bool highlightYellow = false)
@@ -629,23 +621,60 @@ public class TutorialOverlay : MonoBehaviour
         pointerUiTarget = target;
         pointerPulseT = 0f;
         pointerShowArrow = showArrow;
-        pointerArrowFromScreenCenter = arrowFromScreenCenter;
         pointerShowHighlight = showHighlight;
-        pointerArrowPreferRightMiddle = arrowFromRightMiddle;
-        pointerArrowPreferTopRight = arrowFromTopRight;
-        pointerArrowStartOverride = false;
-        pointerArrowEndOverride = false;
         pointerHighlightYellow = highlightYellow;
+        ApplyArrowAnchorPlacement(arrowFromScreenCenter, arrowFromTopRight);
 
-        // Use only the highlight rectangle for UI targets (keeps the pointer minimal and clear).
-        if (pointerHighlightRect != null) pointerHighlightRect.gameObject.SetActive(pointerShowHighlight);
-        ApplyPointerHighlightTheme(isUi: true);
-        if (pointerArrowHeadRect != null) pointerArrowHeadRect.gameObject.SetActive(pointerShowArrow);
-        if (pointerArrowShaftRect != null) pointerArrowShaftRect.gameObject.SetActive(pointerShowArrow);
-
-        // Pre-size highlight. Actual positioning is updated every frame.
         if (pointerHighlightRect != null)
+        {
+            pointerHighlightRect.gameObject.SetActive(pointerShowHighlight);
+            ApplyPointerHighlightTheme(isUi: true);
             pointerHighlightRect.sizeDelta = target.rect.size + new Vector2(padding * 2f, padding * 2f);
+        }
+
+        if (pointerArrowRect != null)
+            pointerArrowRect.gameObject.SetActive(pointerShowArrow);
+    }
+
+    private void ApplyArrowAnchorPlacement(bool usePanelCenter, bool useTopRight)
+    {
+        if (useTopRight)
+        {
+            arrowAnchorPlacement = ArrowAnchorPlacement.TopRight;
+        }
+        else if (usePanelCenter)
+        {
+            arrowAnchorPlacement = ArrowAnchorPlacement.PanelCenter;
+        }
+        else
+        {
+            arrowAnchorPlacement = ArrowAnchorPlacement.RightMiddle;
+        }
+
+        if (arrowStartRect == null)
+            return;
+
+        switch (arrowAnchorPlacement)
+        {
+            case ArrowAnchorPlacement.TopRight:
+                arrowStartRect.anchorMin = new Vector2(1f, 1f);
+                arrowStartRect.anchorMax = new Vector2(1f, 1f);
+                arrowStartRect.pivot = new Vector2(1f, 1f);
+                arrowStartRect.anchoredPosition = new Vector2(28f, -28f);
+                break;
+            case ArrowAnchorPlacement.PanelCenter:
+                arrowStartRect.anchorMin = new Vector2(0.5f, 0.5f);
+                arrowStartRect.anchorMax = new Vector2(0.5f, 0.5f);
+                arrowStartRect.pivot = new Vector2(0.5f, 0.5f);
+                arrowStartRect.anchoredPosition = new Vector2(0f, -24f);
+                break;
+            default:
+                arrowStartRect.anchorMin = new Vector2(1f, 0.5f);
+                arrowStartRect.anchorMax = new Vector2(1f, 0.5f);
+                arrowStartRect.pivot = new Vector2(1f, 0.5f);
+                arrowStartRect.anchoredPosition = new Vector2(28f, 0f);
+                break;
+        }
     }
 
     private void ApplyPointerHighlightTheme(bool isUi)
@@ -676,6 +705,66 @@ public class TutorialOverlay : MonoBehaviour
         }
     }
 
+    private bool TryGetArrowStartLocal(out Vector2 localPoint)
+    {
+        localPoint = Vector2.zero;
+        if (pointerLayer == null || arrowStartRect == null)
+            return false;
+
+        Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(null, arrowStartRect.position);
+        return RectTransformUtility.ScreenPointToLocalPointInRectangle(pointerLayer, screenPoint, null, out localPoint);
+    }
+
+    private bool TryGetCanvasLocalPoint(Vector2 screenPoint, out Vector2 localPoint)
+    {
+        localPoint = Vector2.zero;
+        if (pointerLayer == null)
+            return false;
+
+        return RectTransformUtility.ScreenPointToLocalPointInRectangle(pointerLayer, screenPoint, null, out localPoint);
+    }
+
+    private Vector2 AdjustArrowEndForPadding(Vector2 startLocal, Vector2 endLocal, Vector2? highlightSize)
+    {
+        Vector2 dir = endLocal - startLocal;
+        float len = dir.magnitude;
+        if (len < 0.001f)
+            return endLocal;
+
+        float padding = Mathf.Max(0f, pointerArrowTargetPadding);
+        if (highlightSize.HasValue)
+        {
+            padding += Mathf.Max(highlightSize.Value.x, highlightSize.Value.y) * 0.5f;
+        }
+
+        float adjustedLength = Mathf.Max(0f, len - padding);
+        if (adjustedLength <= 0.001f)
+            return startLocal + dir.normalized * 0.001f;
+
+        return startLocal + dir.normalized * adjustedLength;
+    }
+
+    private void ApplyArrowVisual(Vector2 startLocal, Vector2 endLocal, float pulse)
+    {
+        if (pointerArrowRect == null || pointerArrowImage == null)
+            return;
+
+        Vector2 delta = endLocal - startLocal;
+        float len = delta.magnitude;
+        if (len < 1f)
+        {
+            pointerArrowRect.gameObject.SetActive(false);
+            return;
+        }
+
+        pointerArrowRect.gameObject.SetActive(pointerShowArrow);
+        // Length is encoded along the RectTransform Y axis so rotation stays simple.
+        pointerArrowRect.sizeDelta = new Vector2(Mathf.Max(2f, pointerArrowThickness), len);
+        pointerArrowRect.anchoredPosition = (startLocal + endLocal) * 0.5f;
+        pointerArrowRect.localRotation = Quaternion.Euler(0f, 0f, Vector2.SignedAngle(Vector2.up, delta));
+        pointerArrowRect.localScale = Vector3.one * pulse;
+    }
+
     private static Rect GetScreenRect(RectTransform rt)
     {
         Vector3[] corners = new Vector3[4];
@@ -691,163 +780,85 @@ public class TutorialOverlay : MonoBehaviour
         return Rect.MinMaxRect(min.x, min.y, max.x, max.y);
     }
 
-    private static bool SegmentsIntersect(Vector2 p1, Vector2 p2, Vector2 q1, Vector2 q2)
-    {
-        float o1 = Orientation(p1, p2, q1);
-        float o2 = Orientation(p1, p2, q2);
-        float o3 = Orientation(q1, q2, p1);
-        float o4 = Orientation(q1, q2, p2);
-
-        if (o1 == 0f && OnSegment(p1, q1, p2)) return true;
-        if (o2 == 0f && OnSegment(p1, q2, p2)) return true;
-        if (o3 == 0f && OnSegment(q1, p1, q2)) return true;
-        if (o4 == 0f && OnSegment(q1, p2, q2)) return true;
-
-        return (o1 > 0f) != (o2 > 0f) && (o3 > 0f) != (o4 > 0f);
-    }
-
-    private static float Orientation(Vector2 a, Vector2 b, Vector2 c)
-    {
-        float v = (b.y - a.y) * (c.x - b.x) - (b.x - a.x) * (c.y - b.y);
-        if (Mathf.Abs(v) < 0.00001f) return 0f;
-        return v;
-    }
-
-    private static bool OnSegment(Vector2 a, Vector2 b, Vector2 c)
-    {
-        return b.x <= Mathf.Max(a.x, c.x) + 0.00001f &&
-               b.x >= Mathf.Min(a.x, c.x) - 0.00001f &&
-               b.y <= Mathf.Max(a.y, c.y) + 0.00001f &&
-               b.y >= Mathf.Min(a.y, c.y) - 0.00001f;
-    }
-
-    private static bool SegmentIntersectsRect(Vector2 a, Vector2 b, Rect r)
-    {
-        if (r.Contains(a) || r.Contains(b))
-            return true;
-
-        Vector2 r1 = new Vector2(r.xMin, r.yMin);
-        Vector2 r2 = new Vector2(r.xMax, r.yMin);
-        Vector2 r3 = new Vector2(r.xMax, r.yMax);
-        Vector2 r4 = new Vector2(r.xMin, r.yMax);
-
-        return SegmentsIntersect(a, b, r1, r2) ||
-               SegmentsIntersect(a, b, r2, r3) ||
-               SegmentsIntersect(a, b, r3, r4) ||
-               SegmentsIntersect(a, b, r4, r1);
-    }
-
-    private void GetArrowTailSafeBounds(out float minX, out float maxX, out float minY, out float maxY)
-    {
-        Rect safeArea = Screen.safeArea;
-        float pad = Mathf.Max(0f, pointerTailScreenPadding);
-        minX = safeArea.xMin + pad;
-        maxX = safeArea.xMax - pad;
-        minY = safeArea.yMin + pad;
-        maxY = safeArea.yMax - pad;
-
-        minY = Mathf.Max(minY, Screen.height * Mathf.Clamp01(pointerTailMinViewportY));
-        float bottomHudTop = GetBottomHudTopScreenY();
-        if (bottomHudTop > 0f)
-            minY = Mathf.Max(minY, bottomHudTop + pointerTailBottomHudClearance);
-
-        minX = Mathf.Min(minX, maxX);
-        minY = Mathf.Min(minY, maxY);
-    }
-
-    private Vector2 ClampArrowTailToSafeArea(Vector2 v)
-    {
-        GetArrowTailSafeBounds(out float minX, out float maxX, out float minY, out float maxY);
-        return new Vector2(
-            Mathf.Clamp(v.x, minX, maxX),
-            Mathf.Clamp(v.y, minY, maxY));
-    }
-
-    private float GetBottomHudTopScreenY()
-    {
-        EnsureGameplayHudButtonsCached();
-
-        float topY = 0f;
-
-        void Consider(RectTransform rt)
-        {
-            if (rt == null)
-                return;
-            Rect r = GetScreenRect(rt);
-            topY = Mathf.Max(topY, r.yMax);
-        }
-
-        if (CityUIManager.Instance != null && CityUIManager.Instance.panelRoot != null)
-            Consider(CityUIManager.Instance.panelRoot.GetComponent<RectTransform>());
-        if (UnitUIManager.Instance != null && UnitUIManager.Instance.panelRoot != null)
-            Consider(UnitUIManager.Instance.panelRoot.GetComponent<RectTransform>());
-
-        if (gameplayHudMenuButton != null)
-            Consider(gameplayHudMenuButton.GetComponent<RectTransform>());
-        if (gameplayHudEndTurnOrNextButton != null)
-            Consider(gameplayHudEndTurnOrNextButton.GetComponent<RectTransform>());
-
-        return topY;
-    }
-
     private Vector2 GetArrowStartScreen(Vector2 endScreen)
     {
-        GetArrowTailSafeBounds(out float minX, out float maxX, out float minY, out float maxY);
-
+        float marginX = Mathf.Clamp(Screen.width * 0.12f, 120f, 320f);
+        float marginY = Mathf.Clamp(Screen.height * 0.12f, 120f, 280f);
+        float minX = marginX;
+        float maxX = Screen.width - marginX;
+        float minY = marginY;
+        float maxY = Screen.height - marginY;
         Vector2 screenCenter = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
-        float rightX = Mathf.Max(minX, maxX - 140f);
-        Vector2 rightMiddle = new Vector2(rightX, Mathf.Clamp(Screen.height * 0.5f, minY, maxY));
-        Vector2 topRight = new Vector2(rightX, Mathf.Max(minY, maxY - 140f));
-
-        Vector2 ClampSafe(Vector2 v)
-        {
-            return new Vector2(
-                Mathf.Clamp(v.x, minX, maxX),
-                Mathf.Clamp(v.y, minY, maxY));
-        }
-
-        Vector2 EnsureMinLength(Vector2 s, float desiredMinLen)
-        {
-            Vector2 d = endScreen - s;
-            float l = d.magnitude;
-            if (l < 0.001f)
-                return ClampSafe(s);
-
-            if (l < desiredMinLen)
-                s = endScreen - (d / l) * desiredMinLen;
-
-            return ClampSafe(s);
-        }
+        float minLen = Mathf.Clamp(Screen.height * 0.26f, 160f, 320f);
 
         Rect nextRect = default;
+        Rect nextRectExpanded = default;
         bool hasNextRect = false;
         if (nextButton != null)
         {
             RectTransform nextRt = nextButton.GetComponent<RectTransform>();
-            if (nextRt != null)
+            if (nextRt != null && nextButton.gameObject.activeInHierarchy)
             {
                 nextRect = GetScreenRect(nextRt);
+                nextRectExpanded = Rect.MinMaxRect(nextRect.xMin - 24f, nextRect.yMin - 18f, nextRect.xMax + 24f, nextRect.yMax + 18f);
                 hasNextRect = true;
             }
         }
 
-        float minLen = Mathf.Max(80f, pointerMinArrowLength);
+        float rightX = Mathf.Clamp(Screen.width - marginX * 0.5f, minX, maxX);
+        Vector2 topRight = new Vector2(rightX, maxY);
 
-        Vector2 start = pointerArrowPreferTopRight ? topRight : (pointerArrowPreferRightMiddle ? rightMiddle : screenCenter);
-
-        bool IntersectsNext(Vector2 a, Vector2 b)
+        Vector2 start;
+        switch (arrowAnchorPlacement)
         {
-            return hasNextRect && SegmentIntersectsRect(a, b, nextRect);
+            case ArrowAnchorPlacement.TopRight:
+                start = topRight;
+                break;
+            case ArrowAnchorPlacement.PanelCenter:
+                start = new Vector2(screenCenter.x, Mathf.Clamp(screenCenter.y, minY, maxY));
+                break;
+            default:
+                start = new Vector2(rightX, Mathf.Clamp(screenCenter.y, minY, maxY));
+                break;
         }
 
-        if (pointerArrowPreferTopRight)
+        Vector2 ClampSafe(Vector2 point)
         {
-            // For top-right starts, try a few nearby top-right positions first (avoid pushing the start below the panel).
+            return new Vector2(Mathf.Clamp(point.x, minX, maxX), Mathf.Clamp(point.y, minY, maxY));
+        }
+
+        Vector2 EnsureMinLength(Vector2 candidate, float desiredLength)
+        {
+            Vector2 dir = endScreen - candidate;
+            float len = dir.magnitude;
+            if (len < 0.001f)
+                return candidate;
+
+            if (len >= desiredLength)
+                return candidate;
+
+            dir /= len;
+            return endScreen - dir * desiredLength;
+        }
+
+        bool IntersectsNext(Vector2 from, Vector2 to)
+        {
+            if (!hasNextRect)
+                return false;
+
+            float minSegX = Mathf.Min(from.x, to.x);
+            float maxSegX = Mathf.Max(from.x, to.x);
+            float minSegY = Mathf.Min(from.y, to.y);
+            float maxSegY = Mathf.Max(from.y, to.y);
+            Rect arrowBounds = Rect.MinMaxRect(minSegX, minSegY, maxSegX, maxSegY);
+            return arrowBounds.Overlaps(nextRectExpanded);
+        }
+
+        if (arrowAnchorPlacement == ArrowAnchorPlacement.TopRight)
+        {
             Vector2[] candidates =
             {
                 topRight,
-                new Vector2(Screen.width - 140f, Screen.height - 240f),
-                new Vector2(Screen.width - 240f, Screen.height - 140f),
                 new Vector2(Screen.width - 220f, Screen.height - 320f),
                 new Vector2(Screen.width - 320f, Screen.height - 220f),
             };
@@ -939,84 +950,42 @@ public class TutorialOverlay : MonoBehaviour
         pointerPulseT += Time.unscaledDeltaTime;
         float pulse = 1f + Mathf.Sin(pointerPulseT * 4.5f) * 0.06f;
 
-        Vector3 screenCenter;
+        bool hasArrowStart = TryGetArrowStartLocal(out Vector2 arrowStartLocal);
+
         if (pointerWorldMode)
         {
-            if (cam == null) cam = Camera.main;
+            if (cam == null)
+                cam = Camera.main;
             if (cam == null)
                 return;
-            Vector3 sp = cam.WorldToScreenPoint(pointerWorldPosition);
-            screenCenter = new Vector3(sp.x, sp.y, 0f);
 
-            if (pointerHighlightRect != null)
+            Vector3 screenPos = cam.WorldToScreenPoint(pointerWorldPosition);
+            if (screenPos.z < 0f)
             {
-                pointerHighlightRect.position = screenCenter;
+                if (pointerArrowRect != null)
+                    pointerArrowRect.gameObject.SetActive(false);
+                return;
+            }
+
+            Vector2 screenPoint = new Vector2(screenPos.x, screenPos.y);
+
+            if (pointerHighlightRect != null && pointerShowHighlight)
+            {
+                pointerHighlightRect.gameObject.SetActive(true);
+                pointerHighlightRect.position = screenPoint;
                 pointerHighlightRect.sizeDelta = GetWorldTargetHighlightSizePixels(pointerWorldPosition);
                 pointerHighlightRect.localScale = Vector3.one * pulse;
             }
 
-            if (pointerShowArrow && pointerArrowHeadRect != null && pointerArrowShaftRect != null)
+            if (pointerShowArrow && hasArrowStart && TryGetCanvasLocalPoint(screenPoint, out Vector2 endLocal))
             {
-                float headH = 28f;
-                float headW = 38f;
-                float shaftW = 10f;
-
-                Vector2 hi = pointerHighlightRect != null ? pointerHighlightRect.sizeDelta : new Vector2(96f, 96f);
-
-                if (pointerArrowFromScreenCenter)
-                {
-                    Vector2 end = new Vector2(screenCenter.x, screenCenter.y);
-                    Vector2 start = pointerArrowStartOverride ? pointerArrowStartScreen : GetArrowStartScreen(end);
-
-                    Vector2 dir = end - start;
-                    if (dir.sqrMagnitude < 0.001f)
-                        dir = Vector2.down;
-                    dir.Normalize();
-
-                    float targetRadius = Mathf.Max(hi.x, hi.y) * 0.5f;
-                    float tipToTargetPadding = 8f;
-                    Vector2 tipPos = end - dir * (targetRadius + tipToTargetPadding);
-
-                    float tipToCenter = headH * 0.45f;
-                    Vector2 headCenter = tipPos - dir * tipToCenter;
-
-                    Vector2 shaftStart = start;
-                    // Stop the shaft far enough before the head so scaling/pulsing never makes it overlap the head.
-                    Vector2 shaftEnd = headCenter - dir * (headH * 0.55f);
-                    float shaftLen = Mathf.Max(18f, Vector2.Distance(shaftStart, shaftEnd));
-                    Vector2 shaftCenter = (shaftStart + shaftEnd) * 0.5f;
-
-                    pointerArrowShaftRect.sizeDelta = new Vector2(shaftW, shaftLen);
-                    pointerArrowShaftRect.position = new Vector3(shaftCenter.x, shaftCenter.y, 0f);
-                    pointerArrowShaftRect.rotation = Quaternion.Euler(0f, 0f, Vector2.SignedAngle(Vector2.up, dir));
-                    pointerArrowShaftRect.localScale = Vector3.one * pulse;
-
-                    pointerArrowHeadRect.sizeDelta = new Vector2(headW, headH);
-                    pointerArrowHeadRect.position = new Vector3(headCenter.x, headCenter.y, 0f);
-                    pointerArrowHeadRect.rotation = Quaternion.Euler(0f, 0f, Vector2.SignedAngle(Vector2.down, dir));
-                    pointerArrowHeadRect.localScale = Vector3.one * pulse;
-                }
-                else
-                {
-                    // Default arrow mode: vertical arrow hovering above the highlight.
-                    pointerArrowHeadRect.rotation = Quaternion.identity;
-                    pointerArrowShaftRect.rotation = Quaternion.identity;
-
-                    float topY = screenCenter.y + (hi.y * 0.5f);
-
-                    // Arrow head slightly above the highlight.
-                    pointerArrowHeadRect.sizeDelta = new Vector2(headW, headH);
-                    pointerArrowHeadRect.position = new Vector3(screenCenter.x, topY + (headH * 0.5f) + 14f, 0f);
-                    pointerArrowHeadRect.localScale = Vector3.one * pulse;
-
-                    // Arrow shaft connects to the highlight top.
-                    float shaftTop = pointerArrowHeadRect.position.y - (headH * 0.5f);
-                    float shaftBottom = topY + 4f;
-                    float shaftH = Mathf.Max(18f, shaftTop - shaftBottom);
-                    pointerArrowShaftRect.sizeDelta = new Vector2(shaftW, shaftH);
-                    pointerArrowShaftRect.position = new Vector3(screenCenter.x, shaftBottom + shaftH * 0.5f, 0f);
-                    pointerArrowShaftRect.localScale = Vector3.one * pulse;
-                }
+                Vector2? hiSize = pointerShowHighlight && pointerHighlightRect != null ? pointerHighlightRect.sizeDelta : (Vector2?)null;
+                Vector2 adjustedEnd = AdjustArrowEndForPadding(arrowStartLocal, endLocal, hiSize);
+                ApplyArrowVisual(arrowStartLocal, adjustedEnd, pulse);
+            }
+            else if (pointerArrowRect != null)
+            {
+                pointerArrowRect.gameObject.SetActive(false);
             }
 
             return;
@@ -1025,69 +994,30 @@ public class TutorialOverlay : MonoBehaviour
         if (pointerUiTarget == null)
             return;
 
-        Bounds b = RectTransformUtility.CalculateRelativeRectTransformBounds(pointerLayer, pointerUiTarget);
-        Vector3 centerLocal = b.center;
-        Vector3 centerWorld = pointerLayer.TransformPoint(centerLocal);
-        screenCenter = centerWorld;
+        Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(pointerLayer, pointerUiTarget);
+        Vector3 centerWorld = pointerLayer.TransformPoint(bounds.center);
 
-        if (pointerHighlightRect != null)
+        if (pointerHighlightRect != null && pointerShowHighlight)
         {
+            pointerHighlightRect.gameObject.SetActive(true);
             pointerHighlightRect.position = centerWorld;
-            pointerHighlightRect.sizeDelta = new Vector2(b.size.x, b.size.y) + new Vector2(24f, 18f);
+            pointerHighlightRect.sizeDelta = new Vector2(bounds.size.x, bounds.size.y) + new Vector2(24f, 18f);
             pointerHighlightRect.localScale = Vector3.one * pulse;
         }
 
-        if (pointerShowArrow && pointerArrowHeadRect != null && pointerArrowShaftRect != null)
+        if (pointerShowArrow && hasArrowStart)
         {
-            float headH = 28f;
-            float headW = 38f;
-            float shaftW = 10f;
-
-            Vector2 end = pointerArrowEndOverride ? pointerArrowEndScreen : new Vector2(centerWorld.x, centerWorld.y);
-            Vector2 start =
-                pointerArrowStartOverride ? pointerArrowStartScreen :
-                (pointerArrowFromScreenCenter ? GetArrowStartScreen(end) : new Vector2(Screen.width * 0.5f, Screen.height * 0.5f));
-
-            Vector2 dir = end - start;
-            if (dir.sqrMagnitude < 0.001f)
-                dir = Vector2.down;
-            dir.Normalize();
-
-            float targetEdgeDist = 0f;
-            if (pointerShowHighlight)
+            Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(null, centerWorld);
+            if (TryGetCanvasLocalPoint(screenPoint, out Vector2 endLocal))
             {
-                Vector2 targetSize = new Vector2(b.size.x, b.size.y);
-                Vector2 absDir = new Vector2(Mathf.Abs(dir.x), Mathf.Abs(dir.y));
-
-                float tX = absDir.x > 0.0001f ? (targetSize.x * 0.5f) / absDir.x : float.PositiveInfinity;
-                float tY = absDir.y > 0.0001f ? (targetSize.y * 0.5f) / absDir.y : float.PositiveInfinity;
-                targetEdgeDist = Mathf.Min(tX, tY);
-
-                if (float.IsInfinity(targetEdgeDist) || float.IsNaN(targetEdgeDist))
-                    targetEdgeDist = Mathf.Max(targetSize.x, targetSize.y) * 0.5f;
+                Vector2? hiSize = pointerShowHighlight && pointerHighlightRect != null ? pointerHighlightRect.sizeDelta : (Vector2?)null;
+                Vector2 adjustedEnd = AdjustArrowEndForPadding(arrowStartLocal, endLocal, hiSize);
+                ApplyArrowVisual(arrowStartLocal, adjustedEnd, pulse);
             }
-
-            float tipToTargetPadding = pointerShowHighlight ? 0f : 8f;
-            Vector2 tipPos = end - dir * (targetEdgeDist + tipToTargetPadding);
-
-            float tipToCenter = headH * 0.45f;
-            Vector2 headCenter = tipPos - dir * tipToCenter;
-
-            Vector2 shaftStart = start;
-            // Stop the shaft far enough before the head so scaling/pulsing never makes it overlap the head.
-            Vector2 shaftEnd = headCenter - dir * (headH * 0.55f);
-            float shaftLen = Mathf.Max(18f, Vector2.Distance(shaftStart, shaftEnd));
-            Vector2 shaftCenter = (shaftStart + shaftEnd) * 0.5f;
-
-            pointerArrowShaftRect.sizeDelta = new Vector2(shaftW, shaftLen);
-            pointerArrowShaftRect.position = new Vector3(shaftCenter.x, shaftCenter.y, 0f);
-            pointerArrowShaftRect.rotation = Quaternion.Euler(0f, 0f, Vector2.SignedAngle(Vector2.up, dir));
-            pointerArrowShaftRect.localScale = Vector3.one * pulse;
-
-            pointerArrowHeadRect.sizeDelta = new Vector2(headW, headH);
-            pointerArrowHeadRect.position = new Vector3(headCenter.x, headCenter.y, 0f);
-            pointerArrowHeadRect.rotation = Quaternion.Euler(0f, 0f, Vector2.SignedAngle(Vector2.down, dir));
-            pointerArrowHeadRect.localScale = Vector3.one * pulse;
+        }
+        else if (pointerArrowRect != null)
+        {
+            pointerArrowRect.gameObject.SetActive(false);
         }
     }
 
@@ -1257,6 +1187,7 @@ public class TutorialOverlay : MonoBehaviour
         defaultPanelOffsetMin = panelRect.offsetMin;
         defaultPanelOffsetMax = panelRect.offsetMax;
         defaultPanelPivot = panelRect.pivot;
+        defaultPanelAnchoredPosition = panelRect.anchoredPosition;
     }
 
     private void RestorePanelLayout()
@@ -1269,6 +1200,37 @@ public class TutorialOverlay : MonoBehaviour
         panelRect.offsetMin = defaultPanelOffsetMin;
         panelRect.offsetMax = defaultPanelOffsetMax;
         panelRect.pivot = defaultPanelPivot;
+        panelRect.anchoredPosition = defaultPanelAnchoredPosition;
+    }
+
+    private void SetPanelAnchors(float anchorMinX, float anchorMaxX)
+    {
+        if (panelRect == null)
+            return;
+
+        float minX = Mathf.Clamp01(Mathf.Min(anchorMinX, anchorMaxX));
+        float maxX = Mathf.Clamp01(Mathf.Max(anchorMinX, anchorMaxX));
+
+        panelRect.anchorMin = new Vector2(minX, 1f);
+        panelRect.anchorMax = new Vector2(maxX, 1f);
+        panelRect.pivot = new Vector2(0.5f, 1f);
+        panelRect.offsetMin = Vector2.zero;
+        panelRect.offsetMax = Vector2.zero;
+        Vector2 anchored = panelRect.anchoredPosition;
+        panelRect.anchoredPosition = new Vector2(0f, anchored.y);
+    }
+
+    private void ApplyPanelTopOffset(float extraPadding = 0f)
+    {
+        if (panelRect == null)
+            return;
+
+        panelRect.anchoredPosition = new Vector2(0f, -GetPanelTopOffset(extraPadding));
+    }
+
+    private float GetPanelTopOffset(float extraPadding = 0f)
+    {
+        return Mathf.Max(0f, topHudPadding + Mathf.Max(0f, panelTopMargin) + Mathf.Max(0f, extraPadding));
     }
 
     private void SetPanelLayoutAvoidTopCenter()
@@ -1276,19 +1238,15 @@ public class TutorialOverlay : MonoBehaviour
         if (panelRect == null)
             return;
 
-        // Keep the Gold UI (top-center) visible by moving the panel slightly down and to the left.
         if (IsMobilePlatform())
         {
-            panelRect.anchorMin = new Vector2(0.04f, 0.60f);
-            panelRect.anchorMax = new Vector2(0.72f, 0.84f);
+            SetPanelAnchors(0.04f, 0.72f);
         }
         else
         {
-            panelRect.anchorMin = new Vector2(0.04f, 0.34f);
-            panelRect.anchorMax = new Vector2(0.72f, 0.60f);
+            SetPanelAnchors(0.04f, 0.72f);
         }
-        panelRect.offsetMin = Vector2.zero;
-        panelRect.offsetMax = Vector2.zero;
+        ApplyPanelTopOffset();
     }
 
     private void SetPanelLayoutUpperLeft()
@@ -1298,18 +1256,13 @@ public class TutorialOverlay : MonoBehaviour
 
         if (IsMobilePlatform())
         {
-            panelRect.anchorMin = new Vector2(0.05f, 0.70f);
-            panelRect.anchorMax = new Vector2(0.95f, 0.94f);
+            SetPanelAnchors(0.05f, 0.95f);
         }
         else
         {
-            // Upper-left, narrow enough to keep the top-center HUD readable.
-            panelRect.anchorMin = new Vector2(0.03f, 0.70f);
-            panelRect.anchorMax = new Vector2(0.58f, 0.94f);
+            SetPanelAnchors(0.03f, 0.58f);
         }
-
-        panelRect.offsetMin = Vector2.zero;
-        panelRect.offsetMax = Vector2.zero;
+        ApplyPanelTopOffset();
     }
 
     private void SetPanelLayoutIntroTopLeft()
@@ -1317,26 +1270,15 @@ public class TutorialOverlay : MonoBehaviour
         if (panelRect == null)
             return;
 
-        // Intro step: keep the city fully visible by placing the panel at the top-left with a bit of pixel padding.
-        // Use "top anchored" layout (y anchors both at 1) so padding is reliable across aspect ratios.
-        panelRect.pivot = new Vector2(panelRect.pivot.x, 1f);
-        panelRect.anchorMin = new Vector2(panelRect.anchorMin.x, 1f);
-        panelRect.anchorMax = new Vector2(panelRect.anchorMax.x, 1f);
-
         if (IsMobilePlatform())
         {
-            panelRect.anchorMin = new Vector2(0.04f, 1.0f);
-            panelRect.anchorMax = new Vector2(0.74f, 1.0f);
+            SetPanelAnchors(0.04f, 0.74f);
         }
         else
         {
-            panelRect.anchorMin = new Vector2(0.03f, 1.0f);
-            panelRect.anchorMax = new Vector2(0.58f, 1.0f);
+            SetPanelAnchors(0.03f, 0.58f);
         }
-
-        panelRect.offsetMin = Vector2.zero;
-        panelRect.offsetMax = Vector2.zero;
-        panelRect.anchoredPosition = new Vector2(0f, -Mathf.Max(0f, introPanelTopPadding));
+        ApplyPanelTopOffset(introPanelTopPadding);
     }
 
     private void BuildSteps()
@@ -1407,10 +1349,6 @@ public class TutorialOverlay : MonoBehaviour
                 if (goldRect != null)
                 {
                     PointAtUI(goldRect, padding: 10f, showArrow: true, arrowFromScreenCenter: true, showHighlight: false);
-                    RectTransform hud = goldRect.parent as RectTransform;
-                    Rect goldScreen = GetScreenRect(goldRect);
-                    Rect hudScreen = hud != null ? GetScreenRect(hud) : goldScreen;
-                    SetPointerArrowEndOverride(new Vector2(goldScreen.center.x, hudScreen.yMin));
                 }
                 else
                     HidePointer();
@@ -1433,7 +1371,6 @@ public class TutorialOverlay : MonoBehaviour
                 {
                     PointAtWorld(playerCity.transform.position, showArrow: true, arrowFromScreenCenter: true);
                     LockCameraToWorld(playerCity.transform.position);
-                    SetPointerArrowStartOverride(ClampArrowTailToSafeArea(new Vector2(Screen.width * 0.85f, Screen.height * 0.55f)));
                 }
                 TutorialGate.CanSelectUnit = _ => false;
                 TutorialGate.CanClickCity = _ => false;
@@ -1480,14 +1417,6 @@ public class TutorialOverlay : MonoBehaviour
                     if (recruitRect != null)
                     {
                         PointAtUI(recruitRect, padding: 12f, showArrow: true, arrowFromScreenCenter: false, showHighlight: true, arrowFromRightMiddle: false);
-                        if (playerCity != null)
-                        {
-                            if (cam == null) cam = Camera.main;
-                            Vector3 cityScreen = cam != null ? cam.WorldToScreenPoint(playerCity.transform.position) : Vector3.zero;
-                            Vector2 citySize = GetWorldTargetHighlightSizePixels(playerCity.transform.position);
-                            Vector2 cityBottom = new Vector2(cityScreen.x, cityScreen.y - (citySize.y * 0.5f));
-                            SetPointerArrowStartOverride(cityBottom);
-                        }
                     }
                 }
                 else if (playerCity != null)
@@ -1513,10 +1442,6 @@ public class TutorialOverlay : MonoBehaviour
                 if (goldRect != null)
                 {
                     PointAtUI(goldRect, padding: 10f, showArrow: true, arrowFromScreenCenter: true, showHighlight: false);
-                    RectTransform hud = goldRect.parent as RectTransform;
-                    Rect goldScreen = GetScreenRect(goldRect);
-                    Rect hudScreen = hud != null ? GetScreenRect(hud) : goldScreen;
-                    SetPointerArrowEndOverride(new Vector2(goldScreen.center.x, hudScreen.yMin));
                 }
                 else
                     HidePointer();
@@ -1774,14 +1699,6 @@ public class TutorialOverlay : MonoBehaviour
                         // from the instruction down to the action.
                         PointAtUI(targetRect, padding: 10f, showArrow: true, arrowFromScreenCenter: true, showHighlight: true, arrowFromRightMiddle: false);
 
-                        if (panelRect != null)
-                        {
-                            Rect panelScreen = GetScreenRect(panelRect);
-                            Rect targetScreen = GetScreenRect(targetRect);
-                            float startX = Mathf.Clamp(targetScreen.center.x, panelScreen.xMin + 24f, panelScreen.xMax - 24f);
-                            SetPointerArrowStartOverride(new Vector2(startX, panelScreen.yMin - 10f));
-                            SetPointerArrowEndOverride(new Vector2(targetScreen.center.x, targetScreen.yMax));
-                        }
                     }
                 }
                 else if (playerCity != null)
@@ -1915,14 +1832,6 @@ public class TutorialOverlay : MonoBehaviour
 
                         PointAtUI(targetRect, padding: 10f, showArrow: true, arrowFromScreenCenter: true, showHighlight: true, arrowFromRightMiddle: false);
 
-                        if (panelRect != null)
-                        {
-                            Rect panelScreen = GetScreenRect(panelRect);
-                            Rect targetScreen = GetScreenRect(targetRect);
-                            float startX = Mathf.Clamp(targetScreen.center.x, panelScreen.xMin + 24f, panelScreen.xMax - 24f);
-                            SetPointerArrowStartOverride(new Vector2(startX, panelScreen.yMin - 10f));
-                            SetPointerArrowEndOverride(new Vector2(targetScreen.center.x, targetScreen.yMax));
-                        }
                     }
                 }
                 else if (playerCity != null)
@@ -2345,7 +2254,6 @@ public class TutorialOverlay : MonoBehaviour
                     if (cam != null && warrior2 != null)
                     {
                         Vector3 warriorScreen = cam.WorldToScreenPoint(warrior2.transform.position);
-                        SetPointerArrowStartOverride(warriorScreen);
                     }
                 }
                 else
@@ -3283,23 +3191,27 @@ public class TutorialOverlay : MonoBehaviour
         bgImg.color = new Color(0f, 0f, 0f, 0f);
         bgImg.raycastTarget = false;
 
+        GameObject safeArea = new GameObject("SafeAreaRoot", typeof(RectTransform), typeof(SafeAreaApplier));
+        safeArea.transform.SetParent(root.transform, false);
+        safeAreaRoot = safeArea.GetComponent<RectTransform>();
+        safeAreaRoot.anchorMin = Vector2.zero;
+        safeAreaRoot.anchorMax = Vector2.one;
+        safeAreaRoot.offsetMin = Vector2.zero;
+        safeAreaRoot.offsetMax = Vector2.zero;
+
         // Panel (small, so world is still clickable).
         GameObject panel = new GameObject("Panel", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
-        panel.transform.SetParent(root.transform, false);
+        panel.transform.SetParent(safeAreaRoot, false);
         panelRect = panel.GetComponent<RectTransform>();
         if (IsMobilePlatform())
         {
-            panelRect.anchorMin = new Vector2(0.05f, 0.70f);
-            panelRect.anchorMax = new Vector2(0.95f, 0.94f);
+            SetPanelAnchors(0.05f, 0.95f);
         }
         else
         {
-            // Default: centered panel that stays clear of the top HUD (Turn/Gold) on desktop/web.
-            panelRect.anchorMin = new Vector2(0.05f, 0.62f);
-            panelRect.anchorMax = new Vector2(0.95f, 0.86f);
+            SetPanelAnchors(0.15f, 0.85f);
         }
-        panelRect.offsetMin = Vector2.zero;
-        panelRect.offsetMax = new Vector2(0f, -Mathf.Max(0f, panelTopMargin));
+        ApplyPanelTopOffset();
 
         Image panelImg = panel.GetComponent<Image>();
         panelImg.color = new Color(0.08f, 0.10f, 0.14f, 0.92f);
@@ -3316,6 +3228,14 @@ public class TutorialOverlay : MonoBehaviour
         ContentSizeFitter fitter = panel.GetComponent<ContentSizeFitter>();
         fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
         fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        GameObject arrowAnchor = new GameObject("ArrowStart", typeof(RectTransform), typeof(LayoutElement));
+        arrowAnchor.transform.SetParent(panel.transform, false);
+        LayoutElement arrowAnchorLe = arrowAnchor.GetComponent<LayoutElement>();
+        arrowAnchorLe.ignoreLayout = true;
+        arrowStartRect = arrowAnchor.GetComponent<RectTransform>();
+        arrowStartRect.sizeDelta = Vector2.zero;
+        ApplyArrowAnchorPlacement(usePanelCenter: false, useTopRight: false);
 
         // Header: title only (leaving the tutorial is done via the normal Menu button).
         titleText = CreateTMP(panel.transform, "Title", 54, FontStyles.Bold);
@@ -3370,27 +3290,18 @@ public class TutorialOverlay : MonoBehaviour
         hiOutline.effectColor = new Color(0.18f, 0.52f, 0.82f, 0.85f);
         hiOutline.effectDistance = new Vector2(4f, -4f);
 
-        GameObject arrowShaft = new GameObject("ArrowShaft", typeof(RectTransform), typeof(Image));
-        arrowShaft.transform.SetParent(pointerLayer, false);
-        pointerArrowShaftRect = arrowShaft.GetComponent<RectTransform>();
-        pointerArrowShaftRect.anchorMin = new Vector2(0.5f, 0.5f);
-        pointerArrowShaftRect.anchorMax = new Vector2(0.5f, 0.5f);
-        pointerArrowShaftRect.sizeDelta = new Vector2(10f, 60f);
-        pointerArrowShaftImage = arrowShaft.GetComponent<Image>();
-        pointerArrowShaftImage.sprite = GetWhiteSprite();
-        pointerArrowShaftImage.color = new Color(0.98f, 0.92f, 0.30f, 1f);
-        pointerArrowShaftImage.raycastTarget = false;
-
-        GameObject arrowHead = new GameObject("ArrowHead", typeof(RectTransform), typeof(Image));
-        arrowHead.transform.SetParent(pointerLayer, false);
-        pointerArrowHeadRect = arrowHead.GetComponent<RectTransform>();
-        pointerArrowHeadRect.anchorMin = new Vector2(0.5f, 0.5f);
-        pointerArrowHeadRect.anchorMax = new Vector2(0.5f, 0.5f);
-        pointerArrowHeadRect.sizeDelta = new Vector2(38f, 28f);
-        pointerArrowHeadImage = arrowHead.GetComponent<Image>();
-        pointerArrowHeadImage.sprite = GetTriangleSpriteDown();
-        pointerArrowHeadImage.color = new Color(0.98f, 0.92f, 0.30f, 1f);
-        pointerArrowHeadImage.raycastTarget = false;
+        GameObject arrow = new GameObject("Arrow", typeof(RectTransform), typeof(Image));
+        arrow.transform.SetParent(pointerLayer, false);
+        pointerArrowRect = arrow.GetComponent<RectTransform>();
+        pointerArrowRect.anchorMin = new Vector2(0.5f, 0.5f);
+        pointerArrowRect.anchorMax = new Vector2(0.5f, 0.5f);
+        pointerArrowRect.pivot = new Vector2(0.5f, 0.5f);
+        pointerArrowRect.sizeDelta = new Vector2(Mathf.Max(2f, pointerArrowThickness), 160f);
+        pointerArrowImage = arrow.GetComponent<Image>();
+        pointerArrowImage.sprite = GetPointerArrowSprite();
+        pointerArrowImage.color = new Color(0.98f, 0.92f, 0.30f, 1f);
+        pointerArrowImage.raycastTarget = false;
+        pointerArrowRect.gameObject.SetActive(false);
 
         CaptureDefaultPanelLayout();
         HidePointer();
