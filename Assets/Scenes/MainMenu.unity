@@ -464,7 +464,7 @@ Canvas:
   m_OverrideSorting: 0
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
-  m_VertexColorAlwaysGammaSpace: 0
+  m_VertexColorAlwaysGammaSpace: 1
   m_AdditionalShaderChannelsFlag: 25
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
@@ -851,7 +851,7 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
   m_PrefabInstance: {fileID: 527569645}
   m_PrefabAsset: {fileID: 0}
---- !u!1 &904393861
+--- !u!1 &774234009
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -859,9 +859,9 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 904393864}
-  - component: {fileID: 904393863}
-  - component: {fileID: 904393862}
+  - component: {fileID: 774234012}
+  - component: {fileID: 774234011}
+  - component: {fileID: 774234010}
   m_Layer: 0
   m_Name: EventSystem
   m_TagString: Untagged
@@ -869,13 +869,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &904393862
+--- !u!114 &774234010
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 904393861}
+  m_GameObject: {fileID: 774234009}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 01614664b831546d2ae94a42149d80ac, type: 3}
@@ -900,13 +900,13 @@ MonoBehaviour:
   m_PointerBehavior: 0
   m_CursorLockBehavior: 0
   m_ScrollDeltaPerTick: 6
---- !u!114 &904393863
+--- !u!114 &774234011
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 904393861}
+  m_GameObject: {fileID: 774234009}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 76c392e42b5098c458856cdf6ecaaaa1, type: 3}
@@ -915,13 +915,13 @@ MonoBehaviour:
   m_FirstSelected: {fileID: 0}
   m_sendNavigationEvents: 1
   m_DragThreshold: 10
---- !u!4 &904393864
+--- !u!4 &774234012
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 904393861}
+  m_GameObject: {fileID: 774234009}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -2006,7 +2006,7 @@ SceneRoots:
   m_Roots:
   - {fileID: 345299356}
   - {fileID: 1491674463}
-  - {fileID: 904393864}
   - {fileID: 1678659298}
   - {fileID: 2120047044}
   - {fileID: 9069711305470729211}
+  - {fileID: 774234012}
