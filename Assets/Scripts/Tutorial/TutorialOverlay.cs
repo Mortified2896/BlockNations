@@ -38,7 +38,7 @@ public class TutorialOverlay : MonoBehaviour
     public float defaultHintAfterSeconds = 10f;
 
     private Canvas canvas;
-    private GameObject root;
+    private GraphicRaycaster graphicRaycaster;
     private RectTransform safeAreaRoot;
     private RectTransform panelRect;
     private RectTransform arrowStartRect;
@@ -119,7 +119,6 @@ public class TutorialOverlay : MonoBehaviour
     private float pointerPulseT;
     private bool pointerShowArrow;
     private bool pointerHighlightYellow;
-    [SerializeField] private Sprite tutorialArrowSprite;
 
     private enum ArrowAnchorPlacement
     {
@@ -157,25 +156,22 @@ public class TutorialOverlay : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
-        if (Object.FindFirstObjectByType<TutorialOverlay>() != null)
-            return;
-
         // Only spawn the tutorial when explicitly requested from the main menu.
         if (!TutorialLaunch.IsShowRequested())
             return;
-
-        // Only spawn in scenes that contain gameplay.
-        if (Object.FindFirstObjectByType<TurnManager>() == null)
-            return;
-
-        GameObject go = new GameObject("TutorialOverlay");
-        go.AddComponent<TutorialOverlay>();
     }
 
     void Awake()
     {
         EnsureEventSystem();
-        BuildUI();
+        BindFromScene();
+        if (nextButton != null)
+        {
+            nextButton.onClick.RemoveListener(OnNextClicked);
+            nextButton.onClick.AddListener(OnNextClicked);
+        }
+        CaptureDefaultPanelLayout();
+        HidePointer();
         Show(false);
     }
 
@@ -186,21 +182,24 @@ public class TutorialOverlay : MonoBehaviour
         tm = TurnManager.Instance;
         if (tm == null)
         {
-            Destroy(gameObject);
+            Show(false);
+            enabled = false;
             yield break;
         }
 
         bool forced = TutorialLaunch.TryConsumeShowRequest();
         if (!forced)
         {
-            Destroy(gameObject);
+            Show(false);
+            enabled = false;
             yield break;
         }
 
         // Tutorial assumes a single player vs AI flow.
         if (tm.currentMode != TurnManager.GameMode.VsAI)
         {
-            Destroy(gameObject);
+            Show(false);
+            enabled = false;
             yield break;
         }
 
@@ -440,16 +439,17 @@ public class TutorialOverlay : MonoBehaviour
             SceneManager.LoadScene(mainMenuSceneName);
         }
 
-        Destroy(gameObject);
+        Show(false);
+        enabled = false;
     }
 
     private void Show(bool show)
     {
         isShowing = show;
-        if (root != null)
-            root.SetActive(show);
         if (canvas != null)
             canvas.enabled = show;
+        if (graphicRaycaster != null)
+            graphicRaycaster.enabled = show;
     }
 
     private void ApplyCurrentStep(bool copy)
@@ -506,71 +506,84 @@ public class TutorialOverlay : MonoBehaviour
         return sb.ToString();
     }
 
-    private static Sprite cachedWhiteSprite;
-    private static Sprite cachedPointerArrowSprite;
-
-    private static Sprite GetWhiteSprite()
+    private void BindFromScene()
     {
-        if (cachedWhiteSprite != null)
-            return cachedWhiteSprite;
+        canvas = GetComponent<Canvas>();
+        graphicRaycaster = GetComponent<GraphicRaycaster>();
 
-        Texture2D tex = new Texture2D(1, 1, TextureFormat.RGBA32, mipChain: false);
-        tex.SetPixel(0, 0, Color.white);
-        tex.Apply();
-        cachedWhiteSprite = Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f);
-        return cachedWhiteSprite;
+        safeAreaRoot = FindRectTransform("SafeAreaRoot");
+        panelRect = FindRectTransform("SafeAreaRoot/Panel");
+        arrowStartRect = FindRectTransform("SafeAreaRoot/Panel/ArrowStart");
+        titleText = FindComponent<TextMeshProUGUI>("SafeAreaRoot/Panel/Title");
+        bodyText = FindComponent<TextMeshProUGUI>("SafeAreaRoot/Panel/Body");
+        nextButton = FindComponent<Button>("SafeAreaRoot/Panel/Buttons/NextButton");
+        nextLabel = nextButton != null ? nextButton.GetComponentInChildren<TextMeshProUGUI>(true) : null;
+        pointerLayer = FindRectTransform("PointerLayer");
+        pointerHighlightRect = FindRectTransform("PointerLayer/Highlight");
+        pointerHighlightImage = pointerHighlightRect != null ? pointerHighlightRect.GetComponent<Image>() : null;
+        pointerArrowRect = FindRectTransform("PointerLayer/Arrow");
+        pointerArrowImage = pointerArrowRect != null ? pointerArrowRect.GetComponent<Image>() : null;
+
+        if (canvas == null)
+            Debug.LogError("TutorialOverlay: Missing Canvas component on TutorialCanvas.");
+        if (graphicRaycaster == null)
+            Debug.LogWarning("TutorialOverlay: No GraphicRaycaster found on TutorialCanvas.");
+        if (safeAreaRoot == null)
+            Debug.LogError("TutorialOverlay: Missing SafeAreaRoot under TutorialCanvas.");
+        if (panelRect == null)
+            Debug.LogError("TutorialOverlay: Missing Panel under SafeAreaRoot.");
+        if (arrowStartRect == null)
+            Debug.LogError("TutorialOverlay: Missing ArrowStart under Panel.");
+        if (titleText == null)
+            Debug.LogError("TutorialOverlay: Missing Title text under Panel.");
+        if (bodyText == null)
+            Debug.LogError("TutorialOverlay: Missing Body text under Panel.");
+        if (nextButton == null)
+            Debug.LogError("TutorialOverlay: Missing NextButton under Panel/Buttons.");
+        if (nextLabel == null)
+            Debug.LogError("TutorialOverlay: Missing NextButton label TextMeshProUGUI.");
+        if (pointerLayer == null)
+            Debug.LogError("TutorialOverlay: Missing PointerLayer under TutorialCanvas.");
+        if (pointerHighlightRect == null)
+            Debug.LogError("TutorialOverlay: Missing Highlight under PointerLayer.");
+        if (pointerHighlightImage == null)
+            Debug.LogError("TutorialOverlay: Missing Highlight Image component.");
+        if (pointerArrowRect == null)
+            Debug.LogError("TutorialOverlay: Missing Arrow under PointerLayer.");
+        if (pointerArrowImage == null)
+            Debug.LogError("TutorialOverlay: Missing Arrow Image component.");
+
+        if (pointerArrowImage != null)
+        {
+            pointerArrowImage.type = Image.Type.Simple;
+            pointerArrowImage.preserveAspect = false;
+        }
+        if (pointerArrowRect != null)
+        {
+            pointerArrowRect.pivot = new Vector2(0.5f, 0.5f);
+        }
     }
 
-    private static Sprite GetPointerArrowSprite()
+    private RectTransform FindRectTransform(string path)
     {
-        if (cachedPointerArrowSprite != null)
-            return cachedPointerArrowSprite;
+        Transform t = transform.Find(path);
+        if (t == null)
+            return null;
+        RectTransform rt = t.GetComponent<RectTransform>();
+        if (rt == null)
+            Debug.LogError("TutorialOverlay: Missing RectTransform at " + path + ".");
+        return rt;
+    }
 
-        const int width = 48;
-        const int height = 192;
-        const int headHeight = 48;
-        const int shaftHalfWidth = 6;
-
-        Texture2D tex = new Texture2D(width, height, TextureFormat.RGBA32, mipChain: false);
-        tex.filterMode = FilterMode.Bilinear;
-
-        Color clear = new Color(0f, 0f, 0f, 0f);
-        Color fill = Color.white;
-
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                tex.SetPixel(x, y, clear);
-            }
-        }
-
-        int cx = width / 2;
-        for (int y = 0; y < height; y++)
-        {
-            if (y < height - headHeight)
-            {
-                for (int x = cx - shaftHalfWidth; x <= cx + shaftHalfWidth; x++)
-                {
-                    tex.SetPixel(Mathf.Clamp(x, 0, width - 1), y, fill);
-                }
-            }
-            else
-            {
-                float t = (y - (height - headHeight)) / (float)(headHeight - 1);
-                int halfWidth = Mathf.RoundToInt((width * 0.5f) * t);
-                int x0 = Mathf.Clamp(cx - halfWidth, 0, width - 1);
-                int x1 = Mathf.Clamp(cx + halfWidth, 0, width - 1);
-                for (int x = x0; x <= x1; x++)
-                {
-                    tex.SetPixel(x, y, fill);
-                }
-            }
-        }
-
-        tex.Apply();
-        cachedPointerArrowSprite = Sprite.Create(tex, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f), 100f);
-        return cachedPointerArrowSprite;
+    private T FindComponent<T>(string path) where T : Component
+    {
+        Transform t = transform.Find(path);
+        if (t == null)
+            return null;
+        T component = t.GetComponent<T>();
+        if (component == null)
+            Debug.LogError("TutorialOverlay: Missing " + typeof(T).Name + " at " + path + ".");
+        return component;
     }
 
     private void HidePointer()
@@ -1112,7 +1125,7 @@ public class TutorialOverlay : MonoBehaviour
         }
 
         Show(false);
-        Destroy(gameObject);
+        enabled = false;
     }
 
     private void EnterStep(int index)
@@ -2484,7 +2497,7 @@ public class TutorialOverlay : MonoBehaviour
         float bestMenuY = float.PositiveInfinity;
         float bestNextY = float.PositiveInfinity;
 
-        Transform tutorialRoot = root != null ? root.transform : null;
+        Transform tutorialRoot = transform;
         Transform cityPanel = CityUIManager.Instance != null && CityUIManager.Instance.panelRoot != null ? CityUIManager.Instance.panelRoot.transform : null;
         Transform unitPanel = UnitUIManager.Instance != null && UnitUIManager.Instance.panelRoot != null ? UnitUIManager.Instance.panelRoot.transform : null;
 
@@ -3157,258 +3170,4 @@ public class TutorialOverlay : MonoBehaviour
         Debug.LogWarning("TutorialOverlay: No EventSystem found. Please add one to the gameplay scene.");
     }
 
-    private void BuildUI()
-    {
-        canvas = gameObject.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 450;
-
-        CanvasScaler scaler = gameObject.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1080, 1920);
-        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-        scaler.matchWidthOrHeight = 0.5f;
-
-        gameObject.AddComponent<GraphicRaycaster>();
-
-        root = new GameObject("Root", typeof(RectTransform));
-        root.transform.SetParent(canvas.transform, false);
-        RectTransform rootRt = root.GetComponent<RectTransform>();
-        rootRt.anchorMin = Vector2.zero;
-        rootRt.anchorMax = Vector2.one;
-        rootRt.offsetMin = Vector2.zero;
-        rootRt.offsetMax = Vector2.zero;
-
-        // Background (non-blocking).
-        GameObject bg = new GameObject("Background", typeof(RectTransform), typeof(Image));
-        bg.transform.SetParent(root.transform, false);
-        RectTransform bgRt = bg.GetComponent<RectTransform>();
-        bgRt.anchorMin = Vector2.zero;
-        bgRt.anchorMax = Vector2.one;
-        bgRt.offsetMin = Vector2.zero;
-        bgRt.offsetMax = Vector2.zero;
-        Image bgImg = bg.GetComponent<Image>();
-        bgImg.color = new Color(0f, 0f, 0f, 0f);
-        bgImg.raycastTarget = false;
-
-        GameObject safeArea = new GameObject("SafeAreaRoot", typeof(RectTransform), typeof(SafeAreaApplier));
-        safeArea.transform.SetParent(root.transform, false);
-        safeAreaRoot = safeArea.GetComponent<RectTransform>();
-        safeAreaRoot.anchorMin = Vector2.zero;
-        safeAreaRoot.anchorMax = Vector2.one;
-        safeAreaRoot.offsetMin = Vector2.zero;
-        safeAreaRoot.offsetMax = Vector2.zero;
-
-        // Panel (small, so world is still clickable).
-        GameObject panel = new GameObject("Panel", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
-        panel.transform.SetParent(safeAreaRoot, false);
-        panelRect = panel.GetComponent<RectTransform>();
-        if (IsMobilePlatform())
-        {
-            SetPanelAnchors(0.05f, 0.95f);
-        }
-        else
-        {
-            SetPanelAnchors(0.15f, 0.85f);
-        }
-        ApplyPanelTopOffset();
-
-        Image panelImg = panel.GetComponent<Image>();
-        panelImg.color = new Color(0.08f, 0.10f, 0.14f, 0.92f);
-        panelImg.raycastTarget = true;
-
-        VerticalLayoutGroup v = panel.GetComponent<VerticalLayoutGroup>();
-        v.childControlWidth = true;
-        v.childControlHeight = true;
-        v.childForceExpandWidth = true;
-        v.childForceExpandHeight = false;
-        v.spacing = 10f;
-        v.padding = new RectOffset(24, 24, 28, 18);
-
-        ContentSizeFitter fitter = panel.GetComponent<ContentSizeFitter>();
-        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-        GameObject arrowAnchor = new GameObject("ArrowStart", typeof(RectTransform), typeof(LayoutElement));
-        arrowAnchor.transform.SetParent(panel.transform, false);
-        LayoutElement arrowAnchorLe = arrowAnchor.GetComponent<LayoutElement>();
-        arrowAnchorLe.ignoreLayout = true;
-        arrowStartRect = arrowAnchor.GetComponent<RectTransform>();
-        arrowStartRect.sizeDelta = Vector2.zero;
-        ApplyArrowAnchorPlacement(usePanelCenter: false, useTopRight: false);
-
-        // Header: title only (leaving the tutorial is done via the normal Menu button).
-        titleText = CreateTMP(panel.transform, "Title", 54, FontStyles.Bold);
-
-        bodyText = CreateTMP(panel.transform, "Body", 36, FontStyles.Normal);
-
-        GameObject spacer = new GameObject("ButtonSpacer", typeof(RectTransform), typeof(LayoutElement));
-        spacer.transform.SetParent(panel.transform, false);
-        LayoutElement spacerLe = spacer.GetComponent<LayoutElement>();
-        spacerLe.minHeight = IsMobilePlatform() ? 18f : 12f;
-        spacerLe.flexibleHeight = 0f;
-
-        GameObject row = new GameObject("Buttons", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-        row.transform.SetParent(panel.transform, false);
-        HorizontalLayoutGroup h = row.GetComponent<HorizontalLayoutGroup>();
-        h.childControlWidth = true;
-        h.childControlHeight = true;
-        h.childForceExpandWidth = false;
-        h.childForceExpandHeight = false;
-        h.spacing = 12f;
-        h.childAlignment = TextAnchor.MiddleCenter;
-
-        float nextHeight = IsMobilePlatform() ? 86f : 64f;
-        float nextWidth = IsMobilePlatform() ? 520f : 360f;
-        nextButton = CreateButton(row.transform, "Next", out nextLabel, minWidth: nextWidth, flexibleWidth: 0f, minHeight: nextHeight, fontSize: IsMobilePlatform() ? 40 : 30);
-        nextLabel.text = "Next";
-        nextButton.onClick.AddListener(OnNextClicked);
-        nextButton.interactable = true;
-
-        // Pointer layer (arrows/highlights) - never blocks clicks.
-        GameObject pointer = new GameObject("Pointers", typeof(RectTransform));
-        pointer.transform.SetParent(root.transform, false);
-        pointerLayer = pointer.GetComponent<RectTransform>();
-        pointerLayer.anchorMin = Vector2.zero;
-        pointerLayer.anchorMax = Vector2.one;
-        pointerLayer.offsetMin = Vector2.zero;
-        pointerLayer.offsetMax = Vector2.zero;
-        // Keep pointers behind the tutorial panel so arrows don't draw over the tutorial text/buttons.
-        pointer.transform.SetAsFirstSibling();
-
-        GameObject highlight = new GameObject("Highlight", typeof(RectTransform), typeof(Image), typeof(Outline));
-        highlight.transform.SetParent(pointerLayer, false);
-        pointerHighlightRect = highlight.GetComponent<RectTransform>();
-        pointerHighlightRect.anchorMin = new Vector2(0.5f, 0.5f);
-        pointerHighlightRect.anchorMax = new Vector2(0.5f, 0.5f);
-        pointerHighlightRect.sizeDelta = new Vector2(120f, 60f);
-        pointerHighlightImage = highlight.GetComponent<Image>();
-        pointerHighlightImage.sprite = GetWhiteSprite();
-        pointerHighlightImage.color = new Color(0.18f, 0.52f, 0.82f, 0.18f);
-        pointerHighlightImage.raycastTarget = false;
-        Outline hiOutline = highlight.GetComponent<Outline>();
-        hiOutline.effectColor = new Color(0.18f, 0.52f, 0.82f, 0.85f);
-        hiOutline.effectDistance = new Vector2(4f, -4f);
-
-        GameObject arrow = new GameObject("Arrow", typeof(RectTransform), typeof(Image));
-        arrow.transform.SetParent(pointerLayer, false);
-        pointerArrowRect = arrow.GetComponent<RectTransform>();
-        pointerArrowRect.anchorMin = new Vector2(0.5f, 0.5f);
-        pointerArrowRect.anchorMax = new Vector2(0.5f, 0.5f);
-        pointerArrowRect.pivot = new Vector2(0.5f, 0.5f);
-        pointerArrowRect.sizeDelta = new Vector2(Mathf.Max(2f, pointerArrowThickness), 160f);
-        pointerArrowImage = arrow.GetComponent<Image>();
-        pointerArrowImage.sprite = tutorialArrowSprite != null ? tutorialArrowSprite : GetPointerArrowSprite();
-        pointerArrowImage.color = Color.white;
-        pointerArrowImage.raycastTarget = false;
-        pointerArrowRect.gameObject.SetActive(false);
-
-        CaptureDefaultPanelLayout();
-        HidePointer();
-    }
-
-    private TextMeshProUGUI CreateTMP(Transform parent, string name, int fontSize, FontStyles style)
-    {
-        GameObject go = new GameObject(name, typeof(RectTransform), typeof(TextMeshProUGUI), typeof(LayoutElement));
-        go.transform.SetParent(parent, false);
-
-        LayoutElement le = go.GetComponent<LayoutElement>();
-        le.flexibleWidth = 1f;
-        le.flexibleHeight = 0f;
-
-        TextMeshProUGUI tmp = go.GetComponent<TextMeshProUGUI>();
-        tmp.fontSize = fontSize;
-        tmp.fontStyle = style;
-        tmp.color = Color.white;
-        tmp.alignment = TextAlignmentOptions.TopLeft;
-        tmp.raycastTarget = false;
-        tmp.enableAutoSizing = false;
-        tmp.textWrappingMode = TextWrappingModes.Normal;
-
-        return tmp;
-    }
-
-    private Button CreateCompactButton(Transform parent, string name, out TextMeshProUGUI label, float minHeight, int fontSize)
-    {
-        GameObject go = new GameObject(name + "Button", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement), typeof(HorizontalLayoutGroup), typeof(ContentSizeFitter));
-        go.transform.SetParent(parent, false);
-
-        LayoutElement le = go.GetComponent<LayoutElement>();
-        le.minHeight = minHeight;
-        le.flexibleWidth = 0f;
-        le.minWidth = 0f;
-        le.preferredWidth = -1f;
-
-        HorizontalLayoutGroup layout = go.GetComponent<HorizontalLayoutGroup>();
-        layout.childControlWidth = true;
-        layout.childControlHeight = true;
-        layout.childForceExpandWidth = false;
-        layout.childForceExpandHeight = false;
-        layout.childAlignment = TextAnchor.MiddleCenter;
-        layout.spacing = 0f;
-        int padX = IsMobilePlatform() ? 22 : 16;
-        int padY = IsMobilePlatform() ? 10 : 8;
-        layout.padding = new RectOffset(padX, padX, padY, padY);
-
-        ContentSizeFitter fitter = go.GetComponent<ContentSizeFitter>();
-        fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-        Image img = go.GetComponent<Image>();
-        img.color = new Color(0.18f, 0.52f, 0.82f, 1f);
-
-        Button btn = go.GetComponent<Button>();
-        btn.targetGraphic = img;
-
-        GameObject textGO = new GameObject("Text", typeof(RectTransform), typeof(TextMeshProUGUI), typeof(LayoutElement));
-        textGO.transform.SetParent(go.transform, false);
-
-        LayoutElement textLe = textGO.GetComponent<LayoutElement>();
-        textLe.minWidth = 0f;
-        textLe.flexibleWidth = 0f;
-
-        label = textGO.GetComponent<TextMeshProUGUI>();
-        label.alignment = TextAlignmentOptions.Center;
-        label.fontSize = fontSize;
-        label.fontStyle = FontStyles.Bold;
-        label.color = Color.white;
-        label.raycastTarget = false;
-        label.enableAutoSizing = false;
-
-        return btn;
-    }
-
-    private Button CreateButton(Transform parent, string name, out TextMeshProUGUI label, float minWidth = 0f, float flexibleWidth = 1f, float minHeight = -1f, int fontSize = -1)
-    {
-        GameObject go = new GameObject(name + "Button", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
-        go.transform.SetParent(parent, false);
-
-        LayoutElement le = go.GetComponent<LayoutElement>();
-        le.minHeight = minHeight > 0f ? minHeight : (IsMobilePlatform() ? 86f : 64f);
-        le.minWidth = Mathf.Max(0f, minWidth);
-        le.flexibleWidth = flexibleWidth;
-
-        Image img = go.GetComponent<Image>();
-        img.color = new Color(0.18f, 0.52f, 0.82f, 1f);
-
-        Button btn = go.GetComponent<Button>();
-        btn.targetGraphic = img;
-
-        GameObject textGO = new GameObject("Text", typeof(RectTransform), typeof(TextMeshProUGUI));
-        textGO.transform.SetParent(go.transform, false);
-        RectTransform rt = textGO.GetComponent<RectTransform>();
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-
-        label = textGO.GetComponent<TextMeshProUGUI>();
-        label.alignment = TextAlignmentOptions.Center;
-        label.fontSize = fontSize > 0 ? fontSize : (IsMobilePlatform() ? 40 : 30);
-        label.fontStyle = FontStyles.Bold;
-        label.color = Color.white;
-        label.raycastTarget = false;
-
-        return btn;
-    }
 }
