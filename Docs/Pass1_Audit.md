@@ -108,7 +108,7 @@
 
 ### Assets/Scripts/Core/TurnManager.cs
 - Role: Orchestration
-- Turn-outcome relevance: Yes — Owns turn flow, mode rules, and save/load; it determines which side can act and when turns end.
+- Turn-outcome relevance: Yes - Owns turn flow, mode rules, and save/load; it determines which side can act and when turns end.
 - Dependencies (project scripts only): AIDifficultySelection, City, CityUIManager, ClipboardUtility, GameModeSelection, GameplayUIScaler, GridManager, GridUtils, OwnedSprite, SaveLoadRequest, SoundManager, TileHoverManager, TileVisibility, TutorialGate, TutorialLaunch, TutorialOverlay, Unit, UnitSelectionManager, UnitUIManager
 - Referenced-by: Assets/Scripts/Cities/City.cs, Assets/Scripts/Cities/CityUIManager.cs, Assets/Scripts/Core/GridManager.cs, Assets/Scripts/Gameplay/AIDifficultySelection.cs, Assets/Scripts/Gameplay/GameMenuActions.cs, Assets/Scripts/Gameplay/GameModeSelection.cs, Assets/Scripts/Input/TileHoverManager.cs, Assets/Scripts/Input/UnitSelectionManager.cs, Assets/Scripts/Tutorial/TutorialOverlay.cs, Assets/Scripts/UI/HotseatTurnOverlay.cs, Assets/Scripts/UI/MainMenuController.cs
 - Responsibility quality: Mixed
@@ -119,10 +119,26 @@
 - Pass-1 action:
   - Label for later refactor
 - Notes: Primary type: TurnManager.
+  - Responsibility breakdown:
+    - Turn & Mode Rules: `GameMode` (VsAI/Hotseat/PlayByPost), turn transitions (`EndCurrentTurn`, `BeginPlayerTurn`, `BeginHotseatOpponentTurn`, `AITurn`), control gating (`IsHumanTurn`, `IsCurrentSideOwner`, `CanControlUnit/City`).
+    - Economy: gold banks (`playerGold`/`aiGold`), income (`CollectPlayerIncome`, `CollectAIGold`), spending (`TrySpendGold`, `AddGold`), recruit affordability (`warriorCost`).
+    - Fog / Visibility: visibility computation (`ComputeVisibilityForSide`) and application (`RecalculatePlayerVisibility`) incl. enemy unit fog toggles.
+    - Save/Load + Serialization: `GameSave` schema, build/serialize (`BuildCurrentSave`, `SaveToFile`), restore (`LoadFromFile`), Play-by-Post export snapshot (`CopyCurrentStateToClipboard`, `PreparePlayByPostNextTurnSnapshot`).
+    - AI: turn coroutine (`AITurn`), decision logic (`RunAI`), movement/combat stepper (`MoveAIUnitOneStep`) with difficulty gates.
+    - UI glue / Quality-of-life: TMP text discovery (`EnsureTurnAndGoldTexts`), UI click plumbing (`EnsureEventSystemExists`, `EnsureUIRaycasters`), autosave triggers, and VsAI auto-end-turn (`ScheduleAutoEndTurnCheck`, `AutoEndTurnAfterDelay`).
+  - Multiplayer relevance (later): Multiplayer-critical hub (authoritative game state + I/O + AI + presentation in one place).
+    - Note: In Pass 2, TurnManager should be reduced to an orchestrator over a deterministic GameState + Action pipeline.
+  - Play-by-Post: export relies on `PreparePlayByPostNextTurnSnapshot`; must remain deterministic for fair replay/hand-off.
+  - Pass-1 safe micro-cleanups (optional, no behavior change):
+    - `EndCurrentTurn()` PlayByPost block: fix indentation/brace alignment to reduce edit-risk (no logic change).
+    - `LoadFromFile()`: remove duplicate `ClearSelection` + `RefreshMoveOutlinesForCurrentTurn` block (likely redundant).
+  - Do not touch in Pass 1:
+    - Do not change `GameSave` schema/fields (save compatibility and Play-by-Post exports).
+    - Do not change AI logic, fog rules, or random behavior yet.
 
 ### Assets/Scripts/Gameplay/AIDifficultySelection.cs
 - Role: Data
-- Turn-outcome relevance: Yes — Selects AI difficulty consumed by TurnManager, influencing AI turn behavior.
+- Turn-outcome relevance: Yes - Selects AI difficulty consumed by TurnManager, influencing AI turn behavior.
 - Dependencies (project scripts only): AIDifficulty, TurnManager
 - Referenced-by: Assets/Scripts/Core/TurnManager.cs, Assets/Scripts/UI/MainMenuController.cs
 - Responsibility quality: Single
@@ -211,7 +227,7 @@
 
 ### Assets/Scripts/Input/UnitSelectionManager.cs
 - Role: Input
-- Turn-outcome relevance: Yes — Resolves movement/attack/capture and triggers autosave/turn-end checks.
+- Turn-outcome relevance: Yes - Resolves movement/attack/capture and triggers autosave/turn-end checks.
 - Dependencies (project scripts only): City, GridUtils, SoundManager, TileHighlighter, TurnManager, TutorialGate, Unit, UnitUIManager
 - Referenced-by: Assets/Scripts/Core/TurnManager.cs, Assets/Scripts/Input/TileHoverManager.cs, Assets/Scripts/Tutorial/TutorialOverlay.cs
 - Responsibility quality: Mixed
@@ -221,6 +237,30 @@
 - Pass-1 action:
   - Label for later refactor
 - Notes: Primary type: UnitSelectionManager.
+  - Role / Responsibility:
+    - Owns both unit selection and action execution (moves + attacks), not just selection UI.
+    - Multiplayer-critical entry point because it directly mutates authoritative game state (positions/flags/combat results).
+  - Turn-Outcome Relevance:
+    - Directly affects: unit positions, combat resolution, city capture, and per-turn movement/attack flags.
+  - Key Dependencies:
+    - Turn flow + autosave/fog/capture callbacks: `TurnManager`.
+    - Core unit rules + flags + combat: `Unit`.
+    - Board queries: `GridUtils`.
+    - Reachable/attackable visualization: `TileHighlighter`.
+    - Selection UI panel: `UnitUIManager`.
+    - Tutorial gating and forced highlights: `TutorialGate`.
+    - Audio feedback: `SoundManager`.
+  - Multiplayer / Phase-2 Notes:
+    - Currently mutates `transform.position` directly (movement is applied immediately in the input handler).
+    - Game rules, UI, audio, fog-of-war, and autosave are mixed in one control flow (`TryMoveOrAttackAtPosition`).
+    - In Phase 2, split into action creation (input intent) + action resolution (deterministic state changes).
+  - Determinism & WEGO Considerations:
+    - Adjacency checks rely on floating-point distance thresholds (`tileSize` + `delta.magnitude`).
+    - Recommend switching to grid-delta (dx/dy) adjacency logic to avoid precision edge cases.
+    - Treat as a key entry point for future simultaneous-turn (WEGO) support.
+  - Pass-1 Status:
+    - Reviewed – no behavior changes in Phase 1.
+    - Do not refactor yet; Phase 2 label only.
 
 ### Assets/Scripts/Tutorial/TutorialBoot.cs
 - Role: Orchestration

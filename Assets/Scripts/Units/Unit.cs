@@ -54,7 +54,12 @@ public class Unit : MonoBehaviour
 
     void Awake()
     {
-        currentHealth = maxHealth;
+        // Only initialize HP if it hasn't been set yet (e.g., by load/spawn logic).
+        // This prevents overwriting loaded values that are assigned right after Instantiate().
+        if (currentHealth <= 0)
+        {
+            currentHealth = maxHealth;
+        }
         spriteRenderer = GetComponent<SpriteRenderer>();
         if (spriteRenderer == null)
         {
