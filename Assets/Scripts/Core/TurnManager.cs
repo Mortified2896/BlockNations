@@ -2145,6 +2145,7 @@ public class TurnManager : MonoBehaviour
 
     public void PlayByPostSyncNow()
     {
+        Debug.Log("PlayByPostSyncNow called");
         if (!isPlayByPostWaitingForExport || currentMode != GameMode.PlayByPost)
             return;
 
