@@ -1,3 +1,7 @@
+// CHANGELOG (PBp Auto Sync):
+// - Added transport abstraction + provider wiring for automatic Play-by-Post turn sync.
+// - Extracted `ApplyLoadedSave` and added `LoadFromJsonString` for transport/clipboard loads.
+// - Added PBp auto-submit + polling loop and `PlayByPostSyncNow` (manual fetch button hook).
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -60,6 +64,14 @@ public class TurnManager : MonoBehaviour
     [Tooltip("Optional panel shown when a Play-by-Post turn is finished (e.g., with a 'Copy JSON' button).")]
     public GameObject playByPostPopup;
 
+    [Header("Play By Post - Transport")]
+    public bool playByPostAutoSyncEnabled = true;
+    public float playByPostPollSeconds = 3f;
+    [Tooltip("Optional: a component that implements ITurnTransport. Overrides provider/default if set.")]
+    public MonoBehaviour turnTransportComponent;
+    [Tooltip("Optional: used to construct an ITurnTransport implementation when none is provided.")]
+    public TurnTransportProvider transportProvider;
+
     [Header("References")]
     public GridManager gridManager;
     public int visibilityRadius = 1;
@@ -97,6 +109,10 @@ public class TurnManager : MonoBehaviour
     // to copy/export the JSON state. While this is true,
     // no further actions should be taken in the scene.
     private bool isPlayByPostWaitingForExport = false;
+    private ITurnTransport turnTransport;
+    private Coroutine playByPostPollRoutine;
+    private int lastAppliedTurnNumberForPolling = 0;
+    private bool isPlayByPostFetchInProgress = false;
 
     private Coroutine autoEndTurnRoutine;
     private float lastHumanInputUnscaledTime = -999f;
@@ -234,6 +250,8 @@ public class TurnManager : MonoBehaviour
     void Start()
     {
         isPlayByPostWaitingForExport = false;
+        ResolveTurnTransport();
+        lastAppliedTurnNumberForPolling = turnNumber;
         EnsureTurnAndGoldTexts();
         EnsureEventSystemExists();
         EnsureUIRaycasters();
@@ -396,12 +414,176 @@ public class TurnManager : MonoBehaviour
             isPlayByPostWaitingForExport = true;
             AutoSaveIfEnabled();
 
-        if (playByPostPopup != null)
-        {
-            playByPostPopup.SetActive(true);
-        }
+            if (playByPostPopup != null)
+            {
+                playByPostPopup.SetActive(true);
+            }
 
             Debug.Log("Play-by-Post turn finished. Use the Copy JSON button to export this turn.");
+
+            if (playByPostAutoSyncEnabled)
+            {
+                ResolveTurnTransport();
+                if (TryBuildPlayByPostExportJson(out int exportTurnNumber, out string exportJson))
+                {
+                    lastAppliedTurnNumberForPolling = exportTurnNumber;
+
+                    if (ClipboardUtility.TryCopy(exportJson))
+                    {
+                        Debug.Log($"Play-by-Post JSON copied to clipboard ({exportJson.Length} chars).");
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"Failed to copy Play-by-Post JSON to clipboard ({exportJson.Length} chars). On WebGL this may require user interaction/permissions.");
+                    }
+
+                    StartCoroutine(SubmitPlayByPostTurnThenStartPolling(exportTurnNumber, exportJson));
+                }
+            }
+        }
+    }
+
+    private void ResolveTurnTransport()
+    {
+        if (turnTransportComponent != null && turnTransportComponent is ITurnTransport componentTransport)
+        {
+            turnTransport = componentTransport;
+            turnTransport.Initialize();
+            return;
+        }
+
+        if (transportProvider == null)
+        {
+            transportProvider = GetComponent<TurnTransportProvider>();
+            if (transportProvider == null)
+            {
+                transportProvider = gameObject.AddComponent<TurnTransportProvider>();
+                transportProvider.kind = TurnTransportProvider.TransportKind.InMemory;
+            }
+        }
+
+        turnTransport = transportProvider != null ? transportProvider.GetTransport() : null;
+        if (turnTransport == null)
+        {
+            turnTransport = new NullTurnTransport();
+            turnTransport.Initialize();
+        }
+    }
+
+    private IEnumerator SubmitPlayByPostTurnThenStartPolling(int exportTurnNumber, string exportJson)
+    {
+        if (turnTransport == null || !turnTransport.IsAvailable)
+        {
+            Debug.LogWarning("Play-by-Post auto-sync is enabled, but no transport is available. Manual copy/paste remains available.");
+            yield break;
+        }
+
+        bool submitOk = false;
+        string submitError = null;
+
+        yield return turnTransport.SubmitTurn(currentGameId, exportTurnNumber, exportJson, (ok, err) =>
+        {
+            submitOk = ok;
+            submitError = err;
+        });
+
+        if (submitOk)
+        {
+            Debug.Log($"PBp submit ok via {turnTransport.TransportName} (gameId={currentGameId}, turn={exportTurnNumber}).");
+        }
+        else
+        {
+            Debug.LogWarning($"PBp submit failed via {turnTransport.TransportName} (gameId={currentGameId}, turn={exportTurnNumber}): {submitError}");
+        }
+
+        StartPlayByPostPolling(exportTurnNumber);
+    }
+
+    private void StartPlayByPostPolling(int afterTurnNumber)
+    {
+        if (playByPostPollRoutine != null)
+        {
+            StopCoroutine(playByPostPollRoutine);
+            playByPostPollRoutine = null;
+        }
+
+        lastAppliedTurnNumberForPolling = afterTurnNumber;
+        playByPostPollRoutine = StartCoroutine(PlayByPostPollLoop());
+    }
+
+    private IEnumerator PlayByPostPollLoop()
+    {
+        float pollSeconds = Mathf.Max(0.25f, playByPostPollSeconds);
+
+        while (isPlayByPostWaitingForExport)
+        {
+            yield return TryFetchPlayByPostTurnOnce();
+            if (!isPlayByPostWaitingForExport)
+                break;
+
+            yield return new WaitForSecondsRealtime(pollSeconds);
+        }
+
+        playByPostPollRoutine = null;
+    }
+
+    private IEnumerator TryFetchPlayByPostTurnOnce()
+    {
+        if (!isPlayByPostWaitingForExport || currentMode != GameMode.PlayByPost)
+            yield break;
+
+        if (isPlayByPostFetchInProgress)
+            yield break;
+
+        if (turnTransport == null || !turnTransport.IsAvailable)
+            yield break;
+
+        isPlayByPostFetchInProgress = true;
+        bool ok = false;
+        string err = null;
+        int fetchedTurnNumber = 0;
+        string json = null;
+        int afterTurnNumber = lastAppliedTurnNumberForPolling;
+
+        yield return turnTransport.TryFetchNextTurn(currentGameId, afterTurnNumber, (success, error, turn, fetchedJson) =>
+        {
+            ok = success;
+            err = error;
+            fetchedTurnNumber = turn;
+            json = fetchedJson;
+        });
+
+        isPlayByPostFetchInProgress = false;
+
+        if (!ok)
+        {
+            if (err != "NO_TURN")
+            {
+                Debug.LogWarning($"PBp fetch failed via {turnTransport.TransportName} (gameId={currentGameId}, after={afterTurnNumber}): {err}");
+            }
+            yield break;
+        }
+
+        if (fetchedTurnNumber <= afterTurnNumber)
+        {
+            yield break;
+        }
+
+        Debug.Log($"PBp fetched turn {fetchedTurnNumber} via {turnTransport.TransportName} ({(json != null ? json.Length : 0)} chars).");
+
+        bool loaded = LoadFromJsonString(json);
+        if (loaded)
+        {
+            lastAppliedTurnNumberForPolling = fetchedTurnNumber;
+            if (playByPostPopup != null)
+            {
+                playByPostPopup.SetActive(false);
+            }
+            Debug.Log($"PBp loaded turn {fetchedTurnNumber} successfully.");
+        }
+        else
+        {
+            Debug.LogWarning($"PBp fetched turn {fetchedTurnNumber}, but failed to load JSON.");
         }
     }
 
@@ -1918,27 +2100,10 @@ public class TurnManager : MonoBehaviour
     /// </summary>
     public void CopyCurrentStateToClipboard()
     {
-        GameSave current = BuildCurrentSave();
-        if (current == null)
+        if (!TryBuildPlayByPostExportJson(out _, out string json))
         {
             return;
         }
-
-        GameSave saveForExport = current;
-
-        // For Play-by-Post we build a snapshot that already
-        // represents the *next* side's turn so the receiving
-        // player can simply load and start playing.
-        if (currentMode == GameMode.PlayByPost)
-        {
-            // Deep-copy via JSON so we don't mutate live state.
-            string tmp = JsonUtility.ToJson(current);
-            saveForExport = JsonUtility.FromJson<GameSave>(tmp);
-
-            PreparePlayByPostNextTurnSnapshot(saveForExport);
-        }
-
-        string json = JsonUtility.ToJson(saveForExport, playByPostExportPretty);
 
         if (ClipboardUtility.TryCopy(json))
         {
@@ -1948,6 +2113,43 @@ public class TurnManager : MonoBehaviour
         {
             Debug.LogWarning($"Failed to copy Play-by-Post JSON to clipboard ({json.Length} chars). On WebGL this may require user interaction/permissions.");
         }
+    }
+
+    internal bool TryBuildPlayByPostExportJson(out int exportTurnNumber, out string json)
+    {
+        exportTurnNumber = 0;
+        json = null;
+
+        GameSave current = BuildCurrentSave();
+        if (current == null)
+        {
+            return false;
+        }
+
+        GameSave saveForExport = current;
+
+        // For Play-by-Post we build a snapshot that already represents the *next* side's turn
+        // so the receiving player can simply load and start playing.
+        if (currentMode == GameMode.PlayByPost)
+        {
+            // Deep-copy via JSON so we don't mutate live state.
+            string tmp = JsonUtility.ToJson(current);
+            saveForExport = JsonUtility.FromJson<GameSave>(tmp);
+            PreparePlayByPostNextTurnSnapshot(saveForExport);
+        }
+
+        json = JsonUtility.ToJson(saveForExport, playByPostExportPretty);
+        exportTurnNumber = saveForExport.turnNumber;
+        return !string.IsNullOrWhiteSpace(json);
+    }
+
+    public void PlayByPostSyncNow()
+    {
+        if (!isPlayByPostWaitingForExport || currentMode != GameMode.PlayByPost)
+            return;
+
+        ResolveTurnTransport();
+        StartCoroutine(TryFetchPlayByPostTurnOnce());
     }
 
     public bool LoadFromFile(string path = null)
@@ -1984,183 +2186,242 @@ public class TurnManager : MonoBehaviour
             return false;
         }
 
-        // Basic grid validation: ensure saved tiles fit current grid.
-        int maxTileX = -1;
-        int maxTileY = -1;
-        foreach (SavedTile t in save.tiles)
+        return ApplyLoadedSave(save, targetPath);
+    }
+
+    public bool LoadFromJsonString(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
         {
-            if (t.x > maxTileX) maxTileX = t.x;
-            if (t.y > maxTileY) maxTileY = t.y;
-        }
-        if (maxTileX >= gridManager.width || maxTileY >= gridManager.height)
-        {
-            isLoadingFromSave = false;
-            Debug.LogError($"Save grid ({maxTileX + 1}x{maxTileY + 1}) does not fit current grid ({gridManager.width}x{gridManager.height}). Aborting load.");
+            Debug.LogWarning("LoadFromJsonString: json is empty.");
             return false;
         }
 
-        // Apply basic state
-        if (System.Enum.TryParse(save.mode, out GameMode loadedMode))
+        if (gridManager == null)
         {
-            currentMode = loadedMode;
-        }
-
-        // AI difficulty (optional for older saves)
-        aiDifficulty = AIDifficulty.Level1;
-        if (!string.IsNullOrEmpty(save.aiDifficulty) &&
-            System.Enum.TryParse(save.aiDifficulty, out AIDifficulty loadedDifficulty))
-        {
-            aiDifficulty = loadedDifficulty;
-        }
-        currentGameId = string.IsNullOrEmpty(save.gameId) ? System.Guid.NewGuid().ToString() : save.gameId;
-        isPlayerTurn = save.isPlayerTurn;
-        turnNumber = save.turnNumber;
-        playerGold = save.playerGold;
-        aiGold = save.aiGold;
-        gameOver = save.gameOver;
-        visibilityRadius = save.visibilityRadius;
-        isHotseatHandoff = false;
-        isPlayByPostWaitingForExport = false;
-        Time.timeScale = 1f;
-
-        // Clear units
-        Unit[] existingUnits = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
-        foreach (Unit u in existingUnits)
-        {
-            if (u != null)
-            {
-                Destroy(u.gameObject);
-            }
-        }
-
-        // Restore cities
-        City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
-        foreach (City city in cities)
-        {
-            city.stationedUnit = null;
-        }
-
-        foreach (SavedCity c in save.cities)
-        {
-            foreach (City city in cities)
-            {
-                if (city.x == c.x && city.y == c.y)
-                {
-                    city.isPlayerOwned = c.isPlayerOwned;
-                    city.hasRecruitedThisTurn = c.hasRecruitedThisTurn;
-                }
-            }
-        }
-
-        // Restore units
-        GameObject prefab = unitPrefab;
-        if (prefab == null)
-        {
-            // fallback: try grab from any city
-            foreach (City city in cities)
-            {
-                if (city.warriorPrefab != null)
-                {
-                    prefab = city.warriorPrefab;
-                    break;
-                }
-            }
-        }
-
-        if (prefab == null)
-        {
-            isLoadingFromSave = false;
-            Debug.LogError("No unit prefab configured (TurnManager.unitPrefab or any City.warriorPrefab). Cannot restore units; load aborted.");
+            Debug.LogWarning("Cannot load JSON: gridManager is null.");
             return false;
         }
 
-        foreach (SavedUnit u in save.units)
+        GameSave save;
+        isLoadingFromSave = true;
+        try
         {
-            Vector3 pos = new Vector3(u.x, u.y, u.z);
-            GameObject go = Instantiate(prefab, pos, Quaternion.identity);
-            Unit unit = go.GetComponent<Unit>();
-            if (unit != null)
-            {
-                unit.isPlayerOwned = u.isPlayerOwned;
-                unit.currentHealth = Mathf.Clamp(u.currentHealth, 1, unit.maxHealth);
-                unit.movesUsedThisTurn = Mathf.Clamp(u.movesUsedThisTurn, 0, unit.maxMovesPerTurn);
-                unit.hasAttackedThisTurn = u.hasAttackedThisTurn;
-                bool isCurrentSideUnit = currentMode != GameMode.Hotseat || (unit.isPlayerOwned == isPlayerTurn);
-                unit.SetFogVisibility(true, isCurrentSideUnit); // will be updated after visibility recalculation
-            }
-
-            OwnedSprite owned = go.GetComponent<OwnedSprite>();
-            if (owned != null)
-            {
-                owned.SetOwner(u.isPlayerOwned);
-            }
-
-            // Link to city if occupying one
-            foreach (City city in cities)
-            {
-                if (Vector3.SqrMagnitude(city.transform.position - pos) < 0.001f)
-                {
-                    city.stationedUnit = go;
-                    if (unit != null)
-                    {
-                        unit.currentCity = city;
-                    }
-                    break;
-                }
-            }
+            save = JsonUtility.FromJson<GameSave>(json);
+        }
+        catch (System.Exception ex)
+        {
+            isLoadingFromSave = false;
+            Debug.LogError("Failed to parse JSON save: " + ex.Message);
+            return false;
         }
 
-        // Update move outlines for the active side based on loaded move state
-        if (UnitSelectionManager.Instance != null)
-        {
-            UnitSelectionManager.Instance.ClearSelection();
-            UnitSelectionManager.Instance.RefreshMoveOutlinesForCurrentTurn();
-        }
+        return ApplyLoadedSave(save, "clipboard/transport");
+    }
 
-        // Restore tile seen state.
-        // For Play-by-Post we keep things simpler and recompute fog
-        // purely from current cities/units, ignoring remembered
-        // exploration from the save to avoid asymmetric artefacts.
-        foreach (TileVisibility tile in gridManager.GetAllTiles())
+    private bool ApplyLoadedSave(GameSave save, string debugSource)
+    {
+        try
         {
-            tile.ResetVisibilityState();
-        }
+            if (save == null)
+            {
+                Debug.LogError("Load failed: save was null.");
+                return false;
+            }
 
-        if (currentMode != GameMode.PlayByPost)
-        {
+            save.tiles ??= new List<SavedTile>();
+            save.units ??= new List<SavedUnit>();
+            save.cities ??= new List<SavedCity>();
+
+            // Basic grid validation: ensure saved tiles fit current grid.
+            int maxTileX = -1;
+            int maxTileY = -1;
             foreach (SavedTile t in save.tiles)
             {
-                if (gridManager.TryGetTile(t.x, t.y, out TileVisibility tile))
-                {
-                    // Use current side to drive visuals; for symmetric modes
-                    // (Hotseat), respect whose turn it is.
-                    bool activeSideIsPlayer = true;
-                    if (currentMode == GameMode.Hotseat)
-                    {
-                        activeSideIsPlayer = isPlayerTurn;
-                    }
+                if (t.x > maxTileX) maxTileX = t.x;
+                if (t.y > maxTileY) maxTileY = t.y;
+            }
+            if (maxTileX >= gridManager.width || maxTileY >= gridManager.height)
+            {
+                Debug.LogError($"Save grid ({maxTileX + 1}x{maxTileY + 1}) does not fit current grid ({gridManager.width}x{gridManager.height}). Aborting load.");
+                return false;
+            }
 
-                    tile.SetSeenState(t.playerSeen, t.opponentSeen, activeSideIsPlayer);
+            // Apply basic state
+            if (System.Enum.TryParse(save.mode, out GameMode loadedMode))
+            {
+                currentMode = loadedMode;
+            }
+
+            // AI difficulty (optional for older saves)
+            aiDifficulty = AIDifficulty.Level1;
+            if (!string.IsNullOrEmpty(save.aiDifficulty) &&
+                System.Enum.TryParse(save.aiDifficulty, out AIDifficulty loadedDifficulty))
+            {
+                aiDifficulty = loadedDifficulty;
+            }
+            currentGameId = string.IsNullOrEmpty(save.gameId) ? System.Guid.NewGuid().ToString() : save.gameId;
+            isPlayerTurn = save.isPlayerTurn;
+            turnNumber = save.turnNumber;
+            playerGold = save.playerGold;
+            aiGold = save.aiGold;
+            gameOver = save.gameOver;
+            visibilityRadius = save.visibilityRadius;
+            isHotseatHandoff = false;
+            isPlayByPostWaitingForExport = false;
+            Time.timeScale = 1f;
+
+            // Clear units
+            Unit[] existingUnits = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
+            foreach (Unit u in existingUnits)
+            {
+                if (u != null)
+                {
+                    Destroy(u.gameObject);
                 }
             }
-        }
 
-        // After loading, ensure selection is cleared and move outlines
-        // reflect the loaded movement state.
-        if (UnitSelectionManager.Instance != null)
+            // Restore cities
+            City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+            foreach (City city in cities)
+            {
+                city.stationedUnit = null;
+            }
+
+            foreach (SavedCity c in save.cities)
+            {
+                foreach (City city in cities)
+                {
+                    if (city.x == c.x && city.y == c.y)
+                    {
+                        city.isPlayerOwned = c.isPlayerOwned;
+                        city.hasRecruitedThisTurn = c.hasRecruitedThisTurn;
+                    }
+                }
+            }
+
+            // Restore units
+            GameObject prefab = unitPrefab;
+            if (prefab == null)
+            {
+                // fallback: try grab from any city
+                foreach (City city in cities)
+                {
+                    if (city.warriorPrefab != null)
+                    {
+                        prefab = city.warriorPrefab;
+                        break;
+                    }
+                }
+            }
+
+            if (prefab == null)
+            {
+                Debug.LogError("No unit prefab configured (TurnManager.unitPrefab or any City.warriorPrefab). Cannot restore units; load aborted.");
+                return false;
+            }
+
+            foreach (SavedUnit u in save.units)
+            {
+                Vector3 pos = new Vector3(u.x, u.y, u.z);
+                GameObject go = Instantiate(prefab, pos, Quaternion.identity);
+                Unit unit = go.GetComponent<Unit>();
+                if (unit != null)
+                {
+                    unit.isPlayerOwned = u.isPlayerOwned;
+                    unit.currentHealth = Mathf.Clamp(u.currentHealth, 1, unit.maxHealth);
+                    unit.movesUsedThisTurn = Mathf.Clamp(u.movesUsedThisTurn, 0, unit.maxMovesPerTurn);
+                    unit.hasAttackedThisTurn = u.hasAttackedThisTurn;
+                    bool isCurrentSideUnit = currentMode != GameMode.Hotseat || (unit.isPlayerOwned == isPlayerTurn);
+                    unit.SetFogVisibility(true, isCurrentSideUnit); // will be updated after visibility recalculation
+                }
+
+                OwnedSprite owned = go.GetComponent<OwnedSprite>();
+                if (owned != null)
+                {
+                    owned.SetOwner(u.isPlayerOwned);
+                }
+
+                // Link to city if occupying one
+                foreach (City city in cities)
+                {
+                    if (Vector3.SqrMagnitude(city.transform.position - pos) < 0.001f)
+                    {
+                        city.stationedUnit = go;
+                        if (unit != null)
+                        {
+                            unit.currentCity = city;
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // Update move outlines for the active side based on loaded move state
+            if (UnitSelectionManager.Instance != null)
+            {
+                UnitSelectionManager.Instance.ClearSelection();
+                UnitSelectionManager.Instance.RefreshMoveOutlinesForCurrentTurn();
+            }
+
+            // Restore tile seen state.
+            // For Play-by-Post we keep things simpler and recompute fog
+            // purely from current cities/units, ignoring remembered
+            // exploration from the save to avoid asymmetric artefacts.
+            foreach (TileVisibility tile in gridManager.GetAllTiles())
+            {
+                tile.ResetVisibilityState();
+            }
+
+            if (currentMode != GameMode.PlayByPost)
+            {
+                foreach (SavedTile t in save.tiles)
+                {
+                    if (gridManager.TryGetTile(t.x, t.y, out TileVisibility tile))
+                    {
+                        // Use current side to drive visuals; for symmetric modes
+                        // (Hotseat), respect whose turn it is.
+                        bool activeSideIsPlayer = true;
+                        if (currentMode == GameMode.Hotseat)
+                        {
+                            activeSideIsPlayer = isPlayerTurn;
+                        }
+
+                        tile.SetSeenState(t.playerSeen, t.opponentSeen, activeSideIsPlayer);
+                    }
+                }
+            }
+
+            // After loading, ensure selection is cleared and move outlines
+            // reflect the loaded movement state.
+            if (UnitSelectionManager.Instance != null)
+            {
+                UnitSelectionManager.Instance.ClearSelection();
+                UnitSelectionManager.Instance.RefreshMoveOutlinesForCurrentTurn();
+            }
+
+            UpdateGoldText();
+            RecalculatePlayerVisibility();
+            UpdateTurnText();
+            if (playByPostPopup != null)
+            {
+                playByPostPopup.SetActive(false);
+            }
+            lastAppliedTurnNumberForPolling = turnNumber;
+            Debug.Log("Game loaded from " + debugSource);
+
+            ScheduleAutoEndTurnCheck();
+            return true;
+        }
+        catch (System.Exception ex)
         {
-            UnitSelectionManager.Instance.ClearSelection();
-            UnitSelectionManager.Instance.RefreshMoveOutlinesForCurrentTurn();
+            Debug.LogError("ApplyLoadedSave failed: " + ex.Message);
+            return false;
         }
-
-        UpdateGoldText();
-        RecalculatePlayerVisibility();
-        UpdateTurnText();
-        Debug.Log("Game loaded from " + targetPath);
-        isLoadingFromSave = false;
-
-        ScheduleAutoEndTurnCheck();
-        return true;
+        finally
+        {
+            isLoadingFromSave = false;
+        }
     }
 
     public bool TrySpendGold(bool forPlayer, int amount)

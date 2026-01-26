@@ -500,4 +500,48 @@
   - Do not change fog rules or how `hasBeenSeen*` is promoted when visible.
 - Notes: Primary type: TileVisibility.
 
+## GameSave Semantics & Play-by-Post Contract
+
+There is a single GameSave JSON format used for:
+- Local save/load
+- Hotseat
+- Play-by-Post
+- Future online multiplayer
+
+However, there are two *intentional* ways this snapshot is produced:
+
+### 1) Neutral Snapshot (Current State)
+- Captures the exact current board state.
+- Does NOT advance turns.
+- Used for:
+  - local save/load
+  - debugging
+  - pause/resume
+
+Example source:
+- BuildCurrentSave()
+
+### 2) Next-Player Snapshot (Authoritative Turn Commit)
+- Represents the game state *after* a player has fully committed their turn.
+- The snapshot is always ready for the next player to act.
+- Used for:
+  - Play-by-Post clipboard export
+  - Online multiplayer storage (future)
+
+This snapshot:
+- Advances turn ownership (`isPlayerTurn`)
+- Applies end-of-turn rules (income, resets, visibility updates)
+- Is the ONLY format exchanged between players
+
+Example source:
+- PreparePlayByPostNextTurnSnapshot()
+
+### Invariant
+At any time:
+- Stored / shared multiplayer state is always a **next-player snapshot**
+- The server (or clipboard recipient) never receives partial turns
+
+PBp Fog Policy: On load, ignore saved tiles[] exploration memory and recompute fog from current units/cities only to prevent asymmetric fog artifacts / info leakage.
+
+Future upgrade note: Re-enable per-side exploration memory in PBp once active-side/ownership visuals are fully deterministic and tested
 
