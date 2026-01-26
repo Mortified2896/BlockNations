@@ -20,9 +20,7 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private GameObject aiDifficultyPanel;
     [SerializeField] private TMP_Text importStatusText;
 
-    [Header("Tutorial (Optional)")]
-    [SerializeField] private bool autoInjectTutorialButton = true;
-    [SerializeField] private string tutorialButtonLabel = "Tutorial";
+    [Header("Layout")]
     [SerializeField] private bool autoFitMenuToScreenOnDesktop = true;
     private bool tutorialLaunchQueued;
 
@@ -30,14 +28,9 @@ public class MainMenuController : MonoBehaviour
     {
         // Wait one frame so UI objects/panels are fully initialized and active state is stable.
         yield return null;
-        if (autoInjectTutorialButton)
-        {
-            TryInjectTutorialButtonIntoCanvasMenu();
-        }
-
         if (autoFitMenuToScreenOnDesktop)
         {
-            // One more frame so layouts are rebuilt after we potentially injected a button.
+            // One more frame so layouts are rebuilt after menus are activated.
             yield return null;
             TryAutoFitActiveMenuButtonContainer();
         }
@@ -73,11 +66,6 @@ public class MainMenuController : MonoBehaviour
             // Fallback if no difficulty panel is wired.
             StartVsAIGame(TurnManager.AIDifficulty.Level1);
         }
-    }
-
-    public void PlayTutorial()
-    {
-        RequestTutorialAndStartVsAIGame();
     }
 
     // Unity UI-friendly click handler for Canvas Buttons.
@@ -132,85 +120,6 @@ public class MainMenuController : MonoBehaviour
         tutorialLaunchQueued = true;
         TutorialLaunch.RequestShow(resetCompleted: true);
         StartVsAIGame(TurnManager.AIDifficulty.Level1);
-    }
-
-    private bool TryInjectTutorialButtonIntoCanvasMenu()
-    {
-        // If you switch to the runtime-built menu, that builder can add its own Tutorial button.
-        // This injection is a convenience for Canvas-based menus so you don't have to wire up
-        // a new button manually during prototyping.
-        if (Object.FindFirstObjectByType<MainMenuUIBuilder>() != null)
-            return false;
-
-        Button[] buttons = Object.FindObjectsByType<Button>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-        if (buttons == null || buttons.Length == 0)
-            return false;
-
-        foreach (Button b in buttons)
-        {
-            if (b == null) continue;
-            string label = GetButtonLabel(b);
-            if (!string.IsNullOrEmpty(label) && label.Trim() == tutorialButtonLabel)
-                return false;
-        }
-
-        Button reference = FindActiveButtonByLabelContains(buttons, "Continue") ??
-                           FindActiveButtonByLabelContains(buttons, "Play vs AI") ??
-                           FindActiveButtonByLabelContains(buttons, "Play") ??
-                           FindFirstActiveButton(buttons) ??
-                           FindButtonByLabelContains(buttons, "Continue") ??
-                           FindButtonByLabelContains(buttons, "Play vs AI") ??
-                           FindButtonByLabelContains(buttons, "Play") ??
-                           buttons[0];
-        if (reference == null)
-            return false;
-
-        Transform parent = reference.transform.parent;
-        if (parent == null)
-            return false;
-
-        // Clone an existing menu button so it matches the exact visuals/components (hover effects, sprites, TMP styles).
-        GameObject clone = Instantiate(reference.gameObject, parent, worldPositionStays: false);
-        clone.name = tutorialButtonLabel;
-        clone.SetActive(true);
-
-        // Insert above the first button in this group (but don't jump above titles/backgrounds).
-        int firstButtonIndex = reference.transform.GetSiblingIndex();
-        for (int i = 0; i < parent.childCount; i++)
-        {
-            Transform child = parent.GetChild(i);
-            if (child == null) continue;
-            if (child.GetComponent<Button>() != null)
-            {
-                firstButtonIndex = Mathf.Min(firstButtonIndex, i);
-            }
-        }
-        clone.transform.SetSiblingIndex(firstButtonIndex);
-
-        Button btn = clone.GetComponent<Button>();
-        if (btn == null)
-            return false;
-
-        // Replace the cloned click handler with our tutorial entrypoint.
-        btn.onClick = new Button.ButtonClickedEvent();
-        btn.onClick.AddListener(PlayTutorial);
-
-        // Update label(s).
-        TMP_Text tmp = clone.GetComponentInChildren<TMP_Text>(true);
-        if (tmp != null)
-        {
-            tmp.text = tutorialButtonLabel;
-        }
-        else
-        {
-            Text legacy = clone.GetComponentInChildren<Text>(true);
-            if (legacy != null)
-            {
-                legacy.text = tutorialButtonLabel;
-            }
-        }
-
-        return true;
     }
 
     private void TryAutoFitActiveMenuButtonContainer()
@@ -388,64 +297,6 @@ public class MainMenuController : MonoBehaviour
         }
 
         Canvas.ForceUpdateCanvases();
-    }
-
-    private static Button FindActiveButtonByLabelContains(Button[] buttons, string needle)
-    {
-        if (buttons == null || string.IsNullOrEmpty(needle))
-            return null;
-
-        string n = needle.ToLowerInvariant();
-        foreach (Button b in buttons)
-        {
-            if (b == null || !b.gameObject.activeInHierarchy) continue;
-            string label = GetButtonLabel(b);
-            if (string.IsNullOrEmpty(label)) continue;
-            if (label.ToLowerInvariant().Contains(n))
-                return b;
-        }
-        return null;
-    }
-
-    private static Button FindFirstActiveButton(Button[] buttons)
-    {
-        if (buttons == null) return null;
-        foreach (Button b in buttons)
-        {
-            if (b != null && b.gameObject.activeInHierarchy)
-                return b;
-        }
-        return null;
-    }
-
-    private static Button FindButtonByLabelContains(Button[] buttons, string needle)
-    {
-        if (buttons == null || string.IsNullOrEmpty(needle))
-            return null;
-
-        string n = needle.ToLowerInvariant();
-        foreach (Button b in buttons)
-        {
-            if (b == null) continue;
-            string label = GetButtonLabel(b);
-            if (string.IsNullOrEmpty(label)) continue;
-            if (label.ToLowerInvariant().Contains(n))
-                return b;
-        }
-        return null;
-    }
-
-    private static string GetButtonLabel(Button button)
-    {
-        if (button == null) return null;
-
-        TMP_Text tmp = button.GetComponentInChildren<TMP_Text>(true);
-        if (tmp != null) return tmp.text;
-
-        Text uText = button.GetComponentInChildren<Text>(true);
-        if (uText != null) return uText.text;
-
-        return button.name;
     }
 
     public void CloseAIDifficultyPanel()
