@@ -24,6 +24,7 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private bool autoInjectTutorialButton = true;
     [SerializeField] private string tutorialButtonLabel = "Tutorial";
     [SerializeField] private bool autoFitMenuToScreenOnDesktop = true;
+    private bool tutorialLaunchQueued;
 
     IEnumerator Start()
     {
@@ -76,8 +77,13 @@ public class MainMenuController : MonoBehaviour
 
     public void PlayTutorial()
     {
-        TutorialLaunch.RequestShow(resetCompleted: true);
-        StartVsAIGame(TurnManager.AIDifficulty.Level1);
+        RequestTutorialAndStartVsAIGame();
+    }
+
+    // Unity UI-friendly click handler for Canvas Buttons.
+    public void OnTutorialButtonClicked()
+    {
+        RequestTutorialAndStartVsAIGame();
     }
 
     // Optional: hook dedicated buttons to these for different difficulties.
@@ -116,6 +122,16 @@ public class MainMenuController : MonoBehaviour
         {
             aiDifficultyPanel.SetActive(false);
         }
+    }
+
+    private void RequestTutorialAndStartVsAIGame()
+    {
+        if (tutorialLaunchQueued || TutorialGate.IsActive)
+            return;
+
+        tutorialLaunchQueued = true;
+        TutorialLaunch.RequestShow(resetCompleted: true);
+        StartVsAIGame(TurnManager.AIDifficulty.Level1);
     }
 
     private bool TryInjectTutorialButtonIntoCanvasMenu()

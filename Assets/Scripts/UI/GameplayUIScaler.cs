@@ -10,6 +10,8 @@ public class GameplayUIScaler : MonoBehaviour
 {
     [Header("Bottom Panels (Unit/City UI)")]
     public bool autoScaleBottomPanels = true;
+    [Tooltip("Disable all runtime adjustments to the bottom panels (ButtomPopUp).")]
+    public bool skipBottomPanelsRuntimeAdjustments = true;
     [Tooltip("Name of the RectTransform root for the bottom panels (Unit/City UI).")]
     public string bottomPanelsRootName = "ButtomPopUp";
     [Range(0.25f, 1f)]
@@ -136,7 +138,7 @@ public class GameplayUIScaler : MonoBehaviour
         bool isMobile = Application.isMobilePlatform;
         bool isLandscape = Screen.width > Screen.height;
 
-        if (autoScaleBottomPanels && bottomPanelsRect != null)
+        if (!skipBottomPanelsRuntimeAdjustments && autoScaleBottomPanels && bottomPanelsRect != null)
         {
             if (!bottomPanelsOriginalCached)
             {
