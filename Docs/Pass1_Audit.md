@@ -412,15 +412,20 @@
 - Notes: Primary type: Unit.
 
 ### Assets/Scripts/Utilities/ClipboardUtility.cs
-- Role: Data
-- Turn-outcome relevance: No — Clipboard helper; does not resolve or change gameplay state by itself.
+- Role: Presentation + Data (clipboard export helper)
+- Turn-outcome relevance: No - Copies already-computed text (eg, save JSON) for manual sharing; does not change rules/actions.
+- Multiplayer relevance:
+  - Very important for WebGL Play-by-Post: clipboard is currently a manual export path for sharing the turn snapshot.
+  - Phase 2 likely keeps this as a fallback even after adding backend sync.
+- WebGL constraints:
+  - Requires JS plugin function `CopyToClipboard` via `DllImport("__Internal")` (WebGL only).
+  - May fail if the browser blocks clipboard access without a user gesture (or if permissions are denied).
 - Dependencies (project scripts only): (none found)
-- Referenced-by: Assets/Scripts/Core/TurnManager.cs
-- Responsibility quality: Single
-  - Focused on one primary behavior/service.
+- Referenced-by:
+  - Assets/Scripts/Core/TurnManager.cs: `CopyCurrentStateToClipboard()` uses `ClipboardUtility.TryCopy(json)`
 - Status: Keep
 - Pass-1 action:
-  - No action
+  - Keep; do not refactor now.
 - Notes: Primary type: ClipboardUtility.
 
 ### Assets/Scripts/Utilities/GridUtils.cs
@@ -472,15 +477,27 @@
 - Notes: Primary type: TileHighlighter.
 
 ### Assets/Scripts/Utilities/TileVisibility.cs
-- Role: Core
-- Turn-outcome relevance: Yes — Stores fog-of-war state that determines what tiles/units are visible to the active side.
-- Dependencies (project scripts only): (none found)
-- Referenced-by: Assets/Scripts/Core/GridManager.cs, Assets/Scripts/Core/TurnManager.cs, Assets/Scripts/Tutorial/TutorialOverlay.cs
-- Responsibility quality: Single
-  - Focused on one primary behavior/service.
-- Status: Keep
-- Pass-1 action:
-  - No action
+- Role: Core (Fog-of-war state holder) + Presentation (updates overlay renderers)
+- Turn-outcome relevance: Indirect
+  - Does not change rules/actions, but affects information visibility (what the active side can see).
+- Responsibilities:
+  - Stores per-tile coordinates (`gridX`, `gridY`)
+  - Stores per-side exploration memory (`hasBeenSeenPlayer`, `hasBeenSeenOpponent`)
+  - Stores "visible now" state for the currently active POV (`isVisibleNow`)
+  - Applies fog/explored visuals via `fogRenderer` / `exploredRenderer` in `UpdateVisuals()`
+  - Serialization support via `GetSeenState()` / `SetSeenState()`
+  - Reset helpers: `ResetVisibilityState()` clears both sides' seen state
+- Dependencies (project scripts): (none found)
+- Referenced-by:
+  - GridManager.cs (initialization & tileGrid storage)
+  - TurnManager.cs (visibility recalculation, save/load seen state)
+- Multiplayer relevance:
+  - Current design renders fog for a single "active side POV" at a time (via `currentSideIsPlayer`).
+  - In real multiplayer, fog should typically be computed server-side but rendered per-client; this class will likely remain client-side presentation, driven by received visibility state.
+  - `ResetVisibilityState()` wipes both sides' exploration memory; this is used to simplify Play-by-Post and avoid asymmetric fog artifacts; do not change without rethinking save/export rules.
+- Pass-1 status:
+  - Keep as-is.
+  - Do not change fog rules or how `hasBeenSeen*` is promoted when visible.
 - Notes: Primary type: TileVisibility.
 
 
