@@ -1,5 +1,4 @@
 using UnityEngine;
-using System;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -143,25 +142,25 @@ public class SoundManager : MonoBehaviour
 
     AudioClip PickClip(AudioClip[] options, AudioClip fallback)
     {
-        if (options != null && options.Length > 0)
-        {
-            List<AudioClip> pool = new List<AudioClip>();
-            foreach (AudioClip c in options)
-            {
-                if (c != null)
-                {
-                    pool.Add(c);
-                }
-            }
+        if (options == null || options.Length == 0)
+            return fallback;
 
-            if (pool.Count > 0)
+        AudioClip chosen = null;
+        int seen = 0;
+
+        for (int i = 0; i < options.Length; i++)
+        {
+            AudioClip c = options[i];
+            if (c == null) continue;
+
+            seen++;
+            if (UnityEngine.Random.Range(0, seen) == 0)
             {
-                int idx = UnityEngine.Random.Range(0, pool.Count);
-                return pool[idx];
+                chosen = c;
             }
         }
 
-        return fallback;
+        return chosen != null ? chosen : fallback;
     }
 
     public void PlayBackgroundMusic(AudioClip clip = null, bool restart = false)
