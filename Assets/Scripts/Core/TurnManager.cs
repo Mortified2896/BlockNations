@@ -30,7 +30,18 @@ public class TurnManager : MonoBehaviour
         Unfair
     }
 
+    //Dev only - Local seat selection for Play-by-Post testing only
+
+    public enum LocalSeat
+    {
+        Player1,
+        Player2
+    }
+
     public static TurnManager Instance { get; private set; }
+
+    [Header("Dev only - Play-by-Post")]
+    public LocalSeat localSeat = LocalSeat.Player1;
 
     [Header("Mode")]
     public GameMode currentMode = GameMode.None;
