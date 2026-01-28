@@ -529,6 +529,7 @@ public class TurnManager : MonoBehaviour
 
     private IEnumerator TryFetchPlayByPostTurnOnce()
     {
+        Debug.Log($"PBp fetch attempt started (gameId={currentGameId}, expectedTurn={lastAppliedTurnNumberForPolling + 1})");
         if (!isPlayByPostWaitingForExport || currentMode != GameMode.PlayByPost)
             yield break;
 
@@ -553,6 +554,7 @@ public class TurnManager : MonoBehaviour
             json = fetchedJson;
         });
 
+        Debug.Log($"PBp fetch result via {turnTransport.TransportName} (ok={ok}, turn={(fetchedTurnNumber != 0 ? fetchedTurnNumber.ToString() : "<none>")}, jsonLen={(json != null ? json.Length : 0)}, err={(err ?? "<null>")})");
         isPlayByPostFetchInProgress = false;
 
         if (!ok)
@@ -2145,13 +2147,23 @@ public class TurnManager : MonoBehaviour
 
     public void PlayByPostSyncNow()
     {
-        Debug.Log("PlayByPostSyncNow called");
+        
+        Debug.Log($"PlayByPostSyncNow called (mode={currentMode}, waiting={isPlayByPostWaitingForExport})");
         if (!isPlayByPostWaitingForExport || currentMode != GameMode.PlayByPost)
             return;
 
         ResolveTurnTransport();
-        StartCoroutine(TryFetchPlayByPostTurnOnce());
+        StartCoroutine(TryFetchPlayByPostTurnOnce());   
     }
+    
+    #if UNITY_EDITOR
+[ContextMenu("PBp Debug Sync Now")]
+private void PBpDebugSyncNow_Context()
+{
+    Debug.Log("PBp Debug Context Sync triggered");
+    PlayByPostSyncNow();
+}
+#endif
 
     public bool LoadFromFile(string path = null)
     {
