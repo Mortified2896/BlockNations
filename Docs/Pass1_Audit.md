@@ -545,3 +545,59 @@ PBp Fog Policy: On load, ignore saved tiles[] exploration memory and recompute f
 
 Future upgrade note: Re-enable per-side exploration memory in PBp once active-side/ownership visuals are fully deterministic and tested
 
+
+Multiplayer Roadmap
+
+How this maps to your multiplayer plan
+Step 1 — Localhost (dev phase)
+
+Unity Editor runs:
+
+the game client
+
+the HTTP server (or a small companion server)
+
+The client uses:
+
+http://localhost:PORT
+
+
+This validates:
+
+your HTTP API
+
+turn submission
+
+turn fetching
+
+error handling
+
+This is the easiest possible network environment.
+
+Step 2 — LAN (same Wi-Fi)
+
+Same exact code.
+
+Only difference:
+
+Server runs on one device
+
+Other device connects via:
+
+http://192.168.x.y:PORT
+
+
+Still HTTP.
+Still same endpoints.
+Still same transport code.
+
+Step 3 — Hosted server (internet)
+
+Again, same code.
+
+Only difference:
+
+https://your-server.com
+
+
+That’s why starting with localhost is so powerful.
