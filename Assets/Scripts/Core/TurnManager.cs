@@ -193,9 +193,19 @@ public class TurnManager : MonoBehaviour
         return true;
     }
 
+private bool LocalIsPlayerOwned()
+    {
+        return localSeat == LocalSeat.Player1;
+    }
     public bool IsCurrentSideOwner(bool isPlayerOwned)
     {
-        if (currentMode == GameMode.Hotseat || currentMode == GameMode.PlayByPost)
+        if (currentMode == GameMode.PlayByPost)
+        {
+            bool me = LocalIsPlayerOwned();
+            return (isPlayerTurn == me) && (isPlayerOwned == me);
+        }
+
+        if (currentMode == GameMode.Hotseat)
         {
             return isPlayerTurn == isPlayerOwned;
         }
