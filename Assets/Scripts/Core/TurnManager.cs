@@ -207,11 +207,9 @@ public class TurnManager : MonoBehaviour
         if (currentMode == GameMode.Hotseat)
             return true;
 
+        // Play-by-Post: only allow advancing when it's this local seat's turn.
         if (currentMode == GameMode.PlayByPost)
-        {
-            // Play-by-Post: only allow advancing when it's this local seat's turn.
             return isPlayerTurn == LocalIsPlayerOwned();
-        }
 
         return false;
     }
