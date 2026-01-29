@@ -193,10 +193,34 @@ public class TurnManager : MonoBehaviour
         return true;
     }
 
-private bool LocalIsPlayerOwned()
+    public bool CanAdvanceTurn()
+    {
+        if (gameOver || isHotseatHandoff || isPlayByPostWaitingForExport)
+            return false;
+
+        if (currentMode == GameMode.None)
+            return false;
+
+        if (currentMode == GameMode.VsAI)
+            return isPlayerTurn;
+
+        if (currentMode == GameMode.Hotseat)
+            return true;
+
+        if (currentMode == GameMode.PlayByPost)
+        {
+            // Play-by-Post: only allow advancing when it's this local seat's turn.
+            return isPlayerTurn == LocalIsPlayerOwned();
+        }
+
+        return false;
+    }
+
+    private bool LocalIsPlayerOwned()
     {
         return localSeat == LocalSeat.Player1;
     }
+
     public bool IsCurrentSideOwner(bool isPlayerOwned)
     {
         if (currentMode == GameMode.PlayByPost)
@@ -327,7 +351,7 @@ private bool LocalIsPlayerOwned()
     public void OnEndTurnButtonPressed()
     {
         Debug.Log($"OnEndTurnButtonPressed clicked (gameOver={gameOver}, isHotseatHandoff={isHotseatHandoff}, isHumanTurn={IsHumanTurn()})");
-        if (gameOver || isHotseatHandoff || !IsHumanTurn())
+        if (!CanAdvanceTurn())
         {
             // Ignore clicks if it's not the current human's turn
             return;
@@ -385,6 +409,9 @@ private bool LocalIsPlayerOwned()
 
     void EndCurrentTurn()
     {
+        if (!CanAdvanceTurn())
+            return;
+
         Debug.Log(GetCurrentSideName() + " ends Turn " + turnNumber);
 
         if (autoEndTurnRoutine != null)
