@@ -285,11 +285,7 @@ private bool LocalIsPlayerOwned()
         if (gameOver || isHotseatHandoff)
             return;
 
-        // Optional: keep Space for PC testing
-        if (IsHumanTurn() && Input.GetKeyDown(KeyCode.Space))
-        {
-            OnEndTurnButtonPressed();
-        }
+
 
         RecordHumanInputIfAny();
 
