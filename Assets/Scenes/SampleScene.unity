@@ -1452,6 +1452,7 @@ GameObject:
   m_Component:
   - component: {fileID: 509509619}
   - component: {fileID: 509509618}
+  - component: {fileID: 509509620}
   m_Layer: 0
   m_Name: TurnManager
   m_TagString: Untagged
@@ -1471,6 +1472,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e6148138f6feaf641b0a546c09283659, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TurnManager
+  localSeat: 0
   currentMode: 0
   isPlayerTurn: 1
   turnNumber: 1
@@ -1489,7 +1491,7 @@ MonoBehaviour:
   playByPostPopup: {fileID: 153686181}
   playByPostAutoSyncEnabled: 1
   playByPostPollSeconds: 3
-  turnTransportComponent: {fileID: 0}
+  turnTransportComponent: {fileID: 509509620}
   transportProvider: {fileID: 0}
   gridManager: {fileID: 575130739}
   visibilityRadius: 1
@@ -1518,6 +1520,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &509509620
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 509509617}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ab621ac022fa76f48aa9325c7893263b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FileTurnTransport
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
