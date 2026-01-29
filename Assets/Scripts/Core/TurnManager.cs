@@ -466,9 +466,13 @@ public class TurnManager : MonoBehaviour
             if (playByPostAutoSyncEnabled)
             {
                 ResolveTurnTransport();
-                if (TryBuildPlayByPostExportJson(out int exportTurnNumber, out string exportJson))
+                if (TryBuildPlayByPostExportSave(out GameSave exportSave, out string exportJson))
                 {
-                    lastAppliedTurnNumberForPolling = exportTurnNumber;
+                    int transportSeq = ComputeTransportSeq(exportSave);
+                    Debug.Log(
+                        $"PBp export verify: roundTurn={exportSave.turnNumber}, isPlayerTurn={exportSave.isPlayerTurn}, " +
+                        $"transportSeq={transportSeq}, lastAppliedTransportSeq={lastAppliedTurnNumberForPolling}");
+                    lastAppliedTurnNumberForPolling = transportSeq;
 
                     if (ClipboardUtility.TryCopy(exportJson))
                     {
@@ -479,7 +483,7 @@ public class TurnManager : MonoBehaviour
                         Debug.LogWarning($"Failed to copy Play-by-Post JSON to clipboard ({exportJson.Length} chars). On WebGL this may require user interaction/permissions.");
                     }
 
-                    StartCoroutine(SubmitPlayByPostTurnThenStartPolling(exportTurnNumber, exportJson));
+                    StartCoroutine(SubmitPlayByPostTurnThenStartPolling(transportSeq, exportJson));
                 }
             }
         }
@@ -512,7 +516,7 @@ public class TurnManager : MonoBehaviour
         }
     }
 
-    private IEnumerator SubmitPlayByPostTurnThenStartPolling(int exportTurnNumber, string exportJson)
+    private IEnumerator SubmitPlayByPostTurnThenStartPolling(int transportSeq, string exportJson)
     {
         if (turnTransport == null || !turnTransport.IsAvailable)
         {
@@ -523,7 +527,7 @@ public class TurnManager : MonoBehaviour
         bool submitOk = false;
         string submitError = null;
 
-        yield return turnTransport.SubmitTurn(currentGameId, exportTurnNumber, exportJson, (ok, err) =>
+        yield return turnTransport.SubmitTurn(currentGameId, transportSeq, exportJson, (ok, err) =>
         {
             submitOk = ok;
             submitError = err;
@@ -531,14 +535,14 @@ public class TurnManager : MonoBehaviour
 
         if (submitOk)
         {
-            Debug.Log($"PBp submit ok via {turnTransport.TransportName} (gameId={currentGameId}, turn={exportTurnNumber}).");
+            Debug.Log($"PBp submit ok via {turnTransport.TransportName} (gameId={currentGameId}, turn={transportSeq}).");
         }
         else
         {
-            Debug.LogWarning($"PBp submit failed via {turnTransport.TransportName} (gameId={currentGameId}, turn={exportTurnNumber}): {submitError}");
+            Debug.LogWarning($"PBp submit failed via {turnTransport.TransportName} (gameId={currentGameId}, turn={transportSeq}): {submitError}");
         }
 
-        StartPlayByPostPolling(exportTurnNumber);
+        StartPlayByPostPolling(transportSeq);
     }
 
     private void StartPlayByPostPolling(int afterTurnNumber)
@@ -613,6 +617,7 @@ public class TurnManager : MonoBehaviour
             yield break;
         }
 
+        Debug.Log($"PBp fetch verify: fetchedTransportSeq={fetchedTurnNumber}, previousTransportSeq={lastAppliedTurnNumberForPolling}");
         Debug.Log($"PBp fetched turn {fetchedTurnNumber} via {turnTransport.TransportName} ({(json != null ? json.Length : 0)} chars).");
 
         bool loaded = LoadFromJsonString(json);
@@ -2164,13 +2169,33 @@ public class TurnManager : MonoBehaviour
         exportTurnNumber = 0;
         json = null;
 
+        if (!TryBuildPlayByPostExportSave(out GameSave saveForExport, out string builtJson))
+        {
+            return false;
+        }
+
+        json = builtJson;
+        exportTurnNumber = saveForExport.turnNumber;
+        return true;
+    }
+
+    private static int ComputeTransportSeq(GameSave s)
+    {
+        return s.turnNumber * 2 + (s.isPlayerTurn ? 0 : 1);
+    }
+
+    private bool TryBuildPlayByPostExportSave(out GameSave saveForExport, out string json)
+    {
+        saveForExport = null;
+        json = null;
+
         GameSave current = BuildCurrentSave();
         if (current == null)
         {
             return false;
         }
 
-        GameSave saveForExport = current;
+        saveForExport = current;
 
         // For Play-by-Post we build a snapshot that already represents the *next* side's turn
         // so the receiving player can simply load and start playing.
@@ -2183,7 +2208,6 @@ public class TurnManager : MonoBehaviour
         }
 
         json = JsonUtility.ToJson(saveForExport, playByPostExportPretty);
-        exportTurnNumber = saveForExport.turnNumber;
         return !string.IsNullOrWhiteSpace(json);
     }
 
@@ -2462,7 +2486,14 @@ private void PBpDebugSyncNow_Context()
             {
                 playByPostPopup.SetActive(false);
             }
-            lastAppliedTurnNumberForPolling = turnNumber;
+            if (currentMode == GameMode.PlayByPost)
+            {
+                lastAppliedTurnNumberForPolling = ComputeTransportSeq(save);
+            }
+            else
+            {
+                lastAppliedTurnNumberForPolling = turnNumber;
+            }
             Debug.Log("Game loaded from " + debugSource);
 
             ScheduleAutoEndTurnCheck();
