@@ -2640,6 +2640,7 @@ private void PBpDebugSyncNow_Context()
             if (unit.isPlayerOwned == nextIsPlayer)
             {
                 unit.movesUsedThisTurn = 0;
+                unit.hasAttackedThisTurn = false;
             }
         }
     }
