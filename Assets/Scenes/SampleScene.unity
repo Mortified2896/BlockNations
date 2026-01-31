@@ -1453,6 +1453,7 @@ GameObject:
   - component: {fileID: 509509619}
   - component: {fileID: 509509618}
   - component: {fileID: 509509620}
+  - component: {fileID: 509509621}
   m_Layer: 0
   m_Name: TurnManager
   m_TagString: Untagged
@@ -1493,6 +1494,7 @@ MonoBehaviour:
   playByPostPollSeconds: 3
   turnTransportComponent: {fileID: 509509620}
   transportProvider: {fileID: 0}
+  telemetrySinkComponent: {fileID: 509509621}
   gridManager: {fileID: 575130739}
   visibilityRadius: 1
   unitPrefab: {fileID: 8613717610168908074, guid: 201cae50cac1013489cb65af371b9783, type: 3}
@@ -1532,6 +1534,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ab621ac022fa76f48aa9325c7893263b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FileTurnTransport
+--- !u!114 &509509621
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 509509617}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2ec4caf994f439b46ab02ce08de6c1af, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DebugTurnTelemetrySink
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
@@ -4127,8 +4141,8 @@ RectTransform:
   - {fileID: 153686182}
   m_Father: {fileID: 1909878712}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0.03671706}
-  m_AnchorMax: {x: 1, y: 0.9492441}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}

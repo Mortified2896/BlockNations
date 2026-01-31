@@ -83,6 +83,10 @@ public class TurnManager : MonoBehaviour
     [Tooltip("Optional: used to construct an ITurnTransport implementation when none is provided.")]
     public TurnTransportProvider transportProvider;
 
+    [Header("Telemetry")]
+    [Tooltip("Optional: a component that implements ITurnTelemetrySink.")]
+    public MonoBehaviour telemetrySinkComponent;
+
     [Header("References")]
     public GridManager gridManager;
     public int visibilityRadius = 1;
@@ -121,6 +125,7 @@ public class TurnManager : MonoBehaviour
     // no further actions should be taken in the scene.
     private bool isPlayByPostWaitingForExport = false;
     private ITurnTransport turnTransport;
+    private ITurnTelemetrySink telemetrySink = NullTurnTelemetrySink.Instance;
     private Coroutine playByPostPollRoutine;
     private int lastAppliedTurnNumberForPolling = 0;
     private bool isPlayByPostFetchInProgress = false;
@@ -177,6 +182,8 @@ public class TurnManager : MonoBehaviour
 
     // Stable id for the current campaign/save chain so exports can be shared
     private string currentGameId;
+    private string cachedGameIdRaw;
+    private string cachedGameIdHash;
 
     public bool IsHumanTurn()
     {
@@ -288,6 +295,7 @@ public class TurnManager : MonoBehaviour
         }
 
         Instance = this;
+        ResolveTelemetrySink();
     }
 
     void Start()
@@ -364,7 +372,7 @@ public class TurnManager : MonoBehaviour
             return;
         }
 
-        EndCurrentTurn();
+        EndCurrentTurn(true);
     }
 
     public void OnPlayAgainButtonPressed()
@@ -405,10 +413,15 @@ public class TurnManager : MonoBehaviour
         }
     }
 
-    void EndCurrentTurn()
+    void EndCurrentTurn(bool userInitiated = false)
     {
         if (!CanAdvanceTurn())
             return;
+
+        if (userInitiated)
+        {
+            TryEmitEndTurnTelemetry();
+        }
 
         Debug.Log(GetCurrentSideName() + " ends Turn " + turnNumber);
 
@@ -491,29 +504,157 @@ public class TurnManager : MonoBehaviour
 
     private void ResolveTurnTransport()
     {
+        float start = Time.realtimeSinceStartup;
+        ITurnTransport resolved = null;
+        bool resolvedWasNull = false;
+        string telemetryTransportName = null;
+
         if (turnTransportComponent != null && turnTransportComponent is ITurnTransport componentTransport)
         {
-            turnTransport = componentTransport;
-            turnTransport.Initialize();
-            return;
+            resolved = componentTransport;
+            telemetryTransportName = resolved.TransportName;
+            resolved.Initialize();
         }
-
-        if (transportProvider == null)
+        else
         {
-            transportProvider = GetComponent<TurnTransportProvider>();
             if (transportProvider == null)
             {
-                transportProvider = gameObject.AddComponent<TurnTransportProvider>();
-                transportProvider.kind = TurnTransportProvider.TransportKind.InMemory;
+                transportProvider = GetComponent<TurnTransportProvider>();
+                if (transportProvider == null)
+                {
+                    transportProvider = gameObject.AddComponent<TurnTransportProvider>();
+                    transportProvider.kind = TurnTransportProvider.TransportKind.InMemory;
+                }
+            }
+
+            resolved = transportProvider != null ? transportProvider.GetTransport() : null;
+            if (resolved == null)
+            {
+                resolvedWasNull = true;
+                telemetryTransportName = TurnTelemetryConstants.ProviderNullTransport;
+                resolved = new NullTurnTransport();
+                resolved.Initialize();
             }
         }
 
-        turnTransport = transportProvider != null ? transportProvider.GetTransport() : null;
-        if (turnTransport == null)
+        if (resolved != null && telemetryTransportName == null)
         {
-            turnTransport = new NullTurnTransport();
-            turnTransport.Initialize();
+            telemetryTransportName = resolved.TransportName;
         }
+
+        bool ok = resolved != null && resolved.IsAvailable;
+        string err = ok ? null : (resolvedWasNull ? TurnTelemetryConstants.NullTransport : TurnTelemetryConstants.Unavailable);
+
+        if (string.IsNullOrWhiteSpace(telemetryTransportName))
+        {
+            telemetryTransportName = resolved != null ? resolved.TransportName : "Null";
+        }
+
+        turnTransport = resolved;
+        if (!(turnTransport is TelemetryTurnTransport))
+        {
+            turnTransport = new TelemetryTurnTransport(
+                turnTransport,
+                telemetrySink,
+                () => currentMode.ToString(),
+                GetCurrentGameIdHash);
+        }
+
+        float durationMs = (Time.realtimeSinceStartup - start) * 1000f;
+        TryEmitTransportTelemetry(
+            TurnTelemetryConstants.Resolve,
+            telemetryTransportName,
+            ok,
+            err,
+            durationMs,
+            0,
+            null,
+            null);
+    }
+
+    private void ResolveTelemetrySink()
+    {
+        if (telemetrySinkComponent != null && telemetrySinkComponent is ITurnTelemetrySink sink)
+        {
+            telemetrySink = sink;
+        }
+        else
+        {
+            telemetrySink = NullTurnTelemetrySink.Instance;
+        }
+    }
+
+    private void TryEmitTransportTelemetry(
+        string op,
+        string transport,
+        bool ok,
+        string err,
+        float durationMs,
+        int payloadChars,
+        int? seqA,
+        int? seqB)
+    {
+        if (telemetrySink == null)
+            return;
+
+        try
+        {
+            telemetrySink.OnTransportOp(
+                op,
+                transport,
+                ok,
+                err,
+                durationMs,
+                payloadChars,
+                seqA,
+                seqB,
+                currentMode.ToString(),
+                GetCurrentGameIdHash());
+        }
+        catch
+        {
+        }
+    }
+
+    private void TryEmitEndTurnTelemetry()
+    {
+        if (telemetrySink == null)
+            return;
+
+        try
+        {
+            telemetrySink.OnEndTurnPressed(
+                currentMode.ToString(),
+                turnNumber,
+                GetCurrentGameIdHash());
+        }
+        catch
+        {
+        }
+    }
+
+    private void SetCurrentGameId(string gameId)
+    {
+        if (currentGameId == gameId)
+            return;
+
+        currentGameId = gameId;
+        cachedGameIdRaw = null;
+        cachedGameIdHash = null;
+    }
+
+    private string GetCurrentGameIdHash()
+    {
+        if (string.IsNullOrEmpty(currentGameId))
+            return null;
+
+        if (currentGameId != cachedGameIdRaw)
+        {
+            cachedGameIdRaw = currentGameId;
+            cachedGameIdHash = Hash128.Compute(currentGameId).ToString();
+        }
+
+        return cachedGameIdHash;
     }
 
     private IEnumerator SubmitPlayByPostTurnThenStartPolling(int transportSeq, string exportJson)
@@ -854,7 +995,7 @@ public class TurnManager : MonoBehaviour
 
         if (string.IsNullOrEmpty(currentGameId))
         {
-            currentGameId = System.Guid.NewGuid().ToString();
+            SetCurrentGameId(System.Guid.NewGuid().ToString());
         }
 
         if (GameModeSelection.TryConsume(out GameMode pendingMode))
@@ -977,7 +1118,7 @@ public class TurnManager : MonoBehaviour
                 break;
 
             Debug.Log("Auto-ending turn: no available actions.");
-            EndCurrentTurn();
+            EndCurrentTurn(false);
             break;
         }
 
@@ -2085,9 +2226,14 @@ public class TurnManager : MonoBehaviour
             return null;
         }
 
+        if (string.IsNullOrEmpty(currentGameId))
+        {
+            SetCurrentGameId(System.Guid.NewGuid().ToString());
+        }
+
         GameSave save = new GameSave
         {
-            gameId = string.IsNullOrEmpty(currentGameId) ? (currentGameId = System.Guid.NewGuid().ToString()) : currentGameId,
+            gameId = currentGameId,
             mode = currentMode.ToString(),
             aiDifficulty = aiDifficulty.ToString(),
             isPlayerTurn = isPlayerTurn,
@@ -2339,7 +2485,7 @@ private void PBpDebugSyncNow_Context()
             {
                 aiDifficulty = loadedDifficulty;
             }
-            currentGameId = string.IsNullOrEmpty(save.gameId) ? System.Guid.NewGuid().ToString() : save.gameId;
+            SetCurrentGameId(string.IsNullOrEmpty(save.gameId) ? System.Guid.NewGuid().ToString() : save.gameId);
             isPlayerTurn = save.isPlayerTurn;
             turnNumber = save.turnNumber;
             playerGold = save.playerGold;
