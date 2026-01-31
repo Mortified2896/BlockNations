@@ -129,6 +129,9 @@ public class TurnManager : MonoBehaviour
     private Coroutine playByPostPollRoutine;
     private int lastAppliedTurnNumberForPolling = 0;
     private bool isPlayByPostFetchInProgress = false;
+    private bool playByPostLastFetchWasNoTurn = false;
+    private float playByPostLastNoTurnLogTime = -999f;
+    private const float PlayByPostNoTurnLogCooldownSeconds = 5f;
 
     private Coroutine autoEndTurnRoutine;
     private float lastHumanInputUnscaledTime = -999f;
@@ -741,7 +744,22 @@ public class TurnManager : MonoBehaviour
             json = fetchedJson;
         });
 
-        Debug.Log($"PBp fetch result via {turnTransport.TransportName} (ok={ok}, turn={(fetchedTurnNumber != 0 ? fetchedTurnNumber.ToString() : "<none>")}, jsonLen={(json != null ? json.Length : 0)}, err={(err ?? "<null>")})");
+        bool isNoTurn = !ok && err == TurnTelemetryConstants.NoTurn;
+        float now = Time.realtimeSinceStartup;
+        bool shouldLogNoTurn = isNoTurn &&
+                               (!playByPostLastFetchWasNoTurn || (now - playByPostLastNoTurnLogTime) >= PlayByPostNoTurnLogCooldownSeconds);
+
+        if (!isNoTurn || shouldLogNoTurn)
+        {
+            Debug.Log($"PBp fetch result via {turnTransport.TransportName} (ok={ok}, turn={(fetchedTurnNumber != 0 ? fetchedTurnNumber.ToString() : "<none>")}, jsonLen={(json != null ? json.Length : 0)}, err={(err ?? "<null>")})");
+        }
+
+        if (isNoTurn)
+        {
+            playByPostLastNoTurnLogTime = now;
+        }
+
+        playByPostLastFetchWasNoTurn = isNoTurn;
         isPlayByPostFetchInProgress = false;
 
         if (!ok)
