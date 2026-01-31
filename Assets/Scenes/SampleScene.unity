@@ -1454,6 +1454,7 @@ GameObject:
   - component: {fileID: 509509618}
   - component: {fileID: 509509620}
   - component: {fileID: 509509621}
+  - component: {fileID: 509509622}
   m_Layer: 0
   m_Name: TurnManager
   m_TagString: Untagged
@@ -1492,7 +1493,7 @@ MonoBehaviour:
   playByPostPopup: {fileID: 153686181}
   playByPostAutoSyncEnabled: 1
   playByPostPollSeconds: 3
-  turnTransportComponent: {fileID: 509509620}
+  turnTransportComponent: {fileID: 509509622}
   transportProvider: {fileID: 0}
   telemetrySinkComponent: {fileID: 509509621}
   gridManager: {fileID: 575130739}
@@ -1546,6 +1547,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2ec4caf994f439b46ab02ce08de6c1af, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DebugTurnTelemetrySink
+--- !u!114 &509509622
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 509509617}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7c5a1255c2c725e4cae82c79d2069747, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HttpTurnTransport
+  baseUrl: http://127.0.0.1:8080
+  timeoutSeconds: 10
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
