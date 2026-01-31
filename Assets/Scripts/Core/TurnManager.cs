@@ -719,7 +719,11 @@ public class TurnManager : MonoBehaviour
 
     private IEnumerator TryFetchPlayByPostTurnOnce()
     {
-        Debug.Log($"PBp fetch attempt started (gameId={currentGameId}, expectedTurn={lastAppliedTurnNumberForPolling + 1})");
+        float now = Time.realtimeSinceStartup;
+        if (!playByPostLastFetchWasNoTurn || (now - playByPostLastNoTurnLogTime) >= PlayByPostNoTurnLogCooldownSeconds)
+        {
+            Debug.Log($"PBp fetch attempt started (gameId={currentGameId}, expectedTurn={lastAppliedTurnNumberForPolling + 1})");
+        }
         if (!isPlayByPostWaitingForExport || currentMode != GameMode.PlayByPost)
             yield break;
 
@@ -745,7 +749,6 @@ public class TurnManager : MonoBehaviour
         });
 
         bool isNoTurn = !ok && err == TurnTelemetryConstants.NoTurn;
-        float now = Time.realtimeSinceStartup;
         bool shouldLogNoTurn = isNoTurn &&
                                (!playByPostLastFetchWasNoTurn || (now - playByPostLastNoTurnLogTime) >= PlayByPostNoTurnLogCooldownSeconds);
 
