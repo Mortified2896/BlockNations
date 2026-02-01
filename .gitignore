@@ -30,3 +30,6 @@ Thumbs.db
 # ===== Crash / error logs =====
 *.stackdump
 SysInfo.txt
+
+# Unity recovery files
+Assets/_Recovery/
