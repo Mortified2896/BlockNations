@@ -18,11 +18,14 @@ public class MainMenuController : MonoBehaviour
     [Header("UI")]
     [SerializeField] private GameObject modeSelectionPanel;
     [SerializeField] private GameObject aiDifficultyPanel;
+    [SerializeField] private TMP_InputField joinGameIdInput;
     [SerializeField] private TMP_Text importStatusText;
 
     [Header("Layout")]
     [SerializeField] private bool autoFitMenuToScreenOnDesktop = true;
     private bool tutorialLaunchQueued;
+    private const string PlayByPostGameIdKey = "pbp_gameId";
+    private const string PlayByPostIsPlayer1Key = "pbp_isPlayer1";
 
     IEnumerator Start()
     {
@@ -325,6 +328,54 @@ public class MainMenuController : MonoBehaviour
 
     public void PlayByPost()
     {
+        string gameId = GetOrCreatePlayByPostGameId();
+        PlayerPrefs.SetInt(PlayByPostIsPlayer1Key, 1);
+        PlayerPrefs.Save();
+        if (ClipboardUtility.TryCopy(gameId))
+        {
+            Debug.Log($"Play-by-Post game id copied to clipboard ({gameId}).");
+            SetImportStatus($"Game code: {gameId} (copied to clipboard)");
+        }
+        else
+        {
+            Debug.LogWarning($"Failed to copy Play-by-Post game id to clipboard ({gameId}).");
+            SetImportStatus($"Game code: {gameId}");
+        }
+
+        GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
+        SceneManager.LoadScene(gameplaySceneName);
+
+        if (modeSelectionPanel != null)
+        {
+            modeSelectionPanel.SetActive(false);
+        }
+    }
+
+    public void JoinPlayByPostFromInput()
+    {
+        string gameId = joinGameIdInput != null ? joinGameIdInput.text : null;
+        gameId = string.IsNullOrWhiteSpace(gameId) ? null : gameId.Trim();
+
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            string clipboard = GUIUtility.systemCopyBuffer;
+            if (!string.IsNullOrWhiteSpace(clipboard))
+            {
+                gameId = clipboard.Trim();
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            SetImportStatus("Enter a game id or copy one to the clipboard.");
+            return;
+        }
+
+        PlayerPrefs.SetString(PlayByPostGameIdKey, gameId);
+        PlayerPrefs.SetInt(PlayByPostIsPlayer1Key, 0);
+        PlayerPrefs.Save();
+        SetImportStatus($"Joining game: {gameId}");
+
         GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
         SceneManager.LoadScene(gameplaySceneName);
 
@@ -460,5 +511,17 @@ public class MainMenuController : MonoBehaviour
     public void QuitGame()
     {
         Application.Quit();
+    }
+
+    private string GetOrCreatePlayByPostGameId()
+    {
+        string gameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            gameId = System.Guid.NewGuid().ToString();
+            PlayerPrefs.SetString(PlayByPostGameIdKey, gameId);
+        }
+
+        return gameId;
     }
 }

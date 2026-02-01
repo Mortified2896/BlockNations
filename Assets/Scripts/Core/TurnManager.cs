@@ -132,6 +132,8 @@ public class TurnManager : MonoBehaviour
     private bool playByPostLastFetchWasNoTurn = false;
     private float playByPostLastNoTurnLogTime = -999f;
     private const float PlayByPostNoTurnLogCooldownSeconds = 5f;
+    private const string PlayByPostIsPlayer1Key = "pbp_isPlayer1";
+    private const string PlayByPostGameIdKey = "pbp_gameId";
 
     private Coroutine autoEndTurnRoutine;
     private float lastHumanInputUnscaledTime = -999f;
@@ -226,6 +228,11 @@ public class TurnManager : MonoBehaviour
 
     private bool LocalIsPlayerOwned()
     {
+        if (currentMode == GameMode.PlayByPost)
+        {
+            return PlayerPrefs.GetInt(PlayByPostIsPlayer1Key, 1) != 0;
+        }
+
         return localSeat == LocalSeat.Player1;
     }
 
@@ -472,7 +479,7 @@ public class TurnManager : MonoBehaviour
             isPlayByPostWaitingForExport = true;
             AutoSaveIfEnabled();
 
-            if (playByPostPopup != null)
+            if (ShouldShowPlayByPostPopup())
             {
                 playByPostPopup.SetActive(true);
             }
@@ -573,6 +580,30 @@ public class TurnManager : MonoBehaviour
             0,
             null,
             null);
+    }
+
+    private bool ShouldShowPlayByPostPopup()
+    {
+        if (playByPostPopup == null)
+            return false;
+
+        return !IsHttpPlayByPostTransport();
+    }
+
+    private bool IsHttpPlayByPostTransport()
+    {
+        string transportName = null;
+
+        if (turnTransportComponent is ITurnTransport componentTransport)
+        {
+            transportName = componentTransport.TransportName;
+        }
+        else if (turnTransport != null)
+        {
+            transportName = turnTransport.TransportName;
+        }
+
+        return string.Equals(transportName, "Http", System.StringComparison.OrdinalIgnoreCase);
     }
 
     private void ResolveTelemetrySink()
@@ -770,6 +801,10 @@ public class TurnManager : MonoBehaviour
             if (err != "NO_TURN")
             {
                 Debug.LogWarning($"PBp fetch failed via {turnTransport.TransportName} (gameId={currentGameId}, after={afterTurnNumber}): {err}");
+            }
+            if (err == TurnTelemetryConstants.NoTurn && currentMode == GameMode.PlayByPost && !LocalIsPlayerOwned())
+            {
+                SetPlayByPostWaitingForHostText();
             }
             yield break;
         }
@@ -1014,11 +1049,6 @@ public class TurnManager : MonoBehaviour
         aiGold = startingGold;
         aiDifficulty = AIDifficulty.Level1;
 
-        if (string.IsNullOrEmpty(currentGameId))
-        {
-            SetCurrentGameId(System.Guid.NewGuid().ToString());
-        }
-
         if (GameModeSelection.TryConsume(out GameMode pendingMode))
         {
             SetGameMode(pendingMode);
@@ -1027,6 +1057,15 @@ public class TurnManager : MonoBehaviour
         {
             SetGameMode(GameMode.VsAI);
             Debug.Log("No mode preselected. Defaulting to Vs AI.");
+        }
+
+        if (currentMode == GameMode.PlayByPost)
+        {
+            InitializePlayByPostSession();
+        }
+        else if (string.IsNullOrEmpty(currentGameId))
+        {
+            SetCurrentGameId(System.Guid.NewGuid().ToString());
         }
 
         if (AIDifficultySelection.TryConsume(out AIDifficulty pendingDifficulty))
@@ -1052,6 +1091,34 @@ public class TurnManager : MonoBehaviour
         if (currentMode == GameMode.Hotseat)
         {
             ShowHotseatHandoff(isPlayerTurn, false);
+        }
+    }
+
+    private void InitializePlayByPostSession()
+    {
+        string gameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            gameId = System.Guid.NewGuid().ToString();
+            PlayerPrefs.SetString(PlayByPostGameIdKey, gameId);
+            PlayerPrefs.Save();
+        }
+        SetCurrentGameId(gameId);
+
+        if (!LocalIsPlayerOwned())
+        {
+            isPlayByPostWaitingForExport = true;
+            if (playByPostPopup != null)
+            {
+                playByPostPopup.SetActive(false);
+            }
+            lastAppliedTurnNumberForPolling = -1;
+            SetPlayByPostWaitingForHostText();
+            if (playByPostAutoSyncEnabled)
+            {
+                ResolveTurnTransport();
+                StartPlayByPostPolling(-1);
+            }
         }
     }
 
@@ -2195,6 +2262,15 @@ public class TurnManager : MonoBehaviour
         turnText.text = $"Turn {turnNumber} - {who}";
     }
 
+    private void SetPlayByPostWaitingForHostText()
+    {
+        EnsureTurnAndGoldTexts();
+        if (turnText == null)
+            return;
+
+        turnText.text = "Waiting for host";
+    }
+
     string GetDefaultSavePath()
     {
         return Path.Combine(Application.persistentDataPath, autoSaveFileName);
@@ -2656,6 +2732,17 @@ private void PBpDebugSyncNow_Context()
             if (currentMode == GameMode.PlayByPost)
             {
                 lastAppliedTurnNumberForPolling = ComputeTransportSeq(save);
+                bool localTurn = isPlayerTurn == LocalIsPlayerOwned();
+                isPlayByPostWaitingForExport = !localTurn;
+                if (!localTurn)
+                {
+                    SetPlayByPostWaitingForHostText();
+                    if (playByPostAutoSyncEnabled && playByPostPollRoutine == null)
+                    {
+                        ResolveTurnTransport();
+                        StartPlayByPostPolling(lastAppliedTurnNumberForPolling);
+                    }
+                }
             }
             else
             {

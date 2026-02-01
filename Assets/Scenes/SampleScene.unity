@@ -1559,7 +1559,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7c5a1255c2c725e4cae82c79d2069747, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HttpTurnTransport
-  baseUrl: http://127.0.0.1:8080
+  baseUrl: http://192.168.0.27:8080
   timeoutSeconds: 10
 --- !u!1 &519420028
 GameObject:
@@ -4156,8 +4156,8 @@ RectTransform:
   - {fileID: 153686182}
   m_Father: {fileID: 1909878712}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
+  m_AnchorMin: {x: 0, y: 0.03671706}
+  m_AnchorMax: {x: 1, y: 0.9492441}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
