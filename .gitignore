@@ -33,3 +33,8 @@ SysInfo.txt
 
 # Unity recovery files
 Assets/_Recovery/
+
+# PBp turn saves (local test data)
+data/PlayByPost/Turns/
+data/PlayByPost/Turns/**
+data/PlayByPost/Turns/**/*.json
