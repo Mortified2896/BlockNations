@@ -1,0 +1,63 @@
+HOW TO START THE BLOCK NATIONS PLAY-BY-POST SERVER (LOCAL)
+
+1) REQUIREMENTS
+- Node.js installed (https://nodejs.org, LTS is fine)
+- Port 8080 must be free
+
+2) OPEN TERMINAL (macOS)
+Cmd + Space → type "Terminal" → Enter
+
+3) GO TO THE PROJECT FOLDER
+cd /Users/Jo/Documents/GitHub/BlockNations
+
+4) START THE SERVER
+node server.js
+
+You should see something like:
+[pbp] server listening on 0.0.0.0:8080
+
+Leave this terminal open while playing.
+
+5) VERIFY SERVER IS RUNNING
+In a NEW terminal window, run:
+curl http://127.0.0.1:8080/healthz
+
+Expected output:
+{"ok":true}
+
+6) FIND LOCAL IP (FOR IPHONE / OTHER DEVICES)
+ipconfig getifaddr en0
+
+Example output:
+192.168.0.27
+
+Use this address in the game:
+http://192.168.0.27:8080
+
+7) HOSTING A GAME (IN BLOCK NATIONS)
+- Start the game
+- Choose "Multiplayer by Post"
+- Click "Create Game"
+- Game code is copied to clipboard
+- Send the game code to the other player
+
+8) JOINING A GAME
+- Start the game on another device/editor
+- Choose "Multiplayer by Post"
+- Click "Join Game"
+- Paste the game code
+- Game shows "Waiting for opponent"
+
+9) IMPORTANT NOTES
+- The server must stay running (do NOT close the terminal)
+- USB cable is NOT required after installing the iOS app
+- Devices must be on the SAME Wi-Fi network
+- This setup is LAN-only (no internet play yet)
+
+10) STOP THE SERVER
+In the terminal running the server, press:
+Ctrl + C
+
+TROUBLESHOOTING
+- If curl /healthz fails → server is not running
+- If iPhone cannot connect → check Wi-Fi, IP address, firewall
