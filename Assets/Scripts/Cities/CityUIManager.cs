@@ -349,6 +349,22 @@ public class CityUIManager : MonoBehaviour
         lastRecruitAttemptFrame = Time.frameCount;
         lastRecruitAttemptSucceeded = false;
 
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+        {
+            TurnManager tm = turnManager != null ? turnManager : TurnManager.Instance;
+            int pbpIsPlayer1 = PlayerPrefs.GetInt("pbp_isPlayer1", -1);
+            string cityName = currentCity != null ? currentCity.name : "<null>";
+            string mode = tm != null ? tm.currentMode.ToString() : "<null>";
+            bool canControl = tm != null && currentCity != null && tm.CanControlCity(currentCity);
+            int goldP1 = tm != null ? tm.playerGold : -1;
+            int goldP2 = tm != null ? tm.aiGold : -1;
+
+            Debug.Log(
+                $"[recruit] click city={cityName} cityNull={(currentCity == null)} mode={mode} isPlayerTurn={(tm != null ? tm.isPlayerTurn : false)} pbp_isPlayer1={pbpIsPlayer1} cityOwned={(currentCity != null ? currentCity.isPlayerOwned : false)} canControl={canControl} goldP1={goldP1} goldP2={goldP2} hasUnit={(currentCity != null && currentCity.stationedUnit != null)} recruitedThisTurn={(currentCity != null && currentCity.hasRecruitedThisTurn)}"
+            );
+        }
+#endif
+
         if (TutorialGate.IsActive && TutorialGate.CanRecruitWarrior != null && !TutorialGate.CanRecruitWarrior())
         {
             if (SoundManager.Instance != null)
@@ -381,5 +397,16 @@ public class CityUIManager : MonoBehaviour
         // Let the city handle spawning the Warrior
         currentCity.SpawnWarrior();
         lastRecruitAttemptSucceeded = currentCity.stationedUnit != null;
+
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+        {
+            TurnManager tm = turnManager != null ? turnManager : TurnManager.Instance;
+            int goldP1 = tm != null ? tm.playerGold : -1;
+            int goldP2 = tm != null ? tm.aiGold : -1;
+            Debug.Log(
+                $"[recruit] result city={(currentCity != null ? currentCity.name : "<null>")} succeeded={lastRecruitAttemptSucceeded} hasUnitNow={(currentCity != null && currentCity.stationedUnit != null)} goldP1={goldP1} goldP2={goldP2}"
+            );
+        }
+#endif
     }
 }

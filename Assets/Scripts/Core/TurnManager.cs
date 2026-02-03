@@ -2276,6 +2276,44 @@ public class TurnManager : MonoBehaviour
         return Path.Combine(Application.persistentDataPath, autoSaveFileName);
     }
 
+    private string NormalizeSavePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return GetDefaultSavePath();
+        }
+
+        string normalizedPath = path;
+        string normalizedDataPath = Application.dataPath;
+
+        try
+        {
+            normalizedPath = Path.GetFullPath(path);
+        }
+        catch
+        {
+            // If path normalization fails, fall back to the provided path.
+        }
+
+        try
+        {
+            normalizedDataPath = Path.GetFullPath(Application.dataPath);
+        }
+        catch
+        {
+            // Best-effort: keep the raw dataPath.
+        }
+
+        if (!string.IsNullOrEmpty(normalizedDataPath) &&
+            normalizedPath.StartsWith(normalizedDataPath, System.StringComparison.Ordinal))
+        {
+            Debug.LogWarning($"Save path points inside Application.dataPath; redirecting to persistentDataPath. path={normalizedPath}");
+            return GetDefaultSavePath();
+        }
+
+        return path;
+    }
+
     public void AutoSaveIfEnabled()
     {
         if (!autoSaveEnabled || isLoadingFromSave)
@@ -2291,6 +2329,7 @@ public class TurnManager : MonoBehaviour
         {
             targetPath = GetDefaultSavePath();
         }
+        targetPath = NormalizeSavePath(targetPath);
 
         if (gridManager == null)
         {
@@ -2481,6 +2520,7 @@ private void PBpDebugSyncNow_Context()
         {
             targetPath = GetDefaultSavePath();
         }
+        targetPath = NormalizeSavePath(targetPath);
 
         if (!File.Exists(targetPath))
         {
@@ -2494,7 +2534,16 @@ private void PBpDebugSyncNow_Context()
             return false;
         }
 
-        string json = File.ReadAllText(targetPath);
+        string json;
+        try
+        {
+            json = File.ReadAllText(targetPath);
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError($"Failed to read save at {targetPath}: {ex.Message}");
+            return false;
+        }
         GameSave save;
         isLoadingFromSave = true;
         try

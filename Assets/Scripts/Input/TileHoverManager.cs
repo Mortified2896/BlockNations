@@ -5,8 +5,45 @@ public class TileHoverManager : MonoBehaviour
 {
     public static TileHoverManager Instance { get; private set; }
 
+    [SerializeField] private bool useNewInputSystemPointerOverUi = false;
+
     private TileHighlighter hoveredTile;
     private TileHighlighter selectedTile;
+
+    private static bool IsPointerOverUi(bool useNewInputSystemPointerOverUi)
+    {
+        // On mobile, EventSystem.current.IsPointerOverGameObject() without a pointer id checks the
+        // "mouse" pointer and can return false for touches, causing world clicks to leak through UI.
+        if (EventSystem.current == null)
+            return false;
+
+#if ENABLE_INPUT_SYSTEM
+        if (useNewInputSystemPointerOverUi)
+        {
+            var touches = UnityEngine.InputSystem.EnhancedTouch.Touch.activeTouches;
+            for (int i = 0; i < touches.Count; i++)
+            {
+                var touch = touches[i];
+                if (EventSystem.current.IsPointerOverGameObject(touch.touchId))
+                    return true;
+            }
+        }
+#endif
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.touchCount > 0)
+        {
+            for (int i = 0; i < Input.touchCount; i++)
+            {
+                Touch t = Input.GetTouch(i);
+                if (EventSystem.current.IsPointerOverGameObject(t.fingerId))
+                    return true;
+            }
+        }
+#endif
+
+        return EventSystem.current.IsPointerOverGameObject();
+    }
 
     void Awake()
     {
@@ -22,7 +59,7 @@ public class TileHoverManager : MonoBehaviour
     void Update()
     {
         // Ignore world interaction when the pointer is over UI (buttons, panels, overlays).
-        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+        if (IsPointerOverUi(useNewInputSystemPointerOverUi))
         {
             return;
         }
