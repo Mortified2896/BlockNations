@@ -29,6 +29,11 @@ public class MainMenuController : MonoBehaviour
 
     IEnumerator Start()
     {
+        if (joinGameIdInput != null && IsPlaceholderGameId(joinGameIdInput.text))
+        {
+            joinGameIdInput.text = string.Empty;
+        }
+
         // Wait one frame so UI objects/panels are fully initialized and active state is stable.
         yield return null;
         if (autoFitMenuToScreenOnDesktop)
@@ -328,7 +333,8 @@ public class MainMenuController : MonoBehaviour
 
     public void PlayByPost()
     {
-        string gameId = GetOrCreatePlayByPostGameId();
+        string gameId = System.Guid.NewGuid().ToString();
+        PlayerPrefs.SetString(PlayByPostGameIdKey, gameId);
         PlayerPrefs.SetInt(PlayByPostIsPlayer1Key, 1);
         PlayerPrefs.Save();
         if (ClipboardUtility.TryCopy(gameId))
@@ -365,9 +371,9 @@ public class MainMenuController : MonoBehaviour
             }
         }
 
-        if (string.IsNullOrWhiteSpace(gameId))
+        if (string.IsNullOrWhiteSpace(gameId) || IsPlaceholderGameId(gameId))
         {
-            SetImportStatus("Enter a game id or copy one to the clipboard.");
+            SetImportStatus("Enter a game id.");
             return;
         }
 
@@ -523,5 +529,17 @@ public class MainMenuController : MonoBehaviour
         }
 
         return gameId;
+    }
+
+    private static bool IsPlaceholderGameId(string gameId)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            return false;
+        }
+
+        string trimmed = gameId.Trim();
+        return trimmed.Equals("code", System.StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("enter game code", System.StringComparison.OrdinalIgnoreCase);
     }
 }

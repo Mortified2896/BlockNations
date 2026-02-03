@@ -6,7 +6,7 @@ const path = require("path");
 
 const fsp = fs.promises;
 
-const HOST = process.env.HOST || "127.0.0.1";
+const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number.parseInt(process.env.PORT || "8080", 10);
 const JSON_BODY_LIMIT = "2mb";
 const JSON_BYTE_CAP = 2_000_000;
@@ -23,6 +23,10 @@ if (!Number.isInteger(PORT) || PORT <= 0 || PORT >= 65536) {
 }
 
 const app = express();
+app.use((req, res, next) => {
+  console.log(`[req] ${req.method} ${req.url}`);
+  next();
+});
 app.use(cors());
 app.use(express.json({ limit: JSON_BODY_LIMIT, strict: true }));
 
@@ -288,6 +292,7 @@ app.use((err, req, res, next) => {
 
 const server = app.listen(PORT, HOST, () => {
   logStartup();
+  console.log(`[pbp] listening on ${HOST}:${PORT}`);
 });
 
 server.on("error", (err) => {
