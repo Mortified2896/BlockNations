@@ -1,4 +1,4 @@
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_EDITOR && UI_CLICK_DEBUG
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
