@@ -506,6 +506,7 @@ public class TurnManager : MonoBehaviour
                         Debug.LogWarning($"Failed to copy Play-by-Post JSON to clipboard ({exportJson.Length} chars). On WebGL this may require user interaction/permissions.");
                     }
 
+                    SaveManifestService.RecordPlayByPostExport(currentGameId, turnTransport != null ? turnTransport.TransportName : null);
                     StartCoroutine(SubmitPlayByPostTurnThenStartPolling(transportSeq, exportJson));
                 }
             }
@@ -929,8 +930,6 @@ public class TurnManager : MonoBehaviour
         if (gameOver)
             yield break;
 
-        AutoSaveIfEnabled();
-
         // Back to player
         turnNumber++;
         BeginPlayerTurn();
@@ -972,6 +971,14 @@ public class TurnManager : MonoBehaviour
         Debug.Log(GetCurrentSideName() + " turn " + turnNumber + " begins.");
 
         ScheduleAutoEndTurnCheck();
+
+        if (currentMode == GameMode.VsAI)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.Log("[Turn] Post-refresh autosave at start of player turn.");
+#endif
+            AutoSaveIfEnabled();
+        }
     }
 
     void BeginHotseatOpponentTurn()
@@ -2347,6 +2354,7 @@ public class TurnManager : MonoBehaviour
             Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
             File.WriteAllText(targetPath, json);
             Debug.Log("Game saved to " + targetPath);
+            SaveManifestService.RecordLocalSave(currentGameId, currentMode, targetPath, gameOver);
         }
         catch (IOException ex)
         {
@@ -2458,6 +2466,7 @@ public class TurnManager : MonoBehaviour
 
         json = builtJson;
         exportTurnNumber = saveForExport.turnNumber;
+        SaveManifestService.RecordPlayByPostExport(currentGameId, null);
         return true;
     }
 
@@ -2798,6 +2807,16 @@ private void PBpDebugSyncNow_Context()
                 lastAppliedTurnNumberForPolling = turnNumber;
             }
             Debug.Log("Game loaded from " + debugSource);
+
+            SaveManifestService.RecordLoadApplied(currentGameId, currentMode, gameOver);
+
+            if (currentMode == GameMode.VsAI && !isPlayerTurn && !gameOver)
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.Log("[Turn] Resuming AI turn after load.");
+#endif
+                StartCoroutine(AITurn());
+            }
 
             ScheduleAutoEndTurnCheck();
             return true;

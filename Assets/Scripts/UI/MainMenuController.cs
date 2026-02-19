@@ -444,6 +444,7 @@ public class MainMenuController : MonoBehaviour
         public string mode;
         public bool isPlayerTurn;
         public int turnNumber;
+        public bool gameOver;
     }
 
     public void ImportFromPastedJson()
@@ -488,6 +489,7 @@ public class MainMenuController : MonoBehaviour
         }
 
         Debug.Log($"Importing pasted save to {path} (mode: {header.mode}, turn {header.turnNumber})");
+        SaveManifestService.RecordImportedSave(header.gameId, header.mode, header.gameOver, path);
         SaveLoadRequest.RequestLoad(path);
         SceneManager.LoadScene(gameplaySceneName);
     }

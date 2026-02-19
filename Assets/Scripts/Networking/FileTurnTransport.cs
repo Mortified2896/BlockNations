@@ -78,6 +78,7 @@ public sealed class FileTurnTransport : MonoBehaviour, ITurnTransport
         {
             string gameFolder = GetGameFolderPath(gameId);
             Directory.CreateDirectory(gameFolder);
+            SaveManifestService.RecordPlayByPostFileFolder(gameFolder, gameId);
 
             string finalPath = Path.Combine(gameFolder, GetTurnFileName(turnNumber));
             tmpPath = finalPath + ".tmp";
@@ -147,6 +148,7 @@ public sealed class FileTurnTransport : MonoBehaviour, ITurnTransport
                 done?.Invoke(false, "NO_TURN", 0, null);
                 yield break;
             }
+            SaveManifestService.RecordPlayByPostFileFolder(gameFolder, gameId);
 
             int bestTurn = 0;
             string bestPath = null;
