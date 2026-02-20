@@ -1,9 +1,22 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
 public static class TurnIndicatorService
 {
+    private const string PlayByPostModeString = "PlayByPost";
+    private static readonly long CacheTtlTicks = TimeSpan.FromSeconds(2).Ticks;
+    private static readonly Dictionary<string, CachedTurnIndicator> CacheByGameId = new Dictionary<string, CachedTurnIndicator>();
+
+    private struct CachedTurnIndicator
+    {
+        public bool success;
+        public bool isMyTurn;
+        public string reason;
+        public long computedUtcTicks;
+    }
+
     [Serializable]
     private class MinimalPlayByPostState
     {
@@ -24,21 +37,31 @@ public static class TurnIndicatorService
             return false;
         }
 
+        if (TryGetCached(gameId, out CachedTurnIndicator cached))
+        {
+            isMyTurn = cached.isMyTurn;
+            debugReason = cached.reason;
+            return cached.success;
+        }
+
         if (!LocalPlayerSeatStore.TryGetSeat(gameId, out int seatOrPlayerIndex))
         {
             debugReason = "SEAT_UNKNOWN";
+            SetCached(gameId, success: false, isMyTurn: false, debugReason: debugReason);
             return false;
         }
 
         if (!TryReadLatestState(gameId, out MinimalPlayByPostState state, out string stateReason))
         {
             debugReason = stateReason;
+            SetCached(gameId, success: false, isMyTurn: false, debugReason: debugReason);
             return false;
         }
 
         bool amPlayer1 = seatOrPlayerIndex == 0;
         isMyTurn = state.isPlayerTurn == amPlayer1;
         debugReason = "OK";
+        SetCached(gameId, success: true, isMyTurn: isMyTurn, debugReason: debugReason);
         return true;
     }
 
@@ -131,7 +154,7 @@ public static class TurnIndicatorService
                 return false;
             }
 
-            if (!string.Equals(parsed.mode, TurnManager.GameMode.PlayByPost.ToString(), StringComparison.Ordinal))
+            if (!string.Equals(parsed.mode, PlayByPostModeString, StringComparison.Ordinal))
             {
                 return false;
             }
@@ -169,5 +192,33 @@ public static class TurnIndicatorService
 
         string middle = name.Substring(prefix.Length, name.Length - prefix.Length - suffix.Length);
         return int.TryParse(middle, out turnNumber) && turnNumber > 0;
+    }
+
+    private static bool TryGetCached(string gameId, out CachedTurnIndicator cached)
+    {
+        if (CacheByGameId.TryGetValue(gameId, out cached))
+        {
+            long ageTicks = DateTime.UtcNow.Ticks - cached.computedUtcTicks;
+            if (ageTicks >= 0 && ageTicks <= CacheTtlTicks)
+            {
+                return true;
+            }
+
+            CacheByGameId.Remove(gameId);
+        }
+
+        cached = default;
+        return false;
+    }
+
+    private static void SetCached(string gameId, bool success, bool isMyTurn, string debugReason)
+    {
+        CacheByGameId[gameId] = new CachedTurnIndicator
+        {
+            success = success,
+            isMyTurn = isMyTurn,
+            reason = debugReason,
+            computedUtcTicks = DateTime.UtcNow.Ticks
+        };
     }
 }

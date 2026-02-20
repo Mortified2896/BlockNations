@@ -49,7 +49,9 @@ public class MainMenuController : MonoBehaviour
     private HttpTurnTransport cachedHttpTransport;
 
     public event Action ActivePbpGamesChanged;
+    public event Action PbpBadgeChanged;
     public IReadOnlyList<SaveManifestService.ManifestGameSummary> ActivePbpGames => activePbpGames;
+    public int PbpBadgeCountMyTurn { get; private set; }
     private List<SaveManifestService.ManifestGameSummary> activePbpGames = new List<SaveManifestService.ManifestGameSummary>();
 
     IEnumerator Start()
@@ -67,6 +69,8 @@ public class MainMenuController : MonoBehaviour
             yield return null;
             TryAutoFitActiveMenuButtonContainer();
         }
+
+        RefreshMultiplayerList();
     }
 
     public void NewGame()
@@ -469,6 +473,7 @@ public class MainMenuController : MonoBehaviour
     {
         activePbpGames = SaveManifestService.GetActivePlayByPostGames();
         ActivePbpGamesChanged?.Invoke();
+        RecomputePbpBadge();
 
         if (isServerOnline)
         {
@@ -482,11 +487,37 @@ public class MainMenuController : MonoBehaviour
         }
     }
 
+    public void RecomputePbpBadge()
+    {
+        int countMyTurn = 0;
+        for (int i = 0; i < activePbpGames.Count; i++)
+        {
+            string gameId = activePbpGames[i].gameId;
+            if (string.IsNullOrWhiteSpace(gameId))
+                continue;
+
+            if (TurnIndicatorService.TryGetIsMyTurn(gameId, out bool isMyTurn, out _) && isMyTurn)
+            {
+                countMyTurn++;
+            }
+        }
+
+        if (PbpBadgeCountMyTurn == countMyTurn)
+            return;
+
+        PbpBadgeCountMyTurn = countMyTurn;
+        PbpBadgeChanged?.Invoke();
+    }
+
     public void ResumePlayByPostGame(string gameId)
     {
         if (string.IsNullOrWhiteSpace(gameId))
             return;
 
+        GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        Debug.Log($"Resuming PlayByPost game. pendingMode={TurnManager.GameMode.PlayByPost}, gameId={gameId}");
+#endif
         PlayerPrefs.SetString(PlayByPostGameIdKey, gameId);
         PlayerPrefs.Save();
         SceneManager.LoadScene(gameplaySceneName);
