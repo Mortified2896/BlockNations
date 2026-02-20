@@ -36,6 +36,8 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private GameObject mainMenuPanel;
     [SerializeField] private GameObject multiplayerPanel;
     [SerializeField] private GameObject joinPopupPanel;
+    [SerializeField] private Button createGameButton;
+    [SerializeField] private Button joinGameButton;
     [SerializeField] private string selectedGameId;
 
     [Header("Layout")]
@@ -45,6 +47,7 @@ public class MainMenuController : MonoBehaviour
     private const string PlayByPostIsPlayer1Key = "pbp_isPlayer1";
     private bool isServerOnline = true;
     private Coroutine serverCheckRoutine;
+    private HttpTurnTransport cachedHttpTransport;
 
     public event Action ActivePbpGamesChanged;
     public IReadOnlyList<SaveManifestService.ManifestGameSummary> ActivePbpGames => activePbpGames;
@@ -426,8 +429,10 @@ public class MainMenuController : MonoBehaviour
             StopCoroutine(serverCheckRoutine);
         }
 
+        ResolveServerCheckSources();
         isServerOnline = false;
         SetImportStatus("Checking server...");
+        UpdateMultiplayerButtonStates();
         serverCheckRoutine = StartCoroutine(CheckServerOnlineCoroutine());
     }
 
@@ -510,12 +515,6 @@ public class MainMenuController : MonoBehaviour
 
     public void Multiplayer_JoinGame()
     {
-        if (!isServerOnline)
-        {
-            SetImportStatus("Server offline");
-            return;
-        }
-
         OpenJoinPopup();
     }
 
@@ -675,34 +674,28 @@ public class MainMenuController : MonoBehaviour
 
     private IEnumerator CheckServerOnlineCoroutine()
     {
-        bool online = true;
-        bool hasCheck = false;
+        if (cachedHttpTransport == null)
+        {
+            ResolveServerCheckSources();
+        }
 
-        HttpTurnTransport httpTransport = FindObjectOfType<HttpTurnTransport>();
+        bool online;
+        bool hasCheck = true;
+
+        HttpTurnTransport httpTransport = cachedHttpTransport;
         if (httpTransport != null)
         {
-            hasCheck = true;
             bool probeResult = false;
             yield return StartCoroutine(httpTransport.CheckServerReachable(result => probeResult = result));
             online = probeResult;
         }
         else
         {
-            TurnTransportProvider provider = FindObjectOfType<TurnTransportProvider>();
-            if (provider != null)
-            {
-                hasCheck = true;
-                ITurnTransport transport = provider.GetTransport();
-                online = transport != null && transport.IsAvailable;
-            }
-        }
-
-        if (!hasCheck)
-        {
-            online = true;
+            online = false;
         }
 
         isServerOnline = online;
+        UpdateMultiplayerButtonStates();
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         Debug.Log($"Multiplayer server check complete. online={isServerOnline}, checkedTransport={hasCheck}");
@@ -711,6 +704,27 @@ public class MainMenuController : MonoBehaviour
         SetImportStatus(isServerOnline ? "Server online" : "Server offline");
         RefreshMultiplayerList();
         serverCheckRoutine = null;
+    }
+
+    private void ResolveServerCheckSources()
+    {
+        if (cachedHttpTransport == null)
+        {
+            cachedHttpTransport = FindObjectOfType<HttpTurnTransport>();
+        }
+    }
+
+    private void UpdateMultiplayerButtonStates()
+    {
+        if (createGameButton != null)
+        {
+            createGameButton.interactable = isServerOnline;
+        }
+
+        if (joinGameButton != null)
+        {
+            joinGameButton.interactable = isServerOnline;
+        }
     }
 
     private static bool TryValidateJoinGameId(string rawGameId, out string normalizedGameId, out string error)
