@@ -35,6 +35,7 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private TMP_Text importStatusText;
     [SerializeField] private GameObject mainMenuPanel;
     [SerializeField] private GameObject multiplayerPanel;
+    [SerializeField] private GameObject joinPopupPanel;
     [SerializeField] private string selectedGameId;
 
     [Header("Layout")]
@@ -436,6 +437,27 @@ public class MainMenuController : MonoBehaviour
         if (mainMenuPanel != null)
         {
             mainMenuPanel.SetActive(true);
+        }
+    }
+
+    public void OpenJoinPopup()
+    {
+        if (joinPopupPanel != null)
+        {
+            joinPopupPanel.SetActive(true);
+        }
+    }
+
+    public void CloseJoinPopup()
+    {
+        if (joinPopupPanel != null)
+        {
+            joinPopupPanel.SetActive(false);
+        }
+
+        if (joinGameIdInput != null)
+        {
+            joinGameIdInput.text = "";
         }
     }
 
