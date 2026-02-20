@@ -216,6 +216,32 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         }
     }
 
+    public IEnumerator CheckServerReachable(Action<bool> done)
+    {
+        Initialize();
+
+        if (!IsAvailable)
+        {
+            done?.Invoke(false);
+            yield break;
+        }
+
+        bool reachable = false;
+
+        // Prefer a dedicated health endpoint if the server has one.
+        yield return ProbeReachability(BuildUrl("health"), ok => reachable = ok);
+
+        // Fallback to a safe read endpoint to avoid requiring /health support.
+        if (!reachable)
+        {
+            string probeGameId = Guid.NewGuid().ToString();
+            string probeUrl = BuildUrl($"pbp/turn/next?gameId={Uri.EscapeDataString(probeGameId)}&after=0");
+            yield return ProbeReachability(probeUrl, ok => reachable = ok);
+        }
+
+        done?.Invoke(reachable);
+    }
+
     private static bool IsValidGameId(string gameId)
     {
         return !string.IsNullOrWhiteSpace(gameId);
@@ -256,6 +282,38 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
         int seconds = Mathf.CeilToInt(timeoutSeconds);
         return Mathf.Clamp(seconds, 1, 120);
+    }
+
+    private int GetServerCheckTimeoutSeconds()
+    {
+        int configured = GetTimeoutSeconds();
+        if (configured <= 0)
+            return 3;
+
+        return Mathf.Clamp(configured, 1, 3);
+    }
+
+    private IEnumerator ProbeReachability(string url, Action<bool> done)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            done?.Invoke(false);
+            yield break;
+        }
+
+        using (var req = UnityWebRequest.Get(url))
+        {
+            req.timeout = GetServerCheckTimeoutSeconds();
+            yield return req.SendWebRequest();
+
+            bool reachable = req.responseCode > 0 && req.result != UnityWebRequest.Result.ConnectionError;
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.Log($"PBp server probe: {url} reachable={reachable} result={req.result} code={req.responseCode}");
+#endif
+
+            done?.Invoke(reachable);
+        }
     }
 
     private static string MapInvalidSubmitInput(string gameId, int turnNumber, string json)

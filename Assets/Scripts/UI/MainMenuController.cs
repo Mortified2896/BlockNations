@@ -43,6 +43,8 @@ public class MainMenuController : MonoBehaviour
     private bool tutorialLaunchQueued;
     private const string PlayByPostGameIdKey = "pbp_gameId";
     private const string PlayByPostIsPlayer1Key = "pbp_isPlayer1";
+    private bool isServerOnline = true;
+    private Coroutine serverCheckRoutine;
 
     public event Action ActivePbpGamesChanged;
     public IReadOnlyList<SaveManifestService.ManifestGameSummary> ActivePbpGames => activePbpGames;
@@ -380,28 +382,23 @@ public class MainMenuController : MonoBehaviour
 
     public void JoinPlayByPostFromInput()
     {
-        string gameId = joinGameIdInput != null ? joinGameIdInput.text : null;
-        gameId = string.IsNullOrWhiteSpace(gameId) ? null : gameId.Trim();
-
-        if (string.IsNullOrWhiteSpace(gameId))
+        if (!isServerOnline)
         {
-            string clipboard = GUIUtility.systemCopyBuffer;
-            if (!string.IsNullOrWhiteSpace(clipboard))
-            {
-                gameId = clipboard.Trim();
-            }
-        }
-
-        if (string.IsNullOrWhiteSpace(gameId) || IsPlaceholderGameId(gameId))
-        {
-            SetImportStatus("Enter a game id.");
+            SetImportStatus("Server offline");
             return;
         }
 
-        PlayerPrefs.SetString(PlayByPostGameIdKey, gameId);
+        string gameId = joinGameIdInput != null ? joinGameIdInput.text : null;
+        if (!TryValidateJoinGameId(gameId, out string normalizedGameId, out string validationError))
+        {
+            SetImportStatus(validationError);
+            return;
+        }
+
+        PlayerPrefs.SetString(PlayByPostGameIdKey, normalizedGameId);
         PlayerPrefs.SetInt(PlayByPostIsPlayer1Key, 0);
         PlayerPrefs.Save();
-        SetImportStatus($"Joining game: {gameId}");
+        SetImportStatus($"Joining game: {normalizedGameId}");
 
         GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
         SceneManager.LoadScene(gameplaySceneName);
@@ -424,7 +421,14 @@ public class MainMenuController : MonoBehaviour
             multiplayerPanel.SetActive(true);
         }
 
-        RefreshMultiplayerList();
+        if (serverCheckRoutine != null)
+        {
+            StopCoroutine(serverCheckRoutine);
+        }
+
+        isServerOnline = false;
+        SetImportStatus("Checking server...");
+        serverCheckRoutine = StartCoroutine(CheckServerOnlineCoroutine());
     }
 
     public void CloseMultiplayerScreen()
@@ -465,6 +469,17 @@ public class MainMenuController : MonoBehaviour
     {
         activePbpGames = SaveManifestService.GetActivePlayByPostGames();
         ActivePbpGamesChanged?.Invoke();
+
+        if (isServerOnline)
+        {
+            SetImportStatus(activePbpGames.Count > 0
+                ? $"{activePbpGames.Count} active games"
+                : "No active games");
+        }
+        else
+        {
+            SetImportStatus("Server offline");
+        }
     }
 
     public void ResumePlayByPostGame(string gameId)
@@ -484,12 +499,24 @@ public class MainMenuController : MonoBehaviour
 
     public void Multiplayer_CreateGame()
     {
+        if (!isServerOnline)
+        {
+            SetImportStatus("Server offline");
+            return;
+        }
+
         PlayByPost();
     }
 
     public void Multiplayer_JoinGame()
     {
-        JoinPlayByPostFromInput();
+        if (!isServerOnline)
+        {
+            SetImportStatus("Server offline");
+            return;
+        }
+
+        OpenJoinPopup();
     }
 
     public void ContinueLastSave()
@@ -644,5 +671,65 @@ public class MainMenuController : MonoBehaviour
         string trimmed = gameId.Trim();
         return trimmed.Equals("code", System.StringComparison.OrdinalIgnoreCase)
             || trimmed.Equals("enter game code", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    private IEnumerator CheckServerOnlineCoroutine()
+    {
+        bool online = true;
+        bool hasCheck = false;
+
+        HttpTurnTransport httpTransport = FindObjectOfType<HttpTurnTransport>();
+        if (httpTransport != null)
+        {
+            hasCheck = true;
+            bool probeResult = false;
+            yield return StartCoroutine(httpTransport.CheckServerReachable(result => probeResult = result));
+            online = probeResult;
+        }
+        else
+        {
+            TurnTransportProvider provider = FindObjectOfType<TurnTransportProvider>();
+            if (provider != null)
+            {
+                hasCheck = true;
+                ITurnTransport transport = provider.GetTransport();
+                online = transport != null && transport.IsAvailable;
+            }
+        }
+
+        if (!hasCheck)
+        {
+            online = true;
+        }
+
+        isServerOnline = online;
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        Debug.Log($"Multiplayer server check complete. online={isServerOnline}, checkedTransport={hasCheck}");
+#endif
+
+        SetImportStatus(isServerOnline ? "Server online" : "Server offline");
+        RefreshMultiplayerList();
+        serverCheckRoutine = null;
+    }
+
+    private static bool TryValidateJoinGameId(string rawGameId, out string normalizedGameId, out string error)
+    {
+        normalizedGameId = string.IsNullOrWhiteSpace(rawGameId) ? null : rawGameId.Trim();
+        error = null;
+
+        if (string.IsNullOrWhiteSpace(normalizedGameId) || IsPlaceholderGameId(normalizedGameId))
+        {
+            error = "Enter a game code.";
+            return false;
+        }
+
+        if (!Guid.TryParse(normalizedGameId, out _))
+        {
+            error = "Invalid game code.";
+            return false;
+        }
+
+        return true;
     }
 }
