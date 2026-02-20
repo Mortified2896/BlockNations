@@ -1,217 +1,265 @@
-Block Nations – Roadmap
-Block Nations – Development Roadmap
+# Block Nations – Roadmap  
+## Block Nations – Development Roadmap
 
 This document tracks what exists, what’s next, and what’s intentionally deferred. It is designed to be edited incrementally and to serve as a shared reference between the developer and ChatGPT/Codex.
 
-Principles
+---
 
-Mobile‑first, clarity over complexity
+## Principles
 
-Prefer small, shippable increments
+- Mobile-first, clarity over complexity  
+- Prefer small, shippable increments  
+- Multiplayer is Play-by-Post first; real-time is explicitly out of scope  
+- Instrumentation before optimization  
+- Avoid premature architecture refactors  
 
-Multiplayer is Play‑by‑Post first; real‑time is explicitly out of scope
+---
 
-Instrumentation before optimization
+# ✅ Phase 0 — Foundations (DONE)
 
-Avoid premature architecture refactors
+## Core Gameplay
 
-✅ Phase 0 — Foundations (DONE)
-Core Gameplay
+- Turn-based, tile-based core loop  
+- Hotseat support  
+- Vs AI mode  
+- Fog of war basics  
 
-Turn-based, tile-based core loop
+## Persistence
 
-Hotseat support
+- Save / load system  
+- Stable gameId per campaign  
 
-Vs AI mode
+## Multiplayer Core (Local / File)
 
-Fog of war basics
+- Play-by-Post via file-based transport  
+- Turn snapshots  
+- Transport sequence numbers  
 
-Persistence
+## Telemetry v0 (Completed)
 
-Save / load system
-
-Stable gameId per campaign
-
-Multiplayer Core (Local / File)
-
-Play‑by‑Post via file-based transport
-
-Turn snapshots
-
-Transport sequence numbers
-
-Telemetry v0 (Completed)
-
-ITurnTelemetrySink seam (off by default)
-
-Resolve / Submit / Fetch / EndTurnPressed events
-
-Transport decorator (TelemetryTurnTransport)
-
-Canonical error + op constants
-
-Debug telemetry sink
+- ITurnTelemetrySink seam (off by default)  
+- Resolve / Submit / Fetch / EndTurnPressed events  
+- Transport decorator (TelemetryTurnTransport)  
+- Canonical error + op constants  
+- Debug telemetry sink  
 
 Verified semantics for:
 
-seqA / seqB
+- seqA / seqB  
+- payload size  
+- mode + gameIdHash  
 
-payload size
+---
 
-mode + gameIdHash
+# 🚧 Phase 1 — Mobile PBp (IN PROGRESS)
 
-🚧 Phase 1 — Mobile PBp (IN PROGRESS)
-
-Definition of done for Phase 1: Play‑by‑Post works reliably on real mobile devices (iOS first, then Android) using HTTP transport.
+**Definition of done for Phase 1:**  
+Play-by-Post works reliably on real mobile devices (iOS first, then Android) using HTTP transport.
 
 Transport work in this phase exists to enable and validate mobile builds, not as an abstract backend effort.
 
-Transport (Minimum Viable — MUST happen before mobile builds)
+---
 
-✅ HTTP PBp transport (Unity)
+## Transport (Minimum Viable — MUST happen before mobile builds)
 
-HttpTurnTransport implemented (UnityWebRequest)
+### ✅ HTTP PBp transport (Unity)
 
-Canonical error mapping aligned with ITurnTransport
+- HttpTurnTransport implemented (UnityWebRequest)  
+- Canonical error mapping aligned with ITurnTransport  
+- Telemetry verified for resolve / submit / fetch / NO_TURN  
 
-Telemetry verified for resolve / submit / fetch / NO_TURN
+### ✅ Standalone PBp server (Node/Express)
 
-✅ Standalone PBp server (Node/Express)
+- POST submit / GET fetch  
+- File-backed turn storage  
 
-POST submit / GET fetch / health endpoint
+### ⏳ Health endpoint (recommended)
 
-File-backed turn storage
+- `/health` endpoint returning JSON  
+- Used for server reachability checks  
 
-⏳ Device reachability smoke test
+---
 
-Server reachable from iPhone/Android (same Wi‑Fi/LAN or hosted URL)
+## 🔄 Polling Strategy (MVP)
 
-baseUrl configured per build target
+### ✅ Client-driven polling (menu-only)
 
-Mobile Builds (Core Goal of Phase 1)
+- Poll only while Multiplayer screen is open  
+- Exponential backoff:
+  - 3s → 10s → 30s → 60s → 120s → cap at 300s  
+- Reset delay to 3s if a new turn is received  
+- Stop polling when leaving Multiplayer screen  
 
-📱 iOS build (primary focus)
+### ⏳ Server load signaling (Option 1 — Phase 1)
 
-Xcode build + signing
+- Server may return:
+  - `429 Too Many Requests`
+  - `Retry-After: <seconds>`
+- Client must honor `Retry-After`
+- Fallback: increase backoff to cap if header missing  
 
-iPhone ↔ iPhone PBp works
+This allows server-side throttling without client updates.
 
-iPhone ↔ Editor PBp works
+---
 
-Background / resume does not break PBp state
+## 📡 Networking Upgrade (Planned — Phase 1.5 / Phase 2 Candidate)
 
-🤖 Android build (secondary)
+### ⏳ Option 3 — Long Polling (Deferred but Designed)
 
-Same HTTP PBp flow validated
+**Goal:** Reduce request spam while maintaining near real-time PBp updates.
 
-No platform-specific regressions
+Instead of short-interval polling:
 
-UX
+Client calls:
 
-Clear “Waiting for opponent” state
+GET /pbp/turn/next?gameId=...&after=...&waitSeconds=25
 
-Disabled interactions when not your turn
+Server behavior:
 
-Explicit Sync Now feedback
+- Holds request open up to `waitSeconds`
+- Returns immediately if a new turn arrives
+- Returns `NO_TURN` after timeout
 
-Throttled NO_TURN polling logs (spam reduction)
+Client behavior:
 
-Validation
+- Immediately re-issues request on `NO_TURN`
+- Uses backoff only on error conditions
+- Adds small jitter to avoid thundering herd
 
-Client-side validation before submit/fetch
+**Benefits:**
 
-Server-side sanity checks on turn payloads
+- Fewer HTTP requests  
+- Near real-time responsiveness  
+- Scales better than aggressive polling  
 
-Conflict detection (already partially present)
+**Requirements:**
 
-Server hardening (DEFERRED unless mobile testing forces it)
+- Stable HTTPS hosting  
+- Proper request timeout handling  
+- Cancellation safety  
 
-⏳ JSON-only responses (remove plaintext NO_TURN)
+Explicitly not required for MVP.
 
-⏳ Stricter validation + clearer error mapping
+---
 
-⏳ Simple rate limiting per gameId
+## ⏳ Device reachability smoke test
 
-Telemetry v1 (Light Extension)
+- Server reachable from iPhone/Android (same Wi-Fi/LAN or hosted URL)  
+- baseUrl configured per build target  
 
-HTTP latency visibility (done)
+---
 
-Transport availability / IO errors surfaced
+# 📱 Mobile Builds (Core Goal of Phase 1)
 
-Optional retry counters (future)
+## iOS build (primary focus)
 
+- Xcode build + signing  
+- iPhone ↔ iPhone PBp works  
+- iPhone ↔ Editor PBp works  
+- Background / resume does not break PBp state  
 
+## Android build (secondary)
 
+- Same HTTP PBp flow validated  
+- No platform-specific regressions  
 
-🧩 Phase 2 — Multiplayer Polish
-Player Identity
+---
 
-Move from bool ownership to PlayerId
+# UX
 
-Support >2 players (design only, no UI yet)
+- Clear “Waiting for opponent” state  
+- Disabled interactions when not your turn  
+- Explicit Sync Now feedback  
+- Throttled NO_TURN polling logs  
+- Multiplayer list reflects:
+  - “Your turn”
+  - “Waiting…”
+  - “Server offline”
 
-Visibility
+---
 
-Correct fog of war per player
+# Validation
 
-Spectator-safe serialization
+- Client-side validation before submit/fetch  
+- Server-side sanity checks on turn payloads  
+- Conflict detection  
 
-UX
+---
 
-Better turn transition feedback
+# Server hardening (Deferred unless mobile testing forces it)
 
-Read-only board state when waiting
+- JSON-only responses (remove plaintext NO_TURN)  
+- Stricter validation + clearer error mapping  
+- Simple rate limiting per gameId  
+- Connection limits tuning (for long polling phase)  
 
-📊 Phase 3 — Analytics & Live Ops
-Telemetry v2
+---
 
-UGS Analytics sink
+# 🧩 Phase 2 — Multiplayer Polish
 
-Session-level correlation
+## Player Identity
 
-Event sampling / throttling
+- Move from bool ownership to PlayerId  
+- Support >2 players (design only, no UI yet)  
 
-Insights
+## Visibility
 
-Drop-off points
+- Correct fog of war per player  
+- Spectator-safe serialization  
 
-Average turn duration
+## UX
 
-Transport failure rates
+- Better turn transition feedback  
+- Read-only board state when waiting  
 
-🧪 Phase 4 — Content & Iteration
-Gameplay Variety
+---
 
-Smaller maps (faster matches)
+# 📊 Phase 3 — Analytics & Live Ops
 
-Minor rule twists (e.g. limited actions per turn)
+## Telemetry v2
 
-More meaningful early-game decisions
+- UGS Analytics sink  
+- Session-level correlation  
+- Event sampling / throttling  
 
-AI
+## Insights
 
-Simple heuristics improvements
+- Drop-off points  
+- Average turn duration  
+- Transport failure rates  
 
-Difficulty tuning
+---
 
-🚫 Explicitly Out of Scope (For Now)
+# 🧪 Phase 4 — Content & Iteration
 
-Real-time multiplayer
+## Gameplay Variety
 
-Chat system
+- Smaller maps  
+- Minor rule twists  
+- More meaningful early-game decisions  
 
-Matchmaking / public lobbies
+## AI
 
-In-app purchases
+- Heuristic improvements  
+- Difficulty tuning  
 
-Large-scale content pipelines
+---
 
-WebGL multiplayer support (may be revisited later if there is strong demand)
+# 🚫 Explicitly Out of Scope (For Now)
 
-Notes
+- Real-time multiplayer  
+- Chat system  
+- Matchmaking / public lobbies  
+- In-app purchases  
+- Large-scale content pipelines  
+- WebGL multiplayer support  
+
+---
+
+## Notes
 
 This roadmap is living. Items can move between phases.
 
 ChatGPT is allowed to update this file when explicitly asked.
 
-Last reviewed: 2026-01-31
+Last reviewed: 2026-02-20

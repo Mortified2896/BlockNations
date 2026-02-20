@@ -132,7 +132,6 @@ public class TurnManager : MonoBehaviour
     private bool playByPostLastFetchWasNoTurn = false;
     private float playByPostLastNoTurnLogTime = -999f;
     private const float PlayByPostNoTurnLogCooldownSeconds = 5f;
-    private const string PlayByPostIsPlayer1Key = "pbp_isPlayer1";
     private const string PlayByPostGameIdKey = "pbp_gameId";
 
     private Coroutine autoEndTurnRoutine;
@@ -230,7 +229,12 @@ public class TurnManager : MonoBehaviour
     {
         if (currentMode == GameMode.PlayByPost)
         {
-            return PlayerPrefs.GetInt(PlayByPostIsPlayer1Key, 1) != 0;
+            if (LocalPlayerSeatStore.TryGetSeat(currentGameId, out int seatOrPlayerIndex))
+            {
+                return seatOrPlayerIndex == 0;
+            }
+
+            return true;
         }
 
         return localSeat == LocalSeat.Player1;
@@ -1107,13 +1111,19 @@ public class TurnManager : MonoBehaviour
     private void InitializePlayByPostSession()
     {
         string gameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
+        bool createdGameId = false;
         if (string.IsNullOrWhiteSpace(gameId))
         {
             gameId = System.Guid.NewGuid().ToString();
             PlayerPrefs.SetString(PlayByPostGameIdKey, gameId);
             PlayerPrefs.Save();
+            createdGameId = true;
         }
         SetCurrentGameId(gameId);
+        if (createdGameId)
+        {
+            LocalPlayerSeatStore.SetSeat(gameId, 0);
+        }
 
         if (!LocalIsPlayerOwned())
         {

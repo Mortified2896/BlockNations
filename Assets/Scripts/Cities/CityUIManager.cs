@@ -352,7 +352,8 @@ public class CityUIManager : MonoBehaviour
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
         {
             TurnManager tm = turnManager != null ? turnManager : TurnManager.Instance;
-            int pbpIsPlayer1 = PlayerPrefs.GetInt("pbp_isPlayer1", -1);
+            string pbpGameId = PlayerPrefs.GetString("pbp_gameId", string.Empty);
+            int pbpSeat = LocalPlayerSeatStore.TryGetSeat(pbpGameId, out int resolvedSeat) ? resolvedSeat : -1;
             string cityName = currentCity != null ? currentCity.name : "<null>";
             string mode = tm != null ? tm.currentMode.ToString() : "<null>";
             bool canControl = tm != null && currentCity != null && tm.CanControlCity(currentCity);
@@ -360,7 +361,7 @@ public class CityUIManager : MonoBehaviour
             int goldP2 = tm != null ? tm.aiGold : -1;
 
             Debug.Log(
-                $"[recruit] click city={cityName} cityNull={(currentCity == null)} mode={mode} isPlayerTurn={(tm != null ? tm.isPlayerTurn : false)} pbp_isPlayer1={pbpIsPlayer1} cityOwned={(currentCity != null ? currentCity.isPlayerOwned : false)} canControl={canControl} goldP1={goldP1} goldP2={goldP2} hasUnit={(currentCity != null && currentCity.stationedUnit != null)} recruitedThisTurn={(currentCity != null && currentCity.hasRecruitedThisTurn)}"
+                $"[recruit] click city={cityName} cityNull={(currentCity == null)} mode={mode} isPlayerTurn={(tm != null ? tm.isPlayerTurn : false)} pbpSeat={pbpSeat} cityOwned={(currentCity != null ? currentCity.isPlayerOwned : false)} canControl={canControl} goldP1={goldP1} goldP2={goldP2} hasUnit={(currentCity != null && currentCity.stationedUnit != null)} recruitedThisTurn={(currentCity != null && currentCity.hasRecruitedThisTurn)}"
             );
         }
 #endif

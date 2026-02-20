@@ -44,7 +44,6 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private bool autoFitMenuToScreenOnDesktop = true;
     private bool tutorialLaunchQueued;
     private const string PlayByPostGameIdKey = "pbp_gameId";
-    private const string PlayByPostIsPlayer1Key = "pbp_isPlayer1";
     private bool isServerOnline = true;
     private Coroutine serverCheckRoutine;
     private HttpTurnTransport cachedHttpTransport;
@@ -360,9 +359,7 @@ public class MainMenuController : MonoBehaviour
     public void PlayByPost()
     {
         string gameId = System.Guid.NewGuid().ToString();
-        PlayerPrefs.SetString(PlayByPostGameIdKey, gameId);
-        PlayerPrefs.SetInt(PlayByPostIsPlayer1Key, 1);
-        PlayerPrefs.Save();
+        LocalPlayerSeatStore.SetSeat(gameId, 0);
         if (ClipboardUtility.TryCopy(gameId))
         {
             Debug.Log($"Play-by-Post game id copied to clipboard ({gameId}).");
@@ -398,9 +395,7 @@ public class MainMenuController : MonoBehaviour
             return;
         }
 
-        PlayerPrefs.SetString(PlayByPostGameIdKey, normalizedGameId);
-        PlayerPrefs.SetInt(PlayByPostIsPlayer1Key, 0);
-        PlayerPrefs.Save();
+        LocalPlayerSeatStore.SetSeat(normalizedGameId, 1);
         SetImportStatus($"Joining game: {normalizedGameId}");
 
         GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
