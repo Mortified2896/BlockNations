@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using TMPro;
+using System;
 using System.IO;
 using System.Collections;
 using System.Collections.Generic;
@@ -12,6 +13,18 @@ using UnityEngine.UI;
 /// </summary>
 public class MainMenuController : MonoBehaviour
 {
+    /*
+     * Wiring Instructions (Multiplayer Screen)
+     * - Assign `mainMenuPanel` to the root GameObject of the main menu panel.
+     * - Assign `multiplayerPanel` to the root GameObject of the multiplayer panel.
+     * - Main Menu "Multiplayer" button -> OpenMultiplayerScreen()
+     * - Multiplayer "Back" button -> CloseMultiplayerScreen()
+     * - Multiplayer "Create" button -> Multiplayer_CreateGame()
+     * - Multiplayer "Join" button -> Multiplayer_JoinGame()
+     * - Each "Resume" button -> ResumePlayByPostGame(gameId)
+     *   - Or set `selectedGameId` from your UI and call ResumePlayByPostGame_FromSelected().
+     */
+
     [Header("Scenes")]
     [SerializeField] private string gameplaySceneName = "SampleScene";
 
@@ -20,12 +33,19 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private GameObject aiDifficultyPanel;
     [SerializeField] private TMP_InputField joinGameIdInput;
     [SerializeField] private TMP_Text importStatusText;
+    [SerializeField] private GameObject mainMenuPanel;
+    [SerializeField] private GameObject multiplayerPanel;
+    [SerializeField] private string selectedGameId;
 
     [Header("Layout")]
     [SerializeField] private bool autoFitMenuToScreenOnDesktop = true;
     private bool tutorialLaunchQueued;
     private const string PlayByPostGameIdKey = "pbp_gameId";
     private const string PlayByPostIsPlayer1Key = "pbp_isPlayer1";
+
+    public event Action ActivePbpGamesChanged;
+    public IReadOnlyList<SaveManifestService.ManifestGameSummary> ActivePbpGames => activePbpGames;
+    private List<SaveManifestService.ManifestGameSummary> activePbpGames = new List<SaveManifestService.ManifestGameSummary>();
 
     IEnumerator Start()
     {
@@ -144,7 +164,7 @@ public class MainMenuController : MonoBehaviour
         if (!isLandscape && Screen.height >= 1200)
             return;
 
-        VerticalLayoutGroup[] groups = Object.FindObjectsByType<VerticalLayoutGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        VerticalLayoutGroup[] groups = UnityEngine.Object.FindObjectsByType<VerticalLayoutGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         VerticalLayoutGroup best = null;
         int bestActiveButtons = 0;
 
@@ -389,6 +409,65 @@ public class MainMenuController : MonoBehaviour
         {
             modeSelectionPanel.SetActive(false);
         }
+    }
+
+    public void OpenMultiplayerScreen()
+    {
+        if (mainMenuPanel != null)
+        {
+            mainMenuPanel.SetActive(false);
+        }
+
+        if (multiplayerPanel != null)
+        {
+            multiplayerPanel.SetActive(true);
+        }
+
+        RefreshMultiplayerList();
+    }
+
+    public void CloseMultiplayerScreen()
+    {
+        if (multiplayerPanel != null)
+        {
+            multiplayerPanel.SetActive(false);
+        }
+
+        if (mainMenuPanel != null)
+        {
+            mainMenuPanel.SetActive(true);
+        }
+    }
+
+    public void RefreshMultiplayerList()
+    {
+        activePbpGames = SaveManifestService.GetActivePlayByPostGames();
+        ActivePbpGamesChanged?.Invoke();
+    }
+
+    public void ResumePlayByPostGame(string gameId)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+            return;
+
+        PlayerPrefs.SetString(PlayByPostGameIdKey, gameId);
+        PlayerPrefs.Save();
+        SceneManager.LoadScene(gameplaySceneName);
+    }
+
+    public void ResumePlayByPostGame_FromSelected()
+    {
+        ResumePlayByPostGame(selectedGameId);
+    }
+
+    public void Multiplayer_CreateGame()
+    {
+        PlayByPost();
+    }
+
+    public void Multiplayer_JoinGame()
+    {
+        JoinPlayByPostFromInput();
     }
 
     public void ContinueLastSave()

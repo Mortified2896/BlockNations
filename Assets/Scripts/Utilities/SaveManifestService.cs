@@ -38,6 +38,17 @@ public static class SaveManifestService
         public string opponentLabel;
     }
 
+    public struct ManifestGameSummary
+    {
+        public string entryKey;
+        public string gameId;
+        public string mode;
+        public string slotType;
+        public string lastPlayedUtc;
+        public bool isFinished;
+        public string transportType;
+    }
+
     [Serializable]
     private class MinimalSaveHeader
     {
@@ -50,8 +61,10 @@ public static class SaveManifestService
 
     public static void RecordLocalSave(string gameId, TurnManager.GameMode mode, string savePath, bool isFinished)
     {
-        string entryKey = BuildLocalEntryKey(savePath);
-        RecordSave(entryKey, gameId, mode, savePath, isFinished, transportType: null, folderPath: null, allowCreateWithoutEntryKey: false);
+        string entryKey = mode == TurnManager.GameMode.PlayByPost
+            ? BuildPbpGameEntryKey(gameId)
+            : BuildLocalEntryKey(savePath);
+        RecordSave(entryKey, gameId, mode, savePath, isFinished, transportType: null, folderPath: null, allowCreateWithoutEntryKey: mode == TurnManager.GameMode.PlayByPost);
     }
 
     public static void RecordImportedSave(string gameId, string mode, bool isFinished, string savePath)
@@ -126,6 +139,44 @@ public static class SaveManifestService
             transportType: "File", folderPath: folderRel, allowCreateWithoutEntryKey: false);
     }
 
+    public static List<ManifestGameSummary> GetActivePlayByPostGames()
+    {
+        lock (Sync)
+        {
+            EnsureLoaded();
+            List<ManifestGameSummary> results = new List<ManifestGameSummary>();
+            if (cachedManifest == null || cachedManifest.entries == null)
+                return results;
+
+            for (int i = 0; i < cachedManifest.entries.Count; i++)
+            {
+                SaveEntry entry = cachedManifest.entries[i];
+                if (entry == null)
+                    continue;
+
+                if (!string.Equals(entry.slotType, "PlayByPost", StringComparison.Ordinal))
+                    continue;
+
+                if (entry.isFinished)
+                    continue;
+
+                results.Add(new ManifestGameSummary
+                {
+                    entryKey = entry.entryKey,
+                    gameId = entry.gameId,
+                    mode = entry.mode,
+                    slotType = entry.slotType,
+                    lastPlayedUtc = entry.lastPlayedUtc,
+                    isFinished = entry.isFinished,
+                    transportType = entry.transportType
+                });
+            }
+
+            results.Sort((a, b) => string.CompareOrdinal(b.lastPlayedUtc ?? string.Empty, a.lastPlayedUtc ?? string.Empty));
+            return results;
+        }
+    }
+
     private static void RecordSave(
         string entryKey,
         string gameId,
@@ -139,12 +190,16 @@ public static class SaveManifestService
         lock (Sync)
         {
             EnsureLoaded();
+            if (mode == TurnManager.GameMode.PlayByPost)
+            {
+                MigrateLocalPlayByPostEntry(gameId);
+            }
             if (string.IsNullOrWhiteSpace(entryKey) &&
                 mode == TurnManager.GameMode.PlayByPost &&
                 !string.IsNullOrWhiteSpace(gameId) &&
                 string.IsNullOrWhiteSpace(folderPath))
             {
-                entryKey = "pbp:" + gameId;
+                entryKey = BuildPbpGameEntryKey(gameId);
             }
 
             string normalizedEntryKey = NormalizeEntryKey(entryKey);
@@ -449,6 +504,14 @@ public static class SaveManifestService
         return EntryKeyLocalPrefix + rel;
     }
 
+    private static string BuildPbpGameEntryKey(string gameId)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+            return null;
+
+        return "pbp:" + gameId;
+    }
+
     private static string BuildPbpFileEntryKey(string folderPath)
     {
         string rel = ToRelativePersistentPath(folderPath);
@@ -545,6 +608,36 @@ public static class SaveManifestService
     private static string UtcNowIso()
     {
         return DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
+    }
+
+    private static void MigrateLocalPlayByPostEntry(string gameId)
+    {
+        if (cachedManifest == null || cachedManifest.entries == null)
+            return;
+        if (string.IsNullOrWhiteSpace(gameId))
+            return;
+
+        string localKey = NormalizeEntryKey(EntryKeyLocalPrefix + "save.json");
+        for (int i = 0; i < cachedManifest.entries.Count; i++)
+        {
+            SaveEntry entry = cachedManifest.entries[i];
+            if (entry == null)
+                continue;
+
+            if (NormalizeEntryKey(entry.entryKey) != localKey)
+                continue;
+
+            if (entry.mode != TurnManager.GameMode.PlayByPost.ToString())
+                continue;
+
+            if (!string.Equals(entry.gameId, gameId, StringComparison.Ordinal))
+                continue;
+
+            entry.entryKey = BuildPbpGameEntryKey(gameId);
+            entry.slotType = SlotTypeFromMode(TurnManager.GameMode.PlayByPost);
+            entry.mode = TurnManager.GameMode.PlayByPost.ToString();
+            return;
+        }
     }
 
     private static bool TryParseTurnNumberFromPath(string path, out int turnNumber)

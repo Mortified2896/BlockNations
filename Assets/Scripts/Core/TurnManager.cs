@@ -310,6 +310,9 @@ public class TurnManager : MonoBehaviour
 
     void Start()
     {
+#if UNITY_EDITOR
+        Debug.Log("Persistent Path: " + Application.persistentDataPath);
+#endif
         isPlayByPostWaitingForExport = false;
         ResolveTurnTransport();
         lastAppliedTurnNumberForPolling = turnNumber;
