@@ -37,7 +37,8 @@ Assets/_Recovery/
 # PBp turn saves (local test data)
 data/PlayByPost/Turns/
 data/PlayByPost/Turns/**
-data/PlayByPost/Turns/**/*.jsonnode_modules/
+data/PlayByPost/Turns/**/*.json
+node_modules/
 Library/
 Temp/
 Obj/
