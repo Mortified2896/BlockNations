@@ -57,6 +57,9 @@ public class MainMenuController : MonoBehaviour
     private const string PlayByPostGameIdKey = "pbp_gameId";
     private const string LegacyPlayByPostIsPlayer1Key = "pbp_isPlayer1";
     private const string SeatByGameKeyPrefix = "pbp_seat_";
+    private const string ReturnToMultiplayerPaneKey = "ui_returnToMultiplayerPane";
+    private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
+    private const string LegacySharedSaveFileName = "save.json";
     private bool isServerOnline = true;
     private Coroutine serverCheckRoutine;
     private HttpTurnTransport cachedHttpTransport;
@@ -71,6 +74,8 @@ public class MainMenuController : MonoBehaviour
 
     IEnumerator Start()
     {
+        bool returnToMultiplayerPane = ConsumeReturnToMultiplayerPaneFlag();
+
         if (joinGameIdInput != null && IsPlaceholderGameId(joinGameIdInput.text))
         {
             joinGameIdInput.text = string.Empty;
@@ -86,6 +91,11 @@ public class MainMenuController : MonoBehaviour
         }
 
         RefreshMultiplayerList();
+
+        if (returnToMultiplayerPane)
+        {
+            OpenMultiplayerScreen();
+        }
     }
 
     public void NewGame()
@@ -532,10 +542,16 @@ public class MainMenuController : MonoBehaviour
         PbpBadgeChanged?.Invoke();
     }
 
-    public void ResumePlayByPostGame(string gameId)
+    public void ResumePlayByPostGame(string gameId, bool returnToMultiplayerPane = false)
     {
         if (string.IsNullOrWhiteSpace(gameId))
             return;
+
+        if (returnToMultiplayerPane)
+        {
+            PlayerPrefs.SetInt(ReturnToMultiplayerPaneKey, 1);
+            PlayerPrefs.Save();
+        }
 
         GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -586,7 +602,7 @@ public class MainMenuController : MonoBehaviour
     public void GameDetails_Open()
     {
         string gameId = hasSelectedPbpGame ? selectedPbpGame.gameId : selectedGameId;
-        ResumePlayByPostGame(gameId);
+        ResumePlayByPostGame(gameId, returnToMultiplayerPane: true);
     }
 
     public void GameDetails_ResignLocal()
@@ -659,7 +675,7 @@ public class MainMenuController : MonoBehaviour
 
     public void ResumePlayByPostGame_FromSelected()
     {
-        ResumePlayByPostGame(selectedGameId);
+        ResumePlayByPostGame(selectedGameId, returnToMultiplayerPane: true);
     }
 
     public void Multiplayer_CreateGame()
@@ -680,7 +696,7 @@ public class MainMenuController : MonoBehaviour
 
     public void ContinueLastSave()
     {
-        string path = System.IO.Path.Combine(Application.persistentDataPath, "save.json");
+        string path = ResolveContinueSavePath();
         if (!System.IO.File.Exists(path))
         {
             Debug.LogWarning("No save file found at " + path + ". Continue canceled; staying in menu.");
@@ -709,6 +725,17 @@ public class MainMenuController : MonoBehaviour
         Debug.Log("Continue requested. Loading save at " + path);
         SaveLoadRequest.RequestLoad(path);
         SceneManager.LoadScene(gameplaySceneName);
+    }
+
+    private static string ResolveContinueSavePath()
+    {
+        string spPath = Path.Combine(Application.persistentDataPath, SinglePlayerPrimarySaveFileName);
+        if (File.Exists(spPath))
+        {
+            return spPath;
+        }
+
+        return Path.Combine(Application.persistentDataPath, LegacySharedSaveFileName);
     }
 
     // === JSON import (paste-based) ===
@@ -830,6 +857,18 @@ public class MainMenuController : MonoBehaviour
         string trimmed = gameId.Trim();
         return trimmed.Equals("code", System.StringComparison.OrdinalIgnoreCase)
             || trimmed.Equals("enter game code", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ConsumeReturnToMultiplayerPaneFlag()
+    {
+        if (PlayerPrefs.GetInt(ReturnToMultiplayerPaneKey, 0) != 1)
+        {
+            return false;
+        }
+
+        PlayerPrefs.DeleteKey(ReturnToMultiplayerPaneKey);
+        PlayerPrefs.Save();
+        return true;
     }
 
     private IEnumerator CheckServerOnlineCoroutine()

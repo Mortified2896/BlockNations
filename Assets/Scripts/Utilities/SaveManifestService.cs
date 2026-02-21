@@ -107,7 +107,7 @@ public static class SaveManifestService
 
     public static void DumpManifestToLog()
     {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if DEVELOPMENT_BUILD
         lock (Sync)
         {
             EnsureLoaded();

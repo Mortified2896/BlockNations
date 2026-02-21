@@ -131,8 +131,19 @@ public class TurnManager : MonoBehaviour
     private bool isPlayByPostFetchInProgress = false;
     private bool playByPostLastFetchWasNoTurn = false;
     private float playByPostLastNoTurnLogTime = -999f;
+#if DEVELOPMENT_BUILD
+    private int lastSubmittedTransportSeqForTelemetry = -1;
+    private string lastSubmittedGameIdForTelemetry;
+#endif
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+    private bool hasLoggedManifestProbeFailure = false;
+#endif
     private const float PlayByPostNoTurnLogCooldownSeconds = 5f;
     private const string PlayByPostGameIdKey = "pbp_gameId";
+    private const string PlayByPostPrimarySaveFileName = "save.json";
+    private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
+    private const string PlayByPostPerGameSaveFolderName = "pbp";
+    private const string PlayByPostPerGameSavePrefix = "pbp_";
 
     // Controlled via Unity Scripting Define Symbols:
     // ENABLE_AUTO_END_TURN_ON_NO_ACTIONS
@@ -496,6 +507,7 @@ public class TurnManager : MonoBehaviour
             // represents the *next* side's turn.
             isPlayByPostWaitingForExport = true;
             AutoSaveIfEnabled();
+            SavePlayByPostPerGameSnapshot();
 
             if (ShouldShowPlayByPostPopup())
             {
@@ -515,17 +527,8 @@ public class TurnManager : MonoBehaviour
                         $"transportSeq={transportSeq}, lastAppliedTransportSeq={lastAppliedTurnNumberForPolling}");
                     lastAppliedTurnNumberForPolling = transportSeq;
 
-                    if (ClipboardUtility.TryCopy(exportJson))
-                    {
-                        Debug.Log($"Play-by-Post JSON copied to clipboard ({exportJson.Length} chars).");
-                    }
-                    else
-                    {
-                        Debug.LogWarning($"Failed to copy Play-by-Post JSON to clipboard ({exportJson.Length} chars). On WebGL this may require user interaction/permissions.");
-                    }
-
                     SaveManifestService.RecordPlayByPostExport(currentGameId, turnTransport != null ? turnTransport.TransportName : null);
-                    StartCoroutine(SubmitPlayByPostTurnThenStartPolling(transportSeq, exportJson));
+                    StartCoroutine(SubmitPlayByPostTurnThenStartPolling(transportSeq, exportJson, exportSave.turnNumber, exportSave.isPlayerTurn));
                 }
             }
         }
@@ -710,10 +713,57 @@ public class TurnManager : MonoBehaviour
         return cachedGameIdHash;
     }
 
-    private IEnumerator SubmitPlayByPostTurnThenStartPolling(int transportSeq, string exportJson)
+    private string GetPlayByPostStateSummary()
     {
+        string gameIdForLog = string.IsNullOrWhiteSpace(currentGameId) ? "<none>" : currentGameId;
+        int transportSeq = turnNumber * 2 + (isPlayerTurn ? 0 : 1);
+        return $"mode={currentMode},gameId={gameIdForLog},roundTurn={turnNumber},isPlayerTurn={isPlayerTurn},isWaitingForExport={isPlayByPostWaitingForExport},transportSeq={transportSeq},lastAppliedTransportSeq={lastAppliedTurnNumberForPolling}";
+    }
+
+    private string GetPlayByPostLoadRelationToLastSubmit()
+    {
+#if DEVELOPMENT_BUILD
+        if (lastSubmittedTransportSeqForTelemetry < 0)
+            return "no-submit-recorded";
+
+        if (!string.Equals(lastSubmittedGameIdForTelemetry, currentGameId, System.StringComparison.Ordinal))
+            return "different-game";
+
+        if (lastAppliedTurnNumberForPolling < lastSubmittedTransportSeqForTelemetry)
+            return "pre-submit";
+
+        if (lastAppliedTurnNumberForPolling == lastSubmittedTransportSeqForTelemetry)
+            return "matches-submit";
+
+        return "post-submit";
+#else
+        return "n/a";
+#endif
+    }
+
+    [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+    private void LogPlayByPostTelemetry(string eventName, string details)
+    {
+        Debug.Log($"[PBpTelemetry] {eventName} {details}");
+    }
+
+    private IEnumerator SubmitPlayByPostTurnThenStartPolling(int transportSeq, string exportJson, int exportTurnNumber, bool exportIsPlayerTurn)
+    {
+        float submitStartedAt = Time.realtimeSinceStartup;
+        LogPlayByPostTelemetry(
+            "SubmitStart",
+            $"gameId={currentGameId} exportTurn={exportTurnNumber} exportIsPlayerTurn={exportIsPlayerTurn} transportSeq={transportSeq} isPlayByPostWaitingForExport={isPlayByPostWaitingForExport} currentMode={currentMode} state={GetPlayByPostStateSummary()}");
+#if DEVELOPMENT_BUILD
+        lastSubmittedTransportSeqForTelemetry = transportSeq;
+        lastSubmittedGameIdForTelemetry = currentGameId;
+#endif
+
         if (turnTransport == null || !turnTransport.IsAvailable)
         {
+            float durationMs = (Time.realtimeSinceStartup - submitStartedAt) * 1000f;
+            LogPlayByPostTelemetry(
+                "SubmitResult",
+                $"ok=false err={TurnTelemetryConstants.Unavailable} durationMs={durationMs:F1} transportSeq={transportSeq} lastAppliedTransportSeq={lastAppliedTurnNumberForPolling} state={GetPlayByPostStateSummary()}");
             Debug.LogWarning("Play-by-Post auto-sync is enabled, but no transport is available. Manual copy/paste remains available.");
             TryNotifyPlayByPostSubmitResult(false, TurnTelemetryConstants.Unavailable);
             HandlePlayByPostSubmitConnectivityFailure(TurnTelemetryConstants.Unavailable);
@@ -728,6 +778,11 @@ public class TurnManager : MonoBehaviour
             submitOk = ok;
             submitError = err;
         });
+
+        float submitDurationMs = (Time.realtimeSinceStartup - submitStartedAt) * 1000f;
+        LogPlayByPostTelemetry(
+            "SubmitResult",
+            $"ok={submitOk} err={(submitError ?? "<null>")} durationMs={submitDurationMs:F1} transportSeq={transportSeq} lastAppliedTransportSeq={lastAppliedTurnNumberForPolling} state={GetPlayByPostStateSummary()}");
 
         if (submitOk)
         {
@@ -842,10 +897,12 @@ public class TurnManager : MonoBehaviour
     private IEnumerator TryFetchPlayByPostTurnOnce()
     {
         float now = Time.realtimeSinceStartup;
+#if DEVELOPMENT_BUILD
         if (!playByPostLastFetchWasNoTurn || (now - playByPostLastNoTurnLogTime) >= PlayByPostNoTurnLogCooldownSeconds)
         {
             Debug.Log($"PBp fetch attempt started (gameId={currentGameId}, expectedTurn={lastAppliedTurnNumberForPolling + 1})");
         }
+#endif
         if (!isPlayByPostWaitingForExport || currentMode != GameMode.PlayByPost)
             yield break;
 
@@ -883,10 +940,12 @@ public class TurnManager : MonoBehaviour
         bool shouldLogNoTurn = isNoTurn &&
                                (!playByPostLastFetchWasNoTurn || (now - playByPostLastNoTurnLogTime) >= PlayByPostNoTurnLogCooldownSeconds);
 
+#if DEVELOPMENT_BUILD
         if (!isNoTurn || shouldLogNoTurn)
         {
             Debug.Log($"PBp fetch result via {turnTransport.TransportName} (ok={ok}, turn={(fetchedTurnNumber != 0 ? fetchedTurnNumber.ToString() : "<none>")}, jsonLen={(json != null ? json.Length : 0)}, err={(err ?? "<null>")})");
         }
+#endif
 
         if (isNoTurn)
         {
@@ -898,7 +957,7 @@ public class TurnManager : MonoBehaviour
 
         if (!ok)
         {
-            if (err != "NO_TURN")
+            if (!string.IsNullOrEmpty(err) && err != TurnTelemetryConstants.NoTurn)
             {
                 Debug.LogWarning($"PBp fetch failed via {turnTransport.TransportName} (gameId={currentGameId}, after={afterTurnNumber}): {err}");
             }
@@ -1135,6 +1194,9 @@ public class TurnManager : MonoBehaviour
         // Attempt to load a pending save request before starting a new game.
         if (SaveLoadRequest.TryConsume(out string loadPath))
         {
+            LogPlayByPostTelemetry(
+                "ResumeOpenRequest",
+                $"loadPath={loadPath} state={GetPlayByPostStateSummary()}");
             bool loaded = LoadFromFile(loadPath);
             if (loaded)
             {
@@ -1145,7 +1207,56 @@ public class TurnManager : MonoBehaviour
             Debug.LogWarning("Load request failed; starting a new game. Path: " + loadPath);
         }
 
+        ResolveStartupModeForResume();
+
+        if (currentMode == GameMode.PlayByPost)
+        {
+            string pbpGameId = GetPbpGameIdFromPrefsOrCurrent();
+            if (!string.IsNullOrWhiteSpace(pbpGameId))
+            {
+                string pbpSnapshotPath = GetPbpPerGameSavePath(pbpGameId);
+                if (File.Exists(pbpSnapshotPath))
+                {
+                    LogPlayByPostTelemetry(
+                        "ResumeLocalSnapshotAttempt",
+                        $"gameId={pbpGameId} path={pbpSnapshotPath} state={GetPlayByPostStateSummary()}");
+
+                    if (LoadFromFile(pbpSnapshotPath))
+                    {
+                        currentMode = GameMode.PlayByPost;
+                        SetCurrentGameId(pbpGameId);
+
+                        LogPlayByPostTelemetry(
+                            "ResumeLocalSnapshotLoaded",
+                            $"gameId={pbpGameId} path={pbpSnapshotPath} state={GetPlayByPostStateSummary()}");
+                        Debug.Log($"Loaded PBp local snapshot from {pbpSnapshotPath} on scene start.");
+                        yield break;
+                    }
+
+                    Debug.LogWarning($"Failed to load PBp local snapshot from {pbpSnapshotPath}; falling back to normal startup.");
+                }
+            }
+        }
+
         InitializeNewGame();
+    }
+
+    private void ResolveStartupModeForResume()
+    {
+        if (currentMode != GameMode.None)
+            return;
+
+        if (GameModeSelection.TryConsume(out GameMode pendingMode))
+        {
+            SetGameMode(pendingMode);
+            return;
+        }
+
+        if (HasPlayByPostSessionContext())
+        {
+            SetGameMode(GameMode.PlayByPost);
+            Debug.LogWarning("No mode preselected, but PBp context detected. Forcing PlayByPost mode.");
+        }
     }
 
     System.Collections.IEnumerator WaitForGridReady()
@@ -1222,11 +1333,32 @@ public class TurnManager : MonoBehaviour
     private bool HasPlayByPostSessionContext()
     {
         string pbpGameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
-        if (!string.IsNullOrWhiteSpace(pbpGameId))
+        if (string.IsNullOrWhiteSpace(pbpGameId))
+            return false;
+
+        string snapshotPath = GetPbpPerGameSavePath(pbpGameId);
+        if (!string.IsNullOrWhiteSpace(snapshotPath) && File.Exists(snapshotPath))
             return true;
 
-        return !string.IsNullOrWhiteSpace(currentGameId) &&
-               LocalPlayerSeatStore.TryGetSeat(currentGameId, out _);
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+        try
+        {
+            // Dev-only probe to surface manifest IO/parsing issues without
+            // using manifest state to force PBp mode at runtime.
+            SaveManifestService.GetActivePlayByPostGames();
+        }
+        catch (System.Exception ex)
+        {
+            if (!hasLoggedManifestProbeFailure)
+            {
+                Debug.LogWarning(
+                    $"PBp session context: manifest probe failed ({ex.GetType().Name}): {ex.Message}");
+                hasLoggedManifestProbeFailure = true;
+            }
+        }
+#endif
+
+        return false;
     }
 
     private void InitializePlayByPostSession()
@@ -2426,6 +2558,121 @@ public class TurnManager : MonoBehaviour
         return Path.Combine(Application.persistentDataPath, autoSaveFileName);
     }
 
+    private string GetPrimaryAutosavePathForCurrentMode()
+    {
+        // Primary autosave only: keep SP and PBp isolated from each other.
+        if (currentMode == GameMode.VsAI)
+        {
+            return Path.Combine(Application.persistentDataPath, SinglePlayerPrimarySaveFileName);
+        }
+
+        if (currentMode == GameMode.PlayByPost)
+        {
+            return Path.Combine(Application.persistentDataPath, PlayByPostPrimarySaveFileName);
+        }
+
+        return GetDefaultSavePath();
+    }
+
+    private string GetPbpGameIdFromPrefsOrCurrent()
+    {
+        string gameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
+        if (!string.IsNullOrWhiteSpace(gameId))
+            return gameId;
+
+        return string.IsNullOrWhiteSpace(currentGameId) ? null : currentGameId;
+    }
+
+    private string GetPbpPerGameSavePath(string gameId)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+            return null;
+
+        string safeGameId = SanitizeGameIdForFileName(gameId);
+        string directory = Path.Combine(Application.persistentDataPath, PlayByPostPerGameSaveFolderName);
+        Directory.CreateDirectory(directory);
+        return Path.Combine(directory, $"{PlayByPostPerGameSavePrefix}{safeGameId}.json");
+    }
+
+    private static string SanitizeGameIdForFileName(string gameId)
+    {
+        if (string.IsNullOrEmpty(gameId))
+            return string.Empty;
+
+        char[] chars = gameId.ToCharArray();
+        char[] invalidChars = Path.GetInvalidFileNameChars();
+        for (int i = 0; i < chars.Length; i++)
+        {
+            if (System.Array.IndexOf(invalidChars, chars[i]) >= 0)
+            {
+                chars[i] = '_';
+            }
+        }
+
+        return new string(chars);
+    }
+
+    private void SavePlayByPostPerGameSnapshot()
+    {
+        if (currentMode != GameMode.PlayByPost)
+            return;
+
+        string gameId = GetPbpGameIdFromPrefsOrCurrent();
+        if (string.IsNullOrWhiteSpace(gameId))
+            return;
+
+        if (!string.Equals(currentGameId, gameId, System.StringComparison.Ordinal))
+        {
+            SetCurrentGameId(gameId);
+        }
+
+        string snapshotPath = GetPbpPerGameSavePath(gameId);
+        if (string.IsNullOrWhiteSpace(snapshotPath))
+            return;
+
+        WritePlayByPostSnapshotFile(snapshotPath);
+    }
+
+    private void WritePlayByPostSnapshotFile(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        string directory = Path.GetDirectoryName(path);
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+            Debug.LogWarning($"Cannot save PBp snapshot: invalid path '{path}'.");
+#endif
+            return;
+        }
+
+        if (gridManager == null)
+        {
+            Debug.LogWarning("Cannot save PBp snapshot: gridManager is null.");
+            return;
+        }
+
+        if (!TryBuildSaveJsonForDisk(out string json))
+            return;
+
+        try
+        {
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(path, json);
+            LogPlayByPostTelemetry(
+                "SnapshotSave",
+                $"path={path} state={GetPlayByPostStateSummary()}");
+        }
+        catch (IOException ex)
+        {
+            LogPlayByPostTelemetry(
+                "SnapshotSaveFailed",
+                $"path={path} err={ex.Message} state={GetPlayByPostStateSummary()}");
+            Debug.LogError("Failed to save PBp snapshot: " + ex.Message);
+        }
+    }
+
     private string NormalizeSavePath(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -2469,7 +2716,7 @@ public class TurnManager : MonoBehaviour
         if (!autoSaveEnabled || isLoadingFromSave)
             return;
 
-        SaveToFile();
+        SaveToFile(GetPrimaryAutosavePathForCurrentMode());
     }
 
     public void SaveToFile(string path = null)
@@ -2480,6 +2727,8 @@ public class TurnManager : MonoBehaviour
             targetPath = GetDefaultSavePath();
         }
         targetPath = NormalizeSavePath(targetPath);
+        bool shouldLogPlayByPostSnapshotSave =
+            currentMode == GameMode.PlayByPost && isPlayByPostWaitingForExport;
 
         if (gridManager == null)
         {
@@ -2487,22 +2736,43 @@ public class TurnManager : MonoBehaviour
             return;
         }
 
-        GameSave save = BuildCurrentSave();
-        if (save == null)
+        if (!TryBuildSaveJsonForDisk(out string json))
             return;
 
-        string json = JsonUtility.ToJson(save, true);
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
             File.WriteAllText(targetPath, json);
+            if (shouldLogPlayByPostSnapshotSave)
+            {
+                LogPlayByPostTelemetry(
+                    "SnapshotSave",
+                    $"path={targetPath} state={GetPlayByPostStateSummary()}");
+            }
             Debug.Log("Game saved to " + targetPath);
             SaveManifestService.RecordLocalSave(currentGameId, currentMode, targetPath, gameOver);
         }
         catch (IOException ex)
         {
+            if (shouldLogPlayByPostSnapshotSave)
+            {
+                LogPlayByPostTelemetry(
+                    "SnapshotSaveFailed",
+                    $"path={targetPath} err={ex.Message} state={GetPlayByPostStateSummary()}");
+            }
             Debug.LogError("Failed to save game: " + ex.Message);
         }
+    }
+
+    private bool TryBuildSaveJsonForDisk(out string json)
+    {
+        json = null;
+        GameSave save = BuildCurrentSave();
+        if (save == null)
+            return false;
+
+        json = JsonUtility.ToJson(save, true);
+        return !string.IsNullOrWhiteSpace(json);
     }
 
     GameSave BuildCurrentSave()
@@ -2582,6 +2852,9 @@ public class TurnManager : MonoBehaviour
     /// </summary>
     public void CopyCurrentStateToClipboard()
     {
+#if !DEVELOPMENT_BUILD
+        return;
+#endif
         if (!TryBuildPlayByPostExportJson(out _, out string json))
         {
             return;
@@ -2673,6 +2946,9 @@ private void PBpDebugSyncNow_Context()
             targetPath = GetDefaultSavePath();
         }
         targetPath = NormalizeSavePath(targetPath);
+        LogPlayByPostTelemetry(
+            "LoadFromFileStart",
+            $"path={targetPath} state={GetPlayByPostStateSummary()}");
 
         if (!File.Exists(targetPath))
         {
@@ -2709,6 +2985,14 @@ private void PBpDebugSyncNow_Context()
             return false;
         }
 
+        if (save != null &&
+            string.Equals(save.mode, GameMode.PlayByPost.ToString(), System.StringComparison.Ordinal))
+        {
+            LogPlayByPostTelemetry(
+                "LoadFromFileParsed",
+                $"path={targetPath} loadedMode={save.mode} loadedGameId={save.gameId} loadedRoundTurn={save.turnNumber} loadedIsPlayerTurn={save.isPlayerTurn} loadedTransportSeq={ComputeTransportSeq(save)}");
+        }
+
         return ApplyLoadedSave(save, targetPath);
     }
 
@@ -2739,6 +3023,14 @@ private void PBpDebugSyncNow_Context()
             return false;
         }
 
+        if (save != null &&
+            string.Equals(save.mode, GameMode.PlayByPost.ToString(), System.StringComparison.Ordinal))
+        {
+            LogPlayByPostTelemetry(
+                "LoadFromJsonParsed",
+                $"source=clipboard/transport jsonLen={json.Length} loadedMode={save.mode} loadedGameId={save.gameId} loadedRoundTurn={save.turnNumber} loadedIsPlayerTurn={save.isPlayerTurn} loadedTransportSeq={ComputeTransportSeq(save)}");
+        }
+
         return ApplyLoadedSave(save, "clipboard/transport");
     }
 
@@ -2750,6 +3042,14 @@ private void PBpDebugSyncNow_Context()
             {
                 Debug.LogError("Load failed: save was null.");
                 return false;
+            }
+
+            if (string.Equals(save.mode, GameMode.PlayByPost.ToString(), System.StringComparison.Ordinal) ||
+                currentMode == GameMode.PlayByPost)
+            {
+                LogPlayByPostTelemetry(
+                    "ApplyLoadedSaveStart",
+                    $"source={debugSource} loadedMode={save.mode} loadedGameId={save.gameId} loadedRoundTurn={save.turnNumber} loadedIsPlayerTurn={save.isPlayerTurn} loadedTransportSeq={ComputeTransportSeq(save)} stateBefore={GetPlayByPostStateSummary()}");
             }
 
             save.tiles ??= new List<SavedTile>();
@@ -2948,6 +3248,13 @@ private void PBpDebugSyncNow_Context()
             else
             {
                 lastAppliedTurnNumberForPolling = turnNumber;
+            }
+            if (currentMode == GameMode.PlayByPost)
+            {
+                SavePlayByPostPerGameSnapshot();
+                LogPlayByPostTelemetry(
+                    "ApplyLoadedSaveDone",
+                    $"source={debugSource} loadRelationToLastSubmit={GetPlayByPostLoadRelationToLastSubmit()} stateAfter={GetPlayByPostStateSummary()}");
             }
             Debug.Log("Game loaded from " + debugSource);
 
