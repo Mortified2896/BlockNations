@@ -58,7 +58,7 @@ public class PbpBadgeView : MonoBehaviour
         }
 
         triedResolveMainMenu = true;
-        mainMenu = FindObjectOfType<MainMenuController>();
+        mainMenu = UnityEngine.Object.FindFirstObjectByType<MainMenuController>();
     }
 
     private void SubscribeIfPossible()

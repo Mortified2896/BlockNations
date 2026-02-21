@@ -191,7 +191,7 @@ public class PbpConnectionStatusView : MonoBehaviour
             turnManager = TurnManager.Instance;
             if (turnManager == null)
             {
-                turnManager = FindObjectOfType<TurnManager>();
+                turnManager = UnityEngine.Object.FindFirstObjectByType<TurnManager>();
             }
         }
 
@@ -202,7 +202,7 @@ public class PbpConnectionStatusView : MonoBehaviour
 
         if (httpTurnTransport == null)
         {
-            httpTurnTransport = FindObjectOfType<HttpTurnTransport>();
+            httpTurnTransport = UnityEngine.Object.FindFirstObjectByType<HttpTurnTransport>();
         }
     }
 

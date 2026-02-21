@@ -273,7 +273,6 @@ public static class SaveManifestService
 
             string normalizedEntryKey = NormalizeEntryKey(entryKey);
             SaveEntry entry = FindEntry(cachedManifest, normalizedEntryKey, gameId, folderPath);
-            bool created = false;
             if (entry == null)
             {
                 if (string.IsNullOrWhiteSpace(normalizedEntryKey) && !allowCreateWithoutEntryKey)
@@ -288,7 +287,6 @@ public static class SaveManifestService
                     createdUtc = UtcNowIso()
                 };
                 cachedManifest.entries.Add(entry);
-                created = true;
             }
 
             if (!string.IsNullOrWhiteSpace(normalizedEntryKey) &&

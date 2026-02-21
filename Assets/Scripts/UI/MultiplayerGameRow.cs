@@ -78,17 +78,6 @@ public class MultiplayerGameRow : MonoBehaviour
             return isMyTurn ? "Your turn" : "Waiting...";
         }
 
-        return BuildLegacySubtitle(summary);
-    }
-
-    private static string BuildLegacySubtitle(SaveManifestService.ManifestGameSummary summary)
-    {
-        string lastPlayed = string.IsNullOrWhiteSpace(summary.lastPlayedUtc) ? "-" : summary.lastPlayedUtc;
-        if (string.IsNullOrWhiteSpace(summary.transportType))
-        {
-            return $"Last played: {lastPlayed}";
-        }
-
-        return $"Last played: {lastPlayed} | Transport: {summary.transportType}";
+        return string.Empty;
     }
 }

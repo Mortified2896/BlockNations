@@ -134,6 +134,15 @@ public class TurnManager : MonoBehaviour
     private const float PlayByPostNoTurnLogCooldownSeconds = 5f;
     private const string PlayByPostGameIdKey = "pbp_gameId";
 
+    // Controlled via Unity Scripting Define Symbols:
+    // ENABLE_AUTO_END_TURN_ON_NO_ACTIONS
+    // TODO: To re-enable, define the symbol above.
+#if ENABLE_AUTO_END_TURN_ON_NO_ACTIONS
+    private const bool autoEndTurnOnNoActionsEnabled = true;
+#else
+    private const bool autoEndTurnOnNoActionsEnabled = false;
+#endif
+    private bool autoEndTurnDisabledLoggedThisTurn = false;
     private Coroutine autoEndTurnRoutine;
     private float lastHumanInputUnscaledTime = -999f;
     [System.Serializable]
@@ -1041,6 +1050,7 @@ public class TurnManager : MonoBehaviour
         if (gameOver)
             return;
 
+        autoEndTurnDisabledLoggedThisTurn = false;
         isPlayerTurn = true;
 
         if (SoundManager.Instance != null)
@@ -1336,9 +1346,18 @@ public class TurnManager : MonoBehaviour
             if (HasAnyAvailableActionForCurrentPlayer())
                 break;
 
+#if ENABLE_AUTO_END_TURN_ON_NO_ACTIONS
             Debug.Log("Auto-ending turn: no available actions.");
             EndCurrentTurn(false);
             break;
+#else
+            if (!autoEndTurnDisabledLoggedThisTurn)
+            {
+                Debug.Log("Auto-end turn on no-actions is temporarily disabled.");
+                autoEndTurnDisabledLoggedThisTurn = true;
+            }
+            break;
+#endif
         }
 
         autoEndTurnRoutine = null;

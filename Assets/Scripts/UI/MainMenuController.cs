@@ -870,7 +870,7 @@ public class MainMenuController : MonoBehaviour
     {
         if (cachedHttpTransport == null)
         {
-            cachedHttpTransport = FindObjectOfType<HttpTurnTransport>();
+            cachedHttpTransport = UnityEngine.Object.FindFirstObjectByType<HttpTurnTransport>();
         }
     }
 
@@ -925,12 +925,6 @@ public class MainMenuController : MonoBehaviour
             return isMyTurn ? "Your turn" : "Waiting...";
         }
 
-        string lastPlayed = string.IsNullOrWhiteSpace(summary.lastPlayedUtc) ? "-" : summary.lastPlayedUtc;
-        if (!string.IsNullOrWhiteSpace(summary.transportType))
-        {
-            return $"Last played: {lastPlayed} | Transport: {summary.transportType}";
-        }
-
-        return $"Last played: {lastPlayed}";
+        return string.Empty;
     }
 }
