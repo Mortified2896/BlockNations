@@ -188,6 +188,8 @@ public class TurnManager : MonoBehaviour
     private string currentGameId;
     private string cachedGameIdRaw;
     private string cachedGameIdHash;
+    public event System.Action<bool, string> PlayByPostSubmitResult;
+    public event System.Action<bool, string> PlayByPostFetchResult;
 
     public bool IsHumanTurn()
     {
@@ -704,6 +706,8 @@ public class TurnManager : MonoBehaviour
         if (turnTransport == null || !turnTransport.IsAvailable)
         {
             Debug.LogWarning("Play-by-Post auto-sync is enabled, but no transport is available. Manual copy/paste remains available.");
+            TryNotifyPlayByPostSubmitResult(false, TurnTelemetryConstants.Unavailable);
+            HandlePlayByPostSubmitConnectivityFailure(TurnTelemetryConstants.Unavailable);
             yield break;
         }
 
@@ -725,7 +729,77 @@ public class TurnManager : MonoBehaviour
             Debug.LogWarning($"PBp submit failed via {turnTransport.TransportName} (gameId={currentGameId}, turn={transportSeq}): {submitError}");
         }
 
+        TryNotifyPlayByPostSubmitResult(submitOk, submitError);
+        if (submitOk)
+        {
+            StartPlayByPostPolling(transportSeq);
+            yield break;
+        }
+
+        if (IsConnectivityLikeTransportError(submitError))
+        {
+            HandlePlayByPostSubmitConnectivityFailure(submitError);
+            yield break;
+        }
+
         StartPlayByPostPolling(transportSeq);
+    }
+
+    private void TryNotifyPlayByPostSubmitResult(bool ok, string err)
+    {
+        if (PlayByPostSubmitResult == null)
+            return;
+
+        try
+        {
+            PlayByPostSubmitResult.Invoke(ok, err);
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogException(ex);
+        }
+    }
+
+    private void TryNotifyPlayByPostFetchResult(bool reachable, string resultOrError)
+    {
+        if (PlayByPostFetchResult == null)
+            return;
+
+        try
+        {
+            PlayByPostFetchResult.Invoke(reachable, resultOrError);
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogException(ex);
+        }
+    }
+
+    private void HandlePlayByPostSubmitConnectivityFailure(string submitError)
+    {
+        isPlayByPostWaitingForExport = false;
+        isPlayByPostFetchInProgress = false;
+        playByPostLastFetchWasNoTurn = false;
+
+        if (playByPostPollRoutine != null)
+        {
+            StopCoroutine(playByPostPollRoutine);
+            playByPostPollRoutine = null;
+        }
+
+        if (playByPostPopup != null)
+        {
+            playByPostPopup.SetActive(false);
+        }
+
+        UpdateTurnText();
+
+        if (UnitSelectionManager.Instance != null)
+        {
+            UnitSelectionManager.Instance.RefreshMoveOutlinesForCurrentTurn();
+        }
+
+        Debug.LogWarning($"PBp submit connectivity failure. Keeping local turn active (err={(submitError ?? "<null>")}).");
     }
 
     private void StartPlayByPostPolling(int afterTurnNumber)
@@ -770,7 +844,10 @@ public class TurnManager : MonoBehaviour
             yield break;
 
         if (turnTransport == null || !turnTransport.IsAvailable)
+        {
+            TryNotifyPlayByPostFetchResult(false, TurnTelemetryConstants.Unavailable);
             yield break;
+        }
 
         isPlayByPostFetchInProgress = true;
         bool ok = false;
@@ -786,6 +863,12 @@ public class TurnManager : MonoBehaviour
             fetchedTurnNumber = turn;
             json = fetchedJson;
         });
+
+        string fetchResultOrError = ok
+            ? "OK"
+            : (string.IsNullOrEmpty(err) ? TurnTelemetryConstants.Unknown : err);
+        bool fetchReachable = ok || !IsConnectivityLikeTransportError(fetchResultOrError);
+        TryNotifyPlayByPostFetchResult(fetchReachable, fetchResultOrError);
 
         bool isNoTurn = !ok && err == TurnTelemetryConstants.NoTurn;
         bool shouldLogNoTurn = isNoTurn &&
@@ -839,6 +922,17 @@ public class TurnManager : MonoBehaviour
         {
             Debug.LogWarning($"PBp fetched turn {fetchedTurnNumber}, but failed to load JSON.");
         }
+    }
+
+    private static bool IsConnectivityLikeTransportError(string err)
+    {
+        if (string.IsNullOrEmpty(err))
+            return true;
+
+        return err == TurnTelemetryConstants.IoError ||
+               err == TurnTelemetryConstants.Unavailable ||
+               err == TurnTelemetryConstants.NullTransport ||
+               err == TurnTelemetryConstants.Unknown;
     }
 
     void TryStartGameplayMusic()
@@ -1067,6 +1161,13 @@ public class TurnManager : MonoBehaviour
         {
             SetGameMode(pendingMode);
         }
+        else if (currentMode == GameMode.None && HasPlayByPostSessionContext())
+        {
+            // Defensive fallback: if menu-to-game pending mode was lost but
+            // PBp session context exists, keep this run in PlayByPost.
+            SetGameMode(GameMode.PlayByPost);
+            Debug.LogWarning("No mode preselected, but PBp context detected. Forcing PlayByPost mode.");
+        }
         else if (currentMode == GameMode.None)
         {
             SetGameMode(GameMode.VsAI);
@@ -1106,6 +1207,16 @@ public class TurnManager : MonoBehaviour
         {
             ShowHotseatHandoff(isPlayerTurn, false);
         }
+    }
+
+    private bool HasPlayByPostSessionContext()
+    {
+        string pbpGameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
+        if (!string.IsNullOrWhiteSpace(pbpGameId))
+            return true;
+
+        return !string.IsNullOrWhiteSpace(currentGameId) &&
+               LocalPlayerSeatStore.TryGetSeat(currentGameId, out _);
     }
 
     private void InitializePlayByPostSession()

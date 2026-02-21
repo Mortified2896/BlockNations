@@ -17,12 +17,15 @@ public class MainMenuController : MonoBehaviour
      * Wiring Instructions (Multiplayer Screen)
      * - Assign `mainMenuPanel` to the root GameObject of the main menu panel.
      * - Assign `multiplayerPanel` to the root GameObject of the multiplayer panel.
+     * - Assign GameDetails popup references below to your existing popup panel/texts.
      * - Main Menu "Multiplayer" button -> OpenMultiplayerScreen()
      * - Multiplayer "Back" button -> CloseMultiplayerScreen()
      * - Multiplayer "Create" button -> Multiplayer_CreateGame()
      * - Multiplayer "Join" button -> Multiplayer_JoinGame()
-     * - Each "Resume" button -> ResumePlayByPostGame(gameId)
-     *   - Or set `selectedGameId` from your UI and call ResumePlayByPostGame_FromSelected().
+     * - Active game row click -> OpenSelectedGameDetails(summary) (via MultiplayerGameRow.Bind).
+     * - Popup Open button -> GameDetails_Open()
+     * - Popup Close button -> CloseGameDetailsPopup()
+     * - Popup Resign button -> GameDetails_ResignLocal()
      */
 
     [Header("Scenes")]
@@ -36,6 +39,14 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private GameObject mainMenuPanel;
     [SerializeField] private GameObject multiplayerPanel;
     [SerializeField] private GameObject joinPopupPanel;
+    // Inspector wiring: assign to the existing GameDetailsPopup panel.
+    [SerializeField] private GameObject gameDetailsPopupPanel;
+    // Inspector wiring: assign the popup title text (required for populated title).
+    [SerializeField] private TMP_Text gameDetailsTitleText;
+    // Inspector wiring: optional subtitle text ("Your turn", "Waiting...", fallback info).
+    [SerializeField] private TMP_Text gameDetailsSubtitleText;
+    // Inspector wiring: optional full game id label.
+    [SerializeField] private TMP_Text gameDetailsGameIdText;
     [SerializeField] private Button createGameButton;
     [SerializeField] private Button joinGameButton;
     [SerializeField] private string selectedGameId;
@@ -44,6 +55,8 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private bool autoFitMenuToScreenOnDesktop = true;
     private bool tutorialLaunchQueued;
     private const string PlayByPostGameIdKey = "pbp_gameId";
+    private const string LegacyPlayByPostIsPlayer1Key = "pbp_isPlayer1";
+    private const string SeatByGameKeyPrefix = "pbp_seat_";
     private bool isServerOnline = true;
     private Coroutine serverCheckRoutine;
     private HttpTurnTransport cachedHttpTransport;
@@ -53,6 +66,8 @@ public class MainMenuController : MonoBehaviour
     public IReadOnlyList<SaveManifestService.ManifestGameSummary> ActivePbpGames => activePbpGames;
     public int PbpBadgeCountMyTurn { get; private set; }
     private List<SaveManifestService.ManifestGameSummary> activePbpGames = new List<SaveManifestService.ManifestGameSummary>();
+    private SaveManifestService.ManifestGameSummary selectedPbpGame;
+    private bool hasSelectedPbpGame;
 
     IEnumerator Start()
     {
@@ -472,6 +487,14 @@ public class MainMenuController : MonoBehaviour
     public void RefreshMultiplayerList()
     {
         activePbpGames = SaveManifestService.GetActivePlayByPostGames();
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        Debug.Log($"[MP] Active PBp games={activePbpGames.Count}");
+        for (int i = 0; i < activePbpGames.Count; i++)
+        {
+            SaveManifestService.ManifestGameSummary entry = activePbpGames[i];
+            Debug.Log($"[MP] Active[{i}] gameId={entry.gameId} entryKey={entry.entryKey} lastPlayedUtc={entry.lastPlayedUtc} isFinished={entry.isFinished}");
+        }
+#endif
         ActivePbpGamesChanged?.Invoke();
         RecomputePbpBadge();
 
@@ -521,6 +544,117 @@ public class MainMenuController : MonoBehaviour
         PlayerPrefs.SetString(PlayByPostGameIdKey, gameId);
         PlayerPrefs.Save();
         SceneManager.LoadScene(gameplaySceneName);
+    }
+
+    public void OpenSelectedGameDetails(SaveManifestService.ManifestGameSummary summary)
+    {
+        selectedPbpGame = summary;
+        hasSelectedPbpGame = true;
+        selectedGameId = summary.gameId;
+
+        if (gameDetailsTitleText != null)
+        {
+            gameDetailsTitleText.text = BuildGameTitle(summary.gameId);
+        }
+
+        if (gameDetailsSubtitleText != null)
+        {
+            gameDetailsSubtitleText.text = BuildGameSubtitle(summary);
+        }
+
+        if (gameDetailsGameIdText != null)
+        {
+            gameDetailsGameIdText.text = string.IsNullOrWhiteSpace(summary.gameId)
+                ? "Game ID: -"
+                : $"Game ID: {summary.gameId}";
+        }
+
+        if (gameDetailsPopupPanel != null)
+        {
+            gameDetailsPopupPanel.SetActive(true);
+        }
+    }
+
+    public void CloseGameDetailsPopup()
+    {
+        if (gameDetailsPopupPanel != null)
+        {
+            gameDetailsPopupPanel.SetActive(false);
+        }
+    }
+
+    public void GameDetails_Open()
+    {
+        string gameId = hasSelectedPbpGame ? selectedPbpGame.gameId : selectedGameId;
+        ResumePlayByPostGame(gameId);
+    }
+
+    public void GameDetails_ResignLocal()
+    {
+        string gameId = hasSelectedPbpGame ? selectedPbpGame.gameId : selectedGameId;
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            return;
+        }
+
+        bool manifestUpdated = SaveManifestService.MarkPlayByPostGameFinished(gameId);
+
+        string turnsFolder = Path.Combine(
+            Application.persistentDataPath,
+            "PlayByPost",
+            "Turns",
+            Hash128.Compute(gameId).ToString());
+        bool deletedTurnsFolder = false;
+        if (Directory.Exists(turnsFolder))
+        {
+            try
+            {
+                Directory.Delete(turnsFolder, true);
+                deletedTurnsFolder = true;
+            }
+            catch (Exception ex)
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.LogWarning($"[MP] Failed deleting PBp folder for {gameId}: {turnsFolder} ({ex.Message})");
+#endif
+            }
+        }
+
+        string savePath = Path.Combine(Application.persistentDataPath, "save.json");
+        bool deletedSaveJson = SaveManifestService.TryDeleteMatchingPlayByPostSaveFile(savePath, gameId);
+        string importedPath = Path.Combine(Application.persistentDataPath, "imported.json");
+        bool deletedImportedJson = SaveManifestService.TryDeleteMatchingPlayByPostSaveFile(importedPath, gameId);
+
+        string seatKey = SeatByGameKeyPrefix + Hash128.Compute(gameId).ToString();
+        bool clearedSeatMapping = false;
+        if (PlayerPrefs.HasKey(seatKey))
+        {
+            PlayerPrefs.DeleteKey(seatKey);
+            clearedSeatMapping = true;
+        }
+
+        string activeGameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
+        if (string.Equals(activeGameId, gameId, StringComparison.Ordinal))
+        {
+            PlayerPrefs.DeleteKey(PlayByPostGameIdKey);
+            PlayerPrefs.DeleteKey(LegacyPlayByPostIsPlayer1Key);
+            clearedSeatMapping = true;
+        }
+
+        if (clearedSeatMapping)
+        {
+            PlayerPrefs.Save();
+        }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        Debug.Log($"[MP] ResignLocal gameId={gameId} manifestUpdated={manifestUpdated} deletedTurnsFolder={deletedTurnsFolder} deletedSaveJson={deletedSaveJson} deletedImportedJson={deletedImportedJson} clearedSeatMapping={clearedSeatMapping}");
+#endif
+
+        selectedPbpGame = default;
+        hasSelectedPbpGame = false;
+        selectedGameId = string.Empty;
+        CloseGameDetailsPopup();
+        RefreshMultiplayerList();
     }
 
     public void ResumePlayByPostGame_FromSelected()
@@ -771,5 +905,32 @@ public class MainMenuController : MonoBehaviour
         }
 
         return true;
+    }
+
+    private static string BuildGameTitle(string rawGameId)
+    {
+        if (string.IsNullOrWhiteSpace(rawGameId))
+        {
+            return "Game Unknown";
+        }
+
+        string shortId = rawGameId.Length <= 8 ? rawGameId : rawGameId.Substring(0, 8);
+        return $"Game {shortId}";
+    }
+
+    private static string BuildGameSubtitle(SaveManifestService.ManifestGameSummary summary)
+    {
+        if (TurnIndicatorService.TryGetIsMyTurn(summary.gameId, out bool isMyTurn, out _))
+        {
+            return isMyTurn ? "Your turn" : "Waiting...";
+        }
+
+        string lastPlayed = string.IsNullOrWhiteSpace(summary.lastPlayedUtc) ? "-" : summary.lastPlayedUtc;
+        if (!string.IsNullOrWhiteSpace(summary.transportType))
+        {
+            return $"Last played: {lastPlayed} | Transport: {summary.transportType}";
+        }
+
+        return $"Last played: {lastPlayed}";
     }
 }

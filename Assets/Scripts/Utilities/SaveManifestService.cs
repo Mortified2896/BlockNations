@@ -177,6 +177,75 @@ public static class SaveManifestService
         }
     }
 
+    public static bool MarkPlayByPostGameFinished(string gameId)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+            return false;
+
+        lock (Sync)
+        {
+            EnsureLoaded();
+            if (cachedManifest == null || cachedManifest.entries == null)
+                return false;
+
+            bool updated = false;
+            string nowUtc = UtcNowIso();
+            for (int i = 0; i < cachedManifest.entries.Count; i++)
+            {
+                SaveEntry entry = cachedManifest.entries[i];
+                if (entry == null)
+                    continue;
+
+                if (!string.Equals(entry.slotType, "PlayByPost", StringComparison.Ordinal))
+                    continue;
+
+                if (!string.Equals(entry.gameId, gameId, StringComparison.Ordinal))
+                    continue;
+
+                if (entry.isFinished)
+                    continue;
+
+                entry.isFinished = true;
+                entry.lastPlayedUtc = nowUtc;
+                updated = true;
+            }
+
+            if (!updated)
+                return false;
+
+            WriteManifest(cachedManifest);
+            DumpManifestToLog();
+            return true;
+        }
+    }
+
+    public static bool TryDeleteMatchingPlayByPostSaveFile(string path, string gameId)
+    {
+        if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(gameId) || !File.Exists(path))
+            return false;
+
+        try
+        {
+            string json = File.ReadAllText(path);
+            MinimalSaveHeader header = JsonUtility.FromJson<MinimalSaveHeader>(json);
+            if (header == null)
+                return false;
+
+            if (!string.Equals(header.mode, TurnManager.GameMode.PlayByPost.ToString(), StringComparison.Ordinal))
+                return false;
+
+            if (!string.Equals(header.gameId, gameId, StringComparison.Ordinal))
+                return false;
+
+            File.Delete(path);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static void RecordSave(
         string entryKey,
         string gameId,

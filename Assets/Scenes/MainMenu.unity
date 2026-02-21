@@ -485,7 +485,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 1678659297}
         m_TargetAssemblyTypeName: MainMenuController, Assembly-CSharp
-        m_MethodName: 
+        m_MethodName: CloseGameDetailsPopup
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -2075,7 +2075,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 642, y: -1578.2969}
+  m_AnchoredPosition: {x: 642, y: -1578.2999}
   m_SizeDelta: {x: 1284, y: 300}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &656014264
@@ -2608,7 +2608,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 642, y: -290.79688}
+  m_AnchoredPosition: {x: 642, y: -290.8}
   m_SizeDelta: {x: 250, y: 123.8}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &833357795
@@ -2677,7 +2677,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 1678659297}
         m_TargetAssemblyTypeName: MainMenuController, Assembly-CSharp
-        m_MethodName: 
+        m_MethodName: GameDetails_ResignLocal
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -4067,7 +4067,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 1678659297}
         m_TargetAssemblyTypeName: MainMenuController, Assembly-CSharp
-        m_MethodName: 
+        m_MethodName: GameDetails_Open
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -5139,6 +5139,10 @@ MonoBehaviour:
   mainMenuPanel: {fileID: 1977005933}
   multiplayerPanel: {fileID: 1056362760}
   joinPopupPanel: {fileID: 1969584917}
+  gameDetailsPopupPanel: {fileID: 485342506}
+  gameDetailsTitleText: {fileID: 23509811}
+  gameDetailsSubtitleText: {fileID: 1152004520}
+  gameDetailsGameIdText: {fileID: 0}
   createGameButton: {fileID: 2027554897}
   joinGameButton: {fileID: 1895134062}
   selectedGameId: 

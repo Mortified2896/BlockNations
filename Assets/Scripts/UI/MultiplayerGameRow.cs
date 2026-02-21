@@ -7,13 +7,16 @@ public class MultiplayerGameRow : MonoBehaviour
 {
     [SerializeField] private TMP_Text titleText;
     [SerializeField] private TMP_Text subtitleText;
+    // Inspector wiring: assign the clickable row button (can be the existing resume/open button).
     [SerializeField] private Button resumeButton;
 
     private string gameId;
+    private SaveManifestService.ManifestGameSummary boundSummary;
     private UnityAction resumeClickAction;
 
     public void Bind(MainMenuController menu, SaveManifestService.ManifestGameSummary summary)
     {
+        boundSummary = summary;
         gameId = summary.gameId;
 
         if (titleText != null)
@@ -43,8 +46,7 @@ public class MultiplayerGameRow : MonoBehaviour
             return;
         }
 
-        string boundGameId = gameId;
-        resumeClickAction = () => menu.ResumePlayByPostGame(boundGameId);
+        resumeClickAction = () => menu.OpenSelectedGameDetails(boundSummary);
         resumeButton.onClick.AddListener(resumeClickAction);
         resumeButton.interactable = true;
     }
