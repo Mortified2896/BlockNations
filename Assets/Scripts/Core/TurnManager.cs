@@ -57,7 +57,9 @@ public class TurnManager : MonoBehaviour
     public int playerGold = 2;
     public int aiGold = 0;
     public int goldPerCity = 1;
-    public int warriorCost = 2;
+    // Single source of truth for Warrior recruitment cost.
+    public const int WarriorCost = 3;
+    public int warriorCost => WarriorCost;
 
     [Header("AI Settings")]
     public float aiTurnDelay = 1f; // seconds the AI "thinks" before ending its turn
@@ -74,7 +76,7 @@ public class TurnManager : MonoBehaviour
     public TMP_Text gameOverText;
 
     [Header("Play By Post")]
-    [Tooltip("Optional panel shown when a Play-by-Post turn is finished (e.g., with a 'Copy JSON' button).")]
+    [Tooltip("Optional panel shown when a Play-by-Post submit succeeds (e.g., with a 'Copy Game Code' button).")]
     public GameObject playByPostPopup;
 
     [Header("Play By Post - Transport")]
@@ -220,7 +222,10 @@ public class TurnManager : MonoBehaviour
 
     public bool IsHumanTurn()
     {
-        if (isHotseatHandoff || isPlayByPostWaitingForExport)
+        if (isHotseatHandoff)
+            return false;
+
+        if (currentMode == GameMode.PlayByPost && isPlayByPostWaitingForExport)
             return false;
 
         if (currentMode == GameMode.None)
@@ -235,7 +240,10 @@ public class TurnManager : MonoBehaviour
 
     public bool CanAdvanceTurn()
     {
-        if (gameOver || isHotseatHandoff || isPlayByPostWaitingForExport)
+        if (gameOver || isHotseatHandoff)
+            return false;
+
+        if (currentMode == GameMode.PlayByPost && isPlayByPostWaitingForExport)
             return false;
 
         if (currentMode == GameMode.None)
@@ -363,7 +371,19 @@ public class TurnManager : MonoBehaviour
         if (currentMode != GameMode.None || gameOver)
             return;
 
+        GameMode previousMode = currentMode;
         currentMode = mode;
+
+        if (previousMode != currentMode)
+        {
+            hasCachedEndTurnButtonInteractable = false;
+        }
+
+        if (currentMode != GameMode.PlayByPost)
+        {
+            ResetPlayByPostRuntimeState();
+        }
+
         Time.timeScale = 1f;
         UpdateTurnText();
         RecalculatePlayerVisibility();
@@ -372,6 +392,26 @@ public class TurnManager : MonoBehaviour
         if (UnitSelectionManager.Instance != null)
         {
             UnitSelectionManager.Instance.RefreshMoveOutlinesForCurrentTurn();
+        }
+
+        RefreshEndTurnButtonInteractable(force: true);
+    }
+
+    private void ResetPlayByPostRuntimeState()
+    {
+        isPlayByPostWaitingForExport = false;
+        isPlayByPostFetchInProgress = false;
+        playByPostLastFetchWasNoTurn = false;
+
+        if (playByPostPollRoutine != null)
+        {
+            StopCoroutine(playByPostPollRoutine);
+            playByPostPollRoutine = null;
+        }
+
+        if (playByPostPopup != null)
+        {
+            playByPostPopup.SetActive(false);
         }
     }
 
@@ -392,7 +432,7 @@ public class TurnManager : MonoBehaviour
 #if UNITY_EDITOR
         Debug.Log("Persistent Path: " + Application.persistentDataPath);
 #endif
-        isPlayByPostWaitingForExport = false;
+        ResetPlayByPostRuntimeState();
         ResolveTurnTransport();
         lastAppliedTurnNumberForPolling = turnNumber;
         EnsureTurnAndGoldTexts();
@@ -595,12 +635,7 @@ public class TurnManager : MonoBehaviour
                     snapshotGameId: exportSave.gameId);
             }
 
-            if (ShouldShowPlayByPostPopup())
-            {
-                playByPostPopup.SetActive(true);
-            }
-
-            Debug.Log("Play-by-Post turn finished. Use the Copy JSON button to export this turn.");
+            Debug.Log("Play-by-Post turn finished. Submit is in progress; successful host submit may show Copy Game Code.");
 
             if (playByPostAutoSyncEnabled)
             {
@@ -695,28 +730,12 @@ public class TurnManager : MonoBehaviour
             null);
     }
 
-    private bool ShouldShowPlayByPostPopup()
+    private bool IsLocalHostForCurrentPbpGame()
     {
-        if (playByPostPopup == null)
+        if (string.IsNullOrWhiteSpace(currentGameId))
             return false;
 
-        return !IsHttpPlayByPostTransport();
-    }
-
-    private bool IsHttpPlayByPostTransport()
-    {
-        string transportName = null;
-
-        if (turnTransportComponent is ITurnTransport componentTransport)
-        {
-            transportName = componentTransport.TransportName;
-        }
-        else if (turnTransport != null)
-        {
-            transportName = turnTransport.TransportName;
-        }
-
-        return string.Equals(transportName, "Http", System.StringComparison.OrdinalIgnoreCase);
+        return LocalPlayerSeatStore.TryGetSeat(currentGameId, out int seat) && seat == 0;
     }
 
     private void ResolveTelemetrySink()
@@ -903,6 +922,16 @@ public class TurnManager : MonoBehaviour
                 turnTransport != null ? turnTransport.TransportName : null,
                 lastKnownRoundTurn: exportTurnNumber,
                 lastKnownIsPlayerTurn: exportIsPlayerTurn);
+            string shareShownKey = $"pbp_shareShown_{currentGameId}";
+            if (playByPostPopup != null &&
+                IsLocalHostForCurrentPbpGame() &&
+                PlayerPrefs.GetInt(shareShownKey, 0) != 1)
+            {
+                playByPostPopup.SetActive(true);
+                PlayerPrefs.SetInt(shareShownKey, 1);
+                PlayerPrefs.Save();
+            }
+
             StartPlayByPostPolling(transportSeq);
             yield break;
         }
@@ -1425,10 +1454,10 @@ public class TurnManager : MonoBehaviour
     void InitializeNewGame()
     {
         // Reset core state for a fresh game (important when reloading scenes in-editor).
+        ResetPlayByPostRuntimeState();
         gameOver = false;
         turnNumber = 1;
         isPlayerTurn = true;
-        isPlayByPostWaitingForExport = false;
         playerGold = startingGold;
         aiGold = startingGold;
         aiDifficulty = AIDifficulty.Level1;
@@ -1483,6 +1512,8 @@ public class TurnManager : MonoBehaviour
         {
             ShowHotseatHandoff(isPlayerTurn, false);
         }
+
+        RefreshEndTurnButtonInteractable(force: true);
     }
 
     private bool HasPlayByPostSessionContext()
@@ -3089,6 +3120,49 @@ public class TurnManager : MonoBehaviour
             Debug.LogWarning($"Failed to copy Play-by-Post JSON to clipboard ({json.Length} chars). On WebGL this may require user interaction/permissions.");
         }
 #endif
+    }
+
+    /// <summary>
+    /// Copy the current Play-by-Post game id to the clipboard.
+    /// </summary>
+    public void CopyCurrentGameIdToClipboard()
+    {
+        string gameId = currentGameId;
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            gameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
+        }
+
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.LogWarning("CopyCurrentGameIdToClipboard: no gameId available.");
+#endif
+            return;
+        }
+
+        if (!ClipboardUtility.TryCopy(gameId))
+        {
+            GUIUtility.systemCopyBuffer = gameId;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.LogWarning($"CopyCurrentGameIdToClipboard: ClipboardUtility failed, fallback used ({gameId}).");
+#endif
+            return;
+        }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        Debug.Log($"Play-by-Post game id copied to clipboard ({gameId}).");
+#endif
+    }
+
+    public void ClosePlayByPostPopup()
+    {
+        if (playByPostPopup != null)
+        {
+            playByPostPopup.SetActive(false);
+        }
+
+        RefreshEndTurnButtonInteractable(force: true);
     }
 
     internal bool TryBuildPlayByPostExportJson(out int exportTurnNumber, out string json)

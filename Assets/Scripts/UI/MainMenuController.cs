@@ -393,16 +393,6 @@ public class MainMenuController : MonoBehaviour
         PlayerPrefs.SetInt(PlayByPostForceNewKey, 1);
         PlayerPrefs.SetString(PlayByPostPendingNewGameIdKey, gameId);
         PlayerPrefs.Save();
-        if (ClipboardUtility.TryCopy(gameId))
-        {
-            Debug.Log($"Play-by-Post game id copied to clipboard ({gameId}).");
-            SetImportStatus($"Game code: {gameId} (copied to clipboard)");
-        }
-        else
-        {
-            Debug.LogWarning($"Failed to copy Play-by-Post game id to clipboard ({gameId}).");
-            SetImportStatus($"Game code: {gameId}");
-        }
 
         GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
         SceneManager.LoadScene(gameplaySceneName);
@@ -428,7 +418,16 @@ public class MainMenuController : MonoBehaviour
             return;
         }
 
+        if (joinGameIdInput != null)
+        {
+            joinGameIdInput.text = normalizedGameId;
+        }
+
         LocalPlayerSeatStore.SetSeat(normalizedGameId, 1);
+        PlayerPrefs.DeleteKey(PlayByPostForceNewKey);
+        PlayerPrefs.DeleteKey(PlayByPostPendingNewGameIdKey);
+        PlayerPrefs.SetString(PlayByPostGameIdKey, normalizedGameId);
+        PlayerPrefs.Save();
         SetImportStatus($"Joining game: {normalizedGameId}");
 
         GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
@@ -551,18 +550,11 @@ public class MainMenuController : MonoBehaviour
         if (string.IsNullOrWhiteSpace(gameId))
             return;
 
-        if (returnToMultiplayerPane)
-        {
-            PlayerPrefs.SetInt(ReturnToMultiplayerPaneKey, 1);
-            PlayerPrefs.Save();
-        }
-
         GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         Debug.Log($"Resuming PlayByPost game. pendingMode={TurnManager.GameMode.PlayByPost}, gameId={gameId}");
 #endif
-        PlayerPrefs.SetString(PlayByPostGameIdKey, gameId);
-        PlayerPrefs.Save();
+        PersistPlayByPostSelection(gameId, returnToMultiplayerPane);
         SceneManager.LoadScene(gameplaySceneName);
     }
 
@@ -694,7 +686,36 @@ public class MainMenuController : MonoBehaviour
 
     public void Multiplayer_JoinGame()
     {
+        if (joinPopupPanel != null && joinPopupPanel.activeInHierarchy)
+        {
+            JoinPlayByPostFromInput();
+            return;
+        }
+
         OpenJoinPopup();
+    }
+
+    public void CopyCurrentPbpGameIdToClipboard()
+    {
+        string gameId = hasSelectedPbpGame ? selectedPbpGame.gameId : selectedGameId;
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            gameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
+        }
+
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            SetImportStatus("No game code selected.");
+            return;
+        }
+
+        if (!ClipboardUtility.TryCopy(gameId))
+        {
+            GUIUtility.systemCopyBuffer = gameId;
+            Debug.LogWarning($"ClipboardUtility copy failed; fallback copy buffer used for gameId={gameId}.");
+        }
+
+        SetImportStatus($"Game code copied: {gameId}");
     }
 
     public void ContinueLastSave()
@@ -860,6 +881,23 @@ public class MainMenuController : MonoBehaviour
         string trimmed = gameId.Trim();
         return trimmed.Equals("code", System.StringComparison.OrdinalIgnoreCase)
             || trimmed.Equals("enter game code", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void PersistPlayByPostSelection(string gameId, bool returnToMultiplayerPane)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            return;
+        }
+
+        PlayerPrefs.DeleteKey(PlayByPostForceNewKey);
+        PlayerPrefs.DeleteKey(PlayByPostPendingNewGameIdKey);
+        PlayerPrefs.SetString(PlayByPostGameIdKey, gameId);
+        if (returnToMultiplayerPane)
+        {
+            PlayerPrefs.SetInt(ReturnToMultiplayerPaneKey, 1);
+        }
+        PlayerPrefs.Save();
     }
 
     private static bool ConsumeReturnToMultiplayerPaneFlag()

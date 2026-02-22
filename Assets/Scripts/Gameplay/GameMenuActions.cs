@@ -12,6 +12,8 @@ public class GameMenuActions : MonoBehaviour
     [Header("Scenes")]
     public string mainMenuSceneName = "MainMenu";
 
+    private const string PlayByPostGameIdKey = "pbp_gameId";
+    private const string ReturnToMultiplayerPaneKey = "ui_returnToMultiplayerPane";
     private static GameObject tutorialLeaveConfirmRoot;
 
     public void SaveGame()
@@ -45,6 +47,17 @@ public class GameMenuActions : MonoBehaviour
 
     private void DoQuitToMainMenu()
     {
+        TurnManager tm = TurnManager.Instance;
+        bool shouldReturnToMultiplayerPane = tm != null
+            ? tm.currentMode == TurnManager.GameMode.PlayByPost
+            : !string.IsNullOrWhiteSpace(PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty));
+
+        if (shouldReturnToMultiplayerPane)
+        {
+            PlayerPrefs.SetInt(ReturnToMultiplayerPaneKey, 1);
+            PlayerPrefs.Save();
+        }
+
         if (!string.IsNullOrEmpty(mainMenuSceneName))
         {
             Time.timeScale = 1f;
