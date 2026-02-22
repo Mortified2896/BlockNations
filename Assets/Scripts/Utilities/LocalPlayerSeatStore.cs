@@ -1,10 +1,7 @@
-using System;
 using UnityEngine;
 
 public static class LocalPlayerSeatStore
 {
-    private const string PlayByPostGameIdKey = "pbp_gameId";
-    private const string LegacyPlayByPostIsPlayer1Key = "pbp_isPlayer1";
     private const string SeatByGameKeyPrefix = "pbp_seat_";
 
     public static bool TryGetSeat(string gameId, out int seatOrPlayerIndex)
@@ -23,16 +20,6 @@ public static class LocalPlayerSeatStore
             return true;
         }
 
-        // Backward compatibility for older data that only had one global PBp seat.
-        string activeGameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
-        if (string.Equals(activeGameId, gameId, StringComparison.Ordinal) &&
-            PlayerPrefs.HasKey(LegacyPlayByPostIsPlayer1Key))
-        {
-            bool isPlayer1 = PlayerPrefs.GetInt(LegacyPlayByPostIsPlayer1Key, 1) != 0;
-            seatOrPlayerIndex = isPlayer1 ? 0 : 1;
-            return true;
-        }
-
         return false;
     }
 
@@ -45,10 +32,6 @@ public static class LocalPlayerSeatStore
 
         int seat = NormalizeSeat(seatOrPlayerIndex);
         PlayerPrefs.SetInt(BuildSeatKey(gameId), seat);
-
-        // Keep current-session compatibility with existing PBp flows.
-        PlayerPrefs.SetString(PlayByPostGameIdKey, gameId);
-        PlayerPrefs.SetInt(LegacyPlayByPostIsPlayer1Key, seat == 0 ? 1 : 0);
         PlayerPrefs.Save();
     }
 

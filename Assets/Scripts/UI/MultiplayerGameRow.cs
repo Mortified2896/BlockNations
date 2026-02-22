@@ -73,11 +73,6 @@ public class MultiplayerGameRow : MonoBehaviour
 
     private static string BuildSubtitle(SaveManifestService.ManifestGameSummary summary)
     {
-        if (TurnIndicatorService.TryGetIsMyTurn(summary.gameId, out bool isMyTurn, out _))
-        {
-            return isMyTurn ? "Your turn" : "Waiting...";
-        }
-
-        return string.Empty;
+        return MainMenuController.BuildPlayByPostTurnSubtitle(summary);
     }
 }

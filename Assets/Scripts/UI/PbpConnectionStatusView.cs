@@ -21,10 +21,6 @@ public class PbpConnectionStatusView : MonoBehaviour
     [Header("Checks")]
     [SerializeField, Min(1f)] private float heartbeatSeconds = 60f;
     [SerializeField, Min(0.25f)] private float modeCheckSeconds = 0.5f;
-    [SerializeField, Min(0.5f)] private float submitFeedbackSeconds = 3f;
-
-    private const string PlayByPostGameIdKey = "pbp_gameId";
-    private const string SubmitFailedFeedback = "Turn not sent. Try again.";
 
     private enum ServerState
     {
@@ -35,10 +31,8 @@ public class PbpConnectionStatusView : MonoBehaviour
 
     private Coroutine modeMonitorRoutine;
     private Coroutine heartbeatRoutine;
-    private Coroutine submitFeedbackRoutine;
     private TurnManager subscribedTurnManager;
     private ServerState serverState = ServerState.Checking;
-    private bool showSubmitFailureFeedback;
 
     private void OnEnable()
     {
@@ -51,7 +45,6 @@ public class PbpConnectionStatusView : MonoBehaviour
     {
         StopModeMonitor();
         StopHeartbeat();
-        StopSubmitFailureFeedback();
         UnsubscribeFromTurnManagerEvents();
     }
 
@@ -91,7 +84,6 @@ public class PbpConnectionStatusView : MonoBehaviour
                     StopHeartbeat();
                 }
 
-                StopSubmitFailureFeedback();
                 wasPlayByPost = false;
                 SetVisible(false);
                 yield return new WaitForSecondsRealtime(Mathf.Max(0.25f, modeCheckSeconds));
@@ -117,6 +109,9 @@ public class PbpConnectionStatusView : MonoBehaviour
             {
                 StopHeartbeat();
             }
+
+            // Keep the HUD status in sync when PBp turn ownership flips after load/fetch.
+            RefreshStatusText();
             wasPlayByPost = true;
             yield return new WaitForSecondsRealtime(Mathf.Max(0.25f, modeCheckSeconds));
         }
@@ -218,16 +213,8 @@ public class PbpConnectionStatusView : MonoBehaviour
             return false;
         }
 
-        string gameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
-        if (string.IsNullOrWhiteSpace(gameId) || !LocalPlayerSeatStore.TryGetSeat(gameId, out int seat))
-        {
-            // Fallback to Player 1 seat if unavailable.
-            return turnManager.isPlayerTurn;
-        }
-
-        bool localIsPlayerOne = seat <= 0;
-        bool currentSideIsPlayerOne = turnManager.isPlayerTurn;
-        return localIsPlayerOne == currentSideIsPlayerOne;
+        // Mirror the same gating used by the Next/End Turn button in PBp.
+        return turnManager.CanAdvanceTurn();
     }
 
     private void SetVisible(bool visible)
@@ -294,7 +281,6 @@ public class PbpConnectionStatusView : MonoBehaviour
 
         if (ok)
         {
-            StopSubmitFailureFeedback();
             serverState = ServerState.Connected;
             RefreshStatusText();
             return;
@@ -306,7 +292,6 @@ public class PbpConnectionStatusView : MonoBehaviour
         }
 
         serverState = ServerState.Unreachable;
-        StartSubmitFailureFeedback();
         RefreshStatusText();
     }
 
@@ -346,72 +331,38 @@ public class PbpConnectionStatusView : MonoBehaviour
             return;
         }
 
-        string bannerText = BuildBannerText();
-        if (showSubmitFailureFeedback)
-        {
-            SetStatusText($"{bannerText}\n{SubmitFailedFeedback}");
-        }
-        else
-        {
-            SetStatusText(bannerText);
-        }
+        bool serverOnline = IsServerOnline();
+        bool isYourTurn = IsLocalPlayersTurn();
+        SetStatusText(BuildPbpHudStatus(serverOnline, isYourTurn));
     }
 
-    private string BuildBannerText()
+    private bool IsServerOnline()
     {
-        NetworkReachability reachability = Application.internetReachability;
-        if (reachability == NetworkReachability.NotReachable)
+        if (Application.internetReachability == NetworkReachability.NotReachable)
         {
-            return "No internet connection";
+            return false;
         }
 
-        bool isWifiOrLan = reachability == NetworkReachability.ReachableViaLocalAreaNetwork;
-        if (serverState == ServerState.Checking)
-        {
-            return isWifiOrLan
-                ? "Checking server (Wi-Fi/LAN connected)…"
-                : "Checking server (Cellular connected)…";
-        }
-
-        if (serverState == ServerState.Connected)
-        {
-            return isWifiOrLan
-                ? "Server connected (Wi-Fi/LAN)"
-                : "Server connected (Cellular)";
-        }
-
-        return isWifiOrLan
-            ? "Server unreachable (Wi-Fi/LAN connected)"
-            : "Server unreachable (Cellular connected)";
+        return serverState == ServerState.Connected;
     }
 
-    private void StartSubmitFailureFeedback()
+    // PBp HUD status matrix:
+    // 1) Connected + your turn
+    // 2) Connected + waiting for opponent
+    // 3) Offline + your turn
+    // 4) Offline + waiting for opponent
+    private static string BuildPbpHudStatus(bool serverOnline, bool isYourTurn)
     {
-        showSubmitFailureFeedback = true;
-        if (submitFeedbackRoutine != null)
+        if (serverOnline)
         {
-            StopCoroutine(submitFeedbackRoutine);
+            return isYourTurn
+                ? "Connected • Your turn"
+                : "Connected • Waiting for opponent…";
         }
 
-        submitFeedbackRoutine = StartCoroutine(ClearSubmitFeedbackAfterDelay());
-    }
-
-    private IEnumerator ClearSubmitFeedbackAfterDelay()
-    {
-        yield return new WaitForSecondsRealtime(Mathf.Max(0.5f, submitFeedbackSeconds));
-        showSubmitFailureFeedback = false;
-        submitFeedbackRoutine = null;
-        RefreshStatusText();
-    }
-
-    private void StopSubmitFailureFeedback()
-    {
-        showSubmitFailureFeedback = false;
-        if (submitFeedbackRoutine != null)
-        {
-            StopCoroutine(submitFeedbackRoutine);
-            submitFeedbackRoutine = null;
-        }
+        return isYourTurn
+            ? "Offline • Your turn"
+            : "Offline • Waiting for opponent…";
     }
 
     private static bool IsConnectivityFailure(string err)

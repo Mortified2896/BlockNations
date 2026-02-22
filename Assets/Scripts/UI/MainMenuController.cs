@@ -55,7 +55,8 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private bool autoFitMenuToScreenOnDesktop = true;
     private bool tutorialLaunchQueued;
     private const string PlayByPostGameIdKey = "pbp_gameId";
-    private const string LegacyPlayByPostIsPlayer1Key = "pbp_isPlayer1";
+    private const string PlayByPostForceNewKey = "pbp_forceNew";
+    private const string PlayByPostPendingNewGameIdKey = "pbp_pendingNewGameId";
     private const string SeatByGameKeyPrefix = "pbp_seat_";
     private const string ReturnToMultiplayerPaneKey = "ui_returnToMultiplayerPane";
     private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
@@ -389,6 +390,9 @@ public class MainMenuController : MonoBehaviour
     {
         string gameId = System.Guid.NewGuid().ToString();
         LocalPlayerSeatStore.SetSeat(gameId, 0);
+        PlayerPrefs.SetInt(PlayByPostForceNewKey, 1);
+        PlayerPrefs.SetString(PlayByPostPendingNewGameIdKey, gameId);
+        PlayerPrefs.Save();
         if (ClipboardUtility.TryCopy(gameId))
         {
             Debug.Log($"Play-by-Post game id copied to clipboard ({gameId}).");
@@ -502,7 +506,10 @@ public class MainMenuController : MonoBehaviour
         for (int i = 0; i < activePbpGames.Count; i++)
         {
             SaveManifestService.ManifestGameSummary entry = activePbpGames[i];
-            Debug.Log($"[MP] Active[{i}] gameId={entry.gameId} entryKey={entry.entryKey} lastPlayedUtc={entry.lastPlayedUtc} isFinished={entry.isFinished}");
+            bool computed = TryGetIsYourTurnFromManifest(entry, out bool isYourTurn, out int computedTransportSeq, out string reason);
+            Debug.Log(
+                $"[MP] Active[{i}] gameId={entry.gameId} entryKey={entry.entryKey} lastPlayedUtc={entry.lastPlayedUtc} isFinished={entry.isFinished} " +
+                $"lastKnownRoundTurn={entry.lastKnownRoundTurn} lastKnownIsPlayerTurn={entry.lastKnownIsPlayerTurn} computedTransportSeq={computedTransportSeq} isYourTurn={isYourTurn} computed={computed} reason={reason}");
         }
 #endif
         ActivePbpGamesChanged?.Invoke();
@@ -525,11 +532,8 @@ public class MainMenuController : MonoBehaviour
         int countMyTurn = 0;
         for (int i = 0; i < activePbpGames.Count; i++)
         {
-            string gameId = activePbpGames[i].gameId;
-            if (string.IsNullOrWhiteSpace(gameId))
-                continue;
-
-            if (TurnIndicatorService.TryGetIsMyTurn(gameId, out bool isMyTurn, out _) && isMyTurn)
+            SaveManifestService.ManifestGameSummary summary = activePbpGames[i];
+            if (TryGetIsYourTurnFromManifest(summary, out bool isYourTurn, out _, out _) && isYourTurn)
             {
                 countMyTurn++;
             }
@@ -653,7 +657,6 @@ public class MainMenuController : MonoBehaviour
         if (string.Equals(activeGameId, gameId, StringComparison.Ordinal))
         {
             PlayerPrefs.DeleteKey(PlayByPostGameIdKey);
-            PlayerPrefs.DeleteKey(LegacyPlayByPostIsPlayer1Key);
             clearedSeatMapping = true;
         }
 
@@ -957,13 +960,56 @@ public class MainMenuController : MonoBehaviour
         return $"Game {shortId}";
     }
 
-    private static string BuildGameSubtitle(SaveManifestService.ManifestGameSummary summary)
+    public static string BuildPlayByPostTurnSubtitle(SaveManifestService.ManifestGameSummary summary)
     {
-        if (TurnIndicatorService.TryGetIsMyTurn(summary.gameId, out bool isMyTurn, out _))
+        if (TryGetIsYourTurnFromManifest(summary, out bool isYourTurn, out _, out _) && isYourTurn)
         {
-            return isMyTurn ? "Your turn" : "Waiting...";
+            return "Your turn";
         }
 
-        return string.Empty;
+        return "Waiting for opponent";
+    }
+
+    private static string BuildGameSubtitle(SaveManifestService.ManifestGameSummary summary)
+    {
+        return BuildPlayByPostTurnSubtitle(summary);
+    }
+
+    public static bool TryGetIsYourTurnFromManifest(
+        SaveManifestService.ManifestGameSummary summary,
+        out bool isYourTurn,
+        out int computedTransportSeq,
+        out string reason)
+    {
+        isYourTurn = false;
+        computedTransportSeq = 0;
+        reason = null;
+
+        if (string.IsNullOrWhiteSpace(summary.gameId))
+        {
+            reason = "GAME_ID_MISSING";
+            return false;
+        }
+
+        if (!summary.hasLastKnownTurnState)
+        {
+            reason = "STATE_UNKNOWN";
+            return false;
+        }
+
+        computedTransportSeq = summary.lastKnownTransportSeq > 0
+            ? summary.lastKnownTransportSeq
+            : SaveManifestService.ComputePlayByPostTransportSeq(summary.lastKnownRoundTurn, summary.lastKnownIsPlayerTurn);
+
+        if (!LocalPlayerSeatStore.TryGetSeat(summary.gameId, out int seatOrPlayerIndex))
+        {
+            reason = "SEAT_UNKNOWN";
+            return false;
+        }
+
+        bool localIsPlayerOwned = seatOrPlayerIndex == 0;
+        isYourTurn = summary.lastKnownIsPlayerTurn == localIsPlayerOwned;
+        reason = "OK";
+        return true;
     }
 }

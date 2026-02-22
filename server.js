@@ -279,6 +279,10 @@ app.get("/healthz", (req, res) => {
   res.status(200).json({ ok: true });
 });
 
+app.get("/health", (req, res) => {
+  res.status(200).send("ok");
+});
+
 app.use((err, req, res, next) => {
   if (err && (err.type === "entity.too.large" || err instanceof SyntaxError)) {
     return res.status(400).json({ ok: false, error: "INVALID_INPUT" });

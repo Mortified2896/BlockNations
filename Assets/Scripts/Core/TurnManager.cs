@@ -66,6 +66,8 @@ public class TurnManager : MonoBehaviour
     [Header("UI")]
     public TMP_Text turnText;      // assign in Inspector
     public TMP_Text goldText;
+    [Tooltip("Optional: assign End Turn / Next Turn button to keep interactable state synced with CanAdvanceTurn().")]
+    public Button endTurnButton;
 
     [Header("Game Over UI")]
     public GameObject gameOverPanel;
@@ -137,9 +139,12 @@ public class TurnManager : MonoBehaviour
 #endif
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
     private bool hasLoggedManifestProbeFailure = false;
+    private readonly HashSet<string> missingPbpSeatWarnedGameIds = new HashSet<string>();
 #endif
     private const float PlayByPostNoTurnLogCooldownSeconds = 5f;
     private const string PlayByPostGameIdKey = "pbp_gameId";
+    private const string PlayByPostForceNewKey = "pbp_forceNew";
+    private const string PlayByPostPendingNewGameIdKey = "pbp_pendingNewGameId";
     private const string PlayByPostPrimarySaveFileName = "save.json";
     private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
     private const string PlayByPostPerGameSaveFolderName = "pbp";
@@ -156,6 +161,8 @@ public class TurnManager : MonoBehaviour
     private bool autoEndTurnDisabledLoggedThisTurn = false;
     private Coroutine autoEndTurnRoutine;
     private float lastHumanInputUnscaledTime = -999f;
+    private bool hasCachedEndTurnButtonInteractable;
+    private bool cachedEndTurnButtonInteractable;
     [System.Serializable]
     private class SavedCity
     {
@@ -251,15 +258,61 @@ public class TurnManager : MonoBehaviour
     {
         if (currentMode == GameMode.PlayByPost)
         {
-            if (LocalPlayerSeatStore.TryGetSeat(currentGameId, out int seatOrPlayerIndex))
-            {
-                return seatOrPlayerIndex == 0;
-            }
-
-            return true;
+            return GetLocalIsPlayerOneForGame(currentGameId, out _, out _);
         }
 
         return localSeat == LocalSeat.Player1;
+    }
+
+    private bool GetLocalIsPlayerOneForGame(string gameId, out bool hasSeat, out int seat)
+    {
+        seat = GetLocalSeatIndexForPbpOrDefault(gameId, out hasSeat);
+        return seat == 0;
+    }
+
+    private int GetLocalSeatIndexForPbpOrDefault(string gameId, out bool hasSeat)
+    {
+        hasSeat = false;
+
+        if (!string.IsNullOrWhiteSpace(gameId) && LocalPlayerSeatStore.TryGetSeat(gameId, out int storedSeat))
+        {
+            hasSeat = true;
+            return storedSeat <= 0 ? 0 : 1;
+        }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        string warnGameId = string.IsNullOrWhiteSpace(gameId) ? "<empty>" : gameId;
+        if (missingPbpSeatWarnedGameIds.Add(warnGameId))
+        {
+            Debug.LogWarning($"[PBpSeat] Missing LocalPlayerSeatStore seat for gameId={warnGameId}; defaulting to Player1");
+        }
+#endif
+        return 0;
+    }
+
+    private bool GetViewerIsPlayerOwned()
+    {
+        if (currentMode == GameMode.PlayByPost)
+        {
+            if (string.IsNullOrWhiteSpace(currentGameId))
+            {
+                // Startup transient: gameId not assigned yet; seat lookup not possible;
+                // defer correctness until SetCurrentGameId.
+                return true;
+            }
+
+            int localSeat = GetLocalSeatIndexForPbpOrDefault(currentGameId, out _);
+            return localSeat == 0;
+        }
+
+        if (currentMode == GameMode.Hotseat)
+        {
+            return isPlayerTurn;
+        }
+
+        // VsAI/other modes currently treat the local viewer as the player-owned side.
+        // If future modes support non-player-owned local viewpoints, update this helper.
+        return true;
     }
 
     public bool IsCurrentSideOwner(bool isPlayerOwned)
@@ -346,6 +399,7 @@ public class TurnManager : MonoBehaviour
         EnsureEventSystemExists();
         EnsureUIRaycasters();
         TryStartGameplayMusic();
+        RefreshEndTurnButtonInteractable(force: true);
         StartCoroutine(StartupSequence());
     }
 
@@ -359,6 +413,24 @@ public class TurnManager : MonoBehaviour
         RecordHumanInputIfAny();
 
         // Gameplay UI scaling/offset is handled by GameplayUIScaler.
+    }
+
+    private void RefreshEndTurnButtonInteractable(bool force = false)
+    {
+        if (endTurnButton == null)
+            return;
+
+        bool shouldBeInteractable = CanAdvanceTurn();
+        if (!force &&
+            hasCachedEndTurnButtonInteractable &&
+            cachedEndTurnButtonInteractable == shouldBeInteractable)
+        {
+            return;
+        }
+
+        endTurnButton.interactable = shouldBeInteractable;
+        cachedEndTurnButtonInteractable = shouldBeInteractable;
+        hasCachedEndTurnButtonInteractable = true;
     }
 
     private void RecordHumanInputIfAny()
@@ -399,6 +471,7 @@ public class TurnManager : MonoBehaviour
         if (!CanAdvanceTurn())
         {
             // Ignore clicks if it's not the current human's turn
+            RefreshEndTurnButtonInteractable(force: true);
             return;
         }
 
@@ -506,8 +579,21 @@ public class TurnManager : MonoBehaviour
             // let CopyCurrentStateToClipboard() build a snapshot that
             // represents the *next* side's turn.
             isPlayByPostWaitingForExport = true;
+            RefreshEndTurnButtonInteractable(force: true);
             AutoSaveIfEnabled();
-            SavePlayByPostPerGameSnapshot();
+
+            GameSave exportSave = null;
+            string exportJson = null;
+            if (TryBuildPlayByPostExportSave(out exportSave, out exportJson))
+            {
+                // Persist the exact post-turn/export snapshot so resume cannot regress
+                // to a pre-handoff local-turn state.
+                SavePlayByPostPerGameSnapshot(
+                    snapshotJson: exportJson,
+                    snapshotRoundTurn: exportSave.turnNumber,
+                    snapshotIsPlayerTurn: exportSave.isPlayerTurn,
+                    snapshotGameId: exportSave.gameId);
+            }
 
             if (ShouldShowPlayByPostPopup())
             {
@@ -519,7 +605,7 @@ public class TurnManager : MonoBehaviour
             if (playByPostAutoSyncEnabled)
             {
                 ResolveTurnTransport();
-                if (TryBuildPlayByPostExportSave(out GameSave exportSave, out string exportJson))
+                if (exportSave != null && !string.IsNullOrWhiteSpace(exportJson))
                 {
                     int transportSeq = ComputeTransportSeq(exportSave);
                     Debug.Log(
@@ -527,8 +613,13 @@ public class TurnManager : MonoBehaviour
                         $"transportSeq={transportSeq}, lastAppliedTransportSeq={lastAppliedTurnNumberForPolling}");
                     lastAppliedTurnNumberForPolling = transportSeq;
 
-                    SaveManifestService.RecordPlayByPostExport(currentGameId, turnTransport != null ? turnTransport.TransportName : null);
-                    StartCoroutine(SubmitPlayByPostTurnThenStartPolling(transportSeq, exportJson, exportSave.turnNumber, exportSave.isPlayerTurn));
+                    StartCoroutine(SubmitPlayByPostTurnThenStartPolling(
+                        transportSeq,
+                        exportJson,
+                        exportSave.turnNumber,
+                        exportSave.isPlayerTurn,
+                        exportSave.gameId));
+                    RefreshEndTurnButtonInteractable(force: true);
                 }
             }
         }
@@ -747,7 +838,12 @@ public class TurnManager : MonoBehaviour
         Debug.Log($"[PBpTelemetry] {eventName} {details}");
     }
 
-    private IEnumerator SubmitPlayByPostTurnThenStartPolling(int transportSeq, string exportJson, int exportTurnNumber, bool exportIsPlayerTurn)
+    private IEnumerator SubmitPlayByPostTurnThenStartPolling(
+        int transportSeq,
+        string exportJson,
+        int exportTurnNumber,
+        bool exportIsPlayerTurn,
+        string exportGameId)
     {
         float submitStartedAt = Time.realtimeSinceStartup;
         LogPlayByPostTelemetry(
@@ -796,6 +892,17 @@ public class TurnManager : MonoBehaviour
         TryNotifyPlayByPostSubmitResult(submitOk, submitError);
         if (submitOk)
         {
+            // Re-save on successful submit so disk state always matches the submitted turn.
+            SavePlayByPostPerGameSnapshot(
+                snapshotJson: exportJson,
+                snapshotRoundTurn: exportTurnNumber,
+                snapshotIsPlayerTurn: exportIsPlayerTurn,
+                snapshotGameId: exportGameId);
+            SaveManifestService.RecordPlayByPostExport(
+                currentGameId,
+                turnTransport != null ? turnTransport.TransportName : null,
+                lastKnownRoundTurn: exportTurnNumber,
+                lastKnownIsPlayerTurn: exportIsPlayerTurn);
             StartPlayByPostPolling(transportSeq);
             yield break;
         }
@@ -857,6 +964,8 @@ public class TurnManager : MonoBehaviour
         }
 
         UpdateTurnText();
+        SavePlayByPostPerGameSnapshot();
+        RefreshEndTurnButtonInteractable(force: true);
 
         if (UnitSelectionManager.Instance != null)
         {
@@ -1188,6 +1297,28 @@ public class TurnManager : MonoBehaviour
 
     System.Collections.IEnumerator StartupSequence()
     {
+        if (TryConsumeForceNewPlayByPostRequest(out string forcedNewGameId))
+        {
+            SetGameMode(GameMode.PlayByPost);
+            SetCurrentGameId(forcedNewGameId);
+            if (!LocalPlayerSeatStore.TryGetSeat(forcedNewGameId, out _))
+            {
+                LocalPlayerSeatStore.SetSeat(forcedNewGameId, 0);
+            }
+            PersistCurrentPbpGameIdIfNeeded();
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.Log($"[PBpForceNew] starting new pbp gameId={forcedNewGameId}");
+#endif
+            // Force-new is authoritative; ignore any stale pending explicit load.
+            SaveLoadRequest.TryConsume(out _);
+            // Ensure the grid is initialized before starting the forced new PBp game.
+            yield return WaitForGridReady();
+            InitializeNewGame();
+            RecalculatePlayerVisibility();
+            RefreshEndTurnButtonInteractable(force: true);
+            yield break;
+        }
+
         // Ensure the grid is initialized before applying save or starting a new game.
         yield return WaitForGridReady();
 
@@ -1223,8 +1354,11 @@ public class TurnManager : MonoBehaviour
 
                     if (LoadFromFile(pbpSnapshotPath))
                     {
+                        RefreshEndTurnButtonInteractable(force: true);
                         currentMode = GameMode.PlayByPost;
                         SetCurrentGameId(pbpGameId);
+                        PersistCurrentPbpGameIdIfNeeded();
+                        RecalculatePlayerVisibility();
 
                         LogPlayByPostTelemetry(
                             "ResumeLocalSnapshotLoaded",
@@ -1239,6 +1373,27 @@ public class TurnManager : MonoBehaviour
         }
 
         InitializeNewGame();
+    }
+
+    private static bool TryConsumeForceNewPlayByPostRequest(out string gameId)
+    {
+        gameId = null;
+        if (PlayerPrefs.GetInt(PlayByPostForceNewKey, 0) != 1)
+        {
+            return false;
+        }
+
+        gameId = PlayerPrefs.GetString(PlayByPostPendingNewGameIdKey, string.Empty);
+        PlayerPrefs.DeleteKey(PlayByPostForceNewKey);
+        PlayerPrefs.DeleteKey(PlayByPostPendingNewGameIdKey);
+        PlayerPrefs.Save();
+
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            gameId = System.Guid.NewGuid().ToString();
+        }
+
+        return true;
     }
 
     private void ResolveStartupModeForResume()
@@ -1363,7 +1518,9 @@ public class TurnManager : MonoBehaviour
 
     private void InitializePlayByPostSession()
     {
-        string gameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
+        string gameId = !string.IsNullOrWhiteSpace(currentGameId)
+            ? currentGameId
+            : PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
         bool createdGameId = false;
         if (string.IsNullOrWhiteSpace(gameId))
         {
@@ -1373,6 +1530,7 @@ public class TurnManager : MonoBehaviour
             createdGameId = true;
         }
         SetCurrentGameId(gameId);
+        PersistCurrentPbpGameIdIfNeeded();
         if (createdGameId)
         {
             LocalPlayerSeatStore.SetSeat(gameId, 0);
@@ -2489,12 +2647,7 @@ public class TurnManager : MonoBehaviour
         if (gridManager == null)
             return;
 
-        bool currentSideIsPlayerOwned = true;
-        if (currentMode == GameMode.Hotseat || currentMode == GameMode.PlayByPost)
-        {
-            // Player 1 uses isPlayerOwned=true, Player 2 uses isPlayerOwned=false
-            currentSideIsPlayerOwned = isPlayerTurn;
-        }
+        bool currentSideIsPlayerOwned = GetViewerIsPlayerOwned();
 
         // Reset current visibility for this side (keep per-side explored memory)
         foreach (TileVisibility tile in gridManager.GetAllTiles())
@@ -2576,11 +2729,27 @@ public class TurnManager : MonoBehaviour
 
     private string GetPbpGameIdFromPrefsOrCurrent()
     {
-        string gameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
-        if (!string.IsNullOrWhiteSpace(gameId))
-            return gameId;
+        if (!string.IsNullOrWhiteSpace(currentGameId))
+            return currentGameId;
 
-        return string.IsNullOrWhiteSpace(currentGameId) ? null : currentGameId;
+        string prefsId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
+        return string.IsNullOrWhiteSpace(prefsId) ? null : prefsId;
+    }
+
+    private void PersistCurrentPbpGameIdIfNeeded()
+    {
+        if (currentMode != GameMode.PlayByPost)
+            return;
+
+        if (string.IsNullOrWhiteSpace(currentGameId))
+            return;
+
+        string existing = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
+        if (string.Equals(existing, currentGameId, System.StringComparison.Ordinal))
+            return;
+
+        PlayerPrefs.SetString(PlayByPostGameIdKey, currentGameId);
+        PlayerPrefs.Save();
     }
 
     private string GetPbpPerGameSavePath(string gameId)
@@ -2633,7 +2802,45 @@ public class TurnManager : MonoBehaviour
         WritePlayByPostSnapshotFile(snapshotPath);
     }
 
+    private void SavePlayByPostPerGameSnapshot(string snapshotJson, int snapshotRoundTurn, bool snapshotIsPlayerTurn, string snapshotGameId)
+    {
+        if (currentMode != GameMode.PlayByPost)
+            return;
+
+        string gameId = string.IsNullOrWhiteSpace(snapshotGameId)
+            ? GetPbpGameIdFromPrefsOrCurrent()
+            : snapshotGameId;
+        if (string.IsNullOrWhiteSpace(gameId))
+            return;
+
+        if (!string.Equals(currentGameId, gameId, System.StringComparison.Ordinal))
+        {
+            SetCurrentGameId(gameId);
+        }
+
+        string snapshotPath = GetPbpPerGameSavePath(gameId);
+        if (string.IsNullOrWhiteSpace(snapshotPath))
+            return;
+
+        WritePlayByPostSnapshotFile(
+            snapshotPath,
+            snapshotJson,
+            gameId,
+            snapshotRoundTurn,
+            snapshotIsPlayerTurn);
+    }
+
     private void WritePlayByPostSnapshotFile(string path)
+    {
+        WritePlayByPostSnapshotFile(path, null, currentGameId, turnNumber, isPlayerTurn);
+    }
+
+    private void WritePlayByPostSnapshotFile(
+        string path,
+        string snapshotJson,
+        string gameIdForLog,
+        int snapshotRoundTurn,
+        bool snapshotIsPlayerTurn)
     {
         if (string.IsNullOrWhiteSpace(path))
             return;
@@ -2653,13 +2860,22 @@ public class TurnManager : MonoBehaviour
             return;
         }
 
-        if (!TryBuildSaveJsonForDisk(out string json))
-            return;
+        string json = snapshotJson;
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            if (!TryBuildSaveJsonForDisk(out json))
+                return;
+        }
 
         try
         {
             Directory.CreateDirectory(directory);
             File.WriteAllText(path, json);
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+            int snapshotTransportSeq = ComputeTransportSeq(snapshotRoundTurn, snapshotIsPlayerTurn);
+            Debug.Log(
+                $"PBp snapshot write gameId={gameIdForLog} path={path} roundTurn={snapshotRoundTurn} isPlayerTurn={snapshotIsPlayerTurn} transportSeq={snapshotTransportSeq}");
+#endif
             LogPlayByPostTelemetry(
                 "SnapshotSave",
                 $"path={path} state={GetPlayByPostStateSummary()}");
@@ -2750,7 +2966,13 @@ public class TurnManager : MonoBehaviour
                     $"path={targetPath} state={GetPlayByPostStateSummary()}");
             }
             Debug.Log("Game saved to " + targetPath);
-            SaveManifestService.RecordLocalSave(currentGameId, currentMode, targetPath, gameOver);
+            SaveManifestService.RecordLocalSave(
+                currentGameId,
+                currentMode,
+                targetPath,
+                gameOver,
+                lastKnownRoundTurn: turnNumber,
+                lastKnownIsPlayerTurn: isPlayerTurn);
         }
         catch (IOException ex)
         {
@@ -2852,9 +3074,7 @@ public class TurnManager : MonoBehaviour
     /// </summary>
     public void CopyCurrentStateToClipboard()
     {
-#if !DEVELOPMENT_BUILD
-        return;
-#endif
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (!TryBuildPlayByPostExportJson(out _, out string json))
         {
             return;
@@ -2868,6 +3088,7 @@ public class TurnManager : MonoBehaviour
         {
             Debug.LogWarning($"Failed to copy Play-by-Post JSON to clipboard ({json.Length} chars). On WebGL this may require user interaction/permissions.");
         }
+#endif
     }
 
     internal bool TryBuildPlayByPostExportJson(out int exportTurnNumber, out string json)
@@ -2882,13 +3103,23 @@ public class TurnManager : MonoBehaviour
 
         json = builtJson;
         exportTurnNumber = saveForExport.turnNumber;
-        SaveManifestService.RecordPlayByPostExport(currentGameId, null);
+        SaveManifestService.RecordPlayByPostExport(
+            currentGameId,
+            null,
+            lastKnownRoundTurn: saveForExport.turnNumber,
+            lastKnownIsPlayerTurn: saveForExport.isPlayerTurn);
         return true;
     }
 
     private static int ComputeTransportSeq(GameSave s)
     {
-        return s.turnNumber * 2 + (s.isPlayerTurn ? 0 : 1);
+        return ComputeTransportSeq(s.turnNumber, s.isPlayerTurn);
+    }
+
+    private static int ComputeTransportSeq(int roundTurn, bool turnIsPlayer)
+    {
+        int clampedRoundTurn = System.Math.Max(0, roundTurn);
+        return clampedRoundTurn * 2 + (turnIsPlayer ? 0 : 1);
     }
 
     private bool TryBuildPlayByPostExportSave(out GameSave saveForExport, out string json)
@@ -3084,6 +3315,10 @@ private void PBpDebugSyncNow_Context()
                 aiDifficulty = loadedDifficulty;
             }
             SetCurrentGameId(string.IsNullOrEmpty(save.gameId) ? System.Guid.NewGuid().ToString() : save.gameId);
+            if (currentMode == GameMode.PlayByPost)
+            {
+                PersistCurrentPbpGameIdIfNeeded();
+            }
             isPlayerTurn = save.isPlayerTurn;
             turnNumber = save.turnNumber;
             playerGold = save.playerGold;
@@ -3093,6 +3328,7 @@ private void PBpDebugSyncNow_Context()
             isHotseatHandoff = false;
             isPlayByPostWaitingForExport = false;
             Time.timeScale = 1f;
+            bool viewerIsPlayerOwnedForLoad = GetViewerIsPlayerOwned();
 
             // Clear units
             Unit[] existingUnits = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
@@ -3155,7 +3391,15 @@ private void PBpDebugSyncNow_Context()
                     unit.currentHealth = Mathf.Clamp(u.currentHealth, 1, unit.maxHealth);
                     unit.movesUsedThisTurn = Mathf.Clamp(u.movesUsedThisTurn, 0, unit.maxMovesPerTurn);
                     unit.hasAttackedThisTurn = u.hasAttackedThisTurn;
-                    bool isCurrentSideUnit = currentMode != GameMode.Hotseat || (unit.isPlayerOwned == isPlayerTurn);
+                    bool isCurrentSideUnit = true;
+                    if (currentMode == GameMode.Hotseat)
+                    {
+                        isCurrentSideUnit = unit.isPlayerOwned == isPlayerTurn;
+                    }
+                    else if (currentMode == GameMode.PlayByPost)
+                    {
+                        isCurrentSideUnit = unit.isPlayerOwned == viewerIsPlayerOwnedForLoad;
+                    }
                     unit.SetFogVisibility(true, isCurrentSideUnit); // will be updated after visibility recalculation
                 }
 
@@ -3233,8 +3477,16 @@ private void PBpDebugSyncNow_Context()
             if (currentMode == GameMode.PlayByPost)
             {
                 lastAppliedTurnNumberForPolling = ComputeTransportSeq(save);
-                bool localTurn = isPlayerTurn == LocalIsPlayerOwned();
+                int seat = GetLocalSeatIndexForPbpOrDefault(currentGameId, out bool hasSeat);
+                bool localIsPlayerOne = seat == 0;
+                bool currentSideIsPlayerOne = isPlayerTurn;
+                bool localTurn = localIsPlayerOne == currentSideIsPlayerOne;
                 isPlayByPostWaitingForExport = !localTurn;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                string seatText = hasSeat ? seat.ToString() : "<none>";
+                Debug.Log(
+                    $"[PBpLoadSeat] loadedGameId={save.gameId} seat={seatText} hasSeat={hasSeat} viewerIsPlayerOwned={viewerIsPlayerOwnedForLoad} loadedIsPlayerTurn={isPlayerTurn} isWaitingForExport={isPlayByPostWaitingForExport} canAdvance={CanAdvanceTurn()}");
+#endif
                 if (!localTurn)
                 {
                     SetPlayByPostWaitingForHostText();
@@ -3249,6 +3501,7 @@ private void PBpDebugSyncNow_Context()
             {
                 lastAppliedTurnNumberForPolling = turnNumber;
             }
+            RefreshEndTurnButtonInteractable(force: true);
             if (currentMode == GameMode.PlayByPost)
             {
                 SavePlayByPostPerGameSnapshot();
@@ -3258,7 +3511,12 @@ private void PBpDebugSyncNow_Context()
             }
             Debug.Log("Game loaded from " + debugSource);
 
-            SaveManifestService.RecordLoadApplied(currentGameId, currentMode, gameOver);
+            SaveManifestService.RecordLoadApplied(
+                currentGameId,
+                currentMode,
+                gameOver,
+                lastKnownRoundTurn: turnNumber,
+                lastKnownIsPlayerTurn: isPlayerTurn);
 
             if (currentMode == GameMode.VsAI && !isPlayerTurn && !gameOver)
             {

@@ -36,6 +36,10 @@ public static class SaveManifestService
         public bool isFinished;
         public string transportType;
         public string opponentLabel;
+        public bool hasLastKnownTurnState;
+        public int lastKnownRoundTurn;
+        public bool lastKnownIsPlayerTurn;
+        public int lastKnownTransportSeq;
     }
 
     public struct ManifestGameSummary
@@ -47,6 +51,10 @@ public static class SaveManifestService
         public string lastPlayedUtc;
         public bool isFinished;
         public string transportType;
+        public bool hasLastKnownTurnState;
+        public int lastKnownRoundTurn;
+        public bool lastKnownIsPlayerTurn;
+        public int lastKnownTransportSeq;
     }
 
     [Serializable]
@@ -59,12 +67,28 @@ public static class SaveManifestService
         public bool gameOver;
     }
 
-    public static void RecordLocalSave(string gameId, TurnManager.GameMode mode, string savePath, bool isFinished)
+    public static void RecordLocalSave(
+        string gameId,
+        TurnManager.GameMode mode,
+        string savePath,
+        bool isFinished,
+        int? lastKnownRoundTurn = null,
+        bool? lastKnownIsPlayerTurn = null)
     {
         string entryKey = mode == TurnManager.GameMode.PlayByPost
             ? BuildPbpGameEntryKey(gameId)
             : BuildLocalEntryKey(savePath);
-        RecordSave(entryKey, gameId, mode, savePath, isFinished, transportType: null, folderPath: null, allowCreateWithoutEntryKey: mode == TurnManager.GameMode.PlayByPost);
+        RecordSave(
+            entryKey,
+            gameId,
+            mode,
+            savePath,
+            isFinished,
+            transportType: null,
+            folderPath: null,
+            allowCreateWithoutEntryKey: mode == TurnManager.GameMode.PlayByPost,
+            lastKnownRoundTurn: lastKnownRoundTurn,
+            lastKnownIsPlayerTurn: lastKnownIsPlayerTurn);
     }
 
     public static void RecordImportedSave(string gameId, string mode, bool isFinished, string savePath)
@@ -75,25 +99,46 @@ public static class SaveManifestService
         TurnManager.GameMode parsedMode = ParseMode(mode);
         string resolvedGameId = string.IsNullOrWhiteSpace(gameId) ? DefaultLocalGameId : gameId;
         string entryKey = BuildLocalEntryKey(savePath);
-        RecordSave(entryKey, resolvedGameId, parsedMode, savePath, isFinished, transportType: null, folderPath: null, allowCreateWithoutEntryKey: false);
+        RecordSave(
+            entryKey,
+            resolvedGameId,
+            parsedMode,
+            savePath,
+            isFinished,
+            transportType: null,
+            folderPath: null,
+            allowCreateWithoutEntryKey: false,
+            lastKnownRoundTurn: null,
+            lastKnownIsPlayerTurn: null);
     }
 
-    public static void RecordPlayByPostExport(string gameId, string transportType)
+    public static void RecordPlayByPostExport(
+        string gameId,
+        string transportType,
+        int? lastKnownRoundTurn = null,
+        bool? lastKnownIsPlayerTurn = null)
     {
         if (string.IsNullOrWhiteSpace(gameId))
             return;
 
         RecordSave(entryKey: null, gameId, TurnManager.GameMode.PlayByPost, savePath: null, isFinished: false,
-            transportType: transportType, folderPath: null, allowCreateWithoutEntryKey: true);
+            transportType: transportType, folderPath: null, allowCreateWithoutEntryKey: true,
+            lastKnownRoundTurn: lastKnownRoundTurn, lastKnownIsPlayerTurn: lastKnownIsPlayerTurn);
     }
 
-    public static void RecordLoadApplied(string gameId, TurnManager.GameMode mode, bool isFinished)
+    public static void RecordLoadApplied(
+        string gameId,
+        TurnManager.GameMode mode,
+        bool isFinished,
+        int? lastKnownRoundTurn = null,
+        bool? lastKnownIsPlayerTurn = null)
     {
         if (string.IsNullOrWhiteSpace(gameId))
             gameId = DefaultLocalGameId;
 
         RecordSave(entryKey: null, gameId, mode, savePath: null, isFinished: isFinished,
-            transportType: null, folderPath: null, allowCreateWithoutEntryKey: true);
+            transportType: null, folderPath: null, allowCreateWithoutEntryKey: true,
+            lastKnownRoundTurn: lastKnownRoundTurn, lastKnownIsPlayerTurn: lastKnownIsPlayerTurn);
     }
 
     public static void EnsurePlayByPostEntry(string gameId, string transportType)
@@ -102,7 +147,8 @@ public static class SaveManifestService
             return;
 
         RecordSave(entryKey: null, gameId, TurnManager.GameMode.PlayByPost, savePath: null, isFinished: false,
-            transportType: transportType, folderPath: null, allowCreateWithoutEntryKey: true);
+            transportType: transportType, folderPath: null, allowCreateWithoutEntryKey: true,
+            lastKnownRoundTurn: null, lastKnownIsPlayerTurn: null);
     }
 
     public static void DumpManifestToLog()
@@ -122,7 +168,9 @@ public static class SaveManifestService
                 if (entry == null)
                     continue;
 
-                Debug.Log($"[SaveManifest] entryKey={entry.entryKey} mode={entry.mode} savePath={entry.savePath} folderPath={entry.folderPath} lastPlayedUtc={entry.lastPlayedUtc} isFinished={entry.isFinished}");
+                Debug.Log(
+                    $"[SaveManifest] entryKey={entry.entryKey} mode={entry.mode} savePath={entry.savePath} folderPath={entry.folderPath} lastPlayedUtc={entry.lastPlayedUtc} isFinished={entry.isFinished} " +
+                    $"lastKnownRoundTurn={entry.lastKnownRoundTurn} lastKnownIsPlayerTurn={entry.lastKnownIsPlayerTurn} lastKnownTransportSeq={entry.lastKnownTransportSeq} hasLastKnownTurnState={entry.hasLastKnownTurnState}");
             }
         }
 #endif
@@ -136,7 +184,8 @@ public static class SaveManifestService
         string folderRel = ToRelativePersistentPath(folderPath);
         string entryKey = BuildPbpFileEntryKey(folderRel);
         RecordSave(entryKey, gameId, TurnManager.GameMode.PlayByPost, savePath: null, isFinished: false,
-            transportType: "File", folderPath: folderRel, allowCreateWithoutEntryKey: false);
+            transportType: "File", folderPath: folderRel, allowCreateWithoutEntryKey: false,
+            lastKnownRoundTurn: null, lastKnownIsPlayerTurn: null);
     }
 
     public static List<ManifestGameSummary> GetActivePlayByPostGames()
@@ -168,7 +217,11 @@ public static class SaveManifestService
                     slotType = entry.slotType,
                     lastPlayedUtc = entry.lastPlayedUtc,
                     isFinished = entry.isFinished,
-                    transportType = entry.transportType
+                    transportType = entry.transportType,
+                    hasLastKnownTurnState = entry.hasLastKnownTurnState,
+                    lastKnownRoundTurn = entry.lastKnownRoundTurn,
+                    lastKnownIsPlayerTurn = entry.lastKnownIsPlayerTurn,
+                    lastKnownTransportSeq = entry.lastKnownTransportSeq
                 });
             }
 
@@ -254,7 +307,9 @@ public static class SaveManifestService
         bool isFinished,
         string transportType,
         string folderPath,
-        bool allowCreateWithoutEntryKey)
+        bool allowCreateWithoutEntryKey,
+        int? lastKnownRoundTurn,
+        bool? lastKnownIsPlayerTurn)
     {
         lock (Sync)
         {
@@ -318,6 +373,18 @@ public static class SaveManifestService
             if (!string.IsNullOrWhiteSpace(transportType))
             {
                 entry.transportType = transportType;
+            }
+
+            if (mode == TurnManager.GameMode.PlayByPost &&
+                lastKnownRoundTurn.HasValue &&
+                lastKnownIsPlayerTurn.HasValue)
+            {
+                int clampedRoundTurn = Math.Max(0, lastKnownRoundTurn.Value);
+                bool knownIsPlayerTurn = lastKnownIsPlayerTurn.Value;
+                entry.hasLastKnownTurnState = true;
+                entry.lastKnownRoundTurn = clampedRoundTurn;
+                entry.lastKnownIsPlayerTurn = knownIsPlayerTurn;
+                entry.lastKnownTransportSeq = ComputePlayByPostTransportSeq(clampedRoundTurn, knownIsPlayerTurn);
             }
 
             WriteManifest(cachedManifest);
@@ -446,6 +513,14 @@ public static class SaveManifestService
             lastPlayedUtc = UtcNowIso(),
             isFinished = header.gameOver
         };
+        if (mode == TurnManager.GameMode.PlayByPost)
+        {
+            int clampedRoundTurn = Math.Max(0, header.turnNumber);
+            entry.hasLastKnownTurnState = true;
+            entry.lastKnownRoundTurn = clampedRoundTurn;
+            entry.lastKnownIsPlayerTurn = header.isPlayerTurn;
+            entry.lastKnownTransportSeq = ComputePlayByPostTransportSeq(clampedRoundTurn, header.isPlayerTurn);
+        }
         manifest.entries.Add(entry);
     }
 
@@ -491,6 +566,14 @@ public static class SaveManifestService
             if (header != null && !string.IsNullOrWhiteSpace(header.mode))
             {
                 entry.mode = header.mode;
+            }
+            if (header != null)
+            {
+                int clampedRoundTurn = Math.Max(0, header.turnNumber);
+                entry.hasLastKnownTurnState = true;
+                entry.lastKnownRoundTurn = clampedRoundTurn;
+                entry.lastKnownIsPlayerTurn = header.isPlayerTurn;
+                entry.lastKnownTransportSeq = ComputePlayByPostTransportSeq(clampedRoundTurn, header.isPlayerTurn);
             }
 
             manifest.entries.Add(entry);
@@ -675,6 +758,12 @@ public static class SaveManifestService
     private static string UtcNowIso()
     {
         return DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
+    }
+
+    public static int ComputePlayByPostTransportSeq(int roundTurn, bool isPlayerTurn)
+    {
+        int clampedRoundTurn = Math.Max(0, roundTurn);
+        return clampedRoundTurn * 2 + (isPlayerTurn ? 0 : 1);
     }
 
     private static void MigrateLocalPlayByPostEntry(string gameId)

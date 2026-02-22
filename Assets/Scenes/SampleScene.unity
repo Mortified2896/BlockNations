@@ -1478,6 +1478,7 @@ MonoBehaviour:
   aiDifficulty: 1
   turnText: {fileID: 861704871}
   goldText: {fileID: 196768855}
+  endTurnButton: {fileID: 1385235132}
   gameOverPanel: {fileID: 1387167544}
   gameOverText: {fileID: 1415913224}
   playByPostPopup: {fileID: 153686181}
@@ -1732,6 +1733,18 @@ PrefabInstance:
     - target: {fileID: 1837420442749385823, guid: c9eed9b9b48f5564985312e392a85110, type: 3}
       propertyPath: m_Name
       value: Next
+      objectReference: {fileID: 0}
+    - target: {fileID: 5181861564531971374, guid: c9eed9b9b48f5564985312e392a85110, type: 3}
+      propertyPath: m_Colors.m_DisabledColor.b
+      value: 0.21391062
+      objectReference: {fileID: 0}
+    - target: {fileID: 5181861564531971374, guid: c9eed9b9b48f5564985312e392a85110, type: 3}
+      propertyPath: m_Colors.m_DisabledColor.g
+      value: 0.21391062
+      objectReference: {fileID: 0}
+    - target: {fileID: 5181861564531971374, guid: c9eed9b9b48f5564985312e392a85110, type: 3}
+      propertyPath: m_Colors.m_DisabledColor.r
+      value: 0.21698111
       objectReference: {fileID: 0}
     - target: {fileID: 5181861564531971374, guid: c9eed9b9b48f5564985312e392a85110, type: 3}
       propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_Target
@@ -3585,7 +3598,17 @@ MonoBehaviour:
   httpTurnTransport: {fileID: 509509622}
   heartbeatSeconds: 60
   modeCheckSeconds: 0.5
-  submitFeedbackSeconds: 3
+--- !u!114 &1385235132 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 5181861564531971374, guid: c9eed9b9b48f5564985312e392a85110, type: 3}
+  m_PrefabInstance: {fileID: 560400230}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
 --- !u!1 &1387167544
 GameObject:
   m_ObjectHideFlags: 0
