@@ -82,6 +82,16 @@ public class City : MonoBehaviour
             return;
         }
 
+        if (TurnManager.Instance.currentMode == TurnManager.GameMode.PlayByPost &&
+            !TurnManager.Instance.CanLocalPlayerIssueCommands())
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.Log($"Ignored SpawnWarrior in PBp while local commands are locked (city={name}).", this);
+#endif
+            PlayInvalidIfHuman();
+            return;
+        }
+
         if (!TurnManager.Instance.TrySpendGold(isPlayerOwned, TurnManager.Instance.warriorCost))
         {
             if (isPlayerOwned)

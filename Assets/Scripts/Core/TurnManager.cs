@@ -340,9 +340,35 @@ public class TurnManager : MonoBehaviour
         return isPlayerTurn && isPlayerOwned;
     }
 
+    public bool CanLocalPlayerIssueCommands()
+    {
+        if (currentMode != GameMode.PlayByPost)
+            return true;
+
+        if (isPlayByPostWaitingForExport)
+            return false;
+
+        return LocalTurnMatchesSeat();
+    }
+
+    private bool LocalTurnMatchesSeat()
+    {
+        if (string.IsNullOrWhiteSpace(currentGameId))
+            return false;
+
+        if (!LocalPlayerSeatStore.TryGetSeat(currentGameId, out int seat))
+            return false;
+
+        bool localIsPlayerOne = seat == 0;
+        return isPlayerTurn == localIsPlayerOne;
+    }
+
     public bool CanControlUnit(Unit unit)
     {
         if (unit == null || gameOver || isHotseatHandoff)
+            return false;
+
+        if (currentMode == GameMode.PlayByPost && !CanLocalPlayerIssueCommands())
             return false;
 
         return IsCurrentSideOwner(unit.isPlayerOwned);
@@ -351,6 +377,9 @@ public class TurnManager : MonoBehaviour
     public bool CanControlCity(City city)
     {
         if (city == null || gameOver || isHotseatHandoff)
+            return false;
+
+        if (currentMode == GameMode.PlayByPost && !CanLocalPlayerIssueCommands())
             return false;
 
         return IsCurrentSideOwner(city.isPlayerOwned);
@@ -619,6 +648,14 @@ public class TurnManager : MonoBehaviour
             // let CopyCurrentStateToClipboard() build a snapshot that
             // represents the *next* side's turn.
             isPlayByPostWaitingForExport = true;
+            if (UnitSelectionManager.Instance != null)
+            {
+                UnitSelectionManager.Instance.ClearSelection();
+            }
+            if (CityUIManager.Instance != null)
+            {
+                CityUIManager.Instance.ClosePanel();
+            }
             RefreshEndTurnButtonInteractable(force: true);
             AutoSaveIfEnabled();
 
@@ -3298,7 +3335,7 @@ private void PBpDebugSyncNow_Context()
                 $"path={targetPath} loadedMode={save.mode} loadedGameId={save.gameId} loadedRoundTurn={save.turnNumber} loadedIsPlayerTurn={save.isPlayerTurn} loadedTransportSeq={ComputeTransportSeq(save)}");
         }
 
-        return ApplyLoadedSave(save, targetPath);
+        return ApplyLoadedSave(save, targetPath, json);
     }
 
     public bool LoadFromJsonString(string json)
@@ -3336,10 +3373,10 @@ private void PBpDebugSyncNow_Context()
                 $"source=clipboard/transport jsonLen={json.Length} loadedMode={save.mode} loadedGameId={save.gameId} loadedRoundTurn={save.turnNumber} loadedIsPlayerTurn={save.isPlayerTurn} loadedTransportSeq={ComputeTransportSeq(save)}");
         }
 
-        return ApplyLoadedSave(save, "clipboard/transport");
+        return ApplyLoadedSave(save, "clipboard/transport", json);
     }
 
-    private bool ApplyLoadedSave(GameSave save, string debugSource)
+    private bool ApplyLoadedSave(GameSave save, string debugSource, string rawLoadedJson = null)
     {
         try
         {
@@ -3403,6 +3440,13 @@ private void PBpDebugSyncNow_Context()
             isPlayByPostWaitingForExport = false;
             Time.timeScale = 1f;
             bool viewerIsPlayerOwnedForLoad = GetViewerIsPlayerOwned();
+            int unitCountBeforeClear = 0;
+            int unitCountAfterSpawn = 0;
+            int duplicateOwnerTileSlots = 0;
+            string snapshotWriteMode = "none";
+            int pbpSeat = 0;
+            bool pbpHasSeat = false;
+            string pbpSeatTextForLog = "<none>";
 
             // Clear units
             Unit[] existingUnits = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
@@ -3410,7 +3454,15 @@ private void PBpDebugSyncNow_Context()
             {
                 if (u != null)
                 {
-                    Destroy(u.gameObject);
+                    unitCountBeforeClear++;
+                    GameObject unitObject = u.gameObject;
+                    if (unitObject != null)
+                    {
+                        // Destroy is deferred to end-of-frame; disable immediately so stale units
+                        // cannot be interacted with or picked by same-frame queries.
+                        unitObject.SetActive(false);
+                        Destroy(unitObject);
+                    }
                 }
             }
 
@@ -3498,6 +3550,17 @@ private void PBpDebugSyncNow_Context()
                 }
             }
 
+            Unit[] unitsAfterSpawn = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
+            unitCountAfterSpawn = unitsAfterSpawn != null ? unitsAfterSpawn.Length : 0;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            duplicateOwnerTileSlots = CountDuplicateOwnerTileSlots(unitsAfterSpawn);
+            if (duplicateOwnerTileSlots > 0)
+            {
+                Debug.LogWarning(
+                    $"[PBpLoadDupCheck] source={debugSource} gameId={currentGameId} turn={turnNumber} isPlayerTurn={isPlayerTurn} duplicateOwnerTileSlots={duplicateOwnerTileSlots}");
+            }
+#endif
+
             // Update move outlines for the active side based on loaded move state
             if (UnitSelectionManager.Instance != null)
             {
@@ -3551,15 +3614,15 @@ private void PBpDebugSyncNow_Context()
             if (currentMode == GameMode.PlayByPost)
             {
                 lastAppliedTurnNumberForPolling = ComputeTransportSeq(save);
-                int seat = GetLocalSeatIndexForPbpOrDefault(currentGameId, out bool hasSeat);
-                bool localIsPlayerOne = seat == 0;
+                pbpSeat = GetLocalSeatIndexForPbpOrDefault(currentGameId, out pbpHasSeat);
+                bool localIsPlayerOne = pbpSeat == 0;
                 bool currentSideIsPlayerOne = isPlayerTurn;
                 bool localTurn = localIsPlayerOne == currentSideIsPlayerOne;
+                pbpSeatTextForLog = pbpHasSeat ? pbpSeat.ToString() : "<none>";
                 isPlayByPostWaitingForExport = !localTurn;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-                string seatText = hasSeat ? seat.ToString() : "<none>";
                 Debug.Log(
-                    $"[PBpLoadSeat] loadedGameId={save.gameId} seat={seatText} hasSeat={hasSeat} viewerIsPlayerOwned={viewerIsPlayerOwnedForLoad} loadedIsPlayerTurn={isPlayerTurn} isWaitingForExport={isPlayByPostWaitingForExport} canAdvance={CanAdvanceTurn()}");
+                    $"[PBpLoadSeat] loadedGameId={save.gameId} seat={pbpSeatTextForLog} hasSeat={pbpHasSeat} viewerIsPlayerOwned={viewerIsPlayerOwnedForLoad} loadedIsPlayerTurn={isPlayerTurn} isWaitingForExport={isPlayByPostWaitingForExport} canAdvance={CanAdvanceTurn()}");
 #endif
                 if (!localTurn)
                 {
@@ -3578,10 +3641,31 @@ private void PBpDebugSyncNow_Context()
             RefreshEndTurnButtonInteractable(force: true);
             if (currentMode == GameMode.PlayByPost)
             {
-                SavePlayByPostPerGameSnapshot();
+                if (!string.IsNullOrWhiteSpace(rawLoadedJson))
+                {
+                    SavePlayByPostPerGameSnapshot(
+                        snapshotJson: rawLoadedJson,
+                        snapshotRoundTurn: save.turnNumber,
+                        snapshotIsPlayerTurn: save.isPlayerTurn,
+                        snapshotGameId: save.gameId);
+                    snapshotWriteMode = "rawJson";
+                }
+                else
+                {
+                    SavePlayByPostPerGameSnapshot();
+                    snapshotWriteMode = "rebuild";
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    Debug.LogWarning(
+                        $"[PBpLoadApply] source={debugSource} gameId={currentGameId} rawJsonMissing=true; falling back to snapshot rebuild.");
+#endif
+                }
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.Log(
+                    $"[PBpLoadApply] source={debugSource} gameId={currentGameId} seat={pbpSeatTextForLog} turn={turnNumber} isPlayerTurn={isPlayerTurn} unitsBeforeClear={unitCountBeforeClear} unitsAfterSpawn={unitCountAfterSpawn} duplicateOwnerTileSlots={duplicateOwnerTileSlots} snapshotWrite={snapshotWriteMode}");
+#endif
                 LogPlayByPostTelemetry(
                     "ApplyLoadedSaveDone",
-                    $"source={debugSource} loadRelationToLastSubmit={GetPlayByPostLoadRelationToLastSubmit()} stateAfter={GetPlayByPostStateSummary()}");
+                    $"source={debugSource} snapshotWrite={snapshotWriteMode} loadRelationToLastSubmit={GetPlayByPostLoadRelationToLastSubmit()} stateAfter={GetPlayByPostStateSummary()}");
             }
             Debug.Log("Game loaded from " + debugSource);
 
@@ -3613,6 +3697,44 @@ private void PBpDebugSyncNow_Context()
             isLoadingFromSave = false;
         }
     }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private int CountDuplicateOwnerTileSlots(Unit[] units)
+    {
+        if (units == null || units.Length == 0)
+            return 0;
+
+        var countsByOwnerAndPosition = new Dictionary<string, int>();
+        int duplicateSlots = 0;
+        for (int i = 0; i < units.Length; i++)
+        {
+            Unit unit = units[i];
+            if (unit == null)
+                continue;
+
+            Vector3 pos = unit.transform.position;
+            int x = Mathf.RoundToInt(pos.x * 1000f);
+            int y = Mathf.RoundToInt(pos.y * 1000f);
+            int z = Mathf.RoundToInt(pos.z * 1000f);
+            string key = $"{(unit.isPlayerOwned ? 1 : 0)}:{x}:{y}:{z}";
+
+            if (!countsByOwnerAndPosition.TryGetValue(key, out int count))
+            {
+                countsByOwnerAndPosition[key] = 1;
+                continue;
+            }
+
+            count++;
+            countsByOwnerAndPosition[key] = count;
+            if (count == 2)
+            {
+                duplicateSlots++;
+            }
+        }
+
+        return duplicateSlots;
+    }
+#endif
 
     public bool TrySpendGold(bool forPlayer, int amount)
     {

@@ -62,6 +62,7 @@ public class MainMenuController : MonoBehaviour
     private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
     private const string LegacySharedSaveFileName = "save.json";
     private bool isServerOnline = true;
+    private bool joinProbeInProgress;
     private Coroutine serverCheckRoutine;
     private HttpTurnTransport cachedHttpTransport;
 
@@ -405,6 +406,12 @@ public class MainMenuController : MonoBehaviour
 
     public void JoinPlayByPostFromInput()
     {
+        if (joinProbeInProgress)
+        {
+            SetImportStatus("Checking game on server...");
+            return;
+        }
+
         if (!isServerOnline)
         {
             SetImportStatus("Server offline");
@@ -423,20 +430,10 @@ public class MainMenuController : MonoBehaviour
             joinGameIdInput.text = normalizedGameId;
         }
 
-        LocalPlayerSeatStore.SetSeat(normalizedGameId, 1);
-        PlayerPrefs.DeleteKey(PlayByPostForceNewKey);
-        PlayerPrefs.DeleteKey(PlayByPostPendingNewGameIdKey);
-        PlayerPrefs.SetString(PlayByPostGameIdKey, normalizedGameId);
-        PlayerPrefs.Save();
-        SetImportStatus($"Joining game: {normalizedGameId}");
-
-        GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
-        SceneManager.LoadScene(gameplaySceneName);
-
-        if (modeSelectionPanel != null)
-        {
-            modeSelectionPanel.SetActive(false);
-        }
+        SetImportStatus("Checking game on server...");
+        joinProbeInProgress = true;
+        StartCoroutine(JoinPlayByPostAfterServerProbe(normalizedGameId));
+        return;
     }
 
     public void OpenMultiplayerScreen()
@@ -944,6 +941,62 @@ public class MainMenuController : MonoBehaviour
         SetImportStatus(isServerOnline ? "Server online" : "Server offline");
         RefreshMultiplayerList();
         serverCheckRoutine = null;
+    }
+
+    private IEnumerator JoinPlayByPostAfterServerProbe(string gameId)
+    {
+        try
+        {
+            if (cachedHttpTransport == null)
+            {
+                ResolveServerCheckSources();
+            }
+
+            HttpTurnTransport httpTransport = cachedHttpTransport;
+            if (httpTransport == null)
+            {
+                SetImportStatus("Server offline. Can't verify game.");
+                yield break;
+            }
+
+            httpTransport.Initialize();
+
+            bool probeOk = false;
+            string probeError = null;
+            yield return StartCoroutine(httpTransport.TryFetchNextTurn(gameId, 0, (ok, err, fetchedTurn, fetchedJson) =>
+            {
+                probeOk = ok;
+                probeError = err;
+            }));
+
+            if (probeOk)
+            {
+                SetImportStatus("Game found. Joining...");
+                LocalPlayerSeatStore.SetSeat(gameId, 1);
+                PersistPlayByPostSelection(gameId, returnToMultiplayerPane: true);
+                GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
+                SceneManager.LoadScene(gameplaySceneName);
+
+                if (modeSelectionPanel != null)
+                {
+                    modeSelectionPanel.SetActive(false);
+                }
+
+                yield break;
+            }
+
+            if (string.Equals(probeError, TurnTelemetryConstants.NoTurn, StringComparison.Ordinal))
+            {
+                SetImportStatus("No turns found for this code yet. Ask host to submit their first turn.");
+                yield break;
+            }
+
+            SetImportStatus("Server offline. Can't verify game.");
+        }
+        finally
+        {
+            joinProbeInProgress = false;
+        }
     }
 
     private void ResolveServerCheckSources()
