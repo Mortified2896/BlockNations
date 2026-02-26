@@ -74,6 +74,8 @@ public class TurnManager : MonoBehaviour
     [Header("Game Over UI")]
     public GameObject gameOverPanel;
     public TMP_Text gameOverText;
+    [Tooltip("Optional: assign the endgame primary button (e.g., Play Again) to avoid runtime lookup.")]
+    public Button gameOverPrimaryButtonOverride;
 
     [Header("Play By Post")]
     [Tooltip("Optional panel shown when a Play-by-Post submit succeeds (e.g., with a 'Copy Game Code' button).")]
@@ -151,6 +153,8 @@ public class TurnManager : MonoBehaviour
     private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
     private const string PlayByPostPerGameSaveFolderName = "pbp";
     private const string PlayByPostPerGameSavePrefix = "pbp_";
+    private const string ReturnToMultiplayerPaneKey = "ui_returnToMultiplayerPane";
+    private const string MainMenuSceneName = "MainMenu";
 
     // Controlled via Unity Scripting Define Symbols:
     // ENABLE_AUTO_END_TURN_ON_NO_ACTIONS
@@ -165,6 +169,26 @@ public class TurnManager : MonoBehaviour
     private float lastHumanInputUnscaledTime = -999f;
     private bool hasCachedEndTurnButtonInteractable;
     private bool cachedEndTurnButtonInteractable;
+    private enum PbpEndgamePrimaryAction
+    {
+        None,
+        Submitting,
+        RetrySubmit,
+        BackAndDelete
+    }
+
+    private PbpEndgamePrimaryAction pbpEndgamePrimaryAction = PbpEndgamePrimaryAction.None;
+    private bool pbpEndgameLocalWinner = false;
+    private bool pbpEndgameSubmitPending = false;
+    private bool pbpEndgameSubmitSucceeded = false;
+    private bool pbpEndgameSubmitPayloadCached = false;
+    private string pbpEndgameCachedExportJson;
+    private int pbpEndgameCachedTransportSeq;
+    private int pbpEndgameCachedExportTurnNumber;
+    private bool pbpEndgameCachedExportIsPlayerTurn;
+    private string pbpEndgameCachedExportGameId;
+    private Button gameOverPrimaryButton;
+    private TMP_Text gameOverPrimaryButtonText;
     [System.Serializable]
     private class SavedCity
     {
@@ -219,6 +243,11 @@ public class TurnManager : MonoBehaviour
     private string cachedGameIdHash;
     public event System.Action<bool, string> PlayByPostSubmitResult;
     public event System.Action<bool, string> PlayByPostFetchResult;
+    public bool IsPbpEndgameMenuExitBlocked =>
+        currentMode == GameMode.PlayByPost &&
+        gameOver &&
+        pbpEndgameLocalWinner &&
+        pbpEndgameSubmitPending;
 
     public bool IsHumanTurn()
     {
@@ -431,6 +460,7 @@ public class TurnManager : MonoBehaviour
         isPlayByPostWaitingForExport = false;
         isPlayByPostFetchInProgress = false;
         playByPostLastFetchWasNoTurn = false;
+        ResetPbpEndgameRuntimeState();
 
         if (playByPostPollRoutine != null)
         {
@@ -444,6 +474,22 @@ public class TurnManager : MonoBehaviour
         }
     }
 
+    private void ResetPbpEndgameRuntimeState()
+    {
+        pbpEndgamePrimaryAction = PbpEndgamePrimaryAction.None;
+        pbpEndgameLocalWinner = false;
+        pbpEndgameSubmitPending = false;
+        pbpEndgameSubmitSucceeded = false;
+        pbpEndgameSubmitPayloadCached = false;
+        pbpEndgameCachedExportJson = null;
+        pbpEndgameCachedTransportSeq = 0;
+        pbpEndgameCachedExportTurnNumber = 0;
+        pbpEndgameCachedExportIsPlayerTurn = false;
+        pbpEndgameCachedExportGameId = null;
+        gameOverPrimaryButton = null;
+        gameOverPrimaryButtonText = null;
+    }
+
     void Awake()
     {
         if (Instance != null && Instance != this)
@@ -454,6 +500,16 @@ public class TurnManager : MonoBehaviour
 
         Instance = this;
         ResolveTelemetrySink();
+    }
+
+    void OnEnable()
+    {
+        PlayByPostSubmitResult += OnPlayByPostSubmitResultForEndgame;
+    }
+
+    void OnDisable()
+    {
+        PlayByPostSubmitResult -= OnPlayByPostSubmitResultForEndgame;
     }
 
     void Start()
@@ -558,12 +614,311 @@ public class TurnManager : MonoBehaviour
 
     public void OnPlayAgainButtonPressed()
     {
+        if (currentMode == GameMode.PlayByPost && gameOver)
+        {
+            if (pbpEndgamePrimaryAction == PbpEndgamePrimaryAction.RetrySubmit)
+            {
+                TryStartPbpEndgameAutoSubmit();
+                return;
+            }
+
+            if (pbpEndgamePrimaryAction == PbpEndgamePrimaryAction.BackAndDelete)
+            {
+                ReturnToMultiplayerAndDeleteLocalPbpCopy();
+                return;
+            }
+
+            return;
+        }
+
         // Preserve the mode (VsAI / Hotseat / PlayByPost) for the next game.
         GameModeSelection.SetPendingMode(currentMode);
 
         Time.timeScale = 1f;
         var currentScene = SceneManager.GetActiveScene();
         SceneManager.LoadScene(currentScene.name);
+    }
+
+    private void EnsureGameOverPrimaryButtonReferences()
+    {
+        if (gameOverPanel == null)
+            return;
+
+        if (gameOverPrimaryButtonOverride != null)
+        {
+            gameOverPrimaryButton = gameOverPrimaryButtonOverride;
+            if (gameOverPrimaryButtonText == null)
+            {
+                gameOverPrimaryButtonText = gameOverPrimaryButton.GetComponentInChildren<TMP_Text>(true);
+            }
+            return;
+        }
+
+        if (gameOverPrimaryButton != null)
+        {
+            if (gameOverPrimaryButtonText == null)
+            {
+                gameOverPrimaryButtonText = gameOverPrimaryButton.GetComponentInChildren<TMP_Text>(true);
+            }
+            return;
+        }
+
+        Button[] buttons = gameOverPanel.GetComponentsInChildren<Button>(true);
+        if (buttons == null || buttons.Length == 0)
+            return;
+
+        Button fallback = null;
+        for (int i = 0; i < buttons.Length; i++)
+        {
+            Button b = buttons[i];
+            if (b == null)
+                continue;
+
+            if (fallback == null)
+                fallback = b;
+
+            string n = b.name != null ? b.name : string.Empty;
+            if (string.Equals(n, "Play Again", System.StringComparison.OrdinalIgnoreCase))
+            {
+                gameOverPrimaryButton = b;
+                break;
+            }
+        }
+
+        if (gameOverPrimaryButton == null)
+        {
+            gameOverPrimaryButton = fallback;
+        }
+
+        if (gameOverPrimaryButton != null)
+        {
+            gameOverPrimaryButtonText = gameOverPrimaryButton.GetComponentInChildren<TMP_Text>(true);
+        }
+    }
+
+    private void SetGameOverPrimaryButtonState(string label, bool interactable, PbpEndgamePrimaryAction action)
+    {
+        pbpEndgamePrimaryAction = action;
+        EnsureGameOverPrimaryButtonReferences();
+
+        if (gameOverPrimaryButton != null)
+        {
+            gameOverPrimaryButton.interactable = interactable;
+        }
+
+        if (gameOverPrimaryButtonText != null)
+        {
+            gameOverPrimaryButtonText.text = label;
+        }
+    }
+
+    private void ShowGameOverPopup(string message, bool writeLog = true)
+    {
+        if (gameOverText != null)
+        {
+            gameOverText.text = message;
+            gameOverText.gameObject.SetActive(true);
+        }
+
+        if (gameOverPanel != null)
+        {
+            gameOverPanel.SetActive(true);
+        }
+
+        if (writeLog)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.Log("Game Over: " + message);
+#endif
+        }
+    }
+
+    private bool TryComputePbpLocalResult(int winnerSeatIndex, out bool didLocalWin, out int localSeatIndex)
+    {
+        didLocalWin = false;
+        localSeatIndex = 0;
+
+        if (currentMode != GameMode.PlayByPost)
+            return false;
+
+        localSeatIndex = GetLocalSeatIndexForPbpOrDefault(currentGameId, out _);
+        didLocalWin = winnerSeatIndex == localSeatIndex;
+        return true;
+    }
+
+    private bool TryComputePbpWinnerSeatFromBoard(out int winnerSeatIndex)
+    {
+        winnerSeatIndex = 0;
+        City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        if (cities == null || cities.Length == 0)
+            return false;
+
+        bool owner = cities[0].isPlayerOwned;
+        for (int i = 1; i < cities.Length; i++)
+        {
+            if (cities[i] == null)
+                continue;
+
+            if (cities[i].isPlayerOwned != owner)
+                return false;
+        }
+
+        winnerSeatIndex = owner ? 0 : 1;
+        return true;
+    }
+
+    private void ConfigurePbpEndgameFromCapture(bool didLocalWin)
+    {
+        pbpEndgameLocalWinner = didLocalWin;
+        pbpEndgameSubmitPending = false;
+        pbpEndgameSubmitSucceeded = false;
+        pbpEndgameSubmitPayloadCached = false;
+        pbpEndgameCachedExportJson = null;
+        pbpEndgameCachedExportGameId = null;
+        pbpEndgameCachedTransportSeq = 0;
+        pbpEndgameCachedExportTurnNumber = 0;
+        pbpEndgameCachedExportIsPlayerTurn = false;
+
+        if (didLocalWin)
+        {
+            SetGameOverPrimaryButtonState("Submitting...", false, PbpEndgamePrimaryAction.Submitting);
+            TryStartPbpEndgameAutoSubmit();
+            return;
+        }
+
+        SetGameOverPrimaryButtonState("Back to Multiplayer & Delete local copy", true, PbpEndgamePrimaryAction.BackAndDelete);
+    }
+
+    private void ConfigurePbpEndgameFromLoadedState()
+    {
+        if (!TryComputePbpWinnerSeatFromBoard(out int winnerSeatIndex))
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.LogWarning("PBp gameOver load could not derive a single objective winner seat from board ownership.");
+#endif
+            ShowGameOverPopup("Game over.", writeLog: false);
+            pbpEndgameLocalWinner = false;
+            pbpEndgameSubmitPending = false;
+            pbpEndgameSubmitSucceeded = false;
+            pbpEndgameSubmitPayloadCached = false;
+            pbpEndgameCachedExportJson = null;
+            pbpEndgameCachedExportGameId = null;
+            pbpEndgameCachedTransportSeq = 0;
+            pbpEndgameCachedExportTurnNumber = 0;
+            pbpEndgameCachedExportIsPlayerTurn = false;
+            SetGameOverPrimaryButtonState("Back to Multiplayer & Delete local copy", true, PbpEndgamePrimaryAction.BackAndDelete);
+            return;
+        }
+
+        if (!TryComputePbpLocalResult(winnerSeatIndex, out bool didLocalWin, out _))
+            return;
+
+        string message = didLocalWin ? "You won!" : "You lost!";
+        ShowGameOverPopup(message, writeLog: false);
+
+        pbpEndgameLocalWinner = didLocalWin;
+        pbpEndgameSubmitPending = false;
+        pbpEndgameSubmitSucceeded = false;
+        pbpEndgameSubmitPayloadCached = false;
+        pbpEndgameCachedExportJson = null;
+        pbpEndgameCachedExportGameId = null;
+        pbpEndgameCachedTransportSeq = 0;
+        pbpEndgameCachedExportTurnNumber = 0;
+        pbpEndgameCachedExportIsPlayerTurn = false;
+
+        if (didLocalWin)
+        {
+            SetGameOverPrimaryButtonState("Submitting...", false, PbpEndgamePrimaryAction.Submitting);
+            TryStartPbpEndgameAutoSubmit();
+            return;
+        }
+
+        SetGameOverPrimaryButtonState("Back to Multiplayer & Delete local copy", true, PbpEndgamePrimaryAction.BackAndDelete);
+    }
+
+    private bool TryBuildPbpEndgameSubmitPayload()
+    {
+        if (pbpEndgameSubmitPayloadCached && !string.IsNullOrWhiteSpace(pbpEndgameCachedExportJson))
+            return true;
+
+        if (!TryBuildPlayByPostExportSave(out GameSave exportSave, out string exportJson) ||
+            exportSave == null ||
+            string.IsNullOrWhiteSpace(exportJson))
+        {
+            return false;
+        }
+
+        pbpEndgameCachedExportGameId = exportSave.gameId;
+        pbpEndgameCachedExportTurnNumber = exportSave.turnNumber;
+        pbpEndgameCachedExportIsPlayerTurn = exportSave.isPlayerTurn;
+        pbpEndgameCachedTransportSeq = ComputeTransportSeq(exportSave);
+        pbpEndgameCachedExportJson = exportJson;
+        pbpEndgameSubmitPayloadCached = true;
+        return true;
+    }
+
+    private void TryStartPbpEndgameAutoSubmit()
+    {
+        if (currentMode != GameMode.PlayByPost || !gameOver || !pbpEndgameLocalWinner || pbpEndgameSubmitPending)
+            return;
+
+        if (!TryBuildPbpEndgameSubmitPayload())
+        {
+            pbpEndgameSubmitPending = false;
+            pbpEndgameSubmitSucceeded = false;
+            SetGameOverPrimaryButtonState("Retry submit", true, PbpEndgamePrimaryAction.RetrySubmit);
+            return;
+        }
+
+        ResolveTurnTransport();
+        pbpEndgameSubmitPending = true;
+        pbpEndgameSubmitSucceeded = false;
+        SetGameOverPrimaryButtonState("Submitting...", false, PbpEndgamePrimaryAction.Submitting);
+        lastAppliedTurnNumberForPolling = pbpEndgameCachedTransportSeq;
+
+        StartCoroutine(SubmitPlayByPostTurnThenStartPolling(
+            pbpEndgameCachedTransportSeq,
+            pbpEndgameCachedExportJson,
+            pbpEndgameCachedExportTurnNumber,
+            pbpEndgameCachedExportIsPlayerTurn,
+            pbpEndgameCachedExportGameId));
+    }
+
+    private void OnPlayByPostSubmitResultForEndgame(bool ok, string err)
+    {
+        if (!pbpEndgameSubmitPending || currentMode != GameMode.PlayByPost || !gameOver || !pbpEndgameLocalWinner)
+            return;
+
+        pbpEndgameSubmitPending = false;
+        bool treatAsSuccess = ok || err == TurnTelemetryConstants.Conflict;
+        pbpEndgameSubmitSucceeded = treatAsSuccess;
+        if (treatAsSuccess)
+        {
+            SetGameOverPrimaryButtonState("Back to Multiplayer & Delete local copy", true, PbpEndgamePrimaryAction.BackAndDelete);
+            return;
+        }
+
+        SetGameOverPrimaryButtonState("Retry submit", true, PbpEndgamePrimaryAction.RetrySubmit);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        Debug.LogWarning($"PBp endgame submit failed (err={(err ?? "<null>")}).");
+#endif
+    }
+
+    private void ReturnToMultiplayerAndDeleteLocalPbpCopy()
+    {
+        string gameId = GetPbpGameIdFromPrefsOrCurrent();
+        DeleteLocalPbpGameCopy(gameId);
+
+        PlayerPrefs.SetInt(ReturnToMultiplayerPaneKey, 1);
+        PlayerPrefs.Save();
+
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(MainMenuSceneName);
+    }
+
+    private void DeleteLocalPbpGameCopy(string gameId)
+    {
+        MainMenuController.DeleteLocalPlayByPostGameData(gameId, clearActiveGameSelection: true);
     }
 
     void EnsureEventSystemExists()
@@ -2524,10 +2879,16 @@ public class TurnManager : MonoBehaviour
             CityUIManager.Instance.ClosePanel();
         }
 
+        int winnerSeatIndex = capturedByPlayer ? 0 : 1;
         string message;
         if (currentMode == GameMode.Hotseat)
         {
             message = capturedByPlayer ? "Player 1 wins!" : "Player 2 wins!";
+        }
+        else if (currentMode == GameMode.PlayByPost && TryComputePbpLocalResult(winnerSeatIndex, out bool didLocalWin, out _))
+        {
+            message = didLocalWin ? "You won!" : "You lost!";
+            ConfigurePbpEndgameFromCapture(didLocalWin);
         }
         else
         {
@@ -2541,18 +2902,7 @@ public class TurnManager : MonoBehaviour
             SoundManager.Instance.PlayGameOver(playWinCue);
         }
 
-        if (gameOverText != null)
-        {
-            gameOverText.text = message;
-            gameOverText.gameObject.SetActive(true);
-        }
-
-        if (gameOverPanel != null)
-        {
-            gameOverPanel.SetActive(true);
-        }
-
-        Debug.Log("Game Over: " + message);
+        ShowGameOverPopup(message);
     }
 
     void CollectPlayerIncome()
@@ -3682,6 +4032,11 @@ private void PBpDebugSyncNow_Context()
                 Debug.Log("[Turn] Resuming AI turn after load.");
 #endif
                 StartCoroutine(AITurn());
+            }
+
+            if (currentMode == GameMode.PlayByPost && gameOver)
+            {
+                ConfigurePbpEndgameFromLoadedState();
             }
 
             ScheduleAutoEndTurnCheck();

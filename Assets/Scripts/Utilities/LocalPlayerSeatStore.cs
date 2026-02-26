@@ -35,6 +35,23 @@ public static class LocalPlayerSeatStore
         PlayerPrefs.Save();
     }
 
+    public static bool ClearSeat(string gameId)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            return false;
+        }
+
+        string seatKey = BuildSeatKey(gameId);
+        if (!PlayerPrefs.HasKey(seatKey))
+        {
+            return false;
+        }
+
+        PlayerPrefs.DeleteKey(seatKey);
+        return true;
+    }
+
     private static string BuildSeatKey(string gameId)
     {
         return SeatByGameKeyPrefix + Hash128.Compute(gameId).ToString();

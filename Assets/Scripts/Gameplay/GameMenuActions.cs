@@ -36,6 +36,14 @@ public class GameMenuActions : MonoBehaviour
     {
         Debug.Log("QuitToMainMenu clicked");
 
+        if (TurnManager.Instance != null && TurnManager.Instance.IsPbpEndgameMenuExitBlocked)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.LogWarning("QuitToMainMenu blocked: PBp endgame submit flow is active; use the endgame button.");
+#endif
+            return;
+        }
+
         if (TutorialGate.IsActive)
         {
             ShowTutorialLeaveConfirm();

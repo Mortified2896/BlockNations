@@ -57,7 +57,6 @@ public class MainMenuController : MonoBehaviour
     private const string PlayByPostGameIdKey = "pbp_gameId";
     private const string PlayByPostForceNewKey = "pbp_forceNew";
     private const string PlayByPostPendingNewGameIdKey = "pbp_pendingNewGameId";
-    private const string SeatByGameKeyPrefix = "pbp_seat_";
     private const string ReturnToMultiplayerPaneKey = "ui_returnToMultiplayerPane";
     private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
     private const string LegacySharedSaveFileName = "save.json";
@@ -606,57 +605,7 @@ public class MainMenuController : MonoBehaviour
             return;
         }
 
-        bool manifestUpdated = SaveManifestService.MarkPlayByPostGameFinished(gameId);
-
-        string turnsFolder = Path.Combine(
-            Application.persistentDataPath,
-            "PlayByPost",
-            "Turns",
-            Hash128.Compute(gameId).ToString());
-        bool deletedTurnsFolder = false;
-        if (Directory.Exists(turnsFolder))
-        {
-            try
-            {
-                Directory.Delete(turnsFolder, true);
-                deletedTurnsFolder = true;
-            }
-            catch (Exception ex)
-            {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-                Debug.LogWarning($"[MP] Failed deleting PBp folder for {gameId}: {turnsFolder} ({ex.Message})");
-#endif
-            }
-        }
-
-        string savePath = Path.Combine(Application.persistentDataPath, "save.json");
-        bool deletedSaveJson = SaveManifestService.TryDeleteMatchingPlayByPostSaveFile(savePath, gameId);
-        string importedPath = Path.Combine(Application.persistentDataPath, "imported.json");
-        bool deletedImportedJson = SaveManifestService.TryDeleteMatchingPlayByPostSaveFile(importedPath, gameId);
-
-        string seatKey = SeatByGameKeyPrefix + Hash128.Compute(gameId).ToString();
-        bool clearedSeatMapping = false;
-        if (PlayerPrefs.HasKey(seatKey))
-        {
-            PlayerPrefs.DeleteKey(seatKey);
-            clearedSeatMapping = true;
-        }
-
-        string activeGameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
-        if (string.Equals(activeGameId, gameId, StringComparison.Ordinal))
-        {
-            PlayerPrefs.DeleteKey(PlayByPostGameIdKey);
-            clearedSeatMapping = true;
-        }
-
-        if (clearedSeatMapping)
-        {
-            PlayerPrefs.Save();
-        }
-
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        Debug.Log($"[MP] ResignLocal gameId={gameId} manifestUpdated={manifestUpdated} deletedTurnsFolder={deletedTurnsFolder} deletedSaveJson={deletedSaveJson} deletedImportedJson={deletedImportedJson} clearedSeatMapping={clearedSeatMapping}");
-#endif
+        DeleteLocalPlayByPostGameData(gameId, clearActiveGameSelection: true);
 
         selectedPbpGame = default;
         hasSelectedPbpGame = false;
@@ -1102,5 +1051,61 @@ public class MainMenuController : MonoBehaviour
         isYourTurn = summary.lastKnownIsPlayerTurn == localIsPlayerOwned;
         reason = "OK";
         return true;
+    }
+
+    public static void DeleteLocalPlayByPostGameData(string gameId, bool clearActiveGameSelection = true)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            return;
+        }
+
+        bool manifestUpdated = SaveManifestService.MarkPlayByPostGameFinished(gameId);
+
+        string turnsFolder = Path.Combine(
+            Application.persistentDataPath,
+            "PlayByPost",
+            "Turns",
+            Hash128.Compute(gameId).ToString());
+        bool deletedTurnsFolder = false;
+        if (Directory.Exists(turnsFolder))
+        {
+            try
+            {
+                Directory.Delete(turnsFolder, true);
+                deletedTurnsFolder = true;
+            }
+            catch (Exception ex)
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.LogWarning($"[MP] Failed deleting PBp folder for {gameId}: {turnsFolder} ({ex.Message})");
+#endif
+            }
+        }
+
+        string savePath = Path.Combine(Application.persistentDataPath, "save.json");
+        bool deletedSaveJson = SaveManifestService.TryDeleteMatchingPlayByPostSaveFile(savePath, gameId);
+        string importedPath = Path.Combine(Application.persistentDataPath, "imported.json");
+        bool deletedImportedJson = SaveManifestService.TryDeleteMatchingPlayByPostSaveFile(importedPath, gameId);
+
+        bool prefsChanged = LocalPlayerSeatStore.ClearSeat(gameId);
+        if (clearActiveGameSelection)
+        {
+            string activeGameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
+            if (string.Equals(activeGameId, gameId, StringComparison.Ordinal))
+            {
+                PlayerPrefs.DeleteKey(PlayByPostGameIdKey);
+                prefsChanged = true;
+            }
+        }
+
+        if (prefsChanged)
+        {
+            PlayerPrefs.Save();
+        }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        Debug.Log($"[MP] Local cleanup gameId={gameId} manifestUpdated={manifestUpdated} deletedTurnsFolder={deletedTurnsFolder} deletedSaveJson={deletedSaveJson} deletedImportedJson={deletedImportedJson} prefsChanged={prefsChanged}");
+#endif
     }
 }
