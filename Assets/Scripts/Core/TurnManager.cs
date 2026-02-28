@@ -143,8 +143,15 @@ public class TurnManager : MonoBehaviour
 #endif
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
     private bool hasLoggedManifestProbeFailure = false;
-    private readonly HashSet<string> missingPbpSeatWarnedGameIds = new HashSet<string>();
+    private string lastPbpControlReadinessBlockKey;
+    private string lastPbpSeatAdoptionLogKey;
+    private float lastPbpInputDeniedLogTime = -999f;
+    private const float PbpInputDeniedLogCooldownSeconds = 1f;
+    private float lastPbpSelectionGateLogTime = -999f;
+    private const float PbpSelectionGateLogCooldownSeconds = 1f;
 #endif
+    private bool pbpControlReadinessReady = false;
+    private string pbpCreatorBootstrapGameId;
     private const float PlayByPostNoTurnLogCooldownSeconds = 5f;
     private const string PlayByPostGameIdKey = "pbp_gameId";
     private const string PlayByPostForceNewKey = "pbp_forceNew";
@@ -286,7 +293,7 @@ public class TurnManager : MonoBehaviour
 
         // Play-by-Post: only allow advancing when it's this local seat's turn.
         if (currentMode == GameMode.PlayByPost)
-            return isPlayerTurn == LocalIsPlayerOwned();
+            return CanLocalPlayerIssueCommands();
 
         return false;
     }
@@ -303,28 +310,121 @@ public class TurnManager : MonoBehaviour
 
     private bool GetLocalIsPlayerOneForGame(string gameId, out bool hasSeat, out int seat)
     {
-        seat = GetLocalSeatIndexForPbpOrDefault(gameId, out hasSeat);
-        return seat == 0;
+        hasSeat = TryGetLocalSeatIndexForPbp(gameId, out seat);
+        return hasSeat && seat == 0;
     }
 
-    private int GetLocalSeatIndexForPbpOrDefault(string gameId, out bool hasSeat)
+    private bool TryGetLocalSeatIndexForPbp(string gameId, out int seat)
     {
-        hasSeat = false;
+        seat = 0;
 
         if (!string.IsNullOrWhiteSpace(gameId) && LocalPlayerSeatStore.TryGetSeat(gameId, out int storedSeat))
         {
-            hasSeat = true;
-            return storedSeat <= 0 ? 0 : 1;
+            seat = storedSeat <= 0 ? 0 : 1;
+            return true;
         }
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        string warnGameId = string.IsNullOrWhiteSpace(gameId) ? "<empty>" : gameId;
-        if (missingPbpSeatWarnedGameIds.Add(warnGameId))
+        return false;
+    }
+
+    private bool EnsurePlayByPostControlReadiness()
+    {
+        if (currentMode != GameMode.PlayByPost)
         {
-            Debug.LogWarning($"[PBpSeat] Missing LocalPlayerSeatStore seat for gameId={warnGameId}; defaulting to Player1");
+            pbpControlReadinessReady = false;
+            return true;
+        }
+
+        bool wasReady = pbpControlReadinessReady;
+
+        if (string.IsNullOrWhiteSpace(currentGameId))
+        {
+            string prefsGameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
+            if (!string.IsNullOrWhiteSpace(prefsGameId))
+            {
+                SetCurrentGameId(prefsGameId);
+            }
+        }
+
+        bool hasGameId = !string.IsNullOrWhiteSpace(currentGameId);
+        bool hasSeat = hasGameId && TryGetLocalSeatIndexForPbp(currentGameId, out _);
+
+        // Joiner self-heal: if currentGameId points to a stale/mismatched id without a seat,
+        // but prefs has the active PBp id with a valid seat, adopt that id in-session.
+        if (!hasSeat && hasGameId)
+        {
+            string prefsGameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
+            if (!string.IsNullOrWhiteSpace(prefsGameId) &&
+                !string.Equals(prefsGameId, currentGameId, System.StringComparison.Ordinal) &&
+                TryGetLocalSeatIndexForPbp(prefsGameId, out _))
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                string adoptionKey = $"{currentGameId}->{prefsGameId}";
+                if (!string.Equals(lastPbpSeatAdoptionLogKey, adoptionKey, System.StringComparison.Ordinal))
+                {
+                    lastPbpSeatAdoptionLogKey = adoptionKey;
+                    Debug.Log(
+                        $"[PBpSeat] Adopted prefs gameId due to missing seat for currentGameId (from={currentGameId}, to={prefsGameId}).");
+                }
+#endif
+                SetCurrentGameId(prefsGameId);
+                hasGameId = true;
+                hasSeat = TryGetLocalSeatIndexForPbp(currentGameId, out _);
+            }
+        }
+
+        if (!hasSeat &&
+            hasGameId &&
+            !string.IsNullOrWhiteSpace(pbpCreatorBootstrapGameId) &&
+            string.Equals(currentGameId, pbpCreatorBootstrapGameId, System.StringComparison.Ordinal))
+        {
+            LocalPlayerSeatStore.SetSeat(currentGameId, 0);
+            hasSeat = TryGetLocalSeatIndexForPbp(currentGameId, out _);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (hasSeat)
+            {
+                Debug.Log($"[PBpSeat] Initialized missing creator seat (gameId={currentGameId}, seat=0).");
+            }
+#endif
+        }
+
+        pbpControlReadinessReady = hasGameId && hasSeat;
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (!pbpControlReadinessReady)
+        {
+            string reason = !hasGameId ? "gameId_missing" : "seat_missing";
+            string gameIdText = hasGameId ? currentGameId : "<none>";
+            string blockKey = $"{gameIdText}|{reason}";
+            if (!string.Equals(lastPbpControlReadinessBlockKey, blockKey, System.StringComparison.Ordinal))
+            {
+                lastPbpControlReadinessBlockKey = blockKey;
+                Debug.LogWarning($"[PBpSeat] Blocking local PBp control ({reason}, gameId={gameIdText}).");
+            }
+        }
+        else
+        {
+            lastPbpControlReadinessBlockKey = null;
         }
 #endif
-        return 0;
+
+        if (!wasReady && pbpControlReadinessReady)
+        {
+            if (UnitSelectionManager.Instance != null)
+            {
+                UnitSelectionManager.Instance.ClearSelection();
+                UnitSelectionManager.Instance.RefreshMoveOutlinesForCurrentTurn();
+            }
+
+            if (TileHoverManager.Instance != null)
+            {
+                TileHoverManager.Instance.ClearSelection();
+            }
+
+            RefreshEndTurnButtonInteractable(force: true);
+        }
+
+        return pbpControlReadinessReady;
     }
 
     private bool GetViewerIsPlayerOwned()
@@ -338,8 +438,14 @@ public class TurnManager : MonoBehaviour
                 return true;
             }
 
-            int localSeat = GetLocalSeatIndexForPbpOrDefault(currentGameId, out _);
-            return localSeat == 0;
+            if (TryGetLocalSeatIndexForPbp(currentGameId, out int localSeat))
+            {
+                return localSeat == 0;
+            }
+
+            // Visual-only fallback when seat data is unavailable; control gating
+            // remains locked by EnsurePlayByPostControlReadiness/CanLocalPlayerIssueCommands.
+            return true;
         }
 
         if (currentMode == GameMode.Hotseat)
@@ -356,7 +462,10 @@ public class TurnManager : MonoBehaviour
     {
         if (currentMode == GameMode.PlayByPost)
         {
-            bool me = LocalIsPlayerOwned();
+            bool me = GetLocalIsPlayerOneForGame(currentGameId, out bool hasSeat, out _);
+            if (!hasSeat)
+                return false;
+
             return (isPlayerTurn == me) && (isPlayerOwned == me);
         }
 
@@ -374,23 +483,84 @@ public class TurnManager : MonoBehaviour
         if (currentMode != GameMode.PlayByPost)
             return true;
 
-        if (isPlayByPostWaitingForExport)
+        if (!EnsurePlayByPostControlReadiness())
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            LogPbpInputDeniedIfNeeded("readiness_not_ready");
+#endif
             return false;
+        }
 
-        return LocalTurnMatchesSeat();
+        if (isPlayByPostWaitingForExport)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            LogPbpInputDeniedIfNeeded("waiting_for_export");
+#endif
+            return false;
+        }
+
+        bool localTurnMatchesSeat = LocalTurnMatchesSeat();
+        if (!localTurnMatchesSeat)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            LogPbpInputDeniedIfNeeded("seat_turn_mismatch");
+#endif
+            return false;
+        }
+
+        return true;
     }
 
     private bool LocalTurnMatchesSeat()
     {
-        if (string.IsNullOrWhiteSpace(currentGameId))
-            return false;
-
-        if (!LocalPlayerSeatStore.TryGetSeat(currentGameId, out int seat))
+        if (!TryGetLocalSeatIndexForPbp(currentGameId, out int seat))
             return false;
 
         bool localIsPlayerOne = seat == 0;
         return isPlayerTurn == localIsPlayerOne;
     }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private void LogPbpInputDeniedIfNeeded(string gate)
+    {
+        if (!PbpDebugSettingsLoader.EnableInputLogs)
+            return;
+
+        float now = Time.realtimeSinceStartup;
+        if ((now - lastPbpInputDeniedLogTime) < PbpInputDeniedLogCooldownSeconds)
+            return;
+
+        lastPbpInputDeniedLogTime = now;
+        bool seatExists = TryGetLocalSeatIndexForPbp(currentGameId, out int seatIndex);
+        bool localTurnMatchesSeat = LocalTurnMatchesSeat();
+        string gameIdForLog = string.IsNullOrWhiteSpace(currentGameId) ? "<none>" : currentGameId;
+        string seatIndexForLog = seatExists ? seatIndex.ToString() : "<none>";
+        Debug.Log(
+            $"[PBpInputDenied] gate={gate} currentGameId={gameIdForLog} isPlayByPostWaitingForExport={isPlayByPostWaitingForExport} isPlayByPostFetchInProgress={isPlayByPostFetchInProgress} playByPostLastFetchWasNoTurn={playByPostLastFetchWasNoTurn} lastAppliedTurnNumberForPolling={lastAppliedTurnNumberForPolling} LocalTurnMatchesSeat={localTurnMatchesSeat} pbpControlReadinessReady={pbpControlReadinessReady} seatExists={seatExists} seatIndex={seatIndexForLog} isPlayerTurn={isPlayerTurn}");
+    }
+
+    public void LogPbpSelectionGateIfNeeded(string gate, bool pointerOverUi, Unit unit = null, string reason = null)
+    {
+        if (currentMode != GameMode.PlayByPost)
+            return;
+
+        if (!PbpDebugSettingsLoader.EnableInputLogs)
+            return;
+
+        float now = Time.realtimeSinceStartup;
+        if ((now - lastPbpSelectionGateLogTime) < PbpSelectionGateLogCooldownSeconds)
+            return;
+
+        lastPbpSelectionGateLogTime = now;
+        string gameIdForLog = string.IsNullOrWhiteSpace(currentGameId) ? "<none>" : currentGameId;
+        string reasonForLog = string.IsNullOrWhiteSpace(reason) ? "<none>" : reason;
+        string unitNameForLog = unit != null ? unit.name : "<none>";
+        string unitIdForLog = unit != null ? unit.GetInstanceID().ToString() : "<none>";
+        string unitOwnerForLog = unit != null ? unit.isPlayerOwned.ToString() : "<none>";
+        Debug.Log(
+            $"[PBpSelectionGate] gate={gate} reason={reasonForLog} currentGameId={gameIdForLog} isPlayByPostFetchInProgress={isPlayByPostFetchInProgress} isPlayByPostWaitingForExport={isPlayByPostWaitingForExport} pbpControlReadinessReady={pbpControlReadinessReady} pointerOverUi={pointerOverUi} unitName={unitNameForLog} unitId={unitIdForLog} unitIsPlayerOwned={unitOwnerForLog}");
+    }
+#endif
 
     public bool CanControlUnit(Unit unit)
     {
@@ -460,6 +630,13 @@ public class TurnManager : MonoBehaviour
         isPlayByPostWaitingForExport = false;
         isPlayByPostFetchInProgress = false;
         playByPostLastFetchWasNoTurn = false;
+        pbpControlReadinessReady = false;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        lastPbpControlReadinessBlockKey = null;
+        lastPbpSeatAdoptionLogKey = null;
+        lastPbpInputDeniedLogTime = -999f;
+        lastPbpSelectionGateLogTime = -999f;
+#endif
         ResetPbpEndgameRuntimeState();
 
         if (playByPostPollRoutine != null)
@@ -741,7 +918,9 @@ public class TurnManager : MonoBehaviour
         if (currentMode != GameMode.PlayByPost)
             return false;
 
-        localSeatIndex = GetLocalSeatIndexForPbpOrDefault(currentGameId, out _);
+        if (!TryGetLocalSeatIndexForPbp(currentGameId, out localSeatIndex))
+            return false;
+
         didLocalWin = winnerSeatIndex == localSeatIndex;
         return true;
     }
@@ -1720,6 +1899,7 @@ public class TurnManager : MonoBehaviour
     {
         if (TryConsumeForceNewPlayByPostRequest(out string forcedNewGameId))
         {
+            pbpCreatorBootstrapGameId = forcedNewGameId;
             SetGameMode(GameMode.PlayByPost);
             SetCurrentGameId(forcedNewGameId);
             if (!LocalPlayerSeatStore.TryGetSeat(forcedNewGameId, out _))
@@ -1957,9 +2137,11 @@ public class TurnManager : MonoBehaviour
         if (createdGameId)
         {
             LocalPlayerSeatStore.SetSeat(gameId, 0);
+            pbpCreatorBootstrapGameId = gameId;
         }
 
-        if (!LocalIsPlayerOwned())
+        bool readinessOk = EnsurePlayByPostControlReadiness();
+        if (!readinessOk || !LocalIsPlayerOwned())
         {
             isPlayByPostWaitingForExport = true;
             if (playByPostPopup != null)
@@ -1968,7 +2150,7 @@ public class TurnManager : MonoBehaviour
             }
             lastAppliedTurnNumberForPolling = -1;
             SetPlayByPostWaitingForHostText();
-            if (playByPostAutoSyncEnabled)
+            if (playByPostAutoSyncEnabled && !string.IsNullOrWhiteSpace(currentGameId))
             {
                 ResolveTurnTransport();
                 StartPlayByPostPolling(-1);
@@ -3964,10 +4146,11 @@ private void PBpDebugSyncNow_Context()
             if (currentMode == GameMode.PlayByPost)
             {
                 lastAppliedTurnNumberForPolling = ComputeTransportSeq(save);
-                pbpSeat = GetLocalSeatIndexForPbpOrDefault(currentGameId, out pbpHasSeat);
+                EnsurePlayByPostControlReadiness();
+                pbpHasSeat = TryGetLocalSeatIndexForPbp(currentGameId, out pbpSeat);
                 bool localIsPlayerOne = pbpSeat == 0;
                 bool currentSideIsPlayerOne = isPlayerTurn;
-                bool localTurn = localIsPlayerOne == currentSideIsPlayerOne;
+                bool localTurn = pbpHasSeat && (localIsPlayerOne == currentSideIsPlayerOne);
                 pbpSeatTextForLog = pbpHasSeat ? pbpSeat.ToString() : "<none>";
                 isPlayByPostWaitingForExport = !localTurn;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD

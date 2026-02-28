@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 /// <summary>
 /// Manages which unit is selected and handles simple one-tile movement per turn.
@@ -145,6 +146,122 @@ public class UnitSelectionManager : MonoBehaviour
         return false;
     }
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private static bool IsPointerOverUiForDebug()
+    {
+        return EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+    }
+
+    private void LogSelectionBlockedForDebug(Unit unit, string reason)
+    {
+        if (!PbpDebugSettingsLoader.EnableInputLogs)
+            return;
+
+        if (turnManager != null)
+        {
+            turnManager.LogPbpSelectionGateIfNeeded("hit_unit_but_blocked", IsPointerOverUiForDebug(), unit, reason);
+        }
+    }
+
+    private void LogSelectedNoRadiusIfNeeded(Unit unit)
+    {
+        if (!PbpDebugSettingsLoader.EnableInputLogs)
+            return;
+
+        if (unit == null || turnManager == null)
+            return;
+
+        CountPotentialHighlightsForDebug(unit, out int reachableCount, out int attackableCount);
+        if (reachableCount > 0 || attackableCount > 0)
+            return;
+
+        string reason;
+        if (!unit.CanMoveThisTurn() && unit.hasAttackedThisTurn)
+        {
+            reason = "no_moves_already_attacked";
+        }
+        else if (!unit.CanMoveThisTurn())
+        {
+            reason = "no_moves_remaining";
+        }
+        else if (unit.hasAttackedThisTurn)
+        {
+            reason = "already_attacked_no_targets";
+        }
+        else
+        {
+            reason = "no_adjacent_targets";
+        }
+
+        turnManager.LogPbpSelectionGateIfNeeded("selected_no_radius", IsPointerOverUiForDebug(), unit, reason);
+    }
+
+    private void CountPotentialHighlightsForDebug(Unit unit, out int reachableCount, out int attackableCount)
+    {
+        reachableCount = 0;
+        attackableCount = 0;
+
+        if (unit == null)
+            return;
+
+        TileHighlighter[] tiles = Object.FindObjectsByType<TileHighlighter>(FindObjectsSortMode.None);
+        Vector3 from = unit.transform.position;
+        bool canMove = unit.CanMoveThisTurn();
+        bool canAttack = !unit.hasAttackedThisTurn;
+
+        if (TutorialGate.IsActive && TutorialGate.ForceSingleTargetHighlight)
+        {
+            Vector3 forced = TutorialGate.ForcedTargetWorldPosition;
+            forced.z = 0f;
+
+            foreach (TileHighlighter tile in tiles)
+            {
+                if (tile == null) continue;
+                Vector3 tilePos = tile.transform.position;
+                tilePos.z = 0f;
+
+                if ((tilePos - forced).sqrMagnitude > (0.25f * 0.25f))
+                    continue;
+
+                if (TutorialGate.ForcedTargetIsAttack && canAttack)
+                {
+                    attackableCount = 1;
+                }
+                else if (!TutorialGate.ForcedTargetIsAttack && canMove)
+                {
+                    reachableCount = 1;
+                }
+                break;
+            }
+
+            return;
+        }
+
+        foreach (TileHighlighter tile in tiles)
+        {
+            if (tile == null) continue;
+
+            Vector3 to = tile.transform.position;
+            Vector3 delta = to - from;
+            delta.z = 0f;
+
+            float dist = delta.magnitude;
+            if (dist < 0.5f * tileSize || dist > 1.5f * tileSize)
+                continue;
+
+            Unit occupant = GridUtils.GetUnitAtPosition(to, unit);
+            if (occupant != null && occupant.isPlayerOwned != unit.isPlayerOwned && canAttack)
+            {
+                attackableCount++;
+            }
+            else if (occupant == null && canMove)
+            {
+                reachableCount++;
+            }
+        }
+    }
+#endif
+
     public void SelectUnit(Unit unit)
     {
         if (unit == null)
@@ -156,6 +273,9 @@ public class UnitSelectionManager : MonoBehaviour
             {
                 SoundManager.Instance.PlayInvalid();
             }
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            LogSelectionBlockedForDebug(unit, "tutorial_gate_blocked");
+#endif
             return;
         }
 
@@ -168,7 +288,12 @@ public class UnitSelectionManager : MonoBehaviour
 
         // Only select units that belong to the side whose turn it is
         if (turnManager != null && !turnManager.CanControlUnit(unit))
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            LogSelectionBlockedForDebug(unit, "cannot_control_unit");
+#endif
             return;
+        }
 
         selectedUnit = unit;
         if (SoundManager.Instance != null)
@@ -185,6 +310,9 @@ public class UnitSelectionManager : MonoBehaviour
         }
 
         HighlightReachableTiles(unit);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        LogSelectedNoRadiusIfNeeded(unit);
+#endif
     }
 
     public void ClearSelection()

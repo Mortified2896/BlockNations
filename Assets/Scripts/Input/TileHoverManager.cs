@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
@@ -9,6 +11,12 @@ public class TileHoverManager : MonoBehaviour
 
     private TileHighlighter hoveredTile;
     private TileHighlighter selectedTile;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private const float UiRaycastBlockLogCooldownSeconds = 1f;
+    private const int UiRaycastBlockMaxHits = 5;
+    private float lastUiRaycastBlockLogTime = -999f;
+#endif
+    private readonly List<RaycastResult> uiRaycastResults = new List<RaycastResult>(16);
 
     private static bool IsPointerOverUi(bool useNewInputSystemPointerOverUi)
     {
@@ -58,16 +66,57 @@ public class TileHoverManager : MonoBehaviour
 
     void Update()
     {
-        // Ignore world interaction when the pointer is over UI (buttons, panels, overlays).
-        if (IsPointerOverUi(useNewInputSystemPointerOverUi))
+        bool isPrimaryClickDown = Input.GetMouseButtonDown(0);
+        bool pointerOverUi;
+        int uiRaycastHitCount = 0;
+        Vector2 uiPointerPosition = default;
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        uiRaycastHitCount = RaycastUiAtPointerPosition(out uiPointerPosition);
+        pointerOverUi = uiRaycastHitCount > 0;
+#else
+        pointerOverUi = IsPointerOverUi(useNewInputSystemPointerOverUi);
+        if (pointerOverUi)
         {
+            uiRaycastHitCount = RaycastUiAtPointerPosition(out uiPointerPosition);
+            if (uiRaycastHitCount == 0)
+            {
+                pointerOverUi = false;
+            }
+        }
+#endif
+
+        // Ignore world interaction when the pointer is over UI (buttons, panels, overlays).
+        if (pointerOverUi)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (isPrimaryClickDown && PbpDebugSettingsLoader.EnableInputLogs)
+            {
+                LogUiRaycastBlockIfNeeded(uiPointerPosition, uiRaycastHitCount);
+
+                if (TurnManager.Instance != null)
+                {
+                    Unit selectedForLog = UnitSelectionManager.Instance != null ? UnitSelectionManager.Instance.SelectedUnit : null;
+                    TurnManager.Instance.LogPbpSelectionGateIfNeeded("ignored_over_ui", true, selectedForLog);
+                }
+            }
+#endif
             return;
         }
 
-        if (TurnManager.Instance != null)
+        TurnManager turnManager = TurnManager.Instance;
+        if (turnManager != null)
         {
-            if (TurnManager.Instance.gameOver || TurnManager.Instance.IsHotseatHandoff)
+            if (turnManager.gameOver || turnManager.IsHotseatHandoff)
             {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                if (isPrimaryClickDown && PbpDebugSettingsLoader.EnableInputLogs)
+                {
+                    Unit selectedForLog = UnitSelectionManager.Instance != null ? UnitSelectionManager.Instance.SelectedUnit : null;
+                    string reason = turnManager.gameOver ? "game_over" : "hotseat_handoff";
+                    turnManager.LogPbpSelectionGateIfNeeded("ignored_input_lock", false, selectedForLog, reason);
+                }
+#endif
                 return;
             }
         }
@@ -132,14 +181,30 @@ public class TileHoverManager : MonoBehaviour
         }
 
         // 2) CLICK: toggle selection
-        if (Input.GetMouseButtonDown(0))
+        if (isPrimaryClickDown)
         {
             // Click priority: attack enemy unit (if a friendly is selected and adjacent)
             // > move into enemy city (if a friendly is selected and in range)
             // > movable Unit on player city > player City UI > Unit > Tile
 
             bool hasCity = clickedCity != null;
-            bool hasUnit = clickedUnit != null && UnitSelectionManager.Instance != null;
+            bool hitUnitCollider = clickedUnit != null;
+            bool hasUnit = hitUnitCollider && UnitSelectionManager.Instance != null;
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (PbpDebugSettingsLoader.EnableInputLogs && turnManager != null && hitUnitCollider && UnitSelectionManager.Instance == null)
+            {
+                turnManager.LogPbpSelectionGateIfNeeded("hit_unit_but_blocked", false, clickedUnit, "selection_manager_missing");
+            }
+            else if (PbpDebugSettingsLoader.EnableInputLogs && turnManager != null && !hitUnitCollider && !hasCity)
+            {
+                Unit selectedForLog = UnitSelectionManager.Instance != null ? UnitSelectionManager.Instance.SelectedUnit : null;
+                if (selectedForLog == null)
+                {
+                    turnManager.LogPbpSelectionGateIfNeeded("no_raycast_hit", false, null);
+                }
+            }
+#endif
 
             // 2a) If a unit is selected and we clicked an enemy unit, try to move/attack onto its tile
             if (hasUnit && UnitSelectionManager.Instance != null)
@@ -261,4 +326,117 @@ public class TileHoverManager : MonoBehaviour
             hoveredTile = null;
         }
     }
+
+    private int RaycastUiAtPointerPosition(out Vector2 pointerPosition)
+    {
+        pointerPosition = GetPointerScreenPositionForUiRaycast();
+        EventSystem eventSystem = EventSystem.current;
+        if (eventSystem == null)
+        {
+            uiRaycastResults.Clear();
+            return 0;
+        }
+
+        PointerEventData pointerData = new PointerEventData(eventSystem)
+        {
+            position = pointerPosition,
+            pointerId = GetPointerIdForUiRaycast()
+        };
+
+        uiRaycastResults.Clear();
+        eventSystem.RaycastAll(pointerData, uiRaycastResults);
+        return uiRaycastResults.Count;
+    }
+
+    private static Vector2 GetPointerScreenPositionForUiRaycast()
+    {
+#if ENABLE_INPUT_SYSTEM
+        var touches = UnityEngine.InputSystem.EnhancedTouch.Touch.activeTouches;
+        if (touches.Count > 0)
+        {
+            return touches[0].screenPosition;
+        }
+#endif
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.touchCount > 0)
+        {
+            return Input.GetTouch(0).position;
+        }
+#endif
+
+        return Input.mousePosition;
+    }
+
+    private static int GetPointerIdForUiRaycast()
+    {
+#if ENABLE_INPUT_SYSTEM
+        var touches = UnityEngine.InputSystem.EnhancedTouch.Touch.activeTouches;
+        if (touches.Count > 0)
+        {
+            return touches[0].touchId;
+        }
+#endif
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.touchCount > 0)
+        {
+            return Input.GetTouch(0).fingerId;
+        }
+#endif
+
+        return -1;
+    }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private void LogUiRaycastBlockIfNeeded(Vector2 pointerPosition, int hitCount)
+    {
+        if (Time.unscaledTime - lastUiRaycastBlockLogTime < UiRaycastBlockLogCooldownSeconds)
+            return;
+
+        lastUiRaycastBlockLogTime = Time.unscaledTime;
+
+        StringBuilder builder = new StringBuilder(512);
+        builder.Append("[UIRaycastBlock] pointer=")
+               .Append(pointerPosition)
+               .Append(" hits=")
+               .Append(hitCount);
+
+        int limit = Mathf.Min(UiRaycastBlockMaxHits, hitCount);
+        for (int i = 0; i < limit; i++)
+        {
+            RaycastResult hit = uiRaycastResults[i];
+            builder.Append(" | ")
+                   .Append(i + 1)
+                   .Append(": ");
+
+            if (hit.gameObject == null)
+            {
+                builder.Append("<null>");
+                continue;
+            }
+
+            builder.Append(hit.gameObject.name)
+                   .Append(" path=")
+                   .Append(GetTransformPath(hit.gameObject.transform));
+        }
+
+        Debug.Log(builder.ToString());
+    }
+
+    private static string GetTransformPath(Transform current)
+    {
+        if (current == null)
+            return "<null>";
+
+        Stack<string> pathParts = new Stack<string>();
+        while (current != null)
+        {
+            pathParts.Push(current.name);
+            current = current.parent;
+        }
+
+        return string.Join("/", pathParts);
+    }
+#endif
 }
