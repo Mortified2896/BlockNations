@@ -15,6 +15,9 @@ public class DebugTurnTelemetrySink : MonoBehaviour, ITurnTelemetrySink
         string gameIdHash
     )
     {
+        if (!PbpDebugSettingsLoader.EnableTransportLogs)
+            return;
+
         Debug.Log(
             $"Telemetry TransportOp op={op} transport={transport} ok={ok} err={(err ?? "<null>")} " +
             $"durationMs={durationMs:F1} payloadChars={payloadChars} seqA={(seqA.HasValue ? seqA.Value.ToString() : "<null>")} " +
@@ -23,6 +26,9 @@ public class DebugTurnTelemetrySink : MonoBehaviour, ITurnTelemetrySink
 
     public void OnEndTurnPressed(string mode, int turnNumber, string gameIdHash)
     {
+        if (!PbpDebugSettingsLoader.EnableTransportLogs)
+            return;
+
         Debug.Log($"Telemetry EndTurnPressed mode={mode} turnNumber={turnNumber} gameIdHash={gameIdHash}");
     }
 }

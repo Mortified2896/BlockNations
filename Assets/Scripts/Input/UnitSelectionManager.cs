@@ -302,7 +302,10 @@ public class UnitSelectionManager : MonoBehaviour
         }
 
         string ownerLabel = unit.isPlayerOwned ? "Player" : "AI";
-        Debug.Log($"Selected unit ({ownerLabel}): {unit.name}");
+        if (PbpDebugSettingsLoader.EnableInputLogs)
+        {
+            Debug.Log($"Selected unit ({ownerLabel}): {unit.name}");
+        }
 
         if (UnitUIManager.Instance != null)
         {
@@ -431,7 +434,10 @@ public class UnitSelectionManager : MonoBehaviour
                     SoundManager.Instance.PlayMove();
                 }
 
-                Debug.Log(sideLabel + " unit moved into defeated enemy tile at " + newPos);
+                if (PbpDebugSettingsLoader.EnableInputLogs)
+                {
+                    Debug.Log(sideLabel + " unit moved into defeated enemy tile at " + newPos);
+                }
             }
         }
         else if (canMoveToEmpty)
@@ -445,7 +451,10 @@ public class UnitSelectionManager : MonoBehaviour
                 SoundManager.Instance.PlayMove();
             }
 
-            Debug.Log(sideLabel + " unit moved to " + newPos);
+            if (PbpDebugSettingsLoader.EnableInputLogs)
+            {
+                Debug.Log(sideLabel + " unit moved to " + newPos);
+            }
             actionPerformed = true;
         }
 

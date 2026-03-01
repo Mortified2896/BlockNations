@@ -162,6 +162,9 @@ public class TurnManager : MonoBehaviour
     private const string PlayByPostPerGameSavePrefix = "pbp_";
     private const string ReturnToMultiplayerPaneKey = "ui_returnToMultiplayerPane";
     private const string MainMenuSceneName = "MainMenu";
+    private const int SupportedPbpProtocolVersion = 1;
+    private const int LegacyPbpProtocolVersion = 0;
+    public static int PbpProtocolVersion => SupportedPbpProtocolVersion;
 
     // Controlled via Unity Scripting Define Symbols:
     // ENABLE_AUTO_END_TURN_ON_NO_ACTIONS
@@ -230,6 +233,7 @@ public class TurnManager : MonoBehaviour
     private class GameSave
     {
         public string version = "2";
+        public int protocolVersion;
         public string gameId;
         public string mode;
         public string aiDifficulty;
@@ -1214,9 +1218,12 @@ public class TurnManager : MonoBehaviour
                 if (exportSave != null && !string.IsNullOrWhiteSpace(exportJson))
                 {
                     int transportSeq = ComputeTransportSeq(exportSave);
-                    Debug.Log(
-                        $"PBp export verify: roundTurn={exportSave.turnNumber}, isPlayerTurn={exportSave.isPlayerTurn}, " +
-                        $"transportSeq={transportSeq}, lastAppliedTransportSeq={lastAppliedTurnNumberForPolling}");
+                    if (PbpDebugSettingsLoader.EnableSaveLoadLogs)
+                    {
+                        Debug.Log(
+                            $"PBp export verify: roundTurn={exportSave.turnNumber}, isPlayerTurn={exportSave.isPlayerTurn}, " +
+                            $"transportSeq={transportSeq}, lastAppliedTransportSeq={lastAppliedTurnNumberForPolling}");
+                    }
                     lastAppliedTurnNumberForPolling = transportSeq;
 
                     StartCoroutine(SubmitPlayByPostTurnThenStartPolling(
@@ -1422,10 +1429,14 @@ public class TurnManager : MonoBehaviour
 #endif
     }
 
-    [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
     private void LogPlayByPostTelemetry(string eventName, string details)
     {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (!PbpDebugSettingsLoader.EnableSaveLoadLogs)
+            return;
+
         Debug.Log($"[PBpTelemetry] {eventName} {details}");
+#endif
     }
 
     private IEnumerator SubmitPlayByPostTurnThenStartPolling(
@@ -1609,7 +1620,10 @@ public class TurnManager : MonoBehaviour
 #if DEVELOPMENT_BUILD
         if (!playByPostLastFetchWasNoTurn || (now - playByPostLastNoTurnLogTime) >= PlayByPostNoTurnLogCooldownSeconds)
         {
-            Debug.Log($"PBp fetch attempt started (gameId={currentGameId}, expectedTurn={lastAppliedTurnNumberForPolling + 1})");
+            if (PbpDebugSettingsLoader.EnableSaveLoadLogs)
+            {
+                Debug.Log($"PBp fetch attempt started (gameId={currentGameId}, expectedTurn={lastAppliedTurnNumberForPolling + 1})");
+            }
         }
 #endif
         if (!isPlayByPostWaitingForExport || currentMode != GameMode.PlayByPost)
@@ -1652,7 +1666,10 @@ public class TurnManager : MonoBehaviour
 #if DEVELOPMENT_BUILD
         if (!isNoTurn || shouldLogNoTurn)
         {
-            Debug.Log($"PBp fetch result via {turnTransport.TransportName} (ok={ok}, turn={(fetchedTurnNumber != 0 ? fetchedTurnNumber.ToString() : "<none>")}, jsonLen={(json != null ? json.Length : 0)}, err={(err ?? "<null>")})");
+            if (PbpDebugSettingsLoader.EnableSaveLoadLogs)
+            {
+                Debug.Log($"PBp fetch result via {turnTransport.TransportName} (ok={ok}, turn={(fetchedTurnNumber != 0 ? fetchedTurnNumber.ToString() : "<none>")}, jsonLen={(json != null ? json.Length : 0)}, err={(err ?? "<null>")})");
+            }
         }
 #endif
 
@@ -1682,8 +1699,11 @@ public class TurnManager : MonoBehaviour
             yield break;
         }
 
-        Debug.Log($"PBp fetch verify: fetchedTransportSeq={fetchedTurnNumber}, previousTransportSeq={lastAppliedTurnNumberForPolling}");
-        Debug.Log($"PBp fetched turn {fetchedTurnNumber} via {turnTransport.TransportName} ({(json != null ? json.Length : 0)} chars).");
+        if (PbpDebugSettingsLoader.EnableSaveLoadLogs)
+        {
+            Debug.Log($"PBp fetch verify: fetchedTransportSeq={fetchedTurnNumber}, previousTransportSeq={lastAppliedTurnNumberForPolling}");
+            Debug.Log($"PBp fetched turn {fetchedTurnNumber} via {turnTransport.TransportName} ({(json != null ? json.Length : 0)} chars).");
+        }
 
         bool loaded = LoadFromJsonString(json);
         if (loaded)
@@ -1693,7 +1713,10 @@ public class TurnManager : MonoBehaviour
             {
                 playByPostPopup.SetActive(false);
             }
-            Debug.Log($"PBp loaded turn {fetchedTurnNumber} successfully.");
+            if (PbpDebugSettingsLoader.EnableSaveLoadLogs)
+            {
+                Debug.Log($"PBp loaded turn {fetchedTurnNumber} successfully.");
+            }
         }
         else
         {
@@ -3473,8 +3496,11 @@ public class TurnManager : MonoBehaviour
             File.WriteAllText(path, json);
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
             int snapshotTransportSeq = ComputeTransportSeq(snapshotRoundTurn, snapshotIsPlayerTurn);
-            Debug.Log(
-                $"PBp snapshot write gameId={gameIdForLog} path={path} roundTurn={snapshotRoundTurn} isPlayerTurn={snapshotIsPlayerTurn} transportSeq={snapshotTransportSeq}");
+            if (PbpDebugSettingsLoader.EnableSaveLoadLogs)
+            {
+                Debug.Log(
+                    $"PBp snapshot write gameId={gameIdForLog} path={path} roundTurn={snapshotRoundTurn} isPlayerTurn={snapshotIsPlayerTurn} transportSeq={snapshotTransportSeq}");
+            }
 #endif
             LogPlayByPostTelemetry(
                 "SnapshotSave",
@@ -3565,7 +3591,10 @@ public class TurnManager : MonoBehaviour
                     "SnapshotSave",
                     $"path={targetPath} state={GetPlayByPostStateSummary()}");
             }
-            Debug.Log("Game saved to " + targetPath);
+            if (PbpDebugSettingsLoader.EnableInputLogs)
+            {
+                Debug.Log("Game saved to " + targetPath);
+            }
             SaveManifestService.RecordLocalSave(
                 currentGameId,
                 currentMode,
@@ -3613,6 +3642,7 @@ public class TurnManager : MonoBehaviour
         GameSave save = new GameSave
         {
             gameId = currentGameId,
+            protocolVersion = SupportedPbpProtocolVersion,
             mode = currentMode.ToString(),
             aiDifficulty = aiDifficulty.ToString(),
             isPlayerTurn = isPlayerTurn,
@@ -3794,8 +3824,10 @@ public class TurnManager : MonoBehaviour
 
     public void PlayByPostSyncNow()
     {
-        
-        Debug.Log($"PlayByPostSyncNow called (mode={currentMode}, waiting={isPlayByPostWaitingForExport})");
+        if (PbpDebugSettingsLoader.EnableSaveLoadLogs)
+        {
+            Debug.Log($"PlayByPostSyncNow called (mode={currentMode}, waiting={isPlayByPostWaitingForExport})");
+        }
         if (!isPlayByPostWaitingForExport || currentMode != GameMode.PlayByPost)
             return;
 
@@ -3807,7 +3839,10 @@ public class TurnManager : MonoBehaviour
 [ContextMenu("PBp Debug Sync Now")]
 private void PBpDebugSyncNow_Context()
 {
-    Debug.Log("PBp Debug Context Sync triggered");
+    if (PbpDebugSettingsLoader.EnableSaveLoadLogs)
+    {
+        Debug.Log("PBp Debug Context Sync triggered");
+    }
     PlayByPostSyncNow();
 }
 #endif
@@ -3916,6 +3951,31 @@ private void PBpDebugSyncNow_Context()
             {
                 Debug.LogError("Load failed: save was null.");
                 return false;
+            }
+
+            bool loadedModeIsPbp = string.Equals(
+                save.mode,
+                GameMode.PlayByPost.ToString(),
+                System.StringComparison.Ordinal);
+            if (loadedModeIsPbp)
+            {
+                int loadedProtocolVersion = save.protocolVersion; // missing in older JSON => 0
+                if (loadedProtocolVersion > SupportedPbpProtocolVersion)
+                {
+                    string loadedGameId = string.IsNullOrWhiteSpace(save.gameId) ? "<none>" : save.gameId;
+                    Debug.LogError(
+                        $"PBp load blocked: protocolVersion={loadedProtocolVersion} is newer than supported={SupportedPbpProtocolVersion} (gameId={loadedGameId}).");
+                    return false;
+                }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                if (loadedProtocolVersion == LegacyPbpProtocolVersion)
+                {
+                    string loadedGameId = string.IsNullOrWhiteSpace(save.gameId) ? "<none>" : save.gameId;
+                    Debug.LogWarning(
+                        $"PBp load using legacy protocolVersion={LegacyPbpProtocolVersion} (missing field), supported={SupportedPbpProtocolVersion} (gameId={loadedGameId}).");
+                }
+#endif
             }
 
             if (string.Equals(save.mode, GameMode.PlayByPost.ToString(), System.StringComparison.Ordinal) ||
@@ -4154,8 +4214,11 @@ private void PBpDebugSyncNow_Context()
                 pbpSeatTextForLog = pbpHasSeat ? pbpSeat.ToString() : "<none>";
                 isPlayByPostWaitingForExport = !localTurn;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-                Debug.Log(
-                    $"[PBpLoadSeat] loadedGameId={save.gameId} seat={pbpSeatTextForLog} hasSeat={pbpHasSeat} viewerIsPlayerOwned={viewerIsPlayerOwnedForLoad} loadedIsPlayerTurn={isPlayerTurn} isWaitingForExport={isPlayByPostWaitingForExport} canAdvance={CanAdvanceTurn()}");
+                if (PbpDebugSettingsLoader.EnableSaveLoadLogs)
+                {
+                    Debug.Log(
+                        $"[PBpLoadSeat] loadedGameId={save.gameId} seat={pbpSeatTextForLog} hasSeat={pbpHasSeat} viewerIsPlayerOwned={viewerIsPlayerOwnedForLoad} loadedIsPlayerTurn={isPlayerTurn} isWaitingForExport={isPlayByPostWaitingForExport} canAdvance={CanAdvanceTurn()}");
+                }
 #endif
                 if (!localTurn)
                 {
@@ -4193,14 +4256,20 @@ private void PBpDebugSyncNow_Context()
 #endif
                 }
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-                Debug.Log(
-                    $"[PBpLoadApply] source={debugSource} gameId={currentGameId} seat={pbpSeatTextForLog} turn={turnNumber} isPlayerTurn={isPlayerTurn} unitsBeforeClear={unitCountBeforeClear} unitsAfterSpawn={unitCountAfterSpawn} duplicateOwnerTileSlots={duplicateOwnerTileSlots} snapshotWrite={snapshotWriteMode}");
+                if (PbpDebugSettingsLoader.EnableSaveLoadLogs)
+                {
+                    Debug.Log(
+                        $"[PBpLoadApply] source={debugSource} gameId={currentGameId} seat={pbpSeatTextForLog} turn={turnNumber} isPlayerTurn={isPlayerTurn} unitsBeforeClear={unitCountBeforeClear} unitsAfterSpawn={unitCountAfterSpawn} duplicateOwnerTileSlots={duplicateOwnerTileSlots} snapshotWrite={snapshotWriteMode}");
+                }
 #endif
                 LogPlayByPostTelemetry(
                     "ApplyLoadedSaveDone",
                     $"source={debugSource} snapshotWrite={snapshotWriteMode} loadRelationToLastSubmit={GetPlayByPostLoadRelationToLastSubmit()} stateAfter={GetPlayByPostStateSummary()}");
             }
-            Debug.Log("Game loaded from " + debugSource);
+            if (PbpDebugSettingsLoader.EnableSaveLoadLogs)
+            {
+                Debug.Log("Game loaded from " + debugSource);
+            }
 
             SaveManifestService.RecordLoadApplied(
                 currentGameId,

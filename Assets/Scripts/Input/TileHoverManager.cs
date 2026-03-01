@@ -7,7 +7,9 @@ public class TileHoverManager : MonoBehaviour
 {
     public static TileHoverManager Instance { get; private set; }
 
+#pragma warning disable CS0414
     [SerializeField] private bool useNewInputSystemPointerOverUi = false;
+#pragma warning restore CS0414
 
     private TileHighlighter hoveredTile;
     private TileHighlighter selectedTile;
