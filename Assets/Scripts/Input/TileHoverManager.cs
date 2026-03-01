@@ -19,6 +19,8 @@ public class TileHoverManager : MonoBehaviour
     private float lastUiRaycastBlockLogTime = -999f;
 #endif
     private readonly List<RaycastResult> uiRaycastResults = new List<RaycastResult>(16);
+    private PointerEventData cachedPointerEventData;
+    private EventSystem cachedPointerEventSystem;
 
     private static bool IsPointerOverUi(bool useNewInputSystemPointerOverUi)
     {
@@ -339,14 +341,18 @@ public class TileHoverManager : MonoBehaviour
             return 0;
         }
 
-        PointerEventData pointerData = new PointerEventData(eventSystem)
+        if (cachedPointerEventData == null || cachedPointerEventSystem != eventSystem)
         {
-            position = pointerPosition,
-            pointerId = GetPointerIdForUiRaycast()
-        };
+            cachedPointerEventSystem = eventSystem;
+            cachedPointerEventData = new PointerEventData(eventSystem);
+        }
+
+        cachedPointerEventData.Reset();
+        cachedPointerEventData.position = pointerPosition;
+        cachedPointerEventData.pointerId = GetPointerIdForUiRaycast();
 
         uiRaycastResults.Clear();
-        eventSystem.RaycastAll(pointerData, uiRaycastResults);
+        eventSystem.RaycastAll(cachedPointerEventData, uiRaycastResults);
         return uiRaycastResults.Count;
     }
 
