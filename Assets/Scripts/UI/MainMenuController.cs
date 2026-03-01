@@ -72,6 +72,9 @@ public class MainMenuController : MonoBehaviour
     private List<SaveManifestService.ManifestGameSummary> activePbpGames = new List<SaveManifestService.ManifestGameSummary>();
     private SaveManifestService.ManifestGameSummary selectedPbpGame;
     private bool hasSelectedPbpGame;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private static readonly HashSet<string> PbpSnapshotReadWarningLoggedGameIds = new HashSet<string>();
+#endif
 
     IEnumerator Start()
     {
@@ -1002,12 +1005,98 @@ public class MainMenuController : MonoBehaviour
 
     public static string BuildPlayByPostTurnSubtitle(SaveManifestService.ManifestGameSummary summary)
     {
+        if (TryGetLocalPbpSnapshotGameOver(summary.gameId, out bool snapshotGameOver) && snapshotGameOver)
+        {
+            return "Game Over";
+        }
+
         if (TryGetIsYourTurnFromManifest(summary, out bool isYourTurn, out _, out _) && isYourTurn)
         {
             return "Your turn";
         }
 
         return "Waiting for opponent";
+    }
+
+    private static bool TryGetLocalPbpSnapshotGameOver(string gameId, out bool gameOver)
+    {
+        gameOver = false;
+        string snapshotPath = GetPbpPerGameSnapshotPath(gameId);
+        if (string.IsNullOrWhiteSpace(snapshotPath) || !File.Exists(snapshotPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            string json = File.ReadAllText(snapshotPath);
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return false;
+            }
+
+            MinimalSaveHeader header = JsonUtility.FromJson<MinimalSaveHeader>(json);
+            if (header == null)
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(header.gameId) &&
+                !string.Equals(header.gameId, gameId, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            gameOver = header.gameOver;
+            return true;
+        }
+        catch (Exception ex)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            string gameIdKeyForLog = string.IsNullOrWhiteSpace(gameId) ? "<missing>" : gameId;
+            if (PbpSnapshotReadWarningLoggedGameIds.Add(gameIdKeyForLog))
+            {
+                Debug.LogWarning($"[MP] Failed to read PBp snapshot header for gameId={gameIdKeyForLog}: {ex.Message}");
+            }
+#endif
+            return false;
+        }
+    }
+
+    private static string GetPbpPerGameSnapshotPath(string gameId)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            return null;
+        }
+
+        string safeGameId = SanitizeGameIdForFileName(gameId);
+        if (string.IsNullOrWhiteSpace(safeGameId))
+        {
+            return null;
+        }
+
+        return Path.Combine(Application.persistentDataPath, "pbp", $"pbp_{safeGameId}.json");
+    }
+
+    private static string SanitizeGameIdForFileName(string gameId)
+    {
+        if (string.IsNullOrEmpty(gameId))
+        {
+            return string.Empty;
+        }
+
+        char[] chars = gameId.ToCharArray();
+        char[] invalidChars = Path.GetInvalidFileNameChars();
+        for (int i = 0; i < chars.Length; i++)
+        {
+            if (Array.IndexOf(invalidChars, chars[i]) >= 0)
+            {
+                chars[i] = '_';
+            }
+        }
+
+        return new string(chars);
     }
 
     private static string BuildGameSubtitle(SaveManifestService.ManifestGameSummary summary)
