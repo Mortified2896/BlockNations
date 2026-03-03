@@ -1551,7 +1551,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7c5a1255c2c725e4cae82c79d2069747, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HttpTurnTransport
-  baseUrl: http://192.168.0.27:8080
+  baseUrl: https://blocknations.moneymattersmedia.com
   timeoutSeconds: 10
 --- !u!1 &519420028
 GameObject:
