@@ -39,6 +39,8 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private GameObject mainMenuPanel;
     [SerializeField] private GameObject multiplayerPanel;
     [SerializeField] private GameObject joinPopupPanel;
+    // Inspector wiring: assign the full-screen background used for the GameDetails state.
+    [SerializeField] private GameObject gameDetailsBackground;
     // Inspector wiring: assign to the existing GameDetailsPopup panel.
     [SerializeField] private GameObject gameDetailsPopupPanel;
     // Inspector wiring: assign the popup title text (required for populated title).
@@ -60,6 +62,7 @@ public class MainMenuController : MonoBehaviour
     private const string ReturnToMultiplayerPaneKey = "ui_returnToMultiplayerPane";
     private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
     private const string LegacySharedSaveFileName = "save.json";
+    private const string PbpVersionVerificationFailedMessage = "Unable to verify this game's PBp version. For safety, this match cannot be opened on this build.";
     private bool isServerOnline = true;
     private bool joinProbeInProgress;
     private Coroutine serverCheckRoutine;
@@ -410,7 +413,7 @@ public class MainMenuController : MonoBehaviour
     {
         if (joinProbeInProgress)
         {
-            SetImportStatus("Checking game on server...");
+            SetImportStatus("Checking game compatibility...");
             return;
         }
 
@@ -432,7 +435,7 @@ public class MainMenuController : MonoBehaviour
             joinGameIdInput.text = normalizedGameId;
         }
 
-        SetImportStatus("Checking game on server...");
+        SetImportStatus("Checking game compatibility...");
         joinProbeInProgress = true;
         StartCoroutine(JoinPlayByPostAfterServerProbe(normalizedGameId));
         return;
@@ -549,6 +552,18 @@ public class MainMenuController : MonoBehaviour
         if (string.IsNullOrWhiteSpace(gameId))
             return;
 
+        if (!TryReadLocalPbpSnapshotHeader(gameId, out MinimalSaveHeader localHeader))
+        {
+            SetImportStatus(PbpVersionVerificationFailedMessage);
+            return;
+        }
+
+        if (TryGetPbpPreflightBlockWarningFromHeader(localHeader, out string versionWarning))
+        {
+            SetImportStatus(versionWarning);
+            return;
+        }
+
         GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         Debug.Log($"Resuming PlayByPost game. pendingMode={TurnManager.GameMode.PlayByPost}, gameId={gameId}");
@@ -570,14 +585,29 @@ public class MainMenuController : MonoBehaviour
 
         if (gameDetailsSubtitleText != null)
         {
-            gameDetailsSubtitleText.text = BuildGameSubtitle(summary);
+            gameDetailsSubtitleText.text = $"{BuildGameSubtitle(summary)}\n{BuildPbpVersionText(summary.gameId)}";
         }
 
         if (gameDetailsGameIdText != null)
         {
-            gameDetailsGameIdText.text = string.IsNullOrWhiteSpace(summary.gameId)
+            string gameIdText = string.IsNullOrWhiteSpace(summary.gameId)
                 ? "Game ID: -"
                 : $"Game ID: {summary.gameId}";
+            if (gameDetailsSubtitleText == null)
+            {
+                gameIdText = $"{gameIdText}\n{BuildPbpVersionText(summary.gameId)}";
+            }
+            gameDetailsGameIdText.text = gameIdText;
+        }
+
+        if (multiplayerPanel != null)
+        {
+            multiplayerPanel.SetActive(false);
+        }
+
+        if (gameDetailsBackground != null)
+        {
+            gameDetailsBackground.SetActive(true);
         }
 
         if (gameDetailsPopupPanel != null)
@@ -588,10 +618,23 @@ public class MainMenuController : MonoBehaviour
 
     public void CloseGameDetailsPopup()
     {
+        if (gameDetailsBackground != null)
+        {
+            gameDetailsBackground.SetActive(false);
+        }
+
         if (gameDetailsPopupPanel != null)
         {
             gameDetailsPopupPanel.SetActive(false);
         }
+
+        if (multiplayerPanel != null)
+        {
+            multiplayerPanel.SetActive(true);
+        }
+
+        // Rebind active game rows immediately after returning from details.
+        RefreshMultiplayerList();
     }
 
     public void GameDetails_Open()
@@ -729,6 +772,7 @@ public class MainMenuController : MonoBehaviour
     {
         public string gameId;
         public string mode;
+        public int protocolVersion = 0;
         public bool isPlayerTurn;
         public int turnNumber;
         public bool gameOver;
@@ -761,6 +805,13 @@ public class MainMenuController : MonoBehaviour
         if (header == null || string.IsNullOrEmpty(header.mode))
         {
             SetImportStatus("JSON does not look like a save file.");
+            return;
+        }
+
+        if (string.Equals(header.mode, TurnManager.GameMode.PlayByPost.ToString(), StringComparison.Ordinal) &&
+            TryGetPbpPreflightBlockWarningFromHeader(header, out string importVersionWarning))
+        {
+            SetImportStatus(importVersionWarning);
             return;
         }
 
@@ -915,14 +966,22 @@ public class MainMenuController : MonoBehaviour
 
             bool probeOk = false;
             string probeError = null;
+            string probeJson = null;
             yield return StartCoroutine(httpTransport.TryFetchNextTurn(gameId, 0, (ok, err, fetchedTurn, fetchedJson) =>
             {
                 probeOk = ok;
                 probeError = err;
+                probeJson = fetchedJson;
             }));
 
             if (probeOk)
             {
+                if (TryGetPbpPreflightBlockWarningFromJson(probeJson, out string joinVersionWarning))
+                {
+                    SetImportStatus(joinVersionWarning);
+                    yield break;
+                }
+
                 SetImportStatus("Game found. Joining...");
                 LocalPlayerSeatStore.SetSeat(gameId, 1);
                 PersistPlayByPostSelection(gameId, returnToMultiplayerPane: true);
@@ -939,7 +998,7 @@ public class MainMenuController : MonoBehaviour
 
             if (string.Equals(probeError, TurnTelemetryConstants.NoTurn, StringComparison.Ordinal))
             {
-                SetImportStatus("No turns found for this code yet. Ask host to submit their first turn.");
+                SetImportStatus("Game found, but no turn is available yet. Ask the host to submit the first turn.");
                 yield break;
             }
 
@@ -1021,6 +1080,18 @@ public class MainMenuController : MonoBehaviour
     private static bool TryGetLocalPbpSnapshotGameOver(string gameId, out bool gameOver)
     {
         gameOver = false;
+        if (!TryReadLocalPbpSnapshotHeader(gameId, out MinimalSaveHeader header))
+        {
+            return false;
+        }
+
+        gameOver = header.gameOver;
+        return true;
+    }
+
+    private static bool TryReadLocalPbpSnapshotHeader(string gameId, out MinimalSaveHeader header)
+    {
+        header = null;
         string snapshotPath = GetPbpPerGameSnapshotPath(gameId);
         if (string.IsNullOrWhiteSpace(snapshotPath) || !File.Exists(snapshotPath))
         {
@@ -1035,7 +1106,7 @@ public class MainMenuController : MonoBehaviour
                 return false;
             }
 
-            MinimalSaveHeader header = JsonUtility.FromJson<MinimalSaveHeader>(json);
+            header = JsonUtility.FromJson<MinimalSaveHeader>(json);
             if (header == null)
             {
                 return false;
@@ -1047,7 +1118,6 @@ public class MainMenuController : MonoBehaviour
                 return false;
             }
 
-            gameOver = header.gameOver;
             return true;
         }
         catch (Exception ex)
@@ -1061,6 +1131,108 @@ public class MainMenuController : MonoBehaviour
 #endif
             return false;
         }
+    }
+
+    private static bool TryGetLocalPbpSnapshotProtocolVersion(string gameId, out int protocolVersion)
+    {
+        protocolVersion = 0;
+        if (!TryReadLocalPbpSnapshotHeader(gameId, out MinimalSaveHeader header))
+        {
+            return false;
+        }
+
+        return TryGetVerifiedPbpProtocolVersion(header, out protocolVersion);
+    }
+
+    private static bool TryGetVerifiedPbpProtocolVersion(MinimalSaveHeader header, out int protocolVersion)
+    {
+        protocolVersion = 0;
+        if (header == null)
+        {
+            return false;
+        }
+
+        if (!string.Equals(header.mode, TurnManager.GameMode.PlayByPost.ToString(), StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (header.protocolVersion <= 0)
+        {
+            return false;
+        }
+
+        protocolVersion = header.protocolVersion;
+        return true;
+    }
+
+    private static string BuildPbpVersionText(string gameId)
+    {
+        if (TryGetLocalPbpSnapshotProtocolVersion(gameId, out int protocolVersion))
+        {
+            return $"PBp Version: {protocolVersion}";
+        }
+
+        return "PBp Version: Unverified";
+    }
+
+    private static bool TryGetPbpVersionMismatchWarning(int gameProtocolVersion, out string warning)
+    {
+        warning = null;
+        if (gameProtocolVersion <= 0)
+        {
+            return false;
+        }
+
+        int supportedVersion = TurnManager.PbpProtocolVersion;
+        if (gameProtocolVersion == supportedVersion)
+        {
+            return false;
+        }
+
+        warning = $"This game uses PBp {gameProtocolVersion}. Your app supports PBp {supportedVersion}. This match cannot be opened on this build.";
+        return true;
+    }
+
+    private static bool TryGetPbpPreflightBlockWarningFromHeader(MinimalSaveHeader header, out string warning)
+    {
+        warning = null;
+        if (!TryGetVerifiedPbpProtocolVersion(header, out int gameProtocolVersion))
+        {
+            warning = PbpVersionVerificationFailedMessage;
+            return true;
+        }
+
+        return TryGetPbpVersionMismatchWarning(gameProtocolVersion, out warning);
+    }
+
+    private static bool TryGetPbpPreflightBlockWarningFromJson(string json, out string warning)
+    {
+        warning = null;
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            warning = PbpVersionVerificationFailedMessage;
+            return true;
+        }
+
+        MinimalSaveHeader header;
+        try
+        {
+            header = JsonUtility.FromJson<MinimalSaveHeader>(json);
+        }
+        catch
+        {
+            warning = PbpVersionVerificationFailedMessage;
+            return true;
+        }
+
+        if (header == null)
+        {
+            warning = PbpVersionVerificationFailedMessage;
+            return true;
+        }
+
+        return TryGetPbpPreflightBlockWarningFromHeader(header, out warning);
     }
 
     private static string GetPbpPerGameSnapshotPath(string gameId)

@@ -162,7 +162,7 @@ public class TurnManager : MonoBehaviour
     private const string PlayByPostPerGameSavePrefix = "pbp_";
     private const string ReturnToMultiplayerPaneKey = "ui_returnToMultiplayerPane";
     private const string MainMenuSceneName = "MainMenu";
-    private const int SupportedPbpProtocolVersion = 1;
+    private const int SupportedPbpProtocolVersion = 2;
     private const int LegacyPbpProtocolVersion = 0;
     public static int PbpProtocolVersion => SupportedPbpProtocolVersion;
 
@@ -3960,22 +3960,21 @@ private void PBpDebugSyncNow_Context()
             if (loadedModeIsPbp)
             {
                 int loadedProtocolVersion = save.protocolVersion; // missing in older JSON => 0
-                if (loadedProtocolVersion > SupportedPbpProtocolVersion)
+                if (loadedProtocolVersion <= 0)
                 {
                     string loadedGameId = string.IsNullOrWhiteSpace(save.gameId) ? "<none>" : save.gameId;
                     Debug.LogError(
-                        $"PBp load blocked: protocolVersion={loadedProtocolVersion} is newer than supported={SupportedPbpProtocolVersion} (gameId={loadedGameId}).");
+                        $"PBp load blocked: protocolVersion is missing or invalid ({loadedProtocolVersion}), supported={SupportedPbpProtocolVersion} (gameId={loadedGameId}).");
                     return false;
                 }
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-                if (loadedProtocolVersion == LegacyPbpProtocolVersion)
+                if (loadedProtocolVersion != SupportedPbpProtocolVersion)
                 {
                     string loadedGameId = string.IsNullOrWhiteSpace(save.gameId) ? "<none>" : save.gameId;
-                    Debug.LogWarning(
-                        $"PBp load using legacy protocolVersion={LegacyPbpProtocolVersion} (missing field), supported={SupportedPbpProtocolVersion} (gameId={loadedGameId}).");
+                    Debug.LogError(
+                        $"PBp load blocked: protocolVersion={loadedProtocolVersion} does not match supported={SupportedPbpProtocolVersion} (gameId={loadedGameId}).");
+                    return false;
                 }
-#endif
             }
 
             if (string.Equals(save.mode, GameMode.PlayByPost.ToString(), System.StringComparison.Ordinal) ||

@@ -81,4 +81,5 @@ public class SafeAreaApplier : MonoBehaviour
             hasLogged = true;
         }
     }
+
 }
