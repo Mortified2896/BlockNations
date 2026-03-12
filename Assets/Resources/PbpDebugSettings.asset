@@ -14,4 +14,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PbpDebugSettings
   enableInputLogs: 0
   enableTransportLogs: 0
-  enableSaveLoadLogs: 1
+  enableSaveLoadLogs: 0

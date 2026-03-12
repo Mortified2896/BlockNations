@@ -26,11 +26,6 @@ public class GameplayUIScaler : MonoBehaviour
     [Tooltip("Bottom margin in pixels after scaling.")]
     public float bottomPanelsBottomMargin = 12f;
 
-    [Header("Top HUD")]
-    [Tooltip("Move the top HUD closer to the top on desktop (no notch/safe-area padding needed).")]
-    public bool autoAdjustUpperHudOnDesktop = true;
-    public string upperHudRootName = "Upper HUD";
-    public float desktopUpperHudAnchoredY = -70f;
 
     private RectTransform bottomPanelsRect;
     private bool bottomPanelsOriginalCached;
@@ -38,9 +33,6 @@ public class GameplayUIScaler : MonoBehaviour
     private Vector2 bottomPanelsOriginalAnchoredPosition;
     private Vector2 bottomPanelsOriginalSizeDelta;
 
-    private RectTransform upperHudRect;
-    private bool upperHudOriginalCached;
-    private Vector2 upperHudOriginalAnchoredPosition;
 
     private int lastScreenW = -1;
     private int lastScreenH = -1;
@@ -110,8 +102,6 @@ public class GameplayUIScaler : MonoBehaviour
     {
         bottomPanelsRect = null;
         bottomPanelsOriginalCached = false;
-        upperHudRect = null;
-        upperHudOriginalCached = false;
     }
 
     private void TryResolveTargets()
@@ -123,12 +113,6 @@ public class GameplayUIScaler : MonoBehaviour
                 bottomPanelsRect = bottomRoot.GetComponent<RectTransform>();
         }
 
-        if (upperHudRect == null)
-        {
-            GameObject upperHudRoot = GameObject.Find(upperHudRootName);
-            if (upperHudRoot != null)
-                upperHudRect = upperHudRoot.GetComponent<RectTransform>();
-        }
     }
 
     private void ApplyForCurrentScreen()
@@ -187,22 +171,5 @@ public class GameplayUIScaler : MonoBehaviour
             }
         }
 
-        if (autoAdjustUpperHudOnDesktop && upperHudRect != null)
-        {
-            if (!upperHudOriginalCached)
-            {
-                upperHudOriginalAnchoredPosition = upperHudRect.anchoredPosition;
-                upperHudOriginalCached = true;
-            }
-
-            if (!isMobile)
-            {
-                upperHudRect.anchoredPosition = new Vector2(upperHudRect.anchoredPosition.x, desktopUpperHudAnchoredY);
-            }
-            else
-            {
-                upperHudRect.anchoredPosition = upperHudOriginalAnchoredPosition;
-            }
-        }
     }
 }
