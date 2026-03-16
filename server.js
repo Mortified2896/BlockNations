@@ -11,7 +11,7 @@ const PORT = Number.parseInt(process.env.PORT || "8080", 10);
 const JSON_BODY_LIMIT = "2mb";
 const JSON_BYTE_CAP = 2_000_000;
 const SEQ_MAX_DIGITS = 12;
-const GAME_ID_MAX_LEN = 256;
+const GAME_ID_MAX_LEN = 128;
 
 const DATA_ROOT = path.resolve(__dirname, "data", "PlayByPost", "Turns");
 
@@ -40,21 +40,30 @@ function sha256Hex(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
 
-function isNonEmptyString(value) {
-  return typeof value === "string" && value.length > 0;
-}
-
 function isValidGameId(gameId) {
-  return isNonEmptyString(gameId) && gameId.length <= GAME_ID_MAX_LEN;
+  if (typeof gameId !== "string") {
+    return false;
+  }
+
+  const trimmed = gameId.trim();
+  if (gameId !== trimmed) {
+    return false;
+  }
+
+  return trimmed.length > 0 && trimmed.length <= GAME_ID_MAX_LEN;
 }
 
 function isValidSeq(seq) {
   return (
     typeof seq === "number" &&
     Number.isSafeInteger(seq) &&
-    seq >= 0 &&
+    seq > 0 &&
     String(seq).length <= SEQ_MAX_DIGITS
   );
+}
+
+function isValidTurnJson(json) {
+  return typeof json === "string" && json.trim().length > 0;
 }
 
 function parseAfter(value) {
@@ -84,6 +93,42 @@ function parseAfter(value) {
   }
 
   return { ok: true, value: parsed };
+}
+
+function sendInvalidInput(res) {
+  return res.status(400).json({ ok: false, error: "INVALID_INPUT" });
+}
+
+function validateSubmitInput(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { ok: false };
+  }
+
+  const { gameId, seq, json } = body;
+  if (!isValidGameId(gameId) || !isValidSeq(seq) || !isValidTurnJson(json)) {
+    return { ok: false };
+  }
+
+  return { ok: true, value: { gameId, seq, json } };
+}
+
+function validateFetchInput(query) {
+  if (!query || typeof query !== "object" || Array.isArray(query)) {
+    return { ok: false };
+  }
+
+  const gameId = query.gameId;
+  const after = query.after;
+  if (Array.isArray(gameId) || Array.isArray(after)) {
+    return { ok: false };
+  }
+
+  const afterParsed = parseAfter(after);
+  if (!isValidGameId(gameId) || !afterParsed.ok) {
+    return { ok: false };
+  }
+
+  return { ok: true, value: { gameId, after: afterParsed.value } };
 }
 
 function logDecision(gameHash, seq, bytes, decision, extra) {
@@ -123,15 +168,15 @@ async function shouldTreatRenameAsRace(err, destFile) {
 }
 
 app.post("/pbp/turn", async (req, res) => {
-  const { gameId, seq, json } = req.body || {};
-
-  if (!isValidGameId(gameId) || !isValidSeq(seq) || typeof json !== "string") {
-    return res.status(400).json({ ok: false, error: "INVALID_INPUT" });
+  const validated = validateSubmitInput(req.body);
+  if (!validated.ok) {
+    return sendInvalidInput(res);
   }
+  const { gameId, seq, json } = validated.value;
 
   const byteLength = Buffer.byteLength(json, "utf8");
   if (byteLength > JSON_BYTE_CAP) {
-    return res.status(400).json({ ok: false, error: "INVALID_INPUT" });
+    return sendInvalidInput(res);
   }
 
   const gameHash = sha256Hex(gameId);
@@ -212,14 +257,11 @@ app.post("/pbp/turn", async (req, res) => {
 });
 
 app.get("/pbp/turn/next", async (req, res) => {
-  const gameId = req.query.gameId;
-  const afterParsed = parseAfter(req.query.after);
-
-  if (!isValidGameId(gameId) || !afterParsed.ok) {
-    return res.status(400).json({ ok: false, error: "INVALID_INPUT" });
+  const validated = validateFetchInput(req.query);
+  if (!validated.ok) {
+    return sendInvalidInput(res);
   }
-
-  const after = afterParsed.value;
+  const { gameId, after } = validated.value;
   const gameHash = sha256Hex(gameId);
   const gameDir = path.join(DATA_ROOT, gameHash);
 
