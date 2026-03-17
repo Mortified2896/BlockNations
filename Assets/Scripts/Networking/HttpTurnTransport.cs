@@ -6,6 +6,11 @@ using UnityEngine.Networking;
 
 public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 {
+    private const string ApiKeyHeaderName = "X-BlockNations-Api-Key";
+    private const string ApiKeyPlayerPrefsKey = "pbp_api_key";
+    private const string ApiKeyEnvVarName = "PBP_SHARED_SECRET";
+    private const string DefaultPbpApiKey = "wlrwnDxyIynqTumpdywh_5_5bfIj1wf7RndV_2toTPw";
+
     [SerializeField]
     [Tooltip("Base URL for the PBp server, e.g. http://127.0.0.1:8080")]
     private string baseUrl = "http://127.0.0.1:8080";
@@ -84,6 +89,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
             req.uploadHandler = new UploadHandlerRaw(bodyBytes);
             req.downloadHandler = new DownloadHandlerBuffer();
             req.SetRequestHeader("Content-Type", "application/json");
+            ApplyPbpApiKeyHeader(req);
             req.timeout = GetTimeoutSeconds();
 
             yield return req.SendWebRequest();
@@ -167,6 +173,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
         using (var req = UnityWebRequest.Get(url))
         {
+            ApplyPbpApiKeyHeader(req);
             req.timeout = GetTimeoutSeconds();
 
             yield return req.SendWebRequest();
@@ -247,6 +254,35 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         return !string.IsNullOrWhiteSpace(gameId);
     }
 
+    private static string GetConfiguredPbpApiKey()
+    {
+        string fromEnv = Environment.GetEnvironmentVariable(ApiKeyEnvVarName);
+        if (!string.IsNullOrEmpty(fromEnv))
+        {
+            return fromEnv;
+        }
+
+        string fromPrefs = PlayerPrefs.GetString(ApiKeyPlayerPrefsKey, string.Empty);
+        if (!string.IsNullOrEmpty(fromPrefs))
+        {
+            return fromPrefs;
+        }
+
+        return DefaultPbpApiKey;
+    }
+
+    private static void ApplyPbpApiKeyHeader(UnityWebRequest req)
+    {
+        if (req == null)
+            return;
+
+        string apiKey = GetConfiguredPbpApiKey();
+        if (string.IsNullOrEmpty(apiKey))
+            return;
+
+        req.SetRequestHeader(ApiKeyHeaderName, apiKey);
+    }
+
     private static string NormalizeBaseUrl(string url)
     {
         if (string.IsNullOrWhiteSpace(url))
@@ -303,6 +339,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
         using (var req = UnityWebRequest.Get(url))
         {
+            ApplyPbpApiKeyHeader(req);
             req.timeout = GetServerCheckTimeoutSeconds();
             yield return req.SendWebRequest();
 

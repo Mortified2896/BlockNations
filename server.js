@@ -12,8 +12,15 @@ const JSON_BODY_LIMIT = "2mb";
 const JSON_BYTE_CAP = 2_000_000;
 const SEQ_MAX_DIGITS = 12;
 const GAME_ID_MAX_LEN = 128;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_GET_NEXT_MAX = 60;
+const RATE_LIMIT_POST_TURN_MAX = 20;
+const RATE_LIMIT_CLEANUP_INTERVAL_MS = 5 * 60_000;
+const PBP_API_KEY_HEADER_NAME = "X-BlockNations-Api-Key";
+const PBP_SHARED_SECRET_ENV_KEY = "PBP_SHARED_SECRET";
 
 const DATA_ROOT = path.resolve(__dirname, "data", "PlayByPost", "Turns");
+const rateLimitBuckets = new Map();
 
 if (!Number.isInteger(PORT) || PORT <= 0 || PORT >= 65536) {
   console.error(
@@ -31,6 +38,14 @@ app.use(cors());
 app.use(express.json({ limit: JSON_BODY_LIMIT, strict: true }));
 
 function logStartup() {
+  const hasAuthSecret =
+    typeof process.env[PBP_SHARED_SECRET_ENV_KEY] === "string" &&
+    process.env[PBP_SHARED_SECRET_ENV_KEY].length > 0;
+  if (!hasAuthSecret) {
+    console.warn(
+      `[pbp] WARNING: ${PBP_SHARED_SECRET_ENV_KEY} is not set. Protected PBp routes will return 401 until configured.`
+    );
+  }
   console.log(
     `[pbp] dataRoot=${DATA_ROOT} host=${HOST} port=${PORT} jsonBodyLimit=${JSON_BODY_LIMIT} jsonByteCap=${JSON_BYTE_CAP}`
   );
@@ -66,6 +81,45 @@ function isValidTurnJson(json) {
   return typeof json === "string" && json.trim().length > 0;
 }
 
+function getConfiguredPbpSharedSecret() {
+  const raw = process.env[PBP_SHARED_SECRET_ENV_KEY];
+  if (typeof raw !== "string" || raw.length === 0) {
+    return null;
+  }
+  return raw;
+}
+
+function timingSafeEqualUtf8(a, b) {
+  const aBytes = Buffer.from(a, "utf8");
+  const bBytes = Buffer.from(b, "utf8");
+  if (aBytes.length !== bBytes.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(aBytes, bBytes);
+}
+
+function sendUnauthorized(res) {
+  return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+}
+
+function requirePbpApiKey(req, res, next) {
+  const expectedSecret = getConfiguredPbpSharedSecret();
+  if (!expectedSecret) {
+    return sendUnauthorized(res);
+  }
+
+  const providedHeaderValue = req.get(PBP_API_KEY_HEADER_NAME);
+  if (typeof providedHeaderValue !== "string" || providedHeaderValue.length === 0) {
+    return sendUnauthorized(res);
+  }
+
+  if (!timingSafeEqualUtf8(providedHeaderValue, expectedSecret)) {
+    return sendUnauthorized(res);
+  }
+
+  next();
+}
+
 function parseAfter(value) {
   if (value === undefined) {
     return { ok: true, value: -1 };
@@ -97,6 +151,52 @@ function parseAfter(value) {
 
 function sendInvalidInput(res) {
   return res.status(400).json({ ok: false, error: "INVALID_INPUT" });
+}
+
+function getRateLimitClientIp(req) {
+  if (typeof req.ip === "string" && req.ip.length > 0) {
+    return req.ip;
+  }
+  if (typeof req.socket?.remoteAddress === "string" && req.socket.remoteAddress.length > 0) {
+    return req.socket.remoteAddress;
+  }
+  return "unknown";
+}
+
+function cleanupRateLimitBuckets(now = Date.now()) {
+  for (const [key, entry] of rateLimitBuckets) {
+    if (!entry || entry.resetAt <= now) {
+      rateLimitBuckets.delete(key);
+    }
+  }
+}
+
+function checkRateLimit(req, routeKey, maxRequests, windowMs) {
+  const now = Date.now();
+  const bucketKey = `${routeKey}|${getRateLimitClientIp(req)}`;
+  const existing = rateLimitBuckets.get(bucketKey);
+
+  if (!existing || existing.resetAt <= now) {
+    rateLimitBuckets.set(bucketKey, { count: 1, resetAt: now + windowMs });
+    return null;
+  }
+
+  if (existing.count >= maxRequests) {
+    return Math.max(1, Math.ceil((existing.resetAt - now) / 1000));
+  }
+
+  existing.count += 1;
+  return null;
+}
+
+function enforceRateLimit(req, res, routeKey, maxRequests) {
+  const retryAfterSeconds = checkRateLimit(req, routeKey, maxRequests, RATE_LIMIT_WINDOW_MS);
+  if (retryAfterSeconds === null) {
+    return false;
+  }
+  res.set("Retry-After", String(retryAfterSeconds));
+  res.status(429).json({ ok: false, error: "RATE_LIMITED" });
+  return true;
 }
 
 function validateSubmitInput(body) {
@@ -167,7 +267,11 @@ async function shouldTreatRenameAsRace(err, destFile) {
   return false;
 }
 
-app.post("/pbp/turn", async (req, res) => {
+app.post("/pbp/turn", requirePbpApiKey, async (req, res) => {
+  if (enforceRateLimit(req, res, "POST /pbp/turn", RATE_LIMIT_POST_TURN_MAX)) {
+    return;
+  }
+
   const validated = validateSubmitInput(req.body);
   if (!validated.ok) {
     return sendInvalidInput(res);
@@ -256,7 +360,11 @@ app.post("/pbp/turn", async (req, res) => {
   }
 });
 
-app.get("/pbp/turn/next", async (req, res) => {
+app.get("/pbp/turn/next", requirePbpApiKey, async (req, res) => {
+  if (enforceRateLimit(req, res, "GET /pbp/turn/next", RATE_LIMIT_GET_NEXT_MAX)) {
+    return;
+  }
+
   const validated = validateFetchInput(req.query);
   if (!validated.ok) {
     return sendInvalidInput(res);
@@ -325,7 +433,7 @@ app.get("/health", (req, res) => {
   res.status(200).send("ok");
 });
 
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   if (err && (err.type === "entity.too.large" || err instanceof SyntaxError)) {
     return res.status(400).json({ ok: false, error: "INVALID_INPUT" });
   }
@@ -340,6 +448,13 @@ const server = app.listen(PORT, HOST, () => {
   logStartup();
   console.log(`[pbp] listening on ${HOST}:${PORT}`);
 });
+
+const rateLimitCleanupTimer = setInterval(() => {
+  cleanupRateLimitBuckets();
+}, RATE_LIMIT_CLEANUP_INTERVAL_MS);
+if (typeof rateLimitCleanupTimer.unref === "function") {
+  rateLimitCleanupTimer.unref();
+}
 
 server.on("error", (err) => {
   if (err && err.code === "EADDRINUSE") {
