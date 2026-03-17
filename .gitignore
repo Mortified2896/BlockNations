@@ -30,9 +30,12 @@ Thumbs.db
 # ===== Crash / error logs =====
 *.stackdump
 SysInfo.txt
+mono_crash.mem.*.blob
 
 # Unity recovery files
 Assets/_Recovery/
+.utmp
+GeneratedAssets_deleted/
 
 # PBp turn saves (local test data)
 data/PlayByPost/Turns/
