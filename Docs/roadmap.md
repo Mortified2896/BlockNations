@@ -51,16 +51,21 @@ Verified semantics for:
 
 ---
 
-# 🚧 Phase 1 — Mobile PBp (IN PROGRESS)
+# ✅ Phase 1 — Mobile PBp (COMPLETE)
 
-**Definition of done for Phase 1:**  
-Play-by-Post works reliably on real mobile devices (iOS first, then Android) using HTTP transport.
+**Definition of done achieved:**  
+Play-by-Post works reliably on real mobile devices (iOS first, Android also validated) using HTTP transport.
 
-Transport work in this phase exists to enable and validate mobile builds, not as an abstract backend effort.
+Core multiplayer workflows were validated across:
+- iPhone ↔ iPhone  
+- iPhone ↔ Editor  
+- Android ↔ Editor  
+
+Recent follow-up work focused on backend hardening and did not change intended transport semantics.
 
 ---
 
-## Transport (Minimum Viable — MUST happen before mobile builds)
+## Transport (Implemented)
 
 ### ✅ HTTP PBp transport (Unity)
 
@@ -73,10 +78,18 @@ Transport work in this phase exists to enable and validate mobile builds, not as
 - POST submit / GET fetch  
 - File-backed turn storage  
 
-### ⏳ Health endpoint (recommended)
+### ✅ PBp Server Hardening (MVP COMPLETE)
 
-- `/health` endpoint returning JSON  
-- Used for server reachability checks  
+- Input validation (gameId, seq, json, after)  
+- Payload size limits (Express + byte cap)  
+- Rate limiting (per IP, per endpoint)  
+- API key protection (X-BlockNations-Api-Key)  
+- Production-safe error responses (no stack traces)  
+- Stale temp-file cleanup (crash-safe writes)  
+- Health endpoint (/healthz)  
+
+Status:  
+Backend is considered secure enough for MVP / TestFlight.  
 
 ---
 
@@ -90,15 +103,13 @@ Transport work in this phase exists to enable and validate mobile builds, not as
 - Reset delay to 3s if a new turn is received  
 - Stop polling when leaving Multiplayer screen  
 
-### ⏳ Server load signaling (Option 1 — Phase 1)
+### ✅ Server load signaling
 
 - Server may return:
   - `429 Too Many Requests`
   - `Retry-After: <seconds>`
-- Client must honor `Retry-After`
+- Client honors `Retry-After`  
 - Fallback: increase backoff to cap if header missing  
-
-This allows server-side throttling without client updates.
 
 ---
 
@@ -108,60 +119,21 @@ This allows server-side throttling without client updates.
 
 **Goal:** Reduce request spam while maintaining near real-time PBp updates.
 
-Instead of short-interval polling:
+Client:
 
-Client calls:
+GET /pbp/turn/next?gameId=...&after=...&waitSeconds=25  
 
-GET /pbp/turn/next?gameId=...&after=...&waitSeconds=25
+Server:
 
-Server behavior:
+- Holds request open up to `waitSeconds`  
+- Returns immediately if a new turn arrives  
+- Returns `NO_TURN` after timeout  
 
-- Holds request open up to `waitSeconds`
-- Returns immediately if a new turn arrives
-- Returns `NO_TURN` after timeout
+Client:
 
-Client behavior:
-
-- Immediately re-issues request on `NO_TURN`
-- Uses backoff only on error conditions
-- Adds small jitter to avoid thundering herd
-
-**Benefits:**
-
-- Fewer HTTP requests  
-- Near real-time responsiveness  
-- Scales better than aggressive polling  
-
-**Requirements:**
-
-- Stable HTTPS hosting  
-- Proper request timeout handling  
-- Cancellation safety  
-
-Explicitly not required for MVP.
-
----
-
-## ⏳ Device reachability smoke test
-
-- Server reachable from iPhone/Android (same Wi-Fi/LAN or hosted URL)  
-- baseUrl configured per build target  
-
----
-
-# 📱 Mobile Builds (Core Goal of Phase 1)
-
-## iOS build (primary focus)
-
-- Xcode build + signing  
-- iPhone ↔ iPhone PBp works  
-- iPhone ↔ Editor PBp works  
-- Background / resume does not break PBp state  
-
-## Android build (secondary)
-
-- Same HTTP PBp flow validated  
-- No platform-specific regressions  
+- Immediately re-issues request on `NO_TURN`  
+- Uses backoff only on error conditions  
+- Adds small jitter  
 
 ---
 
@@ -186,12 +158,20 @@ Explicitly not required for MVP.
 
 ---
 
-# Server hardening (Deferred unless mobile testing forces it)
+# Server hardening
+
+### ✅ Phase 1 (Completed)
+
+- Core security layer implemented (auth, validation, limits, cleanup)  
+- Stable error model  
+- Safe file write handling  
+
+### ⏳ Future improvements (only if needed)
 
 - JSON-only responses (remove plaintext NO_TURN)  
-- Stricter validation + clearer error mapping  
-- Simple rate limiting per gameId  
-- Connection limits tuning (for long polling phase)  
+- More granular rate limiting (per gameId / per user)  
+- Distributed rate limiting (multi-instance)  
+- Long polling / connection tuning  
 
 ---
 
@@ -262,4 +242,4 @@ This roadmap is living. Items can move between phases.
 
 ChatGPT is allowed to update this file when explicitly asked.
 
-Last reviewed: 2026-02-20
+Last reviewed: 2026-03-17

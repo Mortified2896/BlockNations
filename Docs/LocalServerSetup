@@ -1,5 +1,10 @@
 HOW TO START THE BLOCK NATIONS PLAY-BY-POST SERVER (LOCAL)
 
+# Local PBp Server Setup (Development Only)
+
+This guide explains how to run the Play-by-Post server locally for testing.
+For production/VPS instructions, see Notion docs.
+
 1) REQUIREMENTS
 - Node.js installed (https://nodejs.org, LTS is fine)
 - Port 8080 must be free

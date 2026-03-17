@@ -1,5 +1,9 @@
 ﻿# PASS 1 Script Audit (Assets/Scripts only)
 
+## Status
+Pass 1 complete. Keep as reference/backlog only.
+Do not treat as active refactor plan during MVP stabilization unless a current bug directly points here.
+
 ## Summary
 - Total script count: 31
 - Count by role:

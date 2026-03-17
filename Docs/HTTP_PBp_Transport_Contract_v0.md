@@ -1,158 +1,180 @@
-# HTTP PBp Transport Contract v0
+HTTP PBp Transport Contract v1
 
-This document defines the HTTP contract for Play‑by‑Post transport so it matches `ITurnTransport` and `FileTurnTransport` semantics.
+This document defines the HTTP contract for Play-by-Post transport so it matches ITurnTransport and FileTurnTransport semantics.
 
-Scope: 2‑player PBp, localhost only, no auth, no retries.
+Scope: 2-player PBp, localhost or VPS, API key authentication enabled, no retries.
 
-## Interface Alignment (Unity)
+⸻
 
-- `SubmitTurn(gameId, turnNumber, json)` → `done(ok, err)`
-- `TryFetchNextTurn(gameId, afterTurnNumber)` → `done(ok, err, fetchedTurnNumber, fetchedJson)`
+Authentication
+
+All PBp endpoints require the following header:
+
+X-BlockNations-Api-Key: 
+
+Behavior:
+	•	Missing or invalid key:
+{ “ok”: false, “error”: “UNAUTHORIZED” }
+HTTP 401
+
+Public endpoints (no auth required):
+	•	GET /healthz
+
+⸻
+
+Interface Alignment (Unity)
+	•	SubmitTurn(gameId, turnNumber, json) → done(ok, err)
+	•	TryFetchNextTurn(gameId, afterTurnNumber) → done(ok, err, fetchedTurnNumber, fetchedJson)
 
 Canonical errors (Unity expects these exact strings):
+	•	INVALID_GAME_ID
+	•	INVALID_TURN
+	•	EMPTY_JSON
+	•	UNAVAILABLE
+	•	CONFLICT
+	•	IO_ERROR
+	•	NO_TURN
 
-- `INVALID_GAME_ID`
-- `INVALID_TURN`
-- `EMPTY_JSON`
-- `UNAVAILABLE`
-- `CONFLICT`
-- `IO_ERROR`
-- `NO_TURN`
+⸻
 
-## Endpoints
-
-Keep current paths:
-
-- `POST /pbp/turn` (submit)
-- `GET /pbp/turn/next` (fetch next)
-- `GET /healthz` (availability)
+Endpoints
+	•	POST /pbp/turn (submit)
+	•	GET /pbp/turn/next (fetch next)
+	•	GET /healthz (availability)
 
 All requests and responses use JSON, except where explicitly noted below.
 
-## Submit: POST /pbp/turn
+⸻
+
+Rate Limiting
+	•	GET /pbp/turn/next → 60 requests / 60 seconds / IP
+	•	POST /pbp/turn → 20 requests / 60 seconds / IP
+
+Exceeded:
+
+HTTP 429
+{ “ok”: false, “error”: “RATE_LIMITED” }
+
+Retry-After header is included.
+
+⸻
+
+Submit: POST /pbp/turn
 
 Request JSON:
 
-```json
 {
-  "gameId": "string",
-  "seq": 123,
-  "json": "string"
+“gameId”: “string”,
+“seq”: 123,
+“json”: “string”
 }
-```
 
 Rules:
+	•	gameId must be non-empty
+	•	seq must be a positive integer (> 0)
+	•	json must be non-empty string
 
-- `gameId` must be non‑empty.
-- `seq` must be a positive integer (> 0).
-- `json` must be non‑empty string.
+Success response (HTTP 200):
 
-Success response JSON (HTTP 200):
+{ “ok”: true, “alreadyHad”: false }
 
-```json
-{ "ok": true, "alreadyHad": false }
-```
+Duplicate (idempotent):
+
+{ “ok”: true, “alreadyHad”: true }
 
 Conflict (same seq, different payload):
 
-```json
-{ "ok": false, "error": "SEQ_CONFLICT" }
-```
+HTTP 409
+{ “ok”: false, “error”: “SEQ_CONFLICT” }
 
 Invalid input:
 
-```json
-{ "ok": false, "error": "INVALID_INPUT" }
-```
+HTTP 400
+{ “ok”: false, “error”: “INVALID_INPUT” }
 
 Server error:
 
-```json
-{ "ok": false, "error": "SERVER_ERROR" }
-```
+HTTP 500
+{ “ok”: false, “error”: “SERVER_ERROR” }
 
 Conflict semantics:
+	•	If same gameId + seq already exists:
+	•	same payload → success (alreadyHad: true)
+	•	different payload → SEQ_CONFLICT
 
-- If the same `gameId` + `seq` already exists:
-  - If stored payload bytes match `json` exactly → treat as success (`ok: true`, `alreadyHad: true`).
-  - If different → treat as conflict (`SEQ_CONFLICT`).
+⸻
 
-## Fetch: GET /pbp/turn/next
+Fetch: GET /pbp/turn/next
 
 Query params:
+	•	gameId (string, required)
+	•	after (int, required; may be -1)
 
-- `gameId` (string, required)
-- `after` (int, required; may be `-1` to request the first turn)
+Success response (HTTP 200):
 
-Success response JSON (HTTP 200):
-
-```json
-{ "seq": 124, "json": "{...}" }
-```
+{ “seq”: 124, “json”: “{…}” }
 
 No turn available:
 
-- The server may respond with JSON:
+Option A (JSON):
 
-```json
-{ "ok": false, "error": "NO_TURN" }
-```
+{ “ok”: false, “error”: “NO_TURN” }
 
-- Or (legacy) with plain‑text body `NO_TURN` (HTTP 200).
+Option B (legacy):
+
+Plain text: NO_TURN (HTTP 200)
 
 Invalid input:
 
-```json
-{ "ok": false, "error": "INVALID_INPUT" }
-```
+HTTP 400
+{ “ok”: false, “error”: “INVALID_INPUT” }
 
 Server error:
 
-```json
-{ "ok": false, "error": "SERVER_ERROR" }
-```
+HTTP 500
+{ “ok”: false, “error”: “SERVER_ERROR” }
 
-## Availability: GET /healthz
+⸻
 
-Response JSON (HTTP 200):
+Availability: GET /healthz
 
-```json
-{ "ok": true }
-```
+Response (HTTP 200):
 
-## Mapping to Canonical Transport Errors
+{ “ok”: true }
 
-The client must map server errors/status to the canonical transport errors:
+⸻
 
-Submit mapping (`SubmitTurn`):
+Mapping to Canonical Transport Errors
 
-- HTTP 200 + `{ ok: true }` → `done(true, null)`
-- HTTP 200 + `{ ok: true, alreadyHad: true }` → `done(true, null)` (idempotent)
-- HTTP 409 + `{ error: "SEQ_CONFLICT" }` → `done(false, "CONFLICT")`
-- HTTP 400 + `{ error: "INVALID_INPUT" }` → `done(false, "INVALID_GAME_ID" | "INVALID_TURN" | "EMPTY_JSON")`
-  - Prefer specific validation on the client side before request to choose the correct canonical error.
-- HTTP 500 + `{ error: "SERVER_ERROR" }` → `done(false, "IO_ERROR")`
-- Any network failure / timeout / parse error → `done(false, "IO_ERROR")`
-- If `/healthz` not reachable or transport disabled → `done(false, "UNAVAILABLE")` (if used)
+Submit mapping:
+	•	HTTP 200 + { ok: true } → done(true, null)
+	•	HTTP 200 + { ok: true, alreadyHad: true } → done(true, null)
+	•	HTTP 409 + SEQ_CONFLICT → done(false, “CONFLICT”)
+	•	HTTP 400 + INVALID_INPUT → client decides:
+	•	INVALID_GAME_ID / INVALID_TURN / EMPTY_JSON
+	•	HTTP 500 + SERVER_ERROR → done(false, “IO_ERROR”)
+	•	Network / timeout / parse → done(false, “IO_ERROR”)
+	•	Auth failure (401 UNAUTHORIZED) → done(false, “UNAVAILABLE”)
 
-Fetch mapping (`TryFetchNextTurn`):
+Fetch mapping:
+	•	HTTP 200 + { seq, json } → done(true, null, seq, json)
+	•	HTTP 200 + NO_TURN → done(false, “NO_TURN”, 0, null)
+	•	HTTP 400 + INVALID_INPUT → done(false, “INVALID_GAME_ID” | “INVALID_TURN”, 0, null)
+	•	HTTP 500 + SERVER_ERROR → done(false, “IO_ERROR”, 0, null)
+	•	Network / timeout / parse → done(false, “IO_ERROR”, 0, null)
+	•	Auth failure (401 UNAUTHORIZED) → done(false, “UNAVAILABLE”, 0, null)
 
-- HTTP 200 + `{ seq, json }` → `done(true, null, seq, json)`
-- HTTP 200 + `{ error: "NO_TURN" }` → `done(false, "NO_TURN", 0, null)`
-- HTTP 200 + plain‑text `NO_TURN` → `done(false, "NO_TURN", 0, null)`
-- HTTP 400 + `{ error: "INVALID_INPUT" }` → `done(false, "INVALID_GAME_ID" | "INVALID_TURN", 0, null)`
-  - Prefer client‑side validation to map correctly.
-- HTTP 500 + `{ error: "SERVER_ERROR" }` → `done(false, "IO_ERROR", 0, null)`
-- Any network failure / timeout / parse error → `done(false, "IO_ERROR", 0, null)`
-- If `/healthz` not reachable or transport disabled → `done(false, "UNAVAILABLE", 0, null)` (if used)
+⸻
 
-## Turn Numbering & Sequence
+Turn Numbering & Sequence
 
-- Unity transport sequences use `ComputeTransportSeq`: `seq = turnNumber * 2 + (isPlayerTurn ? 0 : 1)`.
-- The HTTP server must accept and store this `seq` as‑is.
-- Fetch should return the smallest `seq` strictly greater than `after`.
+seq = turnNumber * 2 + (isPlayerTurn ? 0 : 1)
+	•	Server must store seq exactly as provided
+	•	Fetch returns smallest seq strictly greater than “after”
 
-## Notes
+⸻
 
-- `NO_TURN` must map to `done(false, "NO_TURN", 0, null)` and should not be treated as an error in polling.
-- This contract preserves `FileTurnTransport` behavior with HTTP replacing file I/O.
+Notes
+	•	NO_TURN is not an error → normal polling state
+	•	Transport mirrors FileTurnTransport semantics
+	•	HTTP replaces file I/O without changing game logic
