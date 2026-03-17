@@ -16,6 +16,7 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_GET_NEXT_MAX = 60;
 const RATE_LIMIT_POST_TURN_MAX = 20;
 const RATE_LIMIT_CLEANUP_INTERVAL_MS = 5 * 60_000;
+const STALE_TEMP_FILE_AGE_MS = 3_600_000;
 const PBP_API_KEY_HEADER_NAME = "X-BlockNations-Api-Key";
 const PBP_SHARED_SECRET_ENV_KEY = "PBP_SHARED_SECRET";
 
@@ -258,6 +259,48 @@ async function safeUnlink(filePath) {
   }
 }
 
+async function cleanupStaleTempFiles(gameDir) {
+  const tempFileRegex = /^turn_\d{1,12}\.json\.tmp\.\d+\.[0-9a-f]{12}$/;
+
+  let entries;
+  try {
+    entries = await fsp.readdir(gameDir, { withFileTypes: true });
+  } catch (err) {
+    if (err && err.code === "ENOENT") {
+      return;
+    }
+    console.warn(`[pbp] temp cleanup readdir failed dir=${gameDir} code=${err?.code || "UNKNOWN"}`);
+    return;
+  }
+
+  const now = Date.now();
+  for (const entry of entries) {
+    if (!entry.isFile() || !tempFileRegex.test(entry.name)) {
+      continue;
+    }
+
+    const tempPath = path.join(gameDir, entry.name);
+    try {
+      const stat = await fsp.stat(tempPath);
+      if (!stat.isFile()) {
+        continue;
+      }
+      if (now - stat.mtimeMs <= STALE_TEMP_FILE_AGE_MS) {
+        continue;
+      }
+
+      await safeUnlink(tempPath);
+    } catch (err) {
+      if (err && err.code === "ENOENT") {
+        continue;
+      }
+      console.warn(
+        `[pbp] temp cleanup failed dir=${gameDir} file=${entry.name} code=${err?.code || "UNKNOWN"}`
+      );
+    }
+  }
+}
+
 async function shouldTreatRenameAsRace(err, destFile) {
   if (!err) return false;
   if (err.code === "EEXIST" || err.code === "ENOTEMPTY") return true;
@@ -312,6 +355,8 @@ app.post("/pbp/turn", requirePbpApiKey, async (req, res) => {
       return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
     }
   }
+
+  await cleanupStaleTempFiles(gameDir);
 
   const tmpPath = path.join(
     gameDir,
