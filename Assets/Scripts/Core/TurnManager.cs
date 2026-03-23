@@ -748,21 +748,8 @@ public class TurnManager : MonoBehaviour
         if (currentMode != GameMode.VsAI || !isPlayerTurn)
             return;
 
-        bool input = false;
-
-        if (Input.anyKeyDown || Input.anyKey)
-        {
-            input = true;
-        }
-        else if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) ||
-                 Input.GetMouseButton(0) || Input.GetMouseButton(1))
-        {
-            input = true;
-        }
-        else if (Input.touchCount > 0)
-        {
-            input = true;
-        }
+        bool input = GameplayInputOrchestrator.TryGetSnapshot(out GameplayInputOrchestrator.FrameSnapshot snapshot) &&
+                     snapshot.AnyHumanInputThisFrame;
 
         if (input)
         {
