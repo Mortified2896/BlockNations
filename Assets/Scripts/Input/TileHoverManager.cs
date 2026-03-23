@@ -7,10 +7,6 @@ public class TileHoverManager : MonoBehaviour
 {
     public static TileHoverManager Instance { get; private set; }
 
-#pragma warning disable CS0414
-    [SerializeField] private bool useNewInputSystemPointerOverUi = false;
-#pragma warning restore CS0414
-
     private TileHighlighter hoveredTile;
     private TileHighlighter selectedTile;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -21,41 +17,6 @@ public class TileHoverManager : MonoBehaviour
     private readonly List<RaycastResult> uiRaycastResults = new List<RaycastResult>(16);
     private PointerEventData cachedPointerEventData;
     private EventSystem cachedPointerEventSystem;
-
-    private static bool IsPointerOverUi(bool useNewInputSystemPointerOverUi)
-    {
-        // On mobile, EventSystem.current.IsPointerOverGameObject() without a pointer id checks the
-        // "mouse" pointer and can return false for touches, causing world clicks to leak through UI.
-        if (EventSystem.current == null)
-            return false;
-
-#if ENABLE_INPUT_SYSTEM
-        if (useNewInputSystemPointerOverUi)
-        {
-            var touches = UnityEngine.InputSystem.EnhancedTouch.Touch.activeTouches;
-            for (int i = 0; i < touches.Count; i++)
-            {
-                var touch = touches[i];
-                if (EventSystem.current.IsPointerOverGameObject(touch.touchId))
-                    return true;
-            }
-        }
-#endif
-
-#if ENABLE_LEGACY_INPUT_MANAGER
-        if (Input.touchCount > 0)
-        {
-            for (int i = 0; i < Input.touchCount; i++)
-            {
-                Touch t = Input.GetTouch(i);
-                if (EventSystem.current.IsPointerOverGameObject(t.fingerId))
-                    return true;
-            }
-        }
-#endif
-
-        return EventSystem.current.IsPointerOverGameObject();
-    }
 
     void Awake()
     {
@@ -70,25 +31,13 @@ public class TileHoverManager : MonoBehaviour
 
     void Update()
     {
-        bool isPrimaryClickDown = Input.GetMouseButtonDown(0);
-        bool pointerOverUi;
-        int uiRaycastHitCount = 0;
-        Vector2 uiPointerPosition = default;
+        if (!GameplayInputOrchestrator.TryGetSnapshot(out GameplayInputOrchestrator.FrameSnapshot input))
+            return;
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        uiRaycastHitCount = RaycastUiAtPointerPosition(out uiPointerPosition);
-        pointerOverUi = uiRaycastHitCount > 0;
-#else
-        pointerOverUi = IsPointerOverUi(useNewInputSystemPointerOverUi);
-        if (pointerOverUi)
-        {
-            uiRaycastHitCount = RaycastUiAtPointerPosition(out uiPointerPosition);
-            if (uiRaycastHitCount == 0)
-            {
-                pointerOverUi = false;
-            }
-        }
-#endif
+        bool isPrimaryClickDown = input.TapThisFrame;
+        bool pointerOverUi = input.WorldInputBlockedThisFrame;
+        int uiRaycastHitCount = 0;
+        Vector2 uiPointerPosition = input.PointerPosition;
 
         // Ignore world interaction when the pointer is over UI (buttons, panels, overlays).
         if (pointerOverUi)
@@ -96,6 +45,7 @@ public class TileHoverManager : MonoBehaviour
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (isPrimaryClickDown && PbpDebugSettingsLoader.EnableInputLogs)
             {
+                uiRaycastHitCount = RaycastUiAtPointerPosition(uiPointerPosition, input.PointerId);
                 LogUiRaycastBlockIfNeeded(uiPointerPosition, uiRaycastHitCount);
 
                 if (TurnManager.Instance != null)
@@ -105,6 +55,11 @@ public class TileHoverManager : MonoBehaviour
                 }
             }
 #endif
+            return;
+        }
+
+        if (input.PinchActive || input.DragActive)
+        {
             return;
         }
 
@@ -132,14 +87,14 @@ public class TileHoverManager : MonoBehaviour
             return;
         }
 
-        Vector3 mouse = Input.mousePosition;
-        if (float.IsNaN(mouse.x) || float.IsNaN(mouse.y) ||
-            float.IsInfinity(mouse.x) || float.IsInfinity(mouse.y))
+        Vector2 pointer = input.PointerPosition;
+        if (float.IsNaN(pointer.x) || float.IsNaN(pointer.y) ||
+            float.IsInfinity(pointer.x) || float.IsInfinity(pointer.y))
         {
             return;
         }
 
-        Vector3 mouseWorld = cam.ScreenToWorldPoint(mouse);
+        Vector3 mouseWorld = cam.ScreenToWorldPoint(new Vector3(pointer.x, pointer.y, 0f));
         Vector2 mousePos2D = new Vector2(mouseWorld.x, mouseWorld.y);
 
         RaycastHit2D[] hits = Physics2D.RaycastAll(mousePos2D, Vector2.zero);
@@ -331,9 +286,8 @@ public class TileHoverManager : MonoBehaviour
         }
     }
 
-    private int RaycastUiAtPointerPosition(out Vector2 pointerPosition)
+    private int RaycastUiAtPointerPosition(Vector2 pointerPosition, int pointerId)
     {
-        pointerPosition = GetPointerScreenPositionForUiRaycast();
         EventSystem eventSystem = EventSystem.current;
         if (eventSystem == null)
         {
@@ -349,51 +303,11 @@ public class TileHoverManager : MonoBehaviour
 
         cachedPointerEventData.Reset();
         cachedPointerEventData.position = pointerPosition;
-        cachedPointerEventData.pointerId = GetPointerIdForUiRaycast();
+        cachedPointerEventData.pointerId = pointerId;
 
         uiRaycastResults.Clear();
         eventSystem.RaycastAll(cachedPointerEventData, uiRaycastResults);
         return uiRaycastResults.Count;
-    }
-
-    private static Vector2 GetPointerScreenPositionForUiRaycast()
-    {
-#if ENABLE_INPUT_SYSTEM
-        var touches = UnityEngine.InputSystem.EnhancedTouch.Touch.activeTouches;
-        if (touches.Count > 0)
-        {
-            return touches[0].screenPosition;
-        }
-#endif
-
-#if ENABLE_LEGACY_INPUT_MANAGER
-        if (Input.touchCount > 0)
-        {
-            return Input.GetTouch(0).position;
-        }
-#endif
-
-        return Input.mousePosition;
-    }
-
-    private static int GetPointerIdForUiRaycast()
-    {
-#if ENABLE_INPUT_SYSTEM
-        var touches = UnityEngine.InputSystem.EnhancedTouch.Touch.activeTouches;
-        if (touches.Count > 0)
-        {
-            return touches[0].touchId;
-        }
-#endif
-
-#if ENABLE_LEGACY_INPUT_MANAGER
-        if (Input.touchCount > 0)
-        {
-            return Input.GetTouch(0).fingerId;
-        }
-#endif
-
-        return -1;
     }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
