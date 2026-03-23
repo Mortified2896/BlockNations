@@ -54,3 +54,9 @@ Logs/
 .utmp/RelWithDebInfo/u5k2q56i/arm64-v8a/build.ninja
 .utmp/RelWithDebInfo/u5k2q56i/arm64-v8a/configure_fingerprint.bin
 .utmp/RelWithDebInfo/u5k2q56i/arm64-v8a/FramePacing/CMakeFiles/swappywrapper.dir/UnitySwappyWrapper.cpp.o
+Library/
+Temp/
+Obj/
+Build/
+Logs/
+UserSettings/
