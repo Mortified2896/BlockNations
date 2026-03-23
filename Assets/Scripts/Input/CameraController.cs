@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.EventSystems;
 
 public class CameraController : MonoBehaviour
 {
@@ -8,7 +7,7 @@ public class CameraController : MonoBehaviour
     public float pixelsPerUnit = 16f;    // MUST match your sprite PPU
 
     [Header("Mouse")]
-    public float dragThresholdPixels = 5f;  // how far you must move (on screen) before it starts panning
+    public float dragThresholdPixels = 5f;  // Legacy inspector value; drag threshold is now owned by GameplayInputOrchestrator.
 
     [Header("Zoom (PC)")]
     public bool enableMouseWheelZoom = true;
@@ -21,158 +20,69 @@ public class CameraController : MonoBehaviour
     [Header("Zoom (Touch)")]
     public bool enablePinchZoom = true;
     public float pinchZoomSpeed = 0.02f; // scale factor for pixel-distance deltas
-    public float pinchStartThresholdPixels = 2f;
+    public float pinchStartThresholdPixels = 2f; // Legacy inspector value; pinch threshold is now owned by GameplayInputOrchestrator.
 
     private Camera cam;
 
-    // mouse state
-    private bool isPanning = false;
-    private Vector3 lastPointerWorldPos;
-    private Vector3 mouseDownScreenPos;
-
-    // touch zoom state
-    private bool isPinching = false;
-    private float lastPinchDistancePixels = 0f;
-
-    void Awake()
+    private void Awake()
     {
         cam = GetComponent<Camera>();
         if (cam == null)
             cam = Camera.main;
     }
 
-    void Update()
+    private void Update()
     {
-        // ---------- TOUCH (phone) ----------
-        if (Input.touchCount > 0)
+        if (!GameplayInputOrchestrator.TryGetSnapshot(out GameplayInputOrchestrator.FrameSnapshot input))
+            return;
+
+        if (cam == null)
+            cam = Camera.main;
+
+        if (cam == null)
+            return;
+
+        if (enablePinchZoom && input.PinchActive)
         {
-            // Avoid world camera controls when interacting with UI.
-            if (EventSystem.current != null)
-            {
-                for (int i = 0; i < Input.touchCount; i++)
-                {
-                    Touch uiTouch = Input.GetTouch(i);
-                    if (EventSystem.current.IsPointerOverGameObject(uiTouch.fingerId))
-                    {
-                        isPanning = false;
-                        isPinching = false;
-                        return;
-                    }
-                }
-            }
-
-            // Pinch zoom uses two touches.
-            if (enablePinchZoom && Input.touchCount >= 2 && cam != null)
-            {
-                Touch a = Input.GetTouch(0);
-                Touch b = Input.GetTouch(1);
-
-                float distance = Vector2.Distance(a.position, b.position);
-
-                if (!isPinching || a.phase == TouchPhase.Began || b.phase == TouchPhase.Began)
-                {
-                    isPinching = true;
-                    isPanning = false;
-                    lastPinchDistancePixels = distance;
-                    return;
-                }
-
-                float deltaPixels = distance - lastPinchDistancePixels;
-                if (Mathf.Abs(deltaPixels) >= pinchStartThresholdPixels)
-                {
-                    // Spread fingers => zoom in (smaller ortho size / smaller FOV).
-                    if (cam.orthographic)
-                    {
-                        float newSize = cam.orthographicSize - (deltaPixels * pinchZoomSpeed);
-                        cam.orthographicSize = Mathf.Clamp(newSize, minOrthoSize, maxOrthoSize);
-                    }
-                    else
-                    {
-                        float newFov = cam.fieldOfView - (deltaPixels * pinchZoomSpeed);
-                        cam.fieldOfView = Mathf.Clamp(newFov, minFieldOfView, maxFieldOfView);
-                    }
-                }
-
-                lastPinchDistancePixels = distance;
-                return;
-            }
-
-            // Single-touch pan.
-            Touch t = Input.GetTouch(0);
-            Vector3 touchWorld = cam.ScreenToWorldPoint(new Vector3(t.position.x, t.position.y, 0f));
-
-            if (t.phase == TouchPhase.Began)
-            {
-                isPanning = true;
-                isPinching = false;
-                lastPointerWorldPos = touchWorld;
-            }
-            else if (t.phase == TouchPhase.Moved && isPanning)
-            {
-                Vector3 delta = lastPointerWorldPos - touchWorld;
-                MoveCamera(delta);
-                lastPointerWorldPos = touchWorld;
-            }
-            else if (t.phase == TouchPhase.Ended || t.phase == TouchPhase.Canceled)
-            {
-                isPanning = false;
-                isPinching = false;
-            }
-
-            return; // if we have touch, skip mouse handling
+            ApplyZoomDelta(input.PinchDelta * pinchZoomSpeed);
+            return;
         }
 
-        // ---------- MOUSE WHEEL ZOOM (PC) ----------
-        if (enableMouseWheelZoom && cam != null)
+        if (input.DragActive && !input.WorldInputBlockedThisFrame)
         {
-            // Avoid zooming when scrolling UI.
-            if (EventSystem.current == null || !EventSystem.current.IsPointerOverGameObject())
-            {
-                float scroll = Input.mouseScrollDelta.y;
-                if (Mathf.Abs(scroll) > 0.0001f)
-                {
-                    if (cam.orthographic)
-                    {
-                        float newSize = cam.orthographicSize - (scroll * zoomSpeed);
-                        cam.orthographicSize = Mathf.Clamp(newSize, minOrthoSize, maxOrthoSize);
-                    }
-                    else
-                    {
-                        float newFov = cam.fieldOfView - (scroll * zoomSpeed);
-                        cam.fieldOfView = Mathf.Clamp(newFov, minFieldOfView, maxFieldOfView);
-                    }
-                }
-            }
+            Vector2 currentScreen = input.PointerPosition;
+            Vector2 previousScreen = currentScreen - input.DragDelta;
+
+            Vector3 currentWorld = cam.ScreenToWorldPoint(new Vector3(currentScreen.x, currentScreen.y, 0f));
+            Vector3 previousWorld = cam.ScreenToWorldPoint(new Vector3(previousScreen.x, previousScreen.y, 0f));
+            Vector3 worldDelta = previousWorld - currentWorld;
+            MoveCamera(worldDelta);
+            return;
         }
 
-        // ---------- MOUSE (PC) ----------
-        if (Input.GetMouseButtonDown(0))
+        if (enableMouseWheelZoom && !input.WorldInputBlockedThisFrame)
         {
-            mouseDownScreenPos = Input.mousePosition;
-            isPanning = false; // we don't know yet if this will be a drag or a click
-        }
-        else if (Input.GetMouseButton(0))
-        {
-            // check if we've moved enough on screen to start panning
-            float dist = (Input.mousePosition - mouseDownScreenPos).magnitude;
-            if (!isPanning && dist > dragThresholdPixels)
+            if (Mathf.Abs(input.ScrollDelta) > 0.0001f)
             {
-                // start panning: set reference world position
-                lastPointerWorldPos = cam.ScreenToWorldPoint(Input.mousePosition);
-                isPanning = true;
+                ApplyZoomDelta(input.ScrollDelta * zoomSpeed);
             }
+        }
+    }
 
-            if (isPanning)
-            {
-                Vector3 mouseWorld = cam.ScreenToWorldPoint(Input.mousePosition);
-                Vector3 delta = lastPointerWorldPos - mouseWorld;
-                MoveCamera(delta);
-                lastPointerWorldPos = mouseWorld;
-            }
-        }
-        else if (Input.GetMouseButtonUp(0))
+    private void ApplyZoomDelta(float zoomDelta)
+    {
+        if (Mathf.Abs(zoomDelta) <= 0.00001f)
+            return;
+
+        if (cam.orthographic)
         {
-            isPanning = false;
+            float newSize = cam.orthographicSize - zoomDelta;
+            cam.orthographicSize = Mathf.Clamp(newSize, minOrthoSize, maxOrthoSize);
+        }
+        else
+        {
+            float newFov = cam.fieldOfView - zoomDelta;
+            cam.fieldOfView = Mathf.Clamp(newFov, minFieldOfView, maxFieldOfView);
         }
     }
 

@@ -1,8 +1,5 @@
 using UnityEngine;
 using TMPro;
-using UnityEngine.UI;
-using System.Collections.Generic;
-using System;
 
 /// <summary>
 /// Manages the city UI panel and recruitment actions.
@@ -16,14 +13,12 @@ public class CityUIManager : MonoBehaviour
 
     [Header("UI")]
     public GameObject panelRoot;
-    public GameObject bottomButtonsRoot; // e.g. the Next/Menu button row
     public TMP_Text cityNameText;
     public TMP_Text ownerText;
     public TMP_Text recruitWarriorButtonText;
 
     private City currentCity;
-    private Button cachedBottomMenuButton;
-    private Button cachedBottomEndTurnOrNextButton;
+    private static bool hasLoggedMissingBottomStripController;
 
     [Header("Tutorial/Debug")]
     public int lastRecruitAttemptFrame = -1;
@@ -51,7 +46,6 @@ public class CityUIManager : MonoBehaviour
         }
 
         EnsureRecruitWarriorButtonReference();
-        EnsureBottomButtonsRootReference();
     }
 
     /// <summary>
@@ -93,6 +87,13 @@ public class CityUIManager : MonoBehaviour
             return;
         }
 
+        // Re-tap toggle: tapping the same already-open city closes the panel.
+        if (IsPanelOpen && currentCity == city)
+        {
+            ClosePanel();
+            return;
+        }
+
         currentCity = city;
         OpenPanel();
     }
@@ -108,7 +109,13 @@ public class CityUIManager : MonoBehaviour
         // Try to auto-wire the Recruit Warrior button label if it
         // has not been assigned in the Inspector.
         EnsureRecruitWarriorButtonReference();
-        EnsureBottomButtonsRootReference();
+
+        BottomStripController bottomStrip = GetBottomStripController();
+        if (bottomStrip != null)
+        {
+            // Claim the bottom strip mode first so handoffs do not flash DefaultHud.
+            bottomStrip.SetMode(BottomStripController.BottomStripMode.CityUi);
+        }
 
         if (UnitUIManager.Instance != null)
         {
@@ -116,9 +123,6 @@ public class CityUIManager : MonoBehaviour
         }
 
         panelRoot.SetActive(true);
-
-        // Hide the default bottom HUD buttons while the city panel is open.
-        SetBottomHudButtonsActive(false);
         Debug.Log("CityUIManager.OpenPanel");
 
         if (cityNameText != null && currentCity != null)
@@ -180,170 +184,26 @@ public class CityUIManager : MonoBehaviour
             panelRoot.SetActive(false);
         }
 
-        // Restore the default bottom HUD buttons when the city panel closes.
-        EnsureBottomButtonsRootReference();
-        SetBottomHudButtonsActive(true);
+        BottomStripController bottomStrip = GetBottomStripController();
+        if (bottomStrip != null)
+        {
+            bottomStrip.ReleaseMode(BottomStripController.BottomStripMode.CityUi);
+        }
     }
 
-    private void SetBottomHudButtonsActive(bool active)
+    public bool IsPanelOpen => panelRoot != null && panelRoot.activeSelf;
+
+    private static BottomStripController GetBottomStripController()
     {
-        // Safety: never hide the city UI itself.
-        if (bottomButtonsRoot != null && panelRoot != null && panelRoot.transform.IsChildOf(bottomButtonsRoot.transform))
+        BottomStripController bottomStrip = BottomStripController.Instance;
+        if (bottomStrip == null && !hasLoggedMissingBottomStripController)
         {
-            bottomButtonsRoot = null;
+            hasLoggedMissingBottomStripController = true;
+            Debug.LogError("CityUIManager requires BottomStripController in the gameplay scene.");
         }
 
-        if (bottomButtonsRoot != null)
-        {
-            bottomButtonsRoot.SetActive(active);
-            return;
-        }
-
-        // Fallback: toggle the buttons directly if we can't determine a common root.
-        if (cachedBottomMenuButton != null)
-            cachedBottomMenuButton.gameObject.SetActive(active);
-        if (cachedBottomEndTurnOrNextButton != null)
-            cachedBottomEndTurnOrNextButton.gameObject.SetActive(active);
+        return bottomStrip;
     }
-
-    private void EnsureBottomButtonsRootReference()
-    {
-        if (bottomButtonsRoot != null && cachedBottomMenuButton != null && cachedBottomEndTurnOrNextButton != null)
-            return;
-
-        Button[] buttons = UnityEngine.Object.FindObjectsByType<Button>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-        Button menuButton = null;
-        Button endTurnOrNextButton = null;
-        float bestMenuY = float.PositiveInfinity;
-        float bestNextY = float.PositiveInfinity;
-
-        foreach (Button b in buttons)
-        {
-            if (b == null) continue;
-            if (!b.gameObject.activeInHierarchy) continue;
-
-            string label = GetButtonLabel(b);
-            if (string.IsNullOrWhiteSpace(label))
-                continue;
-
-            float centerY = GetButtonScreenCenterY(b);
-
-            if (string.Equals(label, "Menu", StringComparison.OrdinalIgnoreCase))
-            {
-                if (centerY < bestMenuY)
-                {
-                    bestMenuY = centerY;
-                    menuButton = b;
-                }
-            }
-            else if (string.Equals(label, "End Turn", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(label, "Next", StringComparison.OrdinalIgnoreCase))
-            {
-                if (centerY < bestNextY)
-                {
-                    bestNextY = centerY;
-                    endTurnOrNextButton = b;
-                }
-            }
-        }
-
-        if (menuButton == null || endTurnOrNextButton == null)
-            return;
-
-        cachedBottomMenuButton = menuButton;
-        cachedBottomEndTurnOrNextButton = endTurnOrNextButton;
-
-        Transform root = FindLowestCommonAncestor(menuButton.transform, endTurnOrNextButton.transform);
-        if (root == null)
-            return;
-
-        // Prefer the lowest common parent on the Menu button's path that contains the EndTurn/Next button,
-        // but does NOT contain the city panel root (otherwise we'd accidentally hide the city UI too).
-        Transform refined = root;
-        Transform t = menuButton.transform;
-        while (t != null)
-        {
-            if (endTurnOrNextButton.transform.IsChildOf(t))
-            {
-                bool containsCityPanel = panelRoot != null && panelRoot.transform != null && panelRoot.transform.IsChildOf(t);
-                if (!containsCityPanel)
-                {
-                    refined = t;
-                    break;
-                }
-            }
-            t = t.parent;
-        }
-
-        bottomButtonsRoot = refined.gameObject;
-    }
-
-    private static string GetButtonLabel(Button b)
-    {
-        if (b == null)
-            return null;
-
-        TMP_Text tmp = b.GetComponentInChildren<TMP_Text>(true);
-        if (tmp != null && !string.IsNullOrWhiteSpace(tmp.text))
-            return tmp.text.Trim();
-
-        Text txt = b.GetComponentInChildren<Text>(true);
-        if (txt != null && !string.IsNullOrWhiteSpace(txt.text))
-            return txt.text.Trim();
-
-        return null;
-    }
-
-    private static float GetButtonScreenCenterY(Button b)
-    {
-        if (b == null)
-            return float.PositiveInfinity;
-
-        RectTransform rt = b.GetComponent<RectTransform>();
-        if (rt == null)
-            return float.PositiveInfinity;
-
-        Vector3[] corners = new Vector3[4];
-        rt.GetWorldCorners(corners);
-        Vector2 min = new Vector2(float.PositiveInfinity, float.PositiveInfinity);
-        Vector2 max = new Vector2(float.NegativeInfinity, float.NegativeInfinity);
-        for (int i = 0; i < 4; i++)
-        {
-            Vector2 sp = RectTransformUtility.WorldToScreenPoint(null, corners[i]);
-            min = Vector2.Min(min, sp);
-            max = Vector2.Max(max, sp);
-        }
-        return (min.y + max.y) * 0.5f;
-    }
-
-    private static Transform FindLowestCommonAncestor(Transform a, Transform b)
-    {
-        if (a == null || b == null)
-            return null;
-
-        HashSet<Transform> ancestors = new HashSet<Transform>();
-        Transform t = a;
-        while (t != null)
-        {
-            ancestors.Add(t);
-            t = t.parent;
-        }
-
-        t = b;
-        while (t != null)
-        {
-            if (ancestors.Contains(t))
-                return t;
-            t = t.parent;
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Hook this up to the "Recruit Warrior" button.
-    /// Spawns a warrior for the selected city if allowed.
-    /// </summary>
     public void OnRecruitWarriorButton()
     {
         lastRecruitAttemptFrame = Time.frameCount;
