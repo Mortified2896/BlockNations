@@ -24,6 +24,7 @@ public class CityUIManager : MonoBehaviour
     private City currentCity;
     private Button cachedBottomMenuButton;
     private Button cachedBottomEndTurnOrNextButton;
+    private GameObject bottomPopupRoot;
 
     [Header("Tutorial/Debug")]
     public int lastRecruitAttemptFrame = -1;
@@ -43,6 +44,12 @@ public class CityUIManager : MonoBehaviour
         if (panelRoot != null)
         {
             panelRoot.SetActive(false);
+        }
+
+        if (BottomStripController.Instance == null)
+        {
+            EnsureBottomPopupRootReference();
+            UpdateBottomPopupActiveState();
         }
 
         if (turnManager == null)
@@ -110,15 +117,26 @@ public class CityUIManager : MonoBehaviour
         EnsureRecruitWarriorButtonReference();
         EnsureBottomButtonsRootReference();
 
+        BottomStripController bottomStrip = GetBottomStripController();
+        if (bottomStrip != null)
+        {
+            // Claim the bottom strip mode first so handoffs do not flash DefaultHud.
+            bottomStrip.SetMode(BottomStripController.BottomStripMode.CityUi);
+        }
+
         if (UnitUIManager.Instance != null)
         {
             UnitUIManager.Instance.ClosePanel();
         }
 
         panelRoot.SetActive(true);
+        if (bottomStrip == null)
+        {
+            SetBottomPopupActive(true);
 
-        // Hide the default bottom HUD buttons while the city panel is open.
-        SetBottomHudButtonsActive(false);
+            // Fallback when the controller is not present in the scene.
+            SetBottomHudButtonsActive(false);
+        }
         Debug.Log("CityUIManager.OpenPanel");
 
         if (cityNameText != null && currentCity != null)
@@ -180,9 +198,56 @@ public class CityUIManager : MonoBehaviour
             panelRoot.SetActive(false);
         }
 
-        // Restore the default bottom HUD buttons when the city panel closes.
-        EnsureBottomButtonsRootReference();
-        SetBottomHudButtonsActive(true);
+        BottomStripController bottomStrip = GetBottomStripController();
+        if (bottomStrip != null)
+        {
+            bottomStrip.ReleaseMode(BottomStripController.BottomStripMode.CityUi);
+        }
+        else
+        {
+            UpdateBottomPopupActiveState();
+
+            // Fallback when the controller is not present in the scene.
+            EnsureBottomButtonsRootReference();
+            SetBottomHudButtonsActive(true);
+        }
+    }
+
+    public bool IsPanelOpen => panelRoot != null && panelRoot.activeSelf;
+
+    private BottomStripController GetBottomStripController()
+    {
+        return BottomStripController.Instance;
+    }
+
+    private void EnsureBottomPopupRootReference()
+    {
+        if (bottomPopupRoot != null || panelRoot == null)
+            return;
+
+        Transform parent = panelRoot.transform.parent;
+        if (parent != null)
+        {
+            bottomPopupRoot = parent.gameObject;
+        }
+    }
+
+    private void SetBottomPopupActive(bool active)
+    {
+        EnsureBottomPopupRootReference();
+        if (bottomPopupRoot == null)
+            return;
+
+        if (bottomPopupRoot.activeSelf != active)
+        {
+            bottomPopupRoot.SetActive(active);
+        }
+    }
+
+    private void UpdateBottomPopupActiveState()
+    {
+        bool shouldBeActive = IsPanelOpen || (UnitUIManager.Instance != null && UnitUIManager.Instance.IsPanelOpen);
+        SetBottomPopupActive(shouldBeActive);
     }
 
     private void SetBottomHudButtonsActive(bool active)

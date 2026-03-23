@@ -2454,18 +2454,9 @@ public class TutorialOverlay : MonoBehaviour
 
     private void UpdateGameplayHudButtonsVisibility()
     {
-        // While the City/Unit panel is open, hide the gameplay HUD buttons (Menu / End Turn / Next),
-        // just like the normal game UI flow.
-        bool shouldHide = HasCityPanelOpen() || HasUnitPanelOpen();
-        EnsureGameplayHudButtonsCached();
-
-        bool desiredActive = !shouldHide;
-        if (gameplayHudMenuButton != null && gameplayHudMenuButton.gameObject.activeSelf != desiredActive)
-            gameplayHudMenuButton.gameObject.SetActive(desiredActive);
-        if (gameplayHudEndTurnOrNextButton != null && gameplayHudEndTurnOrNextButton.gameObject.activeSelf != desiredActive)
-            gameplayHudEndTurnOrNextButton.gameObject.SetActive(desiredActive);
-
-        gameplayHudHidden = shouldHide;
+        // Bottom strip visibility is now owned by BottomStripController.
+        // Keep this state as read-only debug context for tutorial logic.
+        gameplayHudHidden = HasCityPanelOpen() || HasUnitPanelOpen();
     }
 
     private void EnsureGameplayPanelsDontOverlap()
