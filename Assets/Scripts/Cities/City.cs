@@ -18,13 +18,19 @@ public class City : MonoBehaviour
     {
         if (stationedUnit != null)
         {
-            Debug.Log("City already has a unit stationed here, cannot recruit another right now.", this);
+            if (PbpDebugSettingsLoader.EnableInputLogs)
+            {
+                Debug.Log("City already has a unit stationed here, cannot recruit another right now.", this);
+            }
             return false;
         }
 
         if (hasRecruitedThisTurn)
         {
-            Debug.Log("This city has already recruited a unit this turn.", this);
+            if (PbpDebugSettingsLoader.EnableInputLogs)
+            {
+                Debug.Log("This city has already recruited a unit this turn.", this);
+            }
             return false;
         }
 
@@ -69,7 +75,10 @@ public class City : MonoBehaviour
         Vector3 spawnPosition = transform.position;
         if (GridUtils.IsTileOccupied(spawnPosition, null))
         {
-            Debug.Log("Cannot spawn Warrior in city " + name + " because the tile is already occupied by a unit.", this);
+            if (PbpDebugSettingsLoader.EnableInputLogs)
+            {
+                Debug.Log("Cannot spawn Warrior in city " + name + " because the tile is already occupied by a unit.", this);
+            }
             PlayInvalidIfHuman();
             return;
         }
@@ -86,7 +95,10 @@ public class City : MonoBehaviour
             !TurnManager.Instance.CanLocalPlayerIssueCommands())
         {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            Debug.Log($"Ignored SpawnWarrior in PBp while local commands are locked (city={name}).", this);
+            if (PbpDebugSettingsLoader.EnableInputLogs)
+            {
+                Debug.Log($"Ignored SpawnWarrior in PBp while local commands are locked (city={name}).", this);
+            }
 #endif
             PlayInvalidIfHuman();
             return;
@@ -96,11 +108,17 @@ public class City : MonoBehaviour
         {
             if (isPlayerOwned)
             {
-                Debug.Log("Not enough gold to recruit a Warrior in " + name);
+                if (PbpDebugSettingsLoader.EnableInputLogs)
+                {
+                    Debug.Log("Not enough gold to recruit a Warrior in " + name);
+                }
             }
             else
             {
-                Debug.Log("AI lacks gold to recruit a Warrior in " + name);
+                if (PbpDebugSettingsLoader.EnableInputLogs)
+                {
+                    Debug.Log("AI lacks gold to recruit a Warrior in " + name);
+                }
             }
 
             // If the player attempted to recruit and still has no actions, auto-end can kick in.
@@ -136,7 +154,10 @@ public class City : MonoBehaviour
             owned.SetOwner(isPlayerOwned);
         }
 
-        Debug.Log($"Spawned Warrior from city {name} at world position {spawnPosition}.");
+        if (PbpDebugSettingsLoader.EnableInputLogs)
+        {
+            Debug.Log($"Spawned Warrior from city {name} at world position {spawnPosition}.");
+        }
 
         if (isPlayerOwned && TurnManager.Instance != null)
         {

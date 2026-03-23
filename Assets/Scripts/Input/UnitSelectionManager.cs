@@ -321,12 +321,6 @@ public class UnitSelectionManager : MonoBehaviour
             SoundManager.Instance.PlayUnitSelect();
         }
 
-        string ownerLabel = unit.isPlayerOwned ? "Player" : "AI";
-        if (PbpDebugSettingsLoader.EnableInputLogs)
-        {
-            Debug.Log($"Selected unit ({ownerLabel}): {unit.name}");
-        }
-
         if (UnitUIManager.Instance != null)
         {
             UnitUIManager.Instance.ShowUnit(unit);
@@ -372,13 +366,11 @@ public class UnitSelectionManager : MonoBehaviour
         {
             if (!turnManager.CanControlUnit(selectedUnit))
             {
-                Debug.Log("Cannot move units when it is not this side's turn or the game is over.");
                 return;
             }
         }
 
         bool isActiveTurnForUnit = turnManager == null || turnManager.IsCurrentSideOwner(selectedUnit.isPlayerOwned);
-        string sideLabel = turnManager != null ? turnManager.GetCurrentSideName() : "Player";
 
         Vector3 from = selectedUnit.transform.position;
         Vector3 to = targetWorldPosition;
@@ -443,7 +435,6 @@ public class UnitSelectionManager : MonoBehaviour
             selectedUnit.UpdateMoveOutline(isActiveTurnForUnit);
 
             bool killed = selectedUnit.Attack(targetUnit);
-            Debug.Log(sideLabel + " unit " + selectedUnit.name + " attacked " + targetUnit.name);
             actionPerformed = true;
 
             // If the defender died, move into their tile
@@ -455,10 +446,6 @@ public class UnitSelectionManager : MonoBehaviour
                     SoundManager.Instance.PlayMove();
                 }
 
-                if (PbpDebugSettingsLoader.EnableInputLogs)
-                {
-                    Debug.Log(sideLabel + " unit moved into defeated enemy tile at " + newPos);
-                }
             }
         }
         else if (canMoveToEmpty)
@@ -472,10 +459,6 @@ public class UnitSelectionManager : MonoBehaviour
                 SoundManager.Instance.PlayMove();
             }
 
-            if (PbpDebugSettingsLoader.EnableInputLogs)
-            {
-                Debug.Log(sideLabel + " unit moved to " + newPos);
-            }
             actionPerformed = true;
         }
 

@@ -619,7 +619,6 @@ public class TurnManager : MonoBehaviour
         Time.timeScale = 1f;
         UpdateTurnText();
         RecalculatePlayerVisibility();
-        Debug.Log("Selected game mode: " + mode);
 
         if (UnitSelectionManager.Instance != null)
         {
@@ -695,9 +694,6 @@ public class TurnManager : MonoBehaviour
 
     void Start()
     {
-#if UNITY_EDITOR
-        Debug.Log("Persistent Path: " + Application.persistentDataPath);
-#endif
         ResetPlayByPostRuntimeState();
         ResolveTurnTransport();
         lastAppliedTurnNumberForPolling = turnNumber;
@@ -760,7 +756,6 @@ public class TurnManager : MonoBehaviour
     // 🚩 This is what the UI Button will call
     public void OnEndTurnButtonPressed()
     {
-        Debug.Log($"OnEndTurnButtonPressed clicked (gameOver={gameOver}, isHotseatHandoff={isHotseatHandoff}, isHumanTurn={IsHumanTurn()})");
         if (!CanAdvanceTurn())
         {
             // Ignore clicks if it's not the current human's turn
@@ -1109,12 +1104,18 @@ public class TurnManager : MonoBehaviour
             if (gr == null)
             {
                 c.gameObject.AddComponent<GraphicRaycaster>();
-                Debug.Log($"Added GraphicRaycaster to canvas '{c.name}' so UI can receive clicks.");
+                if (PbpDebugSettingsLoader.EnableInputLogs)
+                {
+                    Debug.Log($"Added GraphicRaycaster to canvas '{c.name}' so UI can receive clicks.");
+                }
             }
             else if (!gr.enabled)
             {
                 gr.enabled = true;
-                Debug.Log($"Enabled GraphicRaycaster on canvas '{c.name}' so UI can receive clicks.");
+                if (PbpDebugSettingsLoader.EnableInputLogs)
+                {
+                    Debug.Log($"Enabled GraphicRaycaster on canvas '{c.name}' so UI can receive clicks.");
+                }
             }
         }
     }
@@ -1128,8 +1129,6 @@ public class TurnManager : MonoBehaviour
         {
             TryEmitEndTurnTelemetry();
         }
-
-        Debug.Log(GetCurrentSideName() + " ends Turn " + turnNumber);
 
         if (autoEndTurnRoutine != null)
         {
@@ -1196,8 +1195,6 @@ public class TurnManager : MonoBehaviour
                     snapshotIsPlayerTurn: exportSave.isPlayerTurn,
                     snapshotGameId: exportSave.gameId);
             }
-
-            Debug.Log("Play-by-Post turn finished. Submit is in progress; successful host submit may show Copy Game Code.");
 
             if (playByPostAutoSyncEnabled)
             {
@@ -1793,8 +1790,6 @@ public class TurnManager : MonoBehaviour
         if (gameOver || currentMode != GameMode.VsAI)
             yield break;
 
-        Debug.Log("AI Turn " + turnNumber + " started. AI is thinking...");
-
         if (SoundManager.Instance != null)
         {
             SoundManager.Instance.PlayTurnStart();
@@ -1812,8 +1807,6 @@ public class TurnManager : MonoBehaviour
         {
             RunAI();
         }
-
-        Debug.Log("AI finished Turn " + turnNumber);
 
         if (gameOver)
             yield break;
@@ -1857,15 +1850,11 @@ public class TurnManager : MonoBehaviour
         CollectPlayerIncome();
         RecalculatePlayerVisibility();
         UpdateTurnText();
-        Debug.Log(GetCurrentSideName() + " turn " + turnNumber + " begins.");
 
         ScheduleAutoEndTurnCheck();
 
         if (currentMode == GameMode.VsAI)
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            Debug.Log("[Turn] Post-refresh autosave at start of player turn.");
-#endif
             AutoSaveIfEnabled();
         }
     }
@@ -1902,7 +1891,6 @@ public class TurnManager : MonoBehaviour
         UpdateGoldText();
         RecalculatePlayerVisibility();
         UpdateTurnText();
-        Debug.Log(GetCurrentSideName() + " begins their turn.");
     }
 
     System.Collections.IEnumerator StartupSequence()
@@ -2058,7 +2046,6 @@ public class TurnManager : MonoBehaviour
         else if (currentMode == GameMode.None)
         {
             SetGameMode(GameMode.VsAI);
-            Debug.Log("No mode preselected. Defaulting to Vs AI.");
         }
 
         if (currentMode == GameMode.PlayByPost)
@@ -2083,7 +2070,6 @@ public class TurnManager : MonoBehaviour
         UpdateGoldText();
         UpdateTurnText();
         RecalculatePlayerVisibility();
-        Debug.Log("Game start. " + GetCurrentSideName() + " Turn " + turnNumber + " (AI difficulty " + aiDifficulty + ")");
 
         EnsureTutorialOverlayIfNeeded();
         ScheduleAutoEndTurnCheck();
@@ -2252,13 +2238,19 @@ public class TurnManager : MonoBehaviour
                 break;
 
 #if ENABLE_AUTO_END_TURN_ON_NO_ACTIONS
-            Debug.Log("Auto-ending turn: no available actions.");
+            if (PbpDebugSettingsLoader.EnableInputLogs)
+            {
+                Debug.Log("Auto-ending turn: no available actions.");
+            }
             EndCurrentTurn(false);
             break;
 #else
             if (!autoEndTurnDisabledLoggedThisTurn)
             {
-                Debug.Log("Auto-end turn on no-actions is temporarily disabled.");
+                if (PbpDebugSettingsLoader.EnableInputLogs)
+                {
+                    Debug.Log("Auto-end turn on no-actions is temporarily disabled.");
+                }
                 autoEndTurnDisabledLoggedThisTurn = true;
             }
             break;
@@ -2963,7 +2955,6 @@ public class TurnManager : MonoBehaviour
             unit.hasAttackedThisTurn = true;
             unit.RegisterMove();
             bool killed = unit.Attack(targetUnit);
-            Debug.Log("AI unit " + unit.name + " attacked " + targetUnit.name);
 
             if (killed)
             {
@@ -2973,8 +2964,6 @@ public class TurnManager : MonoBehaviour
                 {
                     SoundManager.Instance.PlayMove();
                 }
-
-                Debug.Log("AI unit moved into defeated enemy tile at " + newPos);
             }
         }
         else
@@ -2987,8 +2976,6 @@ public class TurnManager : MonoBehaviour
             {
                 SoundManager.Instance.PlayMove();
             }
-
-            Debug.Log("AI moved unit " + unit.name + " to " + newPos);
         }
 
         // After moving, if the AI unit has not attacked yet,
@@ -3018,12 +3005,10 @@ public class TurnManager : MonoBehaviour
             {
                 unit.hasAttackedThisTurn = true;
                 bool killed = unit.Attack(bestEnemy);
-                Debug.Log("AI unit " + unit.name + " performed a follow-up attack on " + bestEnemy.name);
 
                 if (killed)
                 {
                     unit.transform.position = bestEnemy.transform.position;
-                    Debug.Log("AI unit moved into defeated enemy tile at " + bestEnemy.transform.position);
                 }
             }
         }
@@ -3566,7 +3551,7 @@ public class TurnManager : MonoBehaviour
                     "SnapshotSave",
                     $"path={targetPath} state={GetPlayByPostStateSummary()}");
             }
-            if (PbpDebugSettingsLoader.EnableInputLogs)
+            if (PbpDebugSettingsLoader.EnableSaveLoadLogs)
             {
                 Debug.Log("Game saved to " + targetPath);
             }

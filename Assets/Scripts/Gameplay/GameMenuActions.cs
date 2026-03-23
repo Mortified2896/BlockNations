@@ -34,8 +34,6 @@ public class GameMenuActions : MonoBehaviour
 
     public void QuitToMainMenu()
     {
-        Debug.Log("QuitToMainMenu clicked");
-
         if (TurnManager.Instance != null && TurnManager.Instance.IsPbpEndgameMenuExitBlocked)
         {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD

@@ -65,12 +65,9 @@ public class CityUIManager : MonoBehaviour
             return;
         }
 
-        Debug.Log("CityUIManager.OnCityClicked: " + city.name + " (isPlayerOwned=" + city.isPlayerOwned + ")");
-
         // Only open UI for cities controlled by the current human side
         if (turnManager != null && !turnManager.CanControlCity(city))
         {
-            Debug.Log("Clicked on a city that cannot act this turn, city UI remains closed.");
             if (SoundManager.Instance != null)
             {
                 SoundManager.Instance.PlayInvalid();
@@ -79,7 +76,6 @@ public class CityUIManager : MonoBehaviour
         }
         else if (turnManager == null && !city.isPlayerOwned)
         {
-            Debug.Log("Clicked on a non-player city but TurnManager is not assigned; UI remains closed.");
             if (SoundManager.Instance != null)
             {
                 SoundManager.Instance.PlayInvalid();
@@ -123,7 +119,6 @@ public class CityUIManager : MonoBehaviour
         }
 
         panelRoot.SetActive(true);
-        Debug.Log("CityUIManager.OpenPanel");
 
         if (cityNameText != null && currentCity != null)
         {
@@ -220,9 +215,12 @@ public class CityUIManager : MonoBehaviour
             int goldP1 = tm != null ? tm.playerGold : -1;
             int goldP2 = tm != null ? tm.aiGold : -1;
 
-            Debug.Log(
-                $"[recruit] click city={cityName} cityNull={(currentCity == null)} mode={mode} isPlayerTurn={(tm != null ? tm.isPlayerTurn : false)} pbpSeat={pbpSeat} cityOwned={(currentCity != null ? currentCity.isPlayerOwned : false)} canControl={canControl} goldP1={goldP1} goldP2={goldP2} hasUnit={(currentCity != null && currentCity.stationedUnit != null)} recruitedThisTurn={(currentCity != null && currentCity.hasRecruitedThisTurn)}"
-            );
+            if (PbpDebugSettingsLoader.EnableInputLogs)
+            {
+                Debug.Log(
+                    $"[recruit] click city={cityName} cityNull={(currentCity == null)} mode={mode} isPlayerTurn={(tm != null ? tm.isPlayerTurn : false)} pbpSeat={pbpSeat} cityOwned={(currentCity != null ? currentCity.isPlayerOwned : false)} canControl={canControl} goldP1={goldP1} goldP2={goldP2} hasUnit={(currentCity != null && currentCity.stationedUnit != null)} recruitedThisTurn={(currentCity != null && currentCity.hasRecruitedThisTurn)}"
+                );
+            }
         }
 #endif
 
@@ -247,7 +245,6 @@ public class CityUIManager : MonoBehaviour
 
         if (turnManager != null && !turnManager.CanControlCity(currentCity))
         {
-            Debug.Log("Ignored Recruit Warrior click because it is not this city's turn.");
             if (SoundManager.Instance != null)
             {
                 SoundManager.Instance.PlayInvalid();
@@ -264,9 +261,12 @@ public class CityUIManager : MonoBehaviour
             TurnManager tm = turnManager != null ? turnManager : TurnManager.Instance;
             int goldP1 = tm != null ? tm.playerGold : -1;
             int goldP2 = tm != null ? tm.aiGold : -1;
-            Debug.Log(
-                $"[recruit] result city={(currentCity != null ? currentCity.name : "<null>")} succeeded={lastRecruitAttemptSucceeded} hasUnitNow={(currentCity != null && currentCity.stationedUnit != null)} goldP1={goldP1} goldP2={goldP2}"
-            );
+            if (PbpDebugSettingsLoader.EnableInputLogs)
+            {
+                Debug.Log(
+                    $"[recruit] result city={(currentCity != null ? currentCity.name : "<null>")} succeeded={lastRecruitAttemptSucceeded} hasUnitNow={(currentCity != null && currentCity.stationedUnit != null)} goldP1={goldP1} goldP2={goldP2}"
+                );
+            }
         }
 #endif
     }

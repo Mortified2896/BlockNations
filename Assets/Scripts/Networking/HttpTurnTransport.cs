@@ -346,7 +346,10 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
             bool reachable = req.responseCode > 0 && req.result != UnityWebRequest.Result.ConnectionError;
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            Debug.Log($"PBp server probe: {url} reachable={reachable} result={req.result} code={req.responseCode}");
+            if (PbpDebugSettingsLoader.EnableTransportLogs)
+            {
+                Debug.Log($"PBp server probe: {url} reachable={reachable} result={req.result} code={req.responseCode}");
+            }
 #endif
 
             done?.Invoke(reachable);

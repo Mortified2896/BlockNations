@@ -211,7 +211,6 @@ public class TileHoverManager : MonoBehaviour
                 TurnManager.Instance.CanControlCity(clickedCity) &&
                 CityUIManager.Instance != null)
             {
-                Debug.Log($"TileHoverManager: opening city UI for {clickedCity.name}");
                 if (UnitSelectionManager.Instance != null)
                 {
                     UnitSelectionManager.Instance.ClearSelection();

@@ -503,14 +503,17 @@ public class MainMenuController : MonoBehaviour
     {
         activePbpGames = SaveManifestService.GetActivePlayByPostGames();
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-        Debug.Log($"[MP] Active PBp games={activePbpGames.Count}");
-        for (int i = 0; i < activePbpGames.Count; i++)
+        if (PbpDebugSettingsLoader.EnableSaveLoadLogs)
         {
-            SaveManifestService.ManifestGameSummary entry = activePbpGames[i];
-            bool computed = TryGetIsYourTurnFromManifest(entry, out bool isYourTurn, out int computedTransportSeq, out string reason);
-            Debug.Log(
-                $"[MP] Active[{i}] gameId={entry.gameId} entryKey={entry.entryKey} lastPlayedUtc={entry.lastPlayedUtc} isFinished={entry.isFinished} " +
-                $"lastKnownRoundTurn={entry.lastKnownRoundTurn} lastKnownIsPlayerTurn={entry.lastKnownIsPlayerTurn} computedTransportSeq={computedTransportSeq} isYourTurn={isYourTurn} computed={computed} reason={reason}");
+            Debug.Log($"[MP] Active PBp games={activePbpGames.Count}");
+            for (int i = 0; i < activePbpGames.Count; i++)
+            {
+                SaveManifestService.ManifestGameSummary entry = activePbpGames[i];
+                bool computed = TryGetIsYourTurnFromManifest(entry, out bool isYourTurn, out int computedTransportSeq, out string reason);
+                Debug.Log(
+                    $"[MP] Active[{i}] gameId={entry.gameId} entryKey={entry.entryKey} lastPlayedUtc={entry.lastPlayedUtc} isFinished={entry.isFinished} " +
+                    $"lastKnownRoundTurn={entry.lastKnownRoundTurn} lastKnownIsPlayerTurn={entry.lastKnownIsPlayerTurn} computedTransportSeq={computedTransportSeq} isYourTurn={isYourTurn} computed={computed} reason={reason}");
+            }
         }
 #endif
         ActivePbpGamesChanged?.Invoke();
@@ -938,7 +941,10 @@ public class MainMenuController : MonoBehaviour
         UpdateMultiplayerButtonStates();
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-        Debug.Log($"Multiplayer server check complete. online={isServerOnline}, checkedTransport={hasCheck}");
+        if (PbpDebugSettingsLoader.EnableTransportLogs)
+        {
+            Debug.Log($"Multiplayer server check complete. online={isServerOnline}, checkedTransport={hasCheck}");
+        }
 #endif
 
         SetImportStatus(isServerOnline ? "Server online" : "Server offline");

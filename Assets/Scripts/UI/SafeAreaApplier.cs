@@ -5,14 +5,10 @@ using UnityEngine.UI;
 [RequireComponent(typeof(RectTransform))]
 public class SafeAreaApplier : MonoBehaviour
 {
-    [Tooltip("Log the applied safe area once for verification.")]
-    public bool debugLogs = false;
-
     private RectTransform rectTransform;
     private Rect lastSafeArea = Rect.zero;
     private Vector2Int lastScreenSize = Vector2Int.zero;
     private ScreenOrientation lastOrientation = ScreenOrientation.AutoRotation;
-    private bool hasLogged;
 
     private void OnEnable()
     {
@@ -75,11 +71,6 @@ public class SafeAreaApplier : MonoBehaviour
         Canvas.ForceUpdateCanvases();
         LayoutRebuilder.ForceRebuildLayoutImmediate(rectTransform);
 
-        if (debugLogs && !hasLogged)
-        {
-            Debug.Log($"SafeAreaApplier applied safe area: {currentSafeArea}", this);
-            hasLogged = true;
-        }
     }
 
 }
