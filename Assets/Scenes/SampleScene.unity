@@ -1977,8 +1977,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 86c53203f81937945945b5b93a5a0783, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GridManager
-  width: 10
-  height: 10
+  width: 15
+  height: 15
   tileSize: 1
   tilePrefab: {fileID: 2891236643250678726, guid: 870fbaf2418f95743be8b7f9563606b5, type: 3}
   cityPrefab: {fileID: 492623786828171416, guid: cec95ee826b53544887c1077a20dcf4f, type: 3}
@@ -2350,7 +2350,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::UnitSelectionManager
   turnManager: {fileID: 509509618}
-  tileSize: 1
 --- !u!4 &653581783
 Transform:
   m_ObjectHideFlags: 0

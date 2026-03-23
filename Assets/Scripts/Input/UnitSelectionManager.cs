@@ -11,9 +11,6 @@ public class UnitSelectionManager : MonoBehaviour
     [Header("References")]
     public TurnManager turnManager;
 
-    [Header("Grid")]
-    public float tileSize = 1f;
-
     private Unit selectedUnit;
 
     void Awake()
@@ -32,6 +29,26 @@ public class UnitSelectionManager : MonoBehaviour
         }
     }
 
+    private float GetGridTileSize()
+    {
+        GridManager grid = null;
+        if (turnManager != null)
+        {
+            grid = turnManager.gridManager;
+        }
+        else if (TurnManager.Instance != null)
+        {
+            grid = TurnManager.Instance.gridManager;
+        }
+
+        if (grid != null)
+        {
+            return Mathf.Max(0.01f, grid.tileSize);
+        }
+
+        return 1f;
+    }
+
     private void HighlightReachableTiles(Unit unit)
     {
         ClearReachableTiles();
@@ -43,6 +60,7 @@ public class UnitSelectionManager : MonoBehaviour
         Vector3 from = unit.transform.position;
         bool canMove = unit.CanMoveThisTurn();
         bool canAttack = !unit.hasAttackedThisTurn;
+        float tileSize = GetGridTileSize();
 
         // Tutorial mode: highlight only one forced target to keep the tutorial deterministic and clear.
         if (TutorialGate.IsActive && TutorialGate.ForceSingleTargetHighlight)
@@ -123,6 +141,7 @@ public class UnitSelectionManager : MonoBehaviour
 
         TileHighlighter[] tiles = Object.FindObjectsByType<TileHighlighter>(FindObjectsSortMode.None);
         Vector3 from = unit.transform.position;
+        float tileSize = GetGridTileSize();
 
         foreach (TileHighlighter tile in tiles)
         {
@@ -208,6 +227,7 @@ public class UnitSelectionManager : MonoBehaviour
         Vector3 from = unit.transform.position;
         bool canMove = unit.CanMoveThisTurn();
         bool canAttack = !unit.hasAttackedThisTurn;
+        float tileSize = GetGridTileSize();
 
         if (TutorialGate.IsActive && TutorialGate.ForceSingleTargetHighlight)
         {
@@ -364,6 +384,7 @@ public class UnitSelectionManager : MonoBehaviour
         Vector3 to = targetWorldPosition;
         Vector3 delta = to - from;
         delta.z = 0f;
+        float tileSize = GetGridTileSize();
 
         // Allow any adjacent tile (including diagonals) as "one move"
         float dist = delta.magnitude;

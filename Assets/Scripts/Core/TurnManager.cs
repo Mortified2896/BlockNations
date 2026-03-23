@@ -58,7 +58,7 @@ public class TurnManager : MonoBehaviour
     public int aiGold = 0;
     public int goldPerCity = 1;
     // Single source of truth for Warrior recruitment cost.
-    public const int WarriorCost = 3;
+    public const int WarriorCost = 2;
     public int warriorCost => WarriorCost;
 
     [Header("AI Settings")]
@@ -2328,15 +2328,7 @@ public class TurnManager : MonoBehaviour
         }
 
         // 2) Unit movement / attacks (adjacent).
-        float tileSize = 1f;
-        if (gridManager != null)
-        {
-            tileSize = Mathf.Max(0.01f, gridManager.tileSize);
-        }
-        else if (UnitSelectionManager.Instance != null)
-        {
-            tileSize = Mathf.Max(0.01f, UnitSelectionManager.Instance.tileSize);
-        }
+        float tileSize = gridManager != null ? Mathf.Max(0.01f, gridManager.tileSize) : 1f;
 
         Unit[] units = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
         foreach (Unit unit in units)
@@ -2509,12 +2501,8 @@ public class TurnManager : MonoBehaviour
             return;
         }
 
-        // Determine grid step size from the UnitSelectionManager (fallback to 1)
-        float stepSize = 1f;
-        if (UnitSelectionManager.Instance != null)
-        {
-            stepSize = UnitSelectionManager.Instance.tileSize;
-        }
+        // Determine grid step size from the GridManager (fallback to 1)
+        float stepSize = gridManager != null ? Mathf.Max(0.01f, gridManager.tileSize) : 1f;
 
         // For threat checks: a player can move one tile then attack adjacent, so staying
         // beyond Chebyshev distance 2 avoids being attacked next turn by a fresh unit.
