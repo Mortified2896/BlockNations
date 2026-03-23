@@ -3640,7 +3640,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1175018324}
   - component: {fileID: 1175018323}
-  - component: {fileID: 1175018325}
   m_Layer: 0
   m_Name: UnitUIManager
   m_TagString: Untagged
@@ -3661,7 +3660,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::UnitUIManager
   panelRoot: {fileID: 1095426722}
-  bottomButtonsRoot: {fileID: 2119934942}
   unitNameText: {fileID: 1627979745}
   healthText: {fileID: 92932735}
   attackText: {fileID: 120766385}
@@ -3681,21 +3679,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1175018325
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1175018322}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e5129a2a02bd4ec1a39aaf883292c48b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BottomStripController
-  defaultHudRoot: {fileID: 2119934942}
-  bottomPanelsRoot: {fileID: 1816269696}
-  initialMode: 0
 --- !u!1 &1208880782
 GameObject:
   m_ObjectHideFlags: 0
@@ -4279,7 +4262,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CityUIManager
   turnManager: {fileID: 509509618}
   panelRoot: {fileID: 567402685}
-  bottomButtonsRoot: {fileID: 2119934942}
   cityNameText: {fileID: 265352875}
   ownerText: {fileID: 1058327499}
   recruitWarriorButtonText: {fileID: 1498005513}
@@ -4686,6 +4668,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1759556947}
   - component: {fileID: 1759556948}
+  - component: {fileID: 1759556951}
   - component: {fileID: 1759556950}
   - component: {fileID: 1759556949}
   m_Layer: 5
@@ -4733,6 +4716,21 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SafeAreaApplier
   debugLogs: 1
+--- !u!114 &1759556951
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1759556946}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e5129a2a02bd4ec1a39aaf883292c48b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BottomStripController
+  defaultHudRoot: {fileID: 2119934942}
+  bottomPanelsRoot: {fileID: 1816269696}
+  initialMode: 0
 --- !u!114 &1759556949
 MonoBehaviour:
   m_ObjectHideFlags: 0
