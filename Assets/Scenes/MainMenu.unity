@@ -809,7 +809,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchorMax.y
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchorMin.x
@@ -817,7 +817,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchorMin.y
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_SizeDelta.x
@@ -857,11 +857,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 0
+      value: 642
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: 0
+      value: -360
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -938,7 +938,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &195326331
 RectTransform:
   m_ObjectHideFlags: 0
@@ -1018,6 +1018,7 @@ Canvas:
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 1
+  m_UseReflectionProbes: 0
   m_AdditionalShaderChannelsFlag: 25
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
@@ -1057,7 +1058,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchorMax.y
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchorMin.x
@@ -1065,7 +1066,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchorMin.y
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_SizeDelta.x
@@ -1105,11 +1106,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 0
+      value: 642
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: 0
+      value: -60
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -2510,8 +2511,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 01614664b831546d2ae94a42149d80ac, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.InputSystem::UnityEngine.InputSystem.UI.InputSystemUIInputModule
+  m_SendPointerHoverToParent: 1
   m_MoveRepeatDelay: 0.5
   m_MoveRepeatRate: 0.1
+  m_XRTrackingOrigin: {fileID: 0}
   m_ActionsAsset: {fileID: 0}
   m_PointAction: {fileID: 0}
   m_MoveAction: {fileID: 0}
@@ -4838,7 +4841,7 @@ RectTransform:
   m_AnchorMin: {x: 1, y: 1}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
+  m_SizeDelta: {x: 325.84, y: 50.28}
   m_Pivot: {x: 1, y: 1}
 --- !u!114 &1435020509
 MonoBehaviour:
@@ -5343,7 +5346,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1491674463
 Transform:
   m_ObjectHideFlags: 0
@@ -5980,55 +5983,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &2147001001
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2147001002}
-  - component: {fileID: 2147001003}
-  m_Layer: 0
-  m_Name: MainMenuUITK
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &2147001003
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2147001001}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 051cbb9fd2534fa4bca195c5154c1ca6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::MainMenuUITKView
-  enableUITK: 1
-  mainMenuController: {fileID: 1678659297}
-  legacyCanvas: {fileID: 195326334}
-  layoutResourceName: MainMenu_UITK
-  styleResourceName: MainMenu_UITK
---- !u!4 &2147001002
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2147001001}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &1723836030
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -6059,7 +6013,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchorMax.y
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchorMin.x
@@ -6067,7 +6021,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchorMin.y
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_SizeDelta.x
@@ -6107,11 +6061,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 0
+      value: 642
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: 0
+      value: -210
       objectReference: {fileID: 0}
     - target: {fileID: 3220916862051567633, guid: c6ac1371cb4bcc848b248f0ba23b7b3d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -6188,7 +6142,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ae5e8f0f0a498244491b27a6a2f2248b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SafeAreaApplier
-  debugLogs: 0
 --- !u!222 &1789013584
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -7690,6 +7643,79 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2131751104}
   m_CullTransparentMesh: 1
+--- !u!1 &2147001001
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2147001002}
+  - component: {fileID: 2147001003}
+  - component: {fileID: 2147001004}
+  m_Layer: 0
+  m_Name: MainMenuUITK
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2147001002
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2147001001}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2147001003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2147001001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 051cbb9fd2534fa4bca195c5154c1ca6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MainMenuUITKView
+  enableUITK: 1
+  mainMenuController: {fileID: 1678659297}
+  legacyCanvas: {fileID: 195326334}
+  layoutResourceName: MainMenu_UITK
+  styleResourceName: MainMenu_UITK
+--- !u!114 &2147001004
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2147001001}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.dll::UnityEngine.UIElements.UIDocument
+  m_PanelSettings: {fileID: 11400000, guid: b5dfed67af7804e8ebf3173c8e7c3ad8, type: 2}
+  m_ParentUI: {fileID: 0}
+  sourceAsset: {fileID: 0}
+  m_SortingOrder: 1000
+  m_Position: 0
+  m_WorldSpaceSizeMode: 1
+  m_WorldSpaceWidth: 1920
+  m_WorldSpaceHeight: 1080
+  m_PivotReferenceSize: 0
+  m_Pivot: 0
+  m_WorldSpaceCollider: {fileID: 0}
 --- !u!1001 &3650160606835898046
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -7900,3 +7926,4 @@ SceneRoots:
   - {fileID: 774234012}
   - {fileID: 948159471}
   - {fileID: 309042290}
+  - {fileID: 2147001002}

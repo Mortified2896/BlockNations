@@ -5,6 +5,11 @@ public class MenuVersionLabel : MonoBehaviour
 {
     [SerializeField] private TMP_Text targetText;
 
+    public static string BuildVersionText()
+    {
+        return $"v{Application.version} \u00B7 PbP {TurnManager.PbpProtocolVersion}";
+    }
+
     private void Start()
     {
         if (targetText == null)
@@ -15,6 +20,6 @@ public class MenuVersionLabel : MonoBehaviour
             return;
         }
 
-        targetText.text = $"v{Application.version} \u00B7 PbP {TurnManager.PbpProtocolVersion}";
+        targetText.text = BuildVersionText();
     }
 }

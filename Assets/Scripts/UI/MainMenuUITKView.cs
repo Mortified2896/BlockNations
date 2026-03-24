@@ -1,10 +1,14 @@
 using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
-using UnityEngine.UI;
 using UnityEngine.UIElements;
 
 public class MainMenuUITKView : MonoBehaviour
 {
+    private const string ThemeResourceName = "MainMenu_UITK_Theme";
+    private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
+    private const string LegacySharedSaveFileName = "save.json";
+
     [Header("Trial Toggle")]
     [SerializeField] private bool enableUITK = true;
 
@@ -17,10 +21,10 @@ public class MainMenuUITKView : MonoBehaviour
     [SerializeField] private string styleResourceName = "MainMenu_UITK";
 
     private UIDocument uiDocument;
-    private PanelSettings runtimePanelSettings;
     private CanvasGroup legacyCanvasGroup;
     private VisualTreeAsset layoutAsset;
     private StyleSheet styleAsset;
+    private ThemeStyleSheet themeAsset;
 
     private VisualElement root;
     private VisualElement mainPanel;
@@ -30,6 +34,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Label detailsTitleLabel;
     private Label detailsSubtitleLabel;
     private Label statusLabel;
+    private Label versionLabel;
 
     private Button continueButton;
     private Button playVsAiButton;
@@ -54,6 +59,7 @@ public class MainMenuUITKView : MonoBehaviour
         ResolveReferences();
         layoutAsset = Resources.Load<VisualTreeAsset>(layoutResourceName);
         styleAsset = Resources.Load<StyleSheet>(styleResourceName);
+        themeAsset = Resources.Load<ThemeStyleSheet>(ThemeResourceName);
         EnsurePanelSettingsWhenEnabled();
         ApplyUiMode();
     }
@@ -80,15 +86,6 @@ public class MainMenuUITKView : MonoBehaviour
         UnsubscribeMainMenuEvents();
     }
 
-    private void OnDestroy()
-    {
-        if (runtimePanelSettings != null)
-        {
-            Destroy(runtimePanelSettings);
-            runtimePanelSettings = null;
-        }
-    }
-
     private void Update()
     {
         if (!enableUITK || !uiReady)
@@ -104,11 +101,6 @@ public class MainMenuUITKView : MonoBehaviour
         if (uiDocument == null)
         {
             uiDocument = GetComponent<UIDocument>();
-            if (uiDocument == null)
-            {
-                uiDocument = gameObject.AddComponent<UIDocument>();
-                uiDocument.sortingOrder = 1000;
-            }
         }
 
         if (mainMenuController == null)
@@ -140,12 +132,14 @@ public class MainMenuUITKView : MonoBehaviour
 
         if (uiDocument.panelSettings != null)
         {
+            if (uiDocument.panelSettings.themeStyleSheet == null && themeAsset != null)
+            {
+                uiDocument.panelSettings.themeStyleSheet = themeAsset;
+            }
             return;
         }
 
-        runtimePanelSettings = ScriptableObject.CreateInstance<PanelSettings>();
-        runtimePanelSettings.scaleMode = PanelScaleMode.ConstantPixelSize;
-        uiDocument.panelSettings = runtimePanelSettings;
+        Debug.LogWarning("MainMenuUITKView: UIDocument requires a PanelSettings asset assigned in scene.");
     }
 
     private void ApplyUiMode()
@@ -194,7 +188,9 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         CacheElements();
+        RefreshVersionLabel();
         BindButtons();
+        RefreshContinueButtonVisibility();
 
         SetVisible(mainPanel, true);
         SetVisible(multiplayerPanel, false);
@@ -214,6 +210,7 @@ public class MainMenuUITKView : MonoBehaviour
         detailsTitleLabel = root.Q<Label>("DetailsTitleLabel");
         detailsSubtitleLabel = root.Q<Label>("DetailsSubtitleLabel");
         statusLabel = root.Q<Label>("StatusLabel");
+        versionLabel = root.Q<Label>("VersionLabel");
 
         continueButton = root.Q<Button>("ContinueButton");
         playVsAiButton = root.Q<Button>("PlayVsAIButton");
@@ -436,11 +433,7 @@ public class MainMenuUITKView : MonoBehaviour
         for (int i = 0; i < games.Count; i++)
         {
             SaveManifestService.ManifestGameSummary summary = games[i];
-            Button rowButton = new Button();
-            rowButton.AddToClassList("game-row-button");
-            rowButton.text = BuildGameRowText(summary);
-            rowButton.clicked += () => HandleGameRowClicked(summary);
-            activeGamesList.Add(rowButton);
+            activeGamesList.Add(CreateGameCard(summary));
         }
     }
 
@@ -477,10 +470,20 @@ public class MainMenuUITKView : MonoBehaviour
         return "Game " + shortId;
     }
 
-    private static string BuildGameRowText(SaveManifestService.ManifestGameSummary summary)
+    private Button CreateGameCard(SaveManifestService.ManifestGameSummary summary)
     {
-        string subtitle = MainMenuController.BuildPlayByPostTurnSubtitle(summary);
-        return BuildGameTitle(summary.gameId) + " - " + subtitle;
+        Button card = new Button(() => HandleGameRowClicked(summary));
+        card.AddToClassList("game-card");
+
+        Label title = new Label(BuildGameTitle(summary.gameId));
+        title.AddToClassList("game-card-title");
+        card.Add(title);
+
+        Label status = new Label(MainMenuController.BuildPlayByPostTurnSubtitle(summary));
+        status.AddToClassList("game-card-status");
+        card.Add(status);
+
+        return card;
     }
 
     private void AddInfoRow(string text)
@@ -524,6 +527,42 @@ public class MainMenuUITKView : MonoBehaviour
         {
             statusLabel.text = message ?? string.Empty;
         }
+    }
+
+    private void RefreshVersionLabel()
+    {
+        if (versionLabel != null)
+        {
+            versionLabel.text = MenuVersionLabel.BuildVersionText();
+        }
+    }
+
+    private void RefreshContinueButtonVisibility()
+    {
+        if (continueButton == null)
+        {
+            return;
+        }
+
+        continueButton.style.display = HasContinueSaveFile() ? DisplayStyle.Flex : DisplayStyle.None;
+    }
+
+    private static bool HasContinueSaveFile()
+    {
+        string persistentRoot = Application.persistentDataPath;
+        if (string.IsNullOrWhiteSpace(persistentRoot))
+        {
+            return false;
+        }
+
+        string singlePlayerSavePath = Path.Combine(persistentRoot, SinglePlayerPrimarySaveFileName);
+        if (File.Exists(singlePlayerSavePath))
+        {
+            return true;
+        }
+
+        string legacySavePath = Path.Combine(persistentRoot, LegacySharedSaveFileName);
+        return File.Exists(legacySavePath);
     }
 
     private void ApplySafeArea(bool force)
