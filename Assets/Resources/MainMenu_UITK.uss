@@ -1,0 +1,125 @@
+.root {
+    flex-grow: 1;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(18, 24, 38, 0.93);
+    padding-left: 18px;
+    padding-right: 18px;
+    padding-top: 18px;
+    padding-bottom: 18px;
+}
+
+.panel {
+    width: 92%;
+    max-width: 720px;
+    background-color: rgba(8, 12, 20, 0.78);
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+    border-bottom-left-radius: 16px;
+    border-bottom-right-radius: 16px;
+    padding-left: 24px;
+    padding-right: 24px;
+    padding-top: 24px;
+    padding-bottom: 24px;
+}
+
+.title {
+    font-size: 44px;
+    -unity-font-style: bold;
+    color: rgb(241, 246, 255);
+    unity-text-align: middle-center;
+    margin-bottom: 16px;
+}
+
+.subtitle {
+    font-size: 30px;
+    -unity-font-style: bold;
+    color: rgb(236, 244, 255);
+    margin-bottom: 14px;
+    unity-text-align: middle-left;
+}
+
+.menu-button {
+    height: 54px;
+    margin-top: 6px;
+    margin-bottom: 6px;
+    font-size: 20px;
+}
+
+.small {
+    flex-grow: 1;
+    max-width: 220px;
+}
+
+.button-row {
+    flex-direction: row;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 6px;
+    margin-bottom: 8px;
+}
+
+.list-heading {
+    margin-top: 12px;
+    margin-bottom: 6px;
+    font-size: 18px;
+    color: rgb(186, 201, 228);
+}
+
+.games-list {
+    height: 220px;
+    border-top-width: 1px;
+    border-right-width: 1px;
+    border-bottom-width: 1px;
+    border-left-width: 1px;
+    border-top-color: rgba(148, 171, 212, 0.45);
+    border-right-color: rgba(148, 171, 212, 0.45);
+    border-bottom-color: rgba(148, 171, 212, 0.45);
+    border-left-color: rgba(148, 171, 212, 0.45);
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    border-bottom-left-radius: 10px;
+    border-bottom-right-radius: 10px;
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    margin-bottom: 8px;
+}
+
+.game-row-button {
+    height: 40px;
+    margin-bottom: 6px;
+    font-size: 16px;
+    unity-text-align: middle-left;
+}
+
+.details-panel {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top-width: 1px;
+    border-top-color: rgba(148, 171, 212, 0.45);
+}
+
+.details-title {
+    font-size: 19px;
+    -unity-font-style: bold;
+    color: rgb(230, 240, 255);
+}
+
+.details-subtitle {
+    margin-top: 4px;
+    margin-bottom: 8px;
+    color: rgb(177, 196, 229);
+}
+
+.danger {
+    color: rgb(255, 167, 167);
+}
+
+.status {
+    margin-top: 8px;
+    min-height: 20px;
+    color: rgb(167, 185, 217);
+    font-size: 14px;
+}

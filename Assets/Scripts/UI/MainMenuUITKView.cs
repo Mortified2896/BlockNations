@@ -1,0 +1,561 @@
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.UIElements;
+
+public class MainMenuUITKView : MonoBehaviour
+{
+    [Header("Trial Toggle")]
+    [SerializeField] private bool enableUITK = true;
+
+    [Header("References")]
+    [SerializeField] private MainMenuController mainMenuController;
+    [SerializeField] private Canvas legacyCanvas;
+
+    [Header("Resources")]
+    [SerializeField] private string layoutResourceName = "MainMenu_UITK";
+    [SerializeField] private string styleResourceName = "MainMenu_UITK";
+
+    private UIDocument uiDocument;
+    private PanelSettings runtimePanelSettings;
+    private CanvasGroup legacyCanvasGroup;
+    private VisualTreeAsset layoutAsset;
+    private StyleSheet styleAsset;
+
+    private VisualElement root;
+    private VisualElement mainPanel;
+    private VisualElement multiplayerPanel;
+    private VisualElement detailsPanel;
+    private VisualElement activeGamesList;
+    private Label detailsTitleLabel;
+    private Label detailsSubtitleLabel;
+    private Label statusLabel;
+
+    private Button continueButton;
+    private Button playVsAiButton;
+    private Button playHotseatButton;
+    private Button multiplayerButton;
+    private Button quitButton;
+    private Button createButton;
+    private Button joinButton;
+    private Button multiplayerBackButton;
+    private Button detailsOpenButton;
+    private Button detailsResignButton;
+    private Button detailsCloseButton;
+
+    private bool subscribedToMenuEvents;
+    private bool uiReady;
+    private bool hasSelectedGame;
+    private Rect lastSafeArea = Rect.zero;
+    private Vector2Int lastScreenSize = Vector2Int.zero;
+
+    private void Awake()
+    {
+        ResolveReferences();
+        layoutAsset = Resources.Load<VisualTreeAsset>(layoutResourceName);
+        styleAsset = Resources.Load<StyleSheet>(styleResourceName);
+        EnsurePanelSettingsWhenEnabled();
+        ApplyUiMode();
+    }
+
+    private void OnEnable()
+    {
+        ResolveReferences();
+        EnsurePanelSettingsWhenEnabled();
+        ApplyUiMode();
+
+        if (!enableUITK)
+        {
+            return;
+        }
+
+        BuildVisualTree();
+        SubscribeMainMenuEvents();
+        RefreshGamesList();
+        ShowMainPanel();
+    }
+
+    private void OnDisable()
+    {
+        UnsubscribeMainMenuEvents();
+    }
+
+    private void OnDestroy()
+    {
+        if (runtimePanelSettings != null)
+        {
+            Destroy(runtimePanelSettings);
+            runtimePanelSettings = null;
+        }
+    }
+
+    private void Update()
+    {
+        if (!enableUITK || !uiReady)
+        {
+            return;
+        }
+
+        ApplySafeArea(force: false);
+    }
+
+    private void ResolveReferences()
+    {
+        if (uiDocument == null)
+        {
+            uiDocument = GetComponent<UIDocument>();
+            if (uiDocument == null)
+            {
+                uiDocument = gameObject.AddComponent<UIDocument>();
+                uiDocument.sortingOrder = 1000;
+            }
+        }
+
+        if (mainMenuController == null)
+        {
+            mainMenuController = Object.FindFirstObjectByType<MainMenuController>();
+        }
+
+        if (legacyCanvas == null)
+        {
+            legacyCanvas = Object.FindFirstObjectByType<Canvas>();
+        }
+
+        if (legacyCanvas != null)
+        {
+            legacyCanvasGroup = legacyCanvas.GetComponent<CanvasGroup>();
+            if (legacyCanvasGroup == null)
+            {
+                legacyCanvasGroup = legacyCanvas.gameObject.AddComponent<CanvasGroup>();
+            }
+        }
+    }
+
+    private void EnsurePanelSettingsWhenEnabled()
+    {
+        if (!enableUITK || uiDocument == null)
+        {
+            return;
+        }
+
+        if (uiDocument.panelSettings != null)
+        {
+            return;
+        }
+
+        runtimePanelSettings = ScriptableObject.CreateInstance<PanelSettings>();
+        runtimePanelSettings.scaleMode = PanelScaleMode.ConstantPixelSize;
+        uiDocument.panelSettings = runtimePanelSettings;
+    }
+
+    private void ApplyUiMode()
+    {
+        if (uiDocument != null)
+        {
+            uiDocument.enabled = enableUITK;
+        }
+
+        if (legacyCanvasGroup != null)
+        {
+            legacyCanvasGroup.alpha = enableUITK ? 0f : 1f;
+            legacyCanvasGroup.interactable = !enableUITK;
+            legacyCanvasGroup.blocksRaycasts = !enableUITK;
+        }
+    }
+
+    private void BuildVisualTree()
+    {
+        uiReady = false;
+        hasSelectedGame = false;
+
+        if (uiDocument == null)
+        {
+            return;
+        }
+
+        root = uiDocument.rootVisualElement;
+        if (root == null)
+        {
+            return;
+        }
+
+        root.Clear();
+        if (layoutAsset == null)
+        {
+            Debug.LogWarning("MainMenuUITKView: Missing layout resource.");
+            return;
+        }
+
+        layoutAsset.CloneTree(root);
+
+        if (styleAsset != null)
+        {
+            root.styleSheets.Add(styleAsset);
+        }
+
+        CacheElements();
+        BindButtons();
+
+        SetVisible(mainPanel, true);
+        SetVisible(multiplayerPanel, false);
+        SetVisible(detailsPanel, false);
+        SetStatus(string.Empty);
+
+        ApplySafeArea(force: true);
+        uiReady = true;
+    }
+
+    private void CacheElements()
+    {
+        mainPanel = root.Q<VisualElement>("MainPanel");
+        multiplayerPanel = root.Q<VisualElement>("MultiplayerPanel");
+        detailsPanel = root.Q<VisualElement>("DetailsPanel");
+        activeGamesList = root.Q<VisualElement>("ActiveGamesList");
+        detailsTitleLabel = root.Q<Label>("DetailsTitleLabel");
+        detailsSubtitleLabel = root.Q<Label>("DetailsSubtitleLabel");
+        statusLabel = root.Q<Label>("StatusLabel");
+
+        continueButton = root.Q<Button>("ContinueButton");
+        playVsAiButton = root.Q<Button>("PlayVsAIButton");
+        playHotseatButton = root.Q<Button>("PlayHotseatButton");
+        multiplayerButton = root.Q<Button>("MultiplayerButton");
+        quitButton = root.Q<Button>("QuitButton");
+        createButton = root.Q<Button>("CreateButton");
+        joinButton = root.Q<Button>("JoinButton");
+        multiplayerBackButton = root.Q<Button>("MultiplayerBackButton");
+        detailsOpenButton = root.Q<Button>("DetailsOpenButton");
+        detailsResignButton = root.Q<Button>("DetailsResignButton");
+        detailsCloseButton = root.Q<Button>("DetailsCloseButton");
+    }
+
+    private void BindButtons()
+    {
+        if (continueButton != null)
+        {
+            continueButton.clicked += HandleContinueClicked;
+        }
+
+        if (playVsAiButton != null)
+        {
+            playVsAiButton.clicked += HandlePlayVsAiClicked;
+        }
+
+        if (playHotseatButton != null)
+        {
+            playHotseatButton.clicked += HandlePlayHotseatClicked;
+        }
+
+        if (multiplayerButton != null)
+        {
+            multiplayerButton.clicked += HandleMultiplayerClicked;
+        }
+
+        if (quitButton != null)
+        {
+            quitButton.clicked += HandleQuitClicked;
+        }
+
+        if (createButton != null)
+        {
+            createButton.clicked += HandleCreateClicked;
+        }
+
+        if (joinButton != null)
+        {
+            joinButton.clicked += HandleJoinClicked;
+        }
+
+        if (multiplayerBackButton != null)
+        {
+            multiplayerBackButton.clicked += HandleMultiplayerBackClicked;
+        }
+
+        if (detailsOpenButton != null)
+        {
+            detailsOpenButton.clicked += HandleDetailsOpenClicked;
+        }
+
+        if (detailsResignButton != null)
+        {
+            detailsResignButton.clicked += HandleDetailsResignClicked;
+        }
+
+        if (detailsCloseButton != null)
+        {
+            detailsCloseButton.clicked += HandleDetailsCloseClicked;
+        }
+    }
+
+    private void SubscribeMainMenuEvents()
+    {
+        if (subscribedToMenuEvents || mainMenuController == null)
+        {
+            return;
+        }
+
+        mainMenuController.ActivePbpGamesChanged += RefreshGamesList;
+        subscribedToMenuEvents = true;
+    }
+
+    private void UnsubscribeMainMenuEvents()
+    {
+        if (!subscribedToMenuEvents || mainMenuController == null)
+        {
+            subscribedToMenuEvents = false;
+            return;
+        }
+
+        mainMenuController.ActivePbpGamesChanged -= RefreshGamesList;
+        subscribedToMenuEvents = false;
+    }
+
+    private void HandleContinueClicked()
+    {
+        if (mainMenuController != null)
+        {
+            mainMenuController.ContinueLastSave();
+        }
+    }
+
+    private void HandlePlayVsAiClicked()
+    {
+        if (mainMenuController != null)
+        {
+            mainMenuController.PlayVsAI();
+        }
+    }
+
+    private void HandlePlayHotseatClicked()
+    {
+        if (mainMenuController != null)
+        {
+            mainMenuController.PlayHotseat();
+        }
+    }
+
+    private void HandleMultiplayerClicked()
+    {
+        if (mainMenuController != null)
+        {
+            mainMenuController.OpenMultiplayerScreen();
+        }
+
+        SetStatus(string.Empty);
+        ShowMultiplayerPanel();
+        RefreshGamesList();
+    }
+
+    private void HandleQuitClicked()
+    {
+        if (mainMenuController != null)
+        {
+            mainMenuController.QuitGame();
+        }
+    }
+
+    private void HandleCreateClicked()
+    {
+        if (mainMenuController != null)
+        {
+            mainMenuController.Multiplayer_CreateGame();
+        }
+    }
+
+    private void HandleJoinClicked()
+    {
+        if (mainMenuController != null)
+        {
+            mainMenuController.Multiplayer_JoinGame();
+        }
+
+        SetStatus("Join action invoked (legacy join flow).");
+    }
+
+    private void HandleMultiplayerBackClicked()
+    {
+        if (mainMenuController != null)
+        {
+            mainMenuController.CloseMultiplayerScreen();
+        }
+
+        HideDetailsPanel();
+        SetStatus(string.Empty);
+        ShowMainPanel();
+    }
+
+    private void HandleDetailsOpenClicked()
+    {
+        if (mainMenuController != null && hasSelectedGame)
+        {
+            mainMenuController.GameDetails_Open();
+        }
+    }
+
+    private void HandleDetailsResignClicked()
+    {
+        if (mainMenuController != null && hasSelectedGame)
+        {
+            mainMenuController.GameDetails_ResignLocal();
+            HideDetailsPanel();
+            RefreshGamesList();
+        }
+    }
+
+    private void HandleDetailsCloseClicked()
+    {
+        if (mainMenuController != null)
+        {
+            mainMenuController.CloseGameDetailsPopup();
+        }
+
+        HideDetailsPanel();
+    }
+
+    private void RefreshGamesList()
+    {
+        if (!enableUITK || activeGamesList == null)
+        {
+            return;
+        }
+
+        activeGamesList.Clear();
+
+        if (mainMenuController == null)
+        {
+            AddInfoRow("MainMenuController not found.");
+            return;
+        }
+
+        IReadOnlyList<SaveManifestService.ManifestGameSummary> games = mainMenuController.ActivePbpGames;
+        if (games == null || games.Count == 0)
+        {
+            AddInfoRow("No active games");
+            return;
+        }
+
+        for (int i = 0; i < games.Count; i++)
+        {
+            SaveManifestService.ManifestGameSummary summary = games[i];
+            Button rowButton = new Button();
+            rowButton.AddToClassList("game-row-button");
+            rowButton.text = BuildGameRowText(summary);
+            rowButton.clicked += () => HandleGameRowClicked(summary);
+            activeGamesList.Add(rowButton);
+        }
+    }
+
+    private void HandleGameRowClicked(SaveManifestService.ManifestGameSummary summary)
+    {
+        hasSelectedGame = true;
+
+        if (mainMenuController != null)
+        {
+            mainMenuController.OpenSelectedGameDetails(summary);
+        }
+
+        if (detailsTitleLabel != null)
+        {
+            detailsTitleLabel.text = BuildGameTitle(summary.gameId);
+        }
+
+        if (detailsSubtitleLabel != null)
+        {
+            detailsSubtitleLabel.text = MainMenuController.BuildPlayByPostTurnSubtitle(summary);
+        }
+
+        SetVisible(detailsPanel, true);
+    }
+
+    private static string BuildGameTitle(string gameId)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            return "Game Unknown";
+        }
+
+        string shortId = gameId.Length <= 8 ? gameId : gameId.Substring(0, 8);
+        return "Game " + shortId;
+    }
+
+    private static string BuildGameRowText(SaveManifestService.ManifestGameSummary summary)
+    {
+        string subtitle = MainMenuController.BuildPlayByPostTurnSubtitle(summary);
+        return BuildGameTitle(summary.gameId) + " - " + subtitle;
+    }
+
+    private void AddInfoRow(string text)
+    {
+        Label row = new Label(text);
+        row.AddToClassList("status");
+        activeGamesList.Add(row);
+    }
+
+    private void ShowMainPanel()
+    {
+        SetVisible(mainPanel, true);
+        SetVisible(multiplayerPanel, false);
+    }
+
+    private void ShowMultiplayerPanel()
+    {
+        SetVisible(mainPanel, false);
+        SetVisible(multiplayerPanel, true);
+    }
+
+    private void HideDetailsPanel()
+    {
+        hasSelectedGame = false;
+        SetVisible(detailsPanel, false);
+    }
+
+    private static void SetVisible(VisualElement element, bool visible)
+    {
+        if (element == null)
+        {
+            return;
+        }
+
+        element.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
+    }
+
+    private void SetStatus(string message)
+    {
+        if (statusLabel != null)
+        {
+            statusLabel.text = message ?? string.Empty;
+        }
+    }
+
+    private void ApplySafeArea(bool force)
+    {
+        if (root == null)
+        {
+            return;
+        }
+
+        Vector2Int screenSize = new Vector2Int(Screen.width, Screen.height);
+        Rect safeArea = Screen.safeArea;
+        if (screenSize.x <= 0 || screenSize.y <= 0)
+        {
+            return;
+        }
+
+        if (!force && safeArea == lastSafeArea && screenSize == lastScreenSize)
+        {
+            return;
+        }
+
+        lastSafeArea = safeArea;
+        lastScreenSize = screenSize;
+
+        float left = safeArea.xMin;
+        float right = Mathf.Max(0f, screenSize.x - safeArea.xMax);
+        float bottom = safeArea.yMin;
+        float top = Mathf.Max(0f, screenSize.y - safeArea.yMax);
+
+        root.style.paddingLeft = left;
+        root.style.paddingRight = right;
+        root.style.paddingBottom = bottom;
+        root.style.paddingTop = top;
+    }
+}

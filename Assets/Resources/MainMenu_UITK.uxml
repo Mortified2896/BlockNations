@@ -1,0 +1,36 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:VisualElement name="MainMenuRoot" class="root">
+        <ui:VisualElement name="MainPanel" class="panel">
+            <ui:Label name="TitleLabel" text="Block Nations" class="title" />
+            <ui:Button name="ContinueButton" text="Continue" class="menu-button" />
+            <ui:Button name="PlayVsAIButton" text="Play vs AI" class="menu-button" />
+            <ui:Button name="PlayHotseatButton" text="Play Hotseat" class="menu-button" />
+            <ui:Button name="MultiplayerButton" text="Multiplayer" class="menu-button" />
+            <ui:Button name="QuitButton" text="Quit" class="menu-button" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="MultiplayerPanel" class="panel">
+            <ui:Label text="Multiplayer" class="subtitle" />
+            <ui:VisualElement class="button-row">
+                <ui:Button name="CreateButton" text="Create" class="menu-button small" />
+                <ui:Button name="JoinButton" text="Join" class="menu-button small" />
+                <ui:Button name="MultiplayerBackButton" text="Back" class="menu-button small" />
+            </ui:VisualElement>
+
+            <ui:Label text="Active games" class="list-heading" />
+            <ui:ScrollView name="ActiveGamesList" class="games-list" />
+
+            <ui:VisualElement name="DetailsPanel" class="details-panel">
+                <ui:Label name="DetailsTitleLabel" text="Game Details" class="details-title" />
+                <ui:Label name="DetailsSubtitleLabel" text="" class="details-subtitle" />
+                <ui:VisualElement class="button-row">
+                    <ui:Button name="DetailsOpenButton" text="Open" class="menu-button small" />
+                    <ui:Button name="DetailsResignButton" text="Resign" class="menu-button small danger" />
+                    <ui:Button name="DetailsCloseButton" text="Close" class="menu-button small" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <ui:Label name="StatusLabel" text="" class="status" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>
