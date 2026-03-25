@@ -83,6 +83,8 @@ public class MainMenuController : MonoBehaviour
 
     IEnumerator Start()
     {
+        LocalPlayerProfileStore.GetOrCreateProfile();
+
         bool returnToMultiplayerPane = ConsumeReturnToMultiplayerPaneFlag();
 
         if (joinGameIdInput != null && IsPlaceholderGameId(joinGameIdInput.text))

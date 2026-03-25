@@ -8,6 +8,9 @@ public class MainMenuUITKView : MonoBehaviour
     private const string ThemeResourceName = "MainMenu_UITK_Theme";
     private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
     private const string LegacySharedSaveFileName = "save.json";
+    private const int VisiblePlayerIdPrefixLength = 8;
+    private const int VisiblePlayerIdSuffixLength = 5;
+    private const int ProfileStatusHideDelayMs = 1800;
     private const int InvalidPointerId = -1;
     private const float NonOverflowListDragLimit = 352f;
     private const float NonOverflowListDragDamping = 0.35f;
@@ -27,6 +30,7 @@ public class MainMenuUITKView : MonoBehaviour
     private VisualElement root;
     private VisualElement mainPanel;
     private VisualElement multiplayerPanel;
+    private VisualElement profilePanel;
     private VisualElement detailsPanel;
     private VisualElement joinPanel;
     private ScrollView activeGamesList;
@@ -36,11 +40,15 @@ public class MainMenuUITKView : MonoBehaviour
     private Label statusLabel;
     private Label versionLabel;
     private Label multiplayerVersionLabel;
+    private Label profileUsernameValueLabel;
+    private Label profilePlayerIdValueLabel;
+    private Label profileStatusLabel;
 
     private Button continueButton;
     private Button playVsAiButton;
     private Button playHotseatButton;
     private Button multiplayerButton;
+    private Button profileButton;
     private Button quitButton;
     private Button createButton;
     private Button joinButton;
@@ -51,6 +59,9 @@ public class MainMenuUITKView : MonoBehaviour
     private TextField joinGameIdInput;
     private Button joinConfirmButton;
     private Button joinCancelButton;
+    private Button profileRegenerateButton;
+    private Button profileCopyPlayerIdButton;
+    private Button profileBackButton;
 
     private bool subscribedToMenuEvents;
     private bool uiReady;
@@ -63,7 +74,9 @@ public class MainMenuUITKView : MonoBehaviour
     private Rect lastSafeArea = Rect.zero;
     private Vector2Int lastScreenSize = Vector2Int.zero;
     private IVisualElementScheduledItem activeGamesElasticResetItem;
+    private IVisualElementScheduledItem profileStatusClearItem;
     private IVisualElementScheduledItem viewInitializationItem;
+    private LocalPlayerProfileStore.ProfileData profileData;
 
     private void Awake()
     {
@@ -90,6 +103,7 @@ public class MainMenuUITKView : MonoBehaviour
     private void OnDisable()
     {
         StopViewInitialization();
+        StopProfileStatusClearTimer();
         UnsubscribeMainMenuEvents();
         UnbindButtons();
         UnregisterActiveGamesListCallbacks();
@@ -228,18 +242,26 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         CacheElements();
-        if (mainPanel == null || multiplayerPanel == null || detailsPanel == null || activeGamesList == null)
+        if (mainPanel == null
+            || multiplayerPanel == null
+            || profilePanel == null
+            || detailsPanel == null
+            || activeGamesList == null)
         {
             return false;
         }
 
+        profileData = LocalPlayerProfileStore.GetOrCreateProfile();
         ConfigureActiveGamesList();
         RefreshVersionLabel();
         BindButtons();
         RefreshContinueButtonVisibility();
+        RefreshProfileLabels();
+        ClearProfileStatus();
 
         SetVisible(mainPanel, true);
         SetVisible(multiplayerPanel, false);
+        SetVisible(profilePanel, false);
         SetVisible(detailsPanel, false);
         SetStatus(mainMenuController != null ? mainMenuController.CurrentImportStatus : string.Empty);
 
@@ -259,6 +281,7 @@ public class MainMenuUITKView : MonoBehaviour
     {
         mainPanel = root.Q<VisualElement>("MainPanel");
         multiplayerPanel = root.Q<VisualElement>("MultiplayerPanel");
+        profilePanel = root.Q<VisualElement>("ProfilePanel");
         detailsPanel = root.Q<VisualElement>("DetailsPanel");
         joinPanel = root.Q<VisualElement>("JoinPanel");
         activeGamesList = root.Q<ScrollView>("ActiveGamesList");
@@ -268,11 +291,15 @@ public class MainMenuUITKView : MonoBehaviour
         statusLabel = root.Q<Label>("StatusLabel");
         versionLabel = root.Q<Label>("VersionLabel");
         multiplayerVersionLabel = root.Q<Label>("MultiplayerVersionLabel");
+        profileUsernameValueLabel = root.Q<Label>("ProfileUsernameValueLabel");
+        profilePlayerIdValueLabel = root.Q<Label>("ProfilePlayerIdValueLabel");
+        profileStatusLabel = root.Q<Label>("ProfileStatusLabel");
 
         continueButton = root.Q<Button>("ContinueButton");
         playVsAiButton = root.Q<Button>("PlayVsAIButton");
         playHotseatButton = root.Q<Button>("PlayHotseatButton");
         multiplayerButton = root.Q<Button>("MultiplayerButton");
+        profileButton = root.Q<Button>("ProfileButton");
         quitButton = root.Q<Button>("QuitButton");
         createButton = root.Q<Button>("CreateButton");
         joinButton = root.Q<Button>("JoinButton");
@@ -283,6 +310,9 @@ public class MainMenuUITKView : MonoBehaviour
         joinGameIdInput = root.Q<TextField>("JoinGameIdInput");
         joinConfirmButton = root.Q<Button>("JoinConfirmButton");
         joinCancelButton = root.Q<Button>("JoinCancelButton");
+        profileRegenerateButton = root.Q<Button>("ProfileRegenerateButton");
+        profileCopyPlayerIdButton = root.Q<Button>("ProfileCopyPlayerIdButton");
+        profileBackButton = root.Q<Button>("ProfileBackButton");
     }
 
     private void ConfigureActiveGamesList()
@@ -503,6 +533,11 @@ public class MainMenuUITKView : MonoBehaviour
             multiplayerButton.clicked += HandleMultiplayerClicked;
         }
 
+        if (profileButton != null)
+        {
+            profileButton.clicked += HandleProfileClicked;
+        }
+
         if (quitButton != null)
         {
             quitButton.clicked += HandleQuitClicked;
@@ -547,6 +582,21 @@ public class MainMenuUITKView : MonoBehaviour
         {
             joinCancelButton.clicked += HandleJoinCancelClicked;
         }
+
+        if (profileRegenerateButton != null)
+        {
+            profileRegenerateButton.clicked += HandleProfileRegenerateClicked;
+        }
+
+        if (profileCopyPlayerIdButton != null)
+        {
+            profileCopyPlayerIdButton.clicked += HandleProfileCopyPlayerIdClicked;
+        }
+
+        if (profileBackButton != null)
+        {
+            profileBackButton.clicked += HandleProfileBackClicked;
+        }
     }
 
     private void UnbindButtons()
@@ -569,6 +619,11 @@ public class MainMenuUITKView : MonoBehaviour
         if (multiplayerButton != null)
         {
             multiplayerButton.clicked -= HandleMultiplayerClicked;
+        }
+
+        if (profileButton != null)
+        {
+            profileButton.clicked -= HandleProfileClicked;
         }
 
         if (quitButton != null)
@@ -614,6 +669,21 @@ public class MainMenuUITKView : MonoBehaviour
         if (joinCancelButton != null)
         {
             joinCancelButton.clicked -= HandleJoinCancelClicked;
+        }
+
+        if (profileRegenerateButton != null)
+        {
+            profileRegenerateButton.clicked -= HandleProfileRegenerateClicked;
+        }
+
+        if (profileCopyPlayerIdButton != null)
+        {
+            profileCopyPlayerIdButton.clicked -= HandleProfileCopyPlayerIdClicked;
+        }
+
+        if (profileBackButton != null)
+        {
+            profileBackButton.clicked -= HandleProfileBackClicked;
         }
     }
 
@@ -679,6 +749,11 @@ public class MainMenuUITKView : MonoBehaviour
         SetStatus(mainMenuController != null ? mainMenuController.CurrentImportStatus : string.Empty);
     }
 
+    private void HandleProfileClicked()
+    {
+        ShowProfilePanel();
+    }
+
     private void HandleQuitClicked()
     {
         if (mainMenuController != null)
@@ -728,6 +803,29 @@ public class MainMenuUITKView : MonoBehaviour
         {
             mainMenuController.RefreshMultiplayerList();
         }
+    }
+
+    private void HandleProfileRegenerateClicked()
+    {
+        profileData = LocalPlayerProfileStore.RegenerateUsername();
+        RefreshProfileLabels();
+        ClearProfileStatus();
+    }
+
+    private void HandleProfileCopyPlayerIdClicked()
+    {
+        if (ClipboardUtility.TryCopy(profileData.PlayerId))
+        {
+            ShowTransientProfileStatus("Copied!");
+            return;
+        }
+
+        ShowTransientProfileStatus("Copy failed.");
+    }
+
+    private void HandleProfileBackClicked()
+    {
+        ShowMainPanel();
     }
 
     private void HandleMultiplayerBackClicked()
@@ -916,8 +1014,11 @@ public class MainMenuUITKView : MonoBehaviour
     {
         ResetActiveGamesElasticOffset();
         HideJoinPanel();
+        HideDetailsPanel();
+        ClearProfileStatus();
         SetVisible(mainPanel, true);
         SetVisible(multiplayerPanel, false);
+        SetVisible(profilePanel, false);
 
         if (versionLabel != null)
         {
@@ -934,8 +1035,10 @@ public class MainMenuUITKView : MonoBehaviour
     {
         ResetActiveGamesElasticOffset();
         HideJoinPanel();
+        ClearProfileStatus();
         SetVisible(mainPanel, false);
         SetVisible(multiplayerPanel, true);
+        SetVisible(profilePanel, false);
 
         if (versionLabel != null)
         {
@@ -952,6 +1055,28 @@ public class MainMenuUITKView : MonoBehaviour
     {
         hasSelectedGame = false;
         SetVisible(detailsPanel, false);
+    }
+
+    private void ShowProfilePanel()
+    {
+        profileData = LocalPlayerProfileStore.GetOrCreateProfile();
+        RefreshProfileLabels();
+        ClearProfileStatus();
+        HideJoinPanel();
+        HideDetailsPanel();
+        SetVisible(mainPanel, false);
+        SetVisible(multiplayerPanel, false);
+        SetVisible(profilePanel, true);
+
+        if (versionLabel != null)
+        {
+            versionLabel.style.display = DisplayStyle.None;
+        }
+
+        if (multiplayerVersionLabel != null)
+        {
+            multiplayerVersionLabel.style.display = DisplayStyle.None;
+        }
     }
 
     private void ShowJoinPanel()
@@ -990,6 +1115,79 @@ public class MainMenuUITKView : MonoBehaviour
             statusLabel.text = statusText;
             statusLabel.style.display = string.IsNullOrWhiteSpace(statusText) ? DisplayStyle.None : DisplayStyle.Flex;
         }
+    }
+
+    private void RefreshProfileLabels()
+    {
+        if (profileUsernameValueLabel != null)
+        {
+            profileUsernameValueLabel.text = profileData.Username ?? string.Empty;
+        }
+
+        if (profilePlayerIdValueLabel != null)
+        {
+            profilePlayerIdValueLabel.text = BuildVisiblePlayerId(profileData.PlayerId);
+        }
+    }
+
+    private void SetProfileStatus(string message)
+    {
+        if (profileStatusLabel == null)
+        {
+            return;
+        }
+
+        string statusText = message ?? string.Empty;
+        profileStatusLabel.text = statusText;
+        profileStatusLabel.style.display = string.IsNullOrWhiteSpace(statusText) ? DisplayStyle.None : DisplayStyle.Flex;
+    }
+
+    private void ShowTransientProfileStatus(string message)
+    {
+        SetProfileStatus(message);
+        StopProfileStatusClearTimer();
+
+        if (profilePanel == null || string.IsNullOrWhiteSpace(message))
+        {
+            return;
+        }
+
+        profileStatusClearItem = profilePanel.schedule.Execute(ClearProfileStatus).StartingIn(ProfileStatusHideDelayMs);
+    }
+
+    private void ClearProfileStatus()
+    {
+        StopProfileStatusClearTimer();
+        SetProfileStatus(string.Empty);
+    }
+
+    private void StopProfileStatusClearTimer()
+    {
+        if (profileStatusClearItem == null)
+        {
+            return;
+        }
+
+        profileStatusClearItem.Pause();
+        profileStatusClearItem = null;
+    }
+
+    private static string BuildVisiblePlayerId(string playerId)
+    {
+        if (string.IsNullOrWhiteSpace(playerId))
+        {
+            return string.Empty;
+        }
+
+        int minimumLengthForTruncation = VisiblePlayerIdPrefixLength + VisiblePlayerIdSuffixLength + 3;
+        if (playerId.Length <= minimumLengthForTruncation)
+        {
+            return playerId;
+        }
+
+        string prefix = playerId.Substring(0, VisiblePlayerIdPrefixLength);
+        string suffix = playerId.Substring(playerId.Length - VisiblePlayerIdSuffixLength, VisiblePlayerIdSuffixLength);
+        return $"{prefix}...{suffix}";
     }
 
     private void RefreshVersionLabel()
@@ -1091,6 +1289,7 @@ public class MainMenuUITKView : MonoBehaviour
         root = null;
         mainPanel = null;
         multiplayerPanel = null;
+        profilePanel = null;
         detailsPanel = null;
         joinPanel = null;
         activeGamesList = null;
@@ -1100,10 +1299,14 @@ public class MainMenuUITKView : MonoBehaviour
         statusLabel = null;
         versionLabel = null;
         multiplayerVersionLabel = null;
+        profileUsernameValueLabel = null;
+        profilePlayerIdValueLabel = null;
+        profileStatusLabel = null;
         continueButton = null;
         playVsAiButton = null;
         playHotseatButton = null;
         multiplayerButton = null;
+        profileButton = null;
         quitButton = null;
         createButton = null;
         joinButton = null;
@@ -1114,5 +1317,8 @@ public class MainMenuUITKView : MonoBehaviour
         joinGameIdInput = null;
         joinConfirmButton = null;
         joinCancelButton = null;
+        profileRegenerateButton = null;
+        profileCopyPlayerIdButton = null;
+        profileBackButton = null;
     }
 }
