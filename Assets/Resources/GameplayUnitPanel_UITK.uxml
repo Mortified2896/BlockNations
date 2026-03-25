@@ -1,0 +1,28 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
+    <Style src="project://database/Assets/Resources/GameplayUnitPanel_UITK.uss?fileID=7433441132597879392&amp;guid=2ca3e2acd15a4bc6bc6ef7e8f2712d76&amp;type=3#GameplayUnitPanel_UITK" />
+    <ui:VisualElement name="UnitPanelHudRoot" class="gameplay-unit-hud-root" picking-mode="Ignore">
+        <ui:VisualElement name="UnitPanelContainer" class="gameplay-unit-panel" picking-mode="Ignore">
+            <ui:VisualElement name="UnitHeaderRow" class="gameplay-unit-header-row" picking-mode="Ignore">
+                <ui:VisualElement name="UnitInfoColumn" class="gameplay-unit-info-column" picking-mode="Ignore">
+                    <ui:Label name="UnitNameLabel" text="Unit" class="gameplay-unit-name" picking-mode="Ignore" />
+                </ui:VisualElement>
+                <ui:Button name="UnitCloseButton" text="X" class="gameplay-unit-close-button" />
+            </ui:VisualElement>
+            <ui:VisualElement name="UnitStatsRow" class="gameplay-unit-stats-row" picking-mode="Ignore">
+                <ui:VisualElement name="UnitStatsCard" class="gameplay-unit-stats-card" picking-mode="Ignore">
+                    <ui:VisualElement name="UnitHealthCard" class="gameplay-unit-stat-section" picking-mode="Ignore">
+                        <ui:Label name="UnitHealthLabel" text="HP: 0/0" class="gameplay-unit-stat" picking-mode="Ignore" />
+                    </ui:VisualElement>
+                    <ui:VisualElement name="UnitHealthDivider" class="gameplay-unit-stat-divider" picking-mode="Ignore" />
+                    <ui:VisualElement name="UnitAttackCard" class="gameplay-unit-stat-section" picking-mode="Ignore">
+                        <ui:Label name="UnitAttackLabel" text="ATK: 0" class="gameplay-unit-stat" picking-mode="Ignore" />
+                    </ui:VisualElement>
+                    <ui:VisualElement name="UnitAttackDivider" class="gameplay-unit-stat-divider" picking-mode="Ignore" />
+                    <ui:VisualElement name="UnitDefenseCard" class="gameplay-unit-stat-section" picking-mode="Ignore">
+                        <ui:Label name="UnitDefenseLabel" text="DEF: 0" class="gameplay-unit-stat" picking-mode="Ignore" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

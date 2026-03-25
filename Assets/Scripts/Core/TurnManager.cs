@@ -2271,8 +2271,7 @@ public class TurnManager : MonoBehaviour
         }
 
         if (UnitUIManager.Instance != null &&
-            UnitUIManager.Instance.panelRoot != null &&
-            UnitUIManager.Instance.panelRoot.activeInHierarchy)
+            UnitUIManager.Instance.IsPanelOpen)
         {
             return true;
         }

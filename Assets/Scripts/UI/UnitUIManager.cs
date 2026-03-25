@@ -102,7 +102,8 @@ public class UnitUIManager : MonoBehaviour
         }
     }
 
-    public bool IsPanelOpen => panelRoot != null && panelRoot.activeSelf;
+    public bool IsPanelOpen => currentUnit != null;
+    public Unit CurrentUnit => currentUnit;
 
     private static BottomStripController GetBottomStripController()
     {

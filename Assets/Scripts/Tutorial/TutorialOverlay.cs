@@ -2447,9 +2447,9 @@ public class TutorialOverlay : MonoBehaviour
 
     private bool HasUnitPanelOpen()
     {
-        if (UnitUIManager.Instance == null || UnitUIManager.Instance.panelRoot == null)
+        if (UnitUIManager.Instance == null)
             return false;
-        return UnitUIManager.Instance.panelRoot.activeInHierarchy;
+        return UnitUIManager.Instance.IsPanelOpen;
     }
 
     private void UpdateGameplayHudButtonsVisibility()
