@@ -1,4 +1,5 @@
-<ui:UXML xmlns:ui="UnityEngine.UIElements">
+<ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
+    <Style src="project://database/Assets/Resources/MainMenu_UITK.uss?fileID=7433441132597879392&amp;guid=1f9fc51f9f9a74a6f9abfc538ceeb4da&amp;type=3#MainMenu_UITK" />
     <ui:VisualElement name="MainMenuRoot" class="root">
         <ui:VisualElement name="MainPanel" class="panel">
             <ui:Label name="TitleLabel" text="Block Nations" class="title" />
@@ -8,14 +9,14 @@
             <ui:Button name="MultiplayerButton" text="Multiplayer" class="menu-button" />
         </ui:VisualElement>
 
-        <ui:VisualElement name="MultiplayerPanel" class="multiplayer-pane">
+        <ui:VisualElement name="MultiplayerPanel" class="multiplayer-pane" style="display: none;">
             <ui:VisualElement class="multiplayer-header-row">
-                <ui:Label name="StatusLabel" text="" class="multiplayer-status" />
+                <ui:Label name="StatusLabel" text="" class="multiplayer-status" style="display: none;" />
                 <ui:Label name="MultiplayerVersionLabel" text="" class="multiplayer-version-label" />
             </ui:VisualElement>
             <ui:ScrollView name="ActiveGamesList" class="multiplayer-games-list" />
 
-            <ui:VisualElement name="DetailsPanel" class="multiplayer-details-overlay">
+            <ui:VisualElement name="DetailsPanel" class="multiplayer-details-overlay" style="display: none;">
                 <ui:VisualElement class="multiplayer-details-card">
                     <ui:VisualElement class="multiplayer-details-header">
                         <ui:Label name="DetailsTitleLabel" text="Game Details" class="multiplayer-details-title" />
@@ -25,6 +26,17 @@
                     <ui:VisualElement class="multiplayer-details-actions multiplayer-details-actions-bottom">
                         <ui:Button name="DetailsOpenButton" text="Open" class="menu-button multiplayer-details-button" />
                         <ui:Button name="DetailsCloseButton" text="Close" class="menu-button multiplayer-details-button" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <ui:VisualElement name="JoinPanel" class="multiplayer-join-overlay" style="display: none;">
+                <ui:VisualElement class="multiplayer-join-card">
+                    <ui:Label text="Join Game" class="multiplayer-join-title" />
+                    <ui:TextField name="JoinGameIdInput" label="Game ID" class="multiplayer-join-input" />
+                    <ui:VisualElement class="multiplayer-join-actions">
+                        <ui:Button name="JoinConfirmButton" text="Join" class="menu-button multiplayer-details-button" />
+                        <ui:Button name="JoinCancelButton" text="Cancel" class="menu-button multiplayer-details-button" />
                     </ui:VisualElement>
                 </ui:VisualElement>
             </ui:VisualElement>

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: GameplayTopHud_UITK_PanelSettings
   m_EditorClassIdentifier: UnityEngine.dll::UnityEngine.UIElements.PanelSettings
   themeUss: {fileID: 0}
-  m_DisableNoThemeWarning: 0
+  m_DisableNoThemeWarning: 1
   m_TargetTexture: {fileID: 0}
   m_RenderMode: 0
   m_ColliderUpdateMode: 0

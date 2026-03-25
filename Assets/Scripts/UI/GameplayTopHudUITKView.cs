@@ -1,29 +1,25 @@
 using System;
 using TMPro;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using UnityEngine.UIElements;
 
+[DisallowMultipleComponent]
+[RequireComponent(typeof(UIDocument))]
 public sealed class GameplayTopHudUITKView : MonoBehaviour
 {
-    private const string MainMenuSceneName = "MainMenu";
     private const string LegacyTopHudName = "Upper HUD";
-    private const string LayoutResourceName = "GameplayTopHud_UITK";
-    private const string StyleResourceName = "GameplayTopHud_UITK";
     private const string ThemeResourceName = "GameplayTopHud_UITK_Theme";
-    private const string PanelSettingsResourceName = "GameplayTopHud_UITK_PanelSettings";
-    private const int OverlaySortingOrder = 1000;
-
-    private static GameplayTopHudUITKView instance;
 
     [Header("Spike Toggle")]
     [SerializeField] private bool enableGameplayTopHudUITK = true;
 
+    [Header("Optional Source Overrides")]
+    [SerializeField] private TurnManager turnManager;
+    [SerializeField] private TMP_Text sourceStatusText;
+    [SerializeField] private RectTransform legacyUpperHudRoot;
+
     private UIDocument uiDocument;
-    private PanelSettings panelSettings;
-    private VisualTreeAsset layoutAsset;
-    private StyleSheet styleAsset;
     private ThemeStyleSheet themeAsset;
 
     private VisualElement root;
@@ -32,13 +28,12 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
     private Label goldLabel;
     private Label statusLabel;
     private bool uiReady;
-    private bool overlayAttachedOnce;
+    private bool warnedMissingPanelSettings;
+    private bool warnedMissingLabels;
 
-    private TurnManager turnManager;
     private TMP_Text sourceTurnText;
     private TMP_Text sourceGoldText;
-    private TMP_Text sourceStatusText;
-    private RectTransform legacyUpperHudRoot;
+
     private CanvasGroup legacyUpperHudCanvasGroup;
     private bool cachedLegacyCanvasGroupState;
     private float cachedLegacyAlpha = 1f;
@@ -48,75 +43,54 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
     private Rect lastSafeArea = Rect.zero;
     private Vector2Int lastScreenSize = Vector2Int.zero;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-    private float nextOverlayDebugLogTime = -1f;
-#endif
-
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    private static void Bootstrap()
-    {
-        if (instance != null)
-        {
-            return;
-        }
-
-        GameObject go = new GameObject("GameplayTopHudUITKView");
-        DontDestroyOnLoad(go);
-        go.AddComponent<GameplayTopHudUITKView>();
-    }
 
     private void Awake()
     {
-        if (instance != null && instance != this)
+        uiDocument = GetComponent<UIDocument>();
+        if (themeAsset == null)
         {
-            Destroy(gameObject);
-            return;
+            themeAsset = Resources.Load<ThemeStyleSheet>(ThemeResourceName);
         }
-
-        instance = this;
-        DontDestroyOnLoad(gameObject);
-        LoadResources();
     }
 
     private void OnEnable()
     {
-        SceneManager.sceneLoaded += OnSceneLoaded;
-        ClearSceneBindings();
+        ResolveSceneReferences(force: true);
+        CacheUiElements(force: true);
     }
 
     private void OnDisable()
     {
-        SceneManager.sceneLoaded -= OnSceneLoaded;
-        DisableOverlay();
+        RestoreLegacyUpperHud();
+        ClearUiCache();
     }
 
     private void OnDestroy()
     {
-        if (instance == this)
-        {
-            instance = null;
-        }
-
         RestoreLegacyUpperHud();
     }
 
     private void Update()
     {
-        LoadResources();
-
         if (!enableGameplayTopHudUITK)
         {
             DisableOverlay();
             return;
         }
 
-        if (!TryBindGameplayScene())
+        if (!ResolveSceneReferences(force: false))
         {
             DisableOverlay();
             return;
         }
 
-        if (!EnsureOverlayReady())
+        if (!ShouldShowForMode(turnManager.currentMode))
+        {
+            DisableOverlay();
+            return;
+        }
+
+        if (!EnsureUiReady())
         {
             RestoreLegacyUpperHud();
             return;
@@ -124,52 +98,17 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
         RefreshLabels();
         ApplySafeArea(force: false);
-
-        if (IsOverlayAttached())
-        {
-            overlayAttachedOnce = true;
-            HideLegacyUpperHud();
-        }
-        else
-        {
-            RestoreLegacyUpperHud();
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            LogOverlayState("panel_not_attached");
-#endif
-        }
+        HideLegacyUpperHud();
     }
 
-    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    private bool ResolveSceneReferences(bool force)
     {
-        ClearSceneBindings();
-    }
-
-    private void LoadResources()
-    {
-        if (panelSettings == null)
+        if (uiDocument == null)
         {
-            panelSettings = Resources.Load<PanelSettings>(PanelSettingsResourceName);
+            uiDocument = GetComponent<UIDocument>();
         }
 
-        if (layoutAsset == null)
-        {
-            layoutAsset = Resources.Load<VisualTreeAsset>(LayoutResourceName);
-        }
-
-        if (styleAsset == null)
-        {
-            styleAsset = Resources.Load<StyleSheet>(StyleResourceName);
-        }
-
-        if (themeAsset == null)
-        {
-            themeAsset = Resources.Load<ThemeStyleSheet>(ThemeResourceName);
-        }
-    }
-
-    private bool TryBindGameplayScene()
-    {
-        if (turnManager == null || !IsGameplayScene(turnManager.gameObject.scene))
+        if (turnManager == null || force)
         {
             turnManager = TurnManager.Instance;
             if (turnManager == null)
@@ -178,106 +117,102 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             }
         }
 
-        if (turnManager == null || !IsGameplayScene(turnManager.gameObject.scene))
-        {
-            return false;
-        }
-
-        if (!ShouldShowForMode(turnManager.currentMode))
+        if (turnManager == null)
         {
             return false;
         }
 
         sourceTurnText = turnManager.turnText;
         sourceGoldText = turnManager.goldText;
-        legacyUpperHudRoot = ResolveLegacyUpperHudRoot(turnManager.gameObject.scene);
-        sourceStatusText = ResolvePbpStatusText();
-        return sourceTurnText != null && sourceGoldText != null;
+        TryResolveFallbackSourceTexts(turnManager.gameObject.scene);
+
+        if (legacyUpperHudRoot == null || force)
+        {
+            legacyUpperHudRoot = ResolveLegacyUpperHudRoot(turnManager.gameObject.scene);
+        }
+
+        if (sourceStatusText == null || force)
+        {
+            sourceStatusText = ResolveStatusSourceText(turnManager.gameObject.scene);
+        }
+
+        return uiDocument != null && sourceTurnText != null && sourceGoldText != null;
+    }
+
+    private void TryResolveFallbackSourceTexts(UnityEngine.SceneManagement.Scene scene)
+    {
+        if (sourceTurnText != null && sourceGoldText != null)
+        {
+            return;
+        }
+
+        TMP_Text[] texts = UnityEngine.Object.FindObjectsByType<TMP_Text>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        for (int i = 0; i < texts.Length; i++)
+        {
+            TMP_Text text = texts[i];
+            if (text == null || text.gameObject.scene != scene)
+            {
+                continue;
+            }
+
+            string lowerName = text.name.ToLowerInvariant();
+
+            if (sourceTurnText == null && lowerName.Contains("turn"))
+            {
+                sourceTurnText = text;
+            }
+
+            if (sourceGoldText == null && lowerName.Contains("gold"))
+            {
+                sourceGoldText = text;
+            }
+
+            if (sourceTurnText != null && sourceGoldText != null)
+            {
+                return;
+            }
+        }
     }
 
     private static bool ShouldShowForMode(TurnManager.GameMode mode)
     {
-        return mode == TurnManager.GameMode.VsAI || mode == TurnManager.GameMode.PlayByPost;
+        return mode == TurnManager.GameMode.None ||
+               mode == TurnManager.GameMode.VsAI ||
+               mode == TurnManager.GameMode.PlayByPost;
     }
 
-    private bool IsGameplayScene(Scene scene)
+    private RectTransform ResolveLegacyUpperHudRoot(UnityEngine.SceneManagement.Scene scene)
     {
-        return scene.IsValid() &&
-               scene.isLoaded &&
-               !string.IsNullOrEmpty(scene.name) &&
-               !string.Equals(scene.name, MainMenuSceneName, StringComparison.Ordinal);
-    }
-
-    private RectTransform ResolveLegacyUpperHudRoot(Scene scene)
-    {
-        RectTransform byName = FindRectByNameInScene(LegacyTopHudName, scene);
-        if (byName != null)
+        if (sourceTurnText != null)
         {
-            return byName;
-        }
-
-        if (sourceTurnText == null)
-        {
-            return null;
-        }
-
-        Transform cursor = sourceTurnText.transform;
-        while (cursor != null)
-        {
-            if (string.Equals(cursor.name, LegacyTopHudName, StringComparison.Ordinal))
+            Transform cursor = sourceTurnText.transform;
+            while (cursor != null)
             {
-                return cursor as RectTransform;
+                if (string.Equals(cursor.name, LegacyTopHudName, StringComparison.Ordinal))
+                {
+                    return cursor as RectTransform;
+                }
+
+                cursor = cursor.parent;
             }
 
-            cursor = cursor.parent;
-        }
-
-        return sourceTurnText.transform.parent as RectTransform;
-    }
-
-    private TMP_Text ResolvePbpStatusText()
-    {
-        if (legacyUpperHudRoot == null)
-        {
-            return null;
-        }
-
-        TMP_Text[] texts = legacyUpperHudRoot.GetComponentsInChildren<TMP_Text>(true);
-        for (int i = 0; i < texts.Length; i++)
-        {
-            TMP_Text text = texts[i];
-            if (text == null)
+            RectTransform parentRect = sourceTurnText.transform.parent as RectTransform;
+            if (parentRect != null)
             {
-                continue;
-            }
-
-            string name = text.name.ToLowerInvariant();
-            if (name.Contains("pbp") || name.Contains("connection"))
-            {
-                return text;
+                return parentRect;
             }
         }
 
-        return null;
-    }
-
-    private static RectTransform FindRectByNameInScene(string objectName, Scene scene)
-    {
-        RectTransform[] rects = UnityEngine.Object.FindObjectsByType<RectTransform>(FindObjectsInactive.Include);
+        RectTransform[] rects = UnityEngine.Object.FindObjectsByType<RectTransform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         for (int i = 0; i < rects.Length; i++)
         {
             RectTransform rect = rects[i];
-            if (rect == null)
+            if (rect == null || rect.gameObject.scene != scene)
             {
                 continue;
             }
 
-            if (rect.gameObject.scene != scene)
-            {
-                continue;
-            }
-
-            if (string.Equals(rect.name, objectName, StringComparison.Ordinal))
+            if (string.Equals(rect.name, LegacyTopHudName, StringComparison.Ordinal))
             {
                 return rect;
             }
@@ -286,170 +221,126 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         return null;
     }
 
-    private bool TryResolveSceneDocument(Scene scene)
+    private TMP_Text ResolveStatusSourceText(UnityEngine.SceneManagement.Scene scene)
     {
-        if (uiDocument != null && uiDocument.gameObject.scene == scene)
+        PbpConnectionStatusView[] statusViews = UnityEngine.Object.FindObjectsByType<PbpConnectionStatusView>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        for (int i = 0; i < statusViews.Length; i++)
         {
-            return true;
-        }
-
-        uiDocument = null;
-
-        UIDocument[] docs = UnityEngine.Object.FindObjectsByType<UIDocument>(FindObjectsInactive.Include);
-        for (int i = 0; i < docs.Length; i++)
-        {
-            UIDocument candidate = docs[i];
-            if (candidate == null || candidate.gameObject.scene != scene)
+            PbpConnectionStatusView view = statusViews[i];
+            if (view == null || view.gameObject.scene != scene)
             {
                 continue;
             }
 
-            if (panelSettings != null && candidate.panelSettings == panelSettings)
+            TMP_Text textOnSameObject = view.GetComponent<TMP_Text>();
+            if (textOnSameObject != null)
             {
-                uiDocument = candidate;
-                break;
+                return textOnSameObject;
+            }
+
+            TMP_Text childText = view.GetComponentInChildren<TMP_Text>(true);
+            if (childText != null)
+            {
+                return childText;
             }
         }
 
-        if (uiDocument == null)
+        if (legacyUpperHudRoot != null)
         {
-            for (int i = 0; i < docs.Length; i++)
+            TMP_Text[] legacyTexts = legacyUpperHudRoot.GetComponentsInChildren<TMP_Text>(true);
+            for (int i = 0; i < legacyTexts.Length; i++)
             {
-                UIDocument candidate = docs[i];
-                if (candidate == null || candidate.gameObject.scene != scene)
+                TMP_Text text = legacyTexts[i];
+                if (text == null)
                 {
                     continue;
                 }
 
-                if (candidate.panelSettings == null || panelSettings == null)
+                string name = text.name.ToLowerInvariant();
+                if (name.Contains("pbp") || name.Contains("connection"))
                 {
-                    continue;
-                }
-
-                if (string.Equals(candidate.panelSettings.name, panelSettings.name, StringComparison.Ordinal))
-                {
-                    uiDocument = candidate;
-                    break;
+                    return text;
                 }
             }
         }
 
-        uiReady = false;
-        return uiDocument != null;
+        return null;
     }
 
-    private bool EnsureOverlayReady()
+    private bool EnsureUiReady()
     {
-        if (turnManager == null)
-        {
-            return false;
-        }
-
-        if (!TryResolveSceneDocument(turnManager.gameObject.scene))
-        {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            LogOverlayState("scene_uidocument_missing");
-#endif
-            return false;
-        }
-
         if (uiDocument == null)
         {
             return false;
-        }
-
-        if (uiDocument.panelSettings == null && panelSettings != null)
-        {
-            uiDocument.panelSettings = panelSettings;
-            uiReady = false;
-        }
-
-        if (uiDocument.panelSettings == null)
-        {
-            return false;
-        }
-
-        uiDocument.panelSettings.sortingOrder = OverlaySortingOrder;
-        uiDocument.sortingOrder = OverlaySortingOrder;
-
-        if (uiDocument.panelSettings.themeStyleSheet == null && themeAsset != null)
-        {
-            uiDocument.panelSettings.themeStyleSheet = themeAsset;
         }
 
         if (!uiDocument.enabled)
         {
             uiDocument.enabled = true;
             uiReady = false;
-            return false;
         }
 
-        root = uiDocument.rootVisualElement;
-        if (root == null)
+        if (uiDocument.panelSettings == null)
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            LogOverlayState("root_missing");
-#endif
+            if (!warnedMissingPanelSettings)
+            {
+                warnedMissingPanelSettings = true;
+                Debug.LogWarning("GameplayTopHudUITKView: UIDocument requires a PanelSettings asset assigned in scene.", this);
+            }
+
             return false;
         }
 
-        if (!IsOverlayAttached())
+        if (uiDocument.panelSettings.themeStyleSheet == null && themeAsset != null)
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            LogOverlayState("panel_missing");
-#endif
+            uiDocument.panelSettings.themeStyleSheet = themeAsset;
+        }
+
+        warnedMissingPanelSettings = false;
+        return CacheUiElements(force: false);
+    }
+
+    private bool CacheUiElements(bool force)
+    {
+        if (uiDocument == null)
+        {
             return false;
         }
 
-        if (uiReady)
+        VisualElement currentRoot = uiDocument.rootVisualElement;
+        if (currentRoot == null)
+        {
+            return false;
+        }
+
+        if (!force && uiReady && root == currentRoot)
         {
             return true;
         }
 
-        if (layoutAsset == null)
-        {
-            return false;
-        }
-
-        root.Clear();
-        layoutAsset.CloneTree(root);
-
-        if (styleAsset != null)
-        {
-            root.styleSheets.Remove(styleAsset);
-            root.styleSheets.Add(styleAsset);
-        }
-
-        SetNonInteractive(root);
-        hudRoot = root.Q<VisualElement>("GameplayTopHudRoot");
+        root = currentRoot;
+        hudRoot = root.Q<VisualElement>("GameplayTopHudRoot") ?? root;
         turnLabel = root.Q<Label>("TurnLabel");
         goldLabel = root.Q<Label>("GoldLabel");
         statusLabel = root.Q<Label>("PbpStatusLabel");
 
         if (turnLabel == null || goldLabel == null)
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            LogOverlayState("labels_missing");
-#endif
+            if (!warnedMissingLabels)
+            {
+                warnedMissingLabels = true;
+                Debug.LogWarning("GameplayTopHudUITKView: TurnLabel/GoldLabel not found in UIDocument source asset.", this);
+            }
+
+            uiReady = false;
             return false;
         }
 
-        if (hudRoot == null)
-        {
-            hudRoot = root;
-        }
-
+        warnedMissingLabels = false;
+        SetNonInteractive(root);
         ApplySafeArea(force: true);
         uiReady = true;
         return true;
-    }
-
-    private bool IsOverlayAttached()
-    {
-        return uiDocument != null &&
-               uiDocument.enabled &&
-               root != null &&
-               root.panel != null;
     }
 
     private static void SetNonInteractive(VisualElement element)
@@ -476,18 +367,18 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         turnLabel.text = sourceTurnText != null ? sourceTurnText.text : string.Empty;
         goldLabel.text = sourceGoldText != null ? sourceGoldText.text : string.Empty;
 
-        if (statusLabel != null)
+        if (statusLabel == null)
         {
-            bool showStatus = turnManager != null &&
-                              turnManager.currentMode == TurnManager.GameMode.PlayByPost &&
-                              sourceStatusText != null &&
-                              sourceStatusText.gameObject.activeInHierarchy &&
-                              sourceStatusText.enabled &&
-                              !string.IsNullOrWhiteSpace(sourceStatusText.text);
-
-            statusLabel.text = showStatus ? sourceStatusText.text : string.Empty;
-            statusLabel.style.display = showStatus ? DisplayStyle.Flex : DisplayStyle.None;
+            return;
         }
+
+        bool showStatus = sourceStatusText != null &&
+                          sourceStatusText.gameObject.activeInHierarchy &&
+                          sourceStatusText.enabled &&
+                          !string.IsNullOrWhiteSpace(sourceStatusText.text);
+
+        statusLabel.text = showStatus ? sourceStatusText.text : string.Empty;
+        statusLabel.style.display = showStatus ? DisplayStyle.Flex : DisplayStyle.None;
     }
 
     private void HideLegacyUpperHud()
@@ -558,7 +449,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         float rightInset = screenSize.x - safeArea.xMax;
         float topInset = screenSize.y - safeArea.yMax;
 
-        VisualElement safeAreaTarget = hudRoot != null ? hudRoot : root;
+        VisualElement safeAreaTarget = hudRoot ?? root;
         safeAreaTarget.style.paddingLeft = leftInset;
         safeAreaTarget.style.paddingRight = rightInset;
         safeAreaTarget.style.paddingTop = topInset;
@@ -574,57 +465,18 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             uiDocument.enabled = false;
         }
 
+        ClearUiCache();
+    }
+
+    private void ClearUiCache()
+    {
         root = null;
         hudRoot = null;
         turnLabel = null;
         goldLabel = null;
         statusLabel = null;
         uiReady = false;
-        overlayAttachedOnce = false;
-    }
-
-    private void ClearSceneBindings()
-    {
-        RestoreLegacyUpperHud();
-        turnManager = null;
-        sourceTurnText = null;
-        sourceGoldText = null;
-        sourceStatusText = null;
-        legacyUpperHudRoot = null;
-        legacyUpperHudCanvasGroup = null;
-        cachedLegacyCanvasGroupState = false;
         lastSafeArea = Rect.zero;
         lastScreenSize = Vector2Int.zero;
-        DisableOverlay();
-        uiDocument = null;
     }
-
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-    private void LogOverlayState(string reason)
-    {
-        if (Time.unscaledTime < nextOverlayDebugLogTime)
-        {
-            return;
-        }
-
-        nextOverlayDebugLogTime = Time.unscaledTime + 1f;
-
-        string panelName = panelSettings != null ? panelSettings.name : "<null>";
-        string hostName = uiDocument != null ? uiDocument.gameObject.name : "<null>";
-        string rootName = root != null ? root.name : "<null>";
-        string turnValue = turnLabel != null ? turnLabel.text : "<null>";
-        string goldValue = goldLabel != null ? goldLabel.text : "<null>";
-        string sourceTurnValue = sourceTurnText != null ? sourceTurnText.text : "<null>";
-        string sourceGoldValue = sourceGoldText != null ? sourceGoldText.text : "<null>";
-
-        Debug.Log(
-            $"[GameplayTopHudUITK] state reason={reason} " +
-            $"docEnabled={(uiDocument != null && uiDocument.enabled)} " +
-            $"runtimePanel={(uiDocument != null && uiDocument.runtimePanel != null)} " +
-            $"host={hostName} panelSettings={panelName} root={rootName} " +
-            $"uiReady={uiReady} overlayAttachedOnce={overlayAttachedOnce} " +
-            $"turnLabel={turnValue} goldLabel={goldValue} " +
-            $"sourceTurn={sourceTurnValue} sourceGold={sourceGoldValue}");
-    }
-#endif
 }

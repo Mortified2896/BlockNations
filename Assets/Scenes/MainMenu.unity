@@ -2264,7 +2264,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 708542552}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
   m_Name: 
@@ -7827,8 +7827,6 @@ MonoBehaviour:
   enableUITK: 1
   mainMenuController: {fileID: 1678659297}
   legacyCanvas: {fileID: 195326334}
-  layoutResourceName: MainMenu_UITK
-  styleResourceName: MainMenu_UITK
 --- !u!114 &2147001004
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7836,14 +7834,14 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2147001001}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.dll::UnityEngine.UIElements.UIDocument
   m_PanelSettings: {fileID: 11400000, guid: b5dfed67af7804e8ebf3173c8e7c3ad8, type: 2}
   m_ParentUI: {fileID: 0}
-  sourceAsset: {fileID: 0}
+  sourceAsset: {fileID: 9197481963319205126, guid: ceb70dfe6a98f4c88869946a1df54e09, type: 3}
   m_SortingOrder: 1000
   m_Position: 0
   m_WorldSpaceSizeMode: 1

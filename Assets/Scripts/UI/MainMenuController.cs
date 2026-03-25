@@ -413,22 +413,9 @@ public class MainMenuController : MonoBehaviour
 
     public void JoinPlayByPostFromInput()
     {
-        if (joinProbeInProgress)
-        {
-            SetImportStatus("Checking game compatibility...");
-            return;
-        }
-
-        if (!isServerOnline)
-        {
-            SetImportStatus("Server offline");
-            return;
-        }
-
         string gameId = joinGameIdInput != null ? joinGameIdInput.text : null;
-        if (!TryValidateJoinGameId(gameId, out string normalizedGameId, out string validationError))
+        if (!TryJoinPlayByPostInternal(gameId, out string normalizedGameId))
         {
-            SetImportStatus(validationError);
             return;
         }
 
@@ -436,11 +423,39 @@ public class MainMenuController : MonoBehaviour
         {
             joinGameIdInput.text = normalizedGameId;
         }
+    }
+
+    public bool TryJoinPlayByPost(string rawGameId)
+    {
+        return TryJoinPlayByPostInternal(rawGameId, out _);
+    }
+
+    private bool TryJoinPlayByPostInternal(string rawGameId, out string normalizedGameId)
+    {
+        normalizedGameId = null;
+
+        if (joinProbeInProgress)
+        {
+            SetImportStatus("Checking game compatibility...");
+            return false;
+        }
+
+        if (!isServerOnline)
+        {
+            SetImportStatus("Server offline");
+            return false;
+        }
+
+        if (!TryValidateJoinGameId(rawGameId, out normalizedGameId, out string validationError))
+        {
+            SetImportStatus(validationError);
+            return false;
+        }
 
         SetImportStatus("Checking game compatibility...");
         joinProbeInProgress = true;
         StartCoroutine(JoinPlayByPostAfterServerProbe(normalizedGameId));
-        return;
+        return true;
     }
 
     public void OpenMultiplayerScreen()

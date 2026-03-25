@@ -20,20 +20,15 @@ public class MainMenuUITKView : MonoBehaviour
     [SerializeField] private MainMenuController mainMenuController;
     [SerializeField] private Canvas legacyCanvas;
 
-    [Header("Resources")]
-    [SerializeField] private string layoutResourceName = "MainMenu_UITK";
-    [SerializeField] private string styleResourceName = "MainMenu_UITK";
-
     private UIDocument uiDocument;
     private CanvasGroup legacyCanvasGroup;
-    private VisualTreeAsset layoutAsset;
-    private StyleSheet styleAsset;
     private ThemeStyleSheet themeAsset;
 
     private VisualElement root;
     private VisualElement mainPanel;
     private VisualElement multiplayerPanel;
     private VisualElement detailsPanel;
+    private VisualElement joinPanel;
     private ScrollView activeGamesList;
     private Label detailsTitleLabel;
     private Label detailsSubtitleLabel;
@@ -52,6 +47,9 @@ public class MainMenuUITKView : MonoBehaviour
     private Button detailsOpenButton;
     private Button detailsResignButton;
     private Button detailsCloseButton;
+    private TextField joinGameIdInput;
+    private Button joinConfirmButton;
+    private Button joinCancelButton;
 
     private bool subscribedToMenuEvents;
     private bool uiReady;
@@ -64,12 +62,11 @@ public class MainMenuUITKView : MonoBehaviour
     private Rect lastSafeArea = Rect.zero;
     private Vector2Int lastScreenSize = Vector2Int.zero;
     private IVisualElementScheduledItem activeGamesElasticResetItem;
+    private IVisualElementScheduledItem viewInitializationItem;
 
     private void Awake()
     {
         ResolveReferences();
-        layoutAsset = Resources.Load<VisualTreeAsset>(layoutResourceName);
-        styleAsset = Resources.Load<StyleSheet>(styleResourceName);
         themeAsset = Resources.Load<ThemeStyleSheet>(ThemeResourceName);
         EnsurePanelSettingsWhenEnabled();
         ApplyUiMode();
@@ -86,15 +83,17 @@ public class MainMenuUITKView : MonoBehaviour
             return;
         }
 
-        BuildVisualTree();
-        SubscribeMainMenuEvents();
-        RefreshGamesList();
-        ShowMainPanel();
+        BeginViewInitialization();
     }
 
     private void OnDisable()
     {
+        StopViewInitialization();
         UnsubscribeMainMenuEvents();
+        UnbindButtons();
+        UnregisterActiveGamesListCallbacks();
+        ResetActiveGamesInteractionState();
+        ClearCachedElements();
     }
 
     private void Update()
@@ -168,37 +167,71 @@ public class MainMenuUITKView : MonoBehaviour
         }
     }
 
-    private void BuildVisualTree()
+    private void BeginViewInitialization()
+    {
+        StopViewInitialization();
+        if (TryInitializeView())
+        {
+            FinalizeViewInitialization();
+            return;
+        }
+
+        if (uiDocument == null || uiDocument.rootVisualElement == null)
+        {
+            return;
+        }
+
+        viewInitializationItem = uiDocument.rootVisualElement.schedule.Execute(() =>
+        {
+            if (!enableUITK)
+            {
+                StopViewInitialization();
+                return;
+            }
+
+            if (!TryInitializeView())
+            {
+                return;
+            }
+
+            StopViewInitialization();
+            FinalizeViewInitialization();
+        }).Every(16);
+    }
+
+    private void StopViewInitialization()
+    {
+        if (viewInitializationItem == null)
+        {
+            return;
+        }
+
+        viewInitializationItem.Pause();
+        viewInitializationItem = null;
+    }
+
+    private bool TryInitializeView()
     {
         uiReady = false;
         hasSelectedGame = false;
 
         if (uiDocument == null)
         {
-            return;
+            return false;
         }
 
         root = uiDocument.rootVisualElement;
         if (root == null)
         {
-            return;
-        }
-
-        root.Clear();
-        if (layoutAsset == null)
-        {
-            Debug.LogWarning("MainMenuUITKView: Missing layout resource.");
-            return;
-        }
-
-        layoutAsset.CloneTree(root);
-
-        if (styleAsset != null)
-        {
-            root.styleSheets.Add(styleAsset);
+            return false;
         }
 
         CacheElements();
+        if (mainPanel == null || multiplayerPanel == null || detailsPanel == null || activeGamesList == null)
+        {
+            return false;
+        }
+
         ConfigureActiveGamesList();
         RefreshVersionLabel();
         BindButtons();
@@ -211,6 +244,14 @@ public class MainMenuUITKView : MonoBehaviour
 
         ApplySafeArea(force: true);
         uiReady = true;
+        return true;
+    }
+
+    private void FinalizeViewInitialization()
+    {
+        SubscribeMainMenuEvents();
+        RefreshGamesList();
+        ShowMainPanel();
     }
 
     private void CacheElements()
@@ -218,6 +259,7 @@ public class MainMenuUITKView : MonoBehaviour
         mainPanel = root.Q<VisualElement>("MainPanel");
         multiplayerPanel = root.Q<VisualElement>("MultiplayerPanel");
         detailsPanel = root.Q<VisualElement>("DetailsPanel");
+        joinPanel = root.Q<VisualElement>("JoinPanel");
         activeGamesList = root.Q<ScrollView>("ActiveGamesList");
         detailsTitleLabel = root.Q<Label>("DetailsTitleLabel");
         detailsSubtitleLabel = root.Q<Label>("DetailsSubtitleLabel");
@@ -236,6 +278,9 @@ public class MainMenuUITKView : MonoBehaviour
         detailsOpenButton = root.Q<Button>("DetailsOpenButton");
         detailsResignButton = root.Q<Button>("DetailsResignButton");
         detailsCloseButton = root.Q<Button>("DetailsCloseButton");
+        joinGameIdInput = root.Q<TextField>("JoinGameIdInput");
+        joinConfirmButton = root.Q<Button>("JoinConfirmButton");
+        joinCancelButton = root.Q<Button>("JoinCancelButton");
     }
 
     private void ConfigureActiveGamesList()
@@ -245,6 +290,7 @@ public class MainMenuUITKView : MonoBehaviour
             return;
         }
 
+        UnregisterActiveGamesListCallbacks();
         activeGamesList.mode = ScrollViewMode.Vertical;
         activeGamesList.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
         activeGamesList.verticalScrollerVisibility = ScrollerVisibility.Auto;
@@ -255,6 +301,19 @@ public class MainMenuUITKView : MonoBehaviour
         activeGamesList.RegisterCallback<PointerUpEvent>(HandleActiveGamesPointerUp);
         activeGamesList.RegisterCallback<PointerCancelEvent>(HandleActiveGamesPointerCancel);
         ResetActiveGamesElasticOffset();
+    }
+
+    private void UnregisterActiveGamesListCallbacks()
+    {
+        if (activeGamesList == null)
+        {
+            return;
+        }
+
+        activeGamesList.UnregisterCallback<PointerDownEvent>(HandleActiveGamesPointerDown);
+        activeGamesList.UnregisterCallback<PointerMoveEvent>(HandleActiveGamesPointerMove);
+        activeGamesList.UnregisterCallback<PointerUpEvent>(HandleActiveGamesPointerUp);
+        activeGamesList.UnregisterCallback<PointerCancelEvent>(HandleActiveGamesPointerCancel);
     }
 
     private void HandleActiveGamesPointerDown(PointerDownEvent evt)
@@ -420,6 +479,8 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void BindButtons()
     {
+        UnbindButtons();
+
         if (continueButton != null)
         {
             continueButton.clicked += HandleContinueClicked;
@@ -473,6 +534,84 @@ public class MainMenuUITKView : MonoBehaviour
         if (detailsCloseButton != null)
         {
             detailsCloseButton.clicked += HandleDetailsCloseClicked;
+        }
+
+        if (joinConfirmButton != null)
+        {
+            joinConfirmButton.clicked += HandleJoinConfirmClicked;
+        }
+
+        if (joinCancelButton != null)
+        {
+            joinCancelButton.clicked += HandleJoinCancelClicked;
+        }
+    }
+
+    private void UnbindButtons()
+    {
+        if (continueButton != null)
+        {
+            continueButton.clicked -= HandleContinueClicked;
+        }
+
+        if (playVsAiButton != null)
+        {
+            playVsAiButton.clicked -= HandlePlayVsAiClicked;
+        }
+
+        if (playHotseatButton != null)
+        {
+            playHotseatButton.clicked -= HandlePlayHotseatClicked;
+        }
+
+        if (multiplayerButton != null)
+        {
+            multiplayerButton.clicked -= HandleMultiplayerClicked;
+        }
+
+        if (quitButton != null)
+        {
+            quitButton.clicked -= HandleQuitClicked;
+        }
+
+        if (createButton != null)
+        {
+            createButton.clicked -= HandleCreateClicked;
+        }
+
+        if (joinButton != null)
+        {
+            joinButton.clicked -= HandleJoinClicked;
+        }
+
+        if (multiplayerBackButton != null)
+        {
+            multiplayerBackButton.clicked -= HandleMultiplayerBackClicked;
+        }
+
+        if (detailsOpenButton != null)
+        {
+            detailsOpenButton.clicked -= HandleDetailsOpenClicked;
+        }
+
+        if (detailsResignButton != null)
+        {
+            detailsResignButton.clicked -= HandleDetailsResignClicked;
+        }
+
+        if (detailsCloseButton != null)
+        {
+            detailsCloseButton.clicked -= HandleDetailsCloseClicked;
+        }
+
+        if (joinConfirmButton != null)
+        {
+            joinConfirmButton.clicked -= HandleJoinConfirmClicked;
+        }
+
+        if (joinCancelButton != null)
+        {
+            joinCancelButton.clicked -= HandleJoinCancelClicked;
         }
     }
 
@@ -556,12 +695,37 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HandleJoinClicked()
     {
-        if (mainMenuController != null)
+        if (joinPanel == null)
         {
-            mainMenuController.Multiplayer_JoinGame();
+            SetStatus("Join UI unavailable.");
+            return;
         }
 
-        SetStatus("Join action invoked (legacy join flow).");
+        ShowJoinPanel();
+    }
+
+    private void HandleJoinConfirmClicked()
+    {
+        if (mainMenuController == null)
+        {
+            return;
+        }
+
+        string rawGameId = joinGameIdInput != null ? joinGameIdInput.value : null;
+        bool joinStarted = mainMenuController.TryJoinPlayByPost(rawGameId);
+        if (joinStarted)
+        {
+            HideJoinPanel();
+        }
+    }
+
+    private void HandleJoinCancelClicked()
+    {
+        HideJoinPanel();
+        if (mainMenuController != null)
+        {
+            mainMenuController.RefreshMultiplayerList();
+        }
     }
 
     private void HandleMultiplayerBackClicked()
@@ -571,6 +735,7 @@ public class MainMenuUITKView : MonoBehaviour
             mainMenuController.CloseMultiplayerScreen();
         }
 
+        HideJoinPanel();
         HideDetailsPanel();
         ShowMainPanel();
     }
@@ -707,6 +872,7 @@ public class MainMenuUITKView : MonoBehaviour
     private void ShowMainPanel()
     {
         ResetActiveGamesElasticOffset();
+        HideJoinPanel();
         SetVisible(mainPanel, true);
         SetVisible(multiplayerPanel, false);
 
@@ -724,6 +890,7 @@ public class MainMenuUITKView : MonoBehaviour
     private void ShowMultiplayerPanel()
     {
         ResetActiveGamesElasticOffset();
+        HideJoinPanel();
         SetVisible(mainPanel, false);
         SetVisible(multiplayerPanel, true);
 
@@ -742,6 +909,24 @@ public class MainMenuUITKView : MonoBehaviour
     {
         hasSelectedGame = false;
         SetVisible(detailsPanel, false);
+    }
+
+    private void ShowJoinPanel()
+    {
+        SetVisible(joinPanel, true);
+        if (joinGameIdInput != null)
+        {
+            joinGameIdInput.Focus();
+        }
+    }
+
+    private void HideJoinPanel()
+    {
+        SetVisible(joinPanel, false);
+        if (joinGameIdInput != null)
+        {
+            joinGameIdInput.value = string.Empty;
+        }
     }
 
     private static void SetVisible(VisualElement element, bool visible)
@@ -838,5 +1023,52 @@ public class MainMenuUITKView : MonoBehaviour
         root.style.paddingRight = right;
         root.style.paddingBottom = bottom;
         root.style.paddingTop = top;
+    }
+
+    private void ResetActiveGamesInteractionState()
+    {
+        StopActiveGamesElasticReset();
+
+        if (activeGamesList != null && activeGamesPointerId != InvalidPointerId && activeGamesList.HasPointerCapture(activeGamesPointerId))
+        {
+            activeGamesList.ReleasePointer(activeGamesPointerId);
+        }
+
+        activeGamesPointerId = InvalidPointerId;
+        activeGamesPointerStartY = 0f;
+        activeGamesElasticOffset = 0f;
+        isDraggingNonOverflowGamesList = false;
+        suppressNextGameCardClick = false;
+        hasSelectedGame = false;
+        uiReady = false;
+    }
+
+    private void ClearCachedElements()
+    {
+        root = null;
+        mainPanel = null;
+        multiplayerPanel = null;
+        detailsPanel = null;
+        joinPanel = null;
+        activeGamesList = null;
+        detailsTitleLabel = null;
+        detailsSubtitleLabel = null;
+        statusLabel = null;
+        versionLabel = null;
+        multiplayerVersionLabel = null;
+        continueButton = null;
+        playVsAiButton = null;
+        playHotseatButton = null;
+        multiplayerButton = null;
+        quitButton = null;
+        createButton = null;
+        joinButton = null;
+        multiplayerBackButton = null;
+        detailsOpenButton = null;
+        detailsResignButton = null;
+        detailsCloseButton = null;
+        joinGameIdInput = null;
+        joinConfirmButton = null;
+        joinCancelButton = null;
     }
 }
