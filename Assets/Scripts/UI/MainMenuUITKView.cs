@@ -32,6 +32,7 @@ public class MainMenuUITKView : MonoBehaviour
     private ScrollView activeGamesList;
     private Label detailsTitleLabel;
     private Label detailsSubtitleLabel;
+    private Label detailsGameIdLabel;
     private Label statusLabel;
     private Label versionLabel;
     private Label multiplayerVersionLabel;
@@ -263,6 +264,7 @@ public class MainMenuUITKView : MonoBehaviour
         activeGamesList = root.Q<ScrollView>("ActiveGamesList");
         detailsTitleLabel = root.Q<Label>("DetailsTitleLabel");
         detailsSubtitleLabel = root.Q<Label>("DetailsSubtitleLabel");
+        detailsGameIdLabel = root.Q<Label>("DetailsGameIdLabel");
         statusLabel = root.Q<Label>("StatusLabel");
         versionLabel = root.Q<Label>("VersionLabel");
         multiplayerVersionLabel = root.Q<Label>("MultiplayerVersionLabel");
@@ -821,7 +823,7 @@ public class MainMenuUITKView : MonoBehaviour
 
         if (detailsTitleLabel != null)
         {
-            detailsTitleLabel.text = BuildGameTitle(summary.gameId);
+            detailsTitleLabel.text = BuildGameTitle(summary);
         }
 
         if (detailsSubtitleLabel != null)
@@ -829,10 +831,41 @@ public class MainMenuUITKView : MonoBehaviour
             detailsSubtitleLabel.text = MainMenuController.BuildPlayByPostTurnSubtitle(summary);
         }
 
+        if (detailsGameIdLabel != null)
+        {
+            string gameIdText = BuildGameIdLine(summary.gameId);
+            detailsGameIdLabel.text = gameIdText;
+            detailsGameIdLabel.style.display = string.IsNullOrWhiteSpace(gameIdText) ? DisplayStyle.None : DisplayStyle.Flex;
+        }
+        else if (detailsSubtitleLabel != null)
+        {
+            string gameIdText = BuildGameIdLine(summary.gameId);
+            if (!string.IsNullOrWhiteSpace(gameIdText))
+            {
+                detailsSubtitleLabel.text = $"{detailsSubtitleLabel.text}\n{gameIdText}";
+            }
+        }
+
         SetVisible(detailsPanel, true);
     }
 
-    private static string BuildGameTitle(string gameId)
+    private static string BuildGameTitle(SaveManifestService.ManifestGameSummary summary)
+    {
+        if (!string.IsNullOrWhiteSpace(summary.displayName))
+        {
+            return summary.displayName;
+        }
+
+        string generatedName = PbpGameDisplayNameGenerator.BuildForGameId(summary.gameId);
+        if (!string.IsNullOrWhiteSpace(generatedName))
+        {
+            return generatedName;
+        }
+
+        return BuildLegacyGameTitle(summary.gameId);
+    }
+
+    private static string BuildLegacyGameTitle(string gameId)
     {
         if (string.IsNullOrWhiteSpace(gameId))
         {
@@ -843,6 +876,16 @@ public class MainMenuUITKView : MonoBehaviour
         return "Game " + shortId;
     }
 
+    private static string BuildGameIdLine(string gameId)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            return string.Empty;
+        }
+
+        return $"Game ID: {gameId}";
+    }
+
     private VisualElement CreateGameCard(SaveManifestService.ManifestGameSummary summary, bool isSingleGame, bool isLastGame)
     {
         VisualElement card = new VisualElement();
@@ -851,7 +894,7 @@ public class MainMenuUITKView : MonoBehaviour
         card.EnableInClassList("multiplayer-game-card--last", isLastGame);
         card.RegisterCallback<ClickEvent>(_ => HandleGameRowClicked(summary));
 
-        Label title = new Label(BuildGameTitle(summary.gameId));
+        Label title = new Label(BuildGameTitle(summary));
         title.AddToClassList("multiplayer-game-card-title");
         card.Add(title);
 
@@ -1053,6 +1096,7 @@ public class MainMenuUITKView : MonoBehaviour
         activeGamesList = null;
         detailsTitleLabel = null;
         detailsSubtitleLabel = null;
+        detailsGameIdLabel = null;
         statusLabel = null;
         versionLabel = null;
         multiplayerVersionLabel = null;

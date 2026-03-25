@@ -614,7 +614,7 @@ public class MainMenuController : MonoBehaviour
 
         if (gameDetailsTitleText != null)
         {
-            gameDetailsTitleText.text = BuildGameTitle(summary.gameId);
+            gameDetailsTitleText.text = BuildGameTitle(summary);
         }
 
         if (gameDetailsSubtitleText != null)
@@ -1097,7 +1097,23 @@ public class MainMenuController : MonoBehaviour
         return true;
     }
 
-    private static string BuildGameTitle(string rawGameId)
+    private static string BuildGameTitle(SaveManifestService.ManifestGameSummary summary)
+    {
+        if (!string.IsNullOrWhiteSpace(summary.displayName))
+        {
+            return summary.displayName;
+        }
+
+        string generated = PbpGameDisplayNameGenerator.BuildForGameId(summary.gameId);
+        if (!string.IsNullOrWhiteSpace(generated))
+        {
+            return generated;
+        }
+
+        return BuildLegacyGameTitle(summary.gameId);
+    }
+
+    private static string BuildLegacyGameTitle(string rawGameId)
     {
         if (string.IsNullOrWhiteSpace(rawGameId))
         {

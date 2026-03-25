@@ -21,7 +21,7 @@ public class MultiplayerGameRow : MonoBehaviour
 
         if (titleText != null)
         {
-            titleText.text = BuildTitle(gameId);
+            titleText.text = BuildTitle(summary);
         }
 
         if (subtitleText != null)
@@ -60,7 +60,23 @@ public class MultiplayerGameRow : MonoBehaviour
         }
     }
 
-    private static string BuildTitle(string rawGameId)
+    private static string BuildTitle(SaveManifestService.ManifestGameSummary summary)
+    {
+        if (!string.IsNullOrWhiteSpace(summary.displayName))
+        {
+            return summary.displayName;
+        }
+
+        string generated = PbpGameDisplayNameGenerator.BuildForGameId(summary.gameId);
+        if (!string.IsNullOrWhiteSpace(generated))
+        {
+            return generated;
+        }
+
+        return BuildLegacyTitle(summary.gameId);
+    }
+
+    private static string BuildLegacyTitle(string rawGameId)
     {
         if (string.IsNullOrWhiteSpace(rawGameId))
         {

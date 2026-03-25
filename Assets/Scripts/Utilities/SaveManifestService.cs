@@ -27,6 +27,7 @@ public static class SaveManifestService
     {
         public string entryKey;
         public string gameId;
+        public string displayName;
         public string mode;
         public string slotType;
         public string savePath;
@@ -46,6 +47,7 @@ public static class SaveManifestService
     {
         public string entryKey;
         public string gameId;
+        public string displayName;
         public string mode;
         public string slotType;
         public string lastPlayedUtc;
@@ -213,6 +215,7 @@ public static class SaveManifestService
                 {
                     entryKey = entry.entryKey,
                     gameId = entry.gameId,
+                    displayName = entry.displayName,
                     mode = entry.mode,
                     slotType = entry.slotType,
                     lastPlayedUtc = entry.lastPlayedUtc,
@@ -353,6 +356,12 @@ public static class SaveManifestService
             if (!string.IsNullOrWhiteSpace(gameId))
             {
                 entry.gameId = gameId;
+            }
+
+            if (mode == TurnManager.GameMode.PlayByPost &&
+                string.IsNullOrWhiteSpace(entry.displayName))
+            {
+                entry.displayName = PbpGameDisplayNameGenerator.BuildForGameId(entry.gameId);
             }
 
             entry.mode = mode.ToString();
@@ -506,6 +515,9 @@ public static class SaveManifestService
         {
             entryKey = BuildLocalEntryKey(path),
             gameId = gameId,
+            displayName = mode == TurnManager.GameMode.PlayByPost
+                ? PbpGameDisplayNameGenerator.BuildForGameId(gameId)
+                : null,
             mode = mode.ToString(),
             slotType = SlotTypeFromMode(mode),
             savePath = ToRelativePersistentPath(path),
@@ -554,6 +566,7 @@ public static class SaveManifestService
             {
                 entryKey = BuildPbpFileEntryKey(folder),
                 gameId = gameId,
+                displayName = PbpGameDisplayNameGenerator.BuildForGameId(gameId),
                 mode = TurnManager.GameMode.PlayByPost.ToString(),
                 slotType = SlotTypeFromMode(TurnManager.GameMode.PlayByPost),
                 folderPath = ToRelativePersistentPath(folder),

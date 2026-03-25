@@ -260,9 +260,16 @@
 
 #MultiplayerPanel .multiplayer-details-subtitle {
     margin-top: 10px;
-    margin-bottom: 22px;
+    margin-bottom: 8px;
     color: rgb(227, 236, 250);
     font-size: 30px;
+    white-space: normal;
+}
+
+#MultiplayerPanel .multiplayer-details-gameid {
+    margin-bottom: 22px;
+    color: rgba(227, 236, 250, 0.78);
+    font-size: 21px;
     white-space: normal;
 }
 
