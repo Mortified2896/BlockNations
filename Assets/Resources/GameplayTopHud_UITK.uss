@@ -10,36 +10,36 @@
 
 .gameplay-top-hud-bar {
     width: 100%;
-    min-height: 250px;
-    padding-top: 36px;
+    min-height: 170px;
+    padding-top: 14px;
     padding-right: 0;
-    padding-bottom: 30px;
+    padding-bottom: 12px;
     padding-left: 0;
     background-color: rgba(0, 0, 0, 0.51);
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    row-gap: 30px;
+    row-gap: 12px;
 }
 
 .gameplay-top-hud-label {
-    width: 300px;
+    width: 260px;
     color: rgb(255, 255, 255);
-    font-size: 50px;
+    font-size: 34px;
     -unity-font-style: normal;
     -unity-text-align: middle-center;
     white-space: nowrap;
 }
 
 .gameplay-top-hud-turn {
-    width: 360px;
+    width: 320px;
 }
 
 .gameplay-top-hud-gold {
-    width: 220px;
+    width: 190px;
 }
 
 .gameplay-top-hud-status {
-    width: 540px;
-    font-size: 42px;
+    width: 460px;
+    font-size: 28px;
 }

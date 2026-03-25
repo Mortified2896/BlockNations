@@ -1,0 +1,17 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
+    <Style src="project://database/Assets/Resources/GameplayCityPanel_UITK.uss?fileID=7433441132597879392&amp;guid=17d8d0ad86e7477ea76d163362808eb8&amp;type=3#GameplayCityPanel_UITK" />
+    <ui:VisualElement name="CityPanelHudRoot" class="gameplay-city-hud-root">
+        <ui:VisualElement name="CityPanelContainer" class="gameplay-city-panel">
+            <ui:VisualElement name="CityHeaderRow" class="gameplay-city-header-row">
+                <ui:VisualElement name="CityInfoColumn" class="gameplay-city-info-column">
+                    <ui:Label name="CityNameLabel" text="City" class="gameplay-city-name" />
+                    <ui:Label name="CityOwnerLabel" text="" class="gameplay-city-owner" />
+                </ui:VisualElement>
+                <ui:Button name="CityCloseButton" text="X" class="gameplay-city-close-button" />
+            </ui:VisualElement>
+            <ui:VisualElement name="CityRecruitRow" class="gameplay-city-recruit-row">
+                <ui:Button name="RecruitWarriorButton" text="Warrior&#10;(0 Gold)" class="gameplay-city-recruit-button" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

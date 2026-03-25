@@ -1,0 +1,9 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
+    <Style src="project://database/Assets/Resources/GameplayBottomHud_UITK.uss?fileID=7433441132597879392&amp;guid=0aa2e6f6f1194065bf4631b4fbc12b3d&amp;type=3#GameplayBottomHud_UITK" />
+    <ui:VisualElement name="GameplayBottomHudRoot" class="gameplay-bottom-hud-root">
+        <ui:VisualElement name="DefaultBottomPanel" class="gameplay-bottom-panel">
+            <ui:Button name="MenuButton" text="Menu" class="gameplay-bottom-button gameplay-bottom-menu" />
+            <ui:Button name="NextButton" text="Next" class="gameplay-bottom-button gameplay-bottom-next" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

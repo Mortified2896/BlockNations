@@ -107,6 +107,20 @@ public class UnitUIManager : MonoBehaviour
     private static BottomStripController GetBottomStripController()
     {
         BottomStripController bottomStrip = BottomStripController.Instance;
+        if (bottomStrip == null)
+        {
+            bottomStrip = UnityEngine.Object.FindFirstObjectByType<BottomStripController>();
+        }
+
+        if (bottomStrip == null)
+        {
+            BottomStripController[] controllers = UnityEngine.Object.FindObjectsByType<BottomStripController>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            if (controllers != null && controllers.Length > 0)
+            {
+                bottomStrip = controllers[0];
+            }
+        }
+
         if (bottomStrip == null && !hasLoggedMissingBottomStripController)
         {
             hasLoggedMissingBottomStripController = true;

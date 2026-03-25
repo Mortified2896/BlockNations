@@ -1,0 +1,46 @@
+.gameplay-bottom-hud-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    align-items: stretch;
+    justify-content: flex-end;
+}
+
+.gameplay-bottom-panel {
+    width: 100%;
+    min-height: 220px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 18px;
+    padding-right: 48px;
+    padding-bottom: 18px;
+    padding-left: 48px;
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.gameplay-bottom-button {
+    min-width: 220px;
+    height: 120px;
+    font-size: 52px;
+    color: rgb(255, 255, 255);
+    background-color: rgba(0, 0, 0, 0.62);
+    border-top-width: 2px;
+    border-right-width: 2px;
+    border-bottom-width: 2px;
+    border-left-width: 2px;
+    border-top-color: rgba(255, 255, 255, 0.52);
+    border-right-color: rgba(255, 255, 255, 0.52);
+    border-bottom-color: rgba(255, 255, 255, 0.52);
+    border-left-color: rgba(255, 255, 255, 0.52);
+    border-top-left-radius: 14px;
+    border-top-right-radius: 14px;
+    border-bottom-right-radius: 14px;
+    border-bottom-left-radius: 14px;
+}
+
+.gameplay-bottom-button:disabled {
+    opacity: 0.42;
+}
