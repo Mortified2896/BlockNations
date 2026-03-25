@@ -21,10 +21,8 @@ public class MainMenuUITKView : MonoBehaviour
 
     [Header("References")]
     [SerializeField] private MainMenuController mainMenuController;
-    [SerializeField] private Canvas legacyCanvas;
 
     private UIDocument uiDocument;
-    private CanvasGroup legacyCanvasGroup;
     private ThemeStyleSheet themeAsset;
 
     private VisualElement root;
@@ -33,6 +31,7 @@ public class MainMenuUITKView : MonoBehaviour
     private VisualElement profilePanel;
     private VisualElement detailsPanel;
     private VisualElement joinPanel;
+    private VisualElement createSuccessPanel;
     private ScrollView activeGamesList;
     private Label detailsTitleLabel;
     private Label detailsSubtitleLabel;
@@ -43,6 +42,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Label profileUsernameValueLabel;
     private Label profilePlayerIdValueLabel;
     private Label profileStatusLabel;
+    private Label createSuccessGameCodeLabel;
 
     private Button continueButton;
     private Button playVsAiButton;
@@ -53,6 +53,8 @@ public class MainMenuUITKView : MonoBehaviour
     private Button createButton;
     private Button joinButton;
     private Button multiplayerBackButton;
+    private Button createSuccessCopyButton;
+    private Button createSuccessCloseButton;
     private Button detailsOpenButton;
     private Button detailsResignButton;
     private Button detailsCloseButton;
@@ -77,6 +79,7 @@ public class MainMenuUITKView : MonoBehaviour
     private IVisualElementScheduledItem profileStatusClearItem;
     private IVisualElementScheduledItem viewInitializationItem;
     private LocalPlayerProfileStore.ProfileData profileData;
+    private string pendingCreateSuccessGameId;
 
     private void Awake()
     {
@@ -132,20 +135,6 @@ public class MainMenuUITKView : MonoBehaviour
         {
             mainMenuController = Object.FindFirstObjectByType<MainMenuController>();
         }
-
-        if (legacyCanvas == null)
-        {
-            legacyCanvas = Object.FindFirstObjectByType<Canvas>();
-        }
-
-        if (legacyCanvas != null)
-        {
-            legacyCanvasGroup = legacyCanvas.GetComponent<CanvasGroup>();
-            if (legacyCanvasGroup == null)
-            {
-                legacyCanvasGroup = legacyCanvas.gameObject.AddComponent<CanvasGroup>();
-            }
-        }
     }
 
     private void EnsurePanelSettingsWhenEnabled()
@@ -172,13 +161,6 @@ public class MainMenuUITKView : MonoBehaviour
         if (uiDocument != null)
         {
             uiDocument.enabled = enableUITK;
-        }
-
-        if (legacyCanvasGroup != null)
-        {
-            legacyCanvasGroup.alpha = enableUITK ? 0f : 1f;
-            legacyCanvasGroup.interactable = !enableUITK;
-            legacyCanvasGroup.blocksRaycasts = !enableUITK;
         }
     }
 
@@ -263,6 +245,7 @@ public class MainMenuUITKView : MonoBehaviour
         SetVisible(multiplayerPanel, false);
         SetVisible(profilePanel, false);
         SetVisible(detailsPanel, false);
+        SetVisible(createSuccessPanel, false);
         SetStatus(mainMenuController != null ? mainMenuController.CurrentImportStatus : string.Empty);
 
         ApplySafeArea(force: true);
@@ -284,6 +267,7 @@ public class MainMenuUITKView : MonoBehaviour
         profilePanel = root.Q<VisualElement>("ProfilePanel");
         detailsPanel = root.Q<VisualElement>("DetailsPanel");
         joinPanel = root.Q<VisualElement>("JoinPanel");
+        createSuccessPanel = root.Q<VisualElement>("CreateSuccessPanel");
         activeGamesList = root.Q<ScrollView>("ActiveGamesList");
         detailsTitleLabel = root.Q<Label>("DetailsTitleLabel");
         detailsSubtitleLabel = root.Q<Label>("DetailsSubtitleLabel");
@@ -294,6 +278,7 @@ public class MainMenuUITKView : MonoBehaviour
         profileUsernameValueLabel = root.Q<Label>("ProfileUsernameValueLabel");
         profilePlayerIdValueLabel = root.Q<Label>("ProfilePlayerIdValueLabel");
         profileStatusLabel = root.Q<Label>("ProfileStatusLabel");
+        createSuccessGameCodeLabel = root.Q<Label>("CreateSuccessGameCodeLabel");
 
         continueButton = root.Q<Button>("ContinueButton");
         playVsAiButton = root.Q<Button>("PlayVsAIButton");
@@ -304,6 +289,8 @@ public class MainMenuUITKView : MonoBehaviour
         createButton = root.Q<Button>("CreateButton");
         joinButton = root.Q<Button>("JoinButton");
         multiplayerBackButton = root.Q<Button>("MultiplayerBackButton");
+        createSuccessCopyButton = root.Q<Button>("CreateSuccessCopyButton");
+        createSuccessCloseButton = root.Q<Button>("CreateSuccessCloseButton");
         detailsOpenButton = root.Q<Button>("DetailsOpenButton");
         detailsResignButton = root.Q<Button>("DetailsResignButton");
         detailsCloseButton = root.Q<Button>("DetailsCloseButton");
@@ -558,6 +545,16 @@ public class MainMenuUITKView : MonoBehaviour
             multiplayerBackButton.clicked += HandleMultiplayerBackClicked;
         }
 
+        if (createSuccessCopyButton != null)
+        {
+            createSuccessCopyButton.clicked += HandleCreateSuccessCopyClicked;
+        }
+
+        if (createSuccessCloseButton != null)
+        {
+            createSuccessCloseButton.clicked += HandleCreateSuccessCloseClicked;
+        }
+
         if (detailsOpenButton != null)
         {
             detailsOpenButton.clicked += HandleDetailsOpenClicked;
@@ -646,6 +643,16 @@ public class MainMenuUITKView : MonoBehaviour
             multiplayerBackButton.clicked -= HandleMultiplayerBackClicked;
         }
 
+        if (createSuccessCopyButton != null)
+        {
+            createSuccessCopyButton.clicked -= HandleCreateSuccessCopyClicked;
+        }
+
+        if (createSuccessCloseButton != null)
+        {
+            createSuccessCloseButton.clicked -= HandleCreateSuccessCloseClicked;
+        }
+
         if (detailsOpenButton != null)
         {
             detailsOpenButton.clicked -= HandleDetailsOpenClicked;
@@ -696,6 +703,7 @@ public class MainMenuUITKView : MonoBehaviour
 
         mainMenuController.ActivePbpGamesChanged += RefreshGamesList;
         mainMenuController.ImportStatusChanged += SetStatus;
+        mainMenuController.MultiplayerCreateSucceeded += HandleMultiplayerCreateSucceeded;
         SetStatus(mainMenuController.CurrentImportStatus);
         subscribedToMenuEvents = true;
     }
@@ -710,6 +718,7 @@ public class MainMenuUITKView : MonoBehaviour
 
         mainMenuController.ActivePbpGamesChanged -= RefreshGamesList;
         mainMenuController.ImportStatusChanged -= SetStatus;
+        mainMenuController.MultiplayerCreateSucceeded -= HandleMultiplayerCreateSucceeded;
         subscribedToMenuEvents = false;
     }
 
@@ -835,9 +844,37 @@ public class MainMenuUITKView : MonoBehaviour
             mainMenuController.CloseMultiplayerScreen();
         }
 
+        HideCreateSuccessPanel();
         HideJoinPanel();
         HideDetailsPanel();
         ShowMainPanel();
+    }
+
+    private void HandleMultiplayerCreateSucceeded(string gameId)
+    {
+        pendingCreateSuccessGameId = gameId;
+        TryShowPendingCreateSuccessPanel();
+    }
+
+    private void HandleCreateSuccessCopyClicked()
+    {
+        if (mainMenuController == null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(pendingCreateSuccessGameId))
+        {
+            SetStatus("No game code selected.");
+            return;
+        }
+
+        mainMenuController.CopyPbpGameIdToClipboard(pendingCreateSuccessGameId);
+    }
+
+    private void HandleCreateSuccessCloseClicked()
+    {
+        HideCreateSuccessPanel();
     }
 
     private void HandleDetailsOpenClicked()
@@ -1013,6 +1050,7 @@ public class MainMenuUITKView : MonoBehaviour
     private void ShowMainPanel()
     {
         ResetActiveGamesElasticOffset();
+        HideCreateSuccessPanel();
         HideJoinPanel();
         HideDetailsPanel();
         ClearProfileStatus();
@@ -1049,6 +1087,8 @@ public class MainMenuUITKView : MonoBehaviour
         {
             multiplayerVersionLabel.style.display = DisplayStyle.None;
         }
+
+        TryShowPendingCreateSuccessPanel();
     }
 
     private void HideDetailsPanel()
@@ -1081,6 +1121,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void ShowJoinPanel()
     {
+        HideCreateSuccessPanel();
         SetVisible(joinPanel, true);
         if (joinGameIdInput != null)
         {
@@ -1292,6 +1333,7 @@ public class MainMenuUITKView : MonoBehaviour
         profilePanel = null;
         detailsPanel = null;
         joinPanel = null;
+        createSuccessPanel = null;
         activeGamesList = null;
         detailsTitleLabel = null;
         detailsSubtitleLabel = null;
@@ -1302,6 +1344,7 @@ public class MainMenuUITKView : MonoBehaviour
         profileUsernameValueLabel = null;
         profilePlayerIdValueLabel = null;
         profileStatusLabel = null;
+        createSuccessGameCodeLabel = null;
         continueButton = null;
         playVsAiButton = null;
         playHotseatButton = null;
@@ -1311,6 +1354,8 @@ public class MainMenuUITKView : MonoBehaviour
         createButton = null;
         joinButton = null;
         multiplayerBackButton = null;
+        createSuccessCopyButton = null;
+        createSuccessCloseButton = null;
         detailsOpenButton = null;
         detailsResignButton = null;
         detailsCloseButton = null;
@@ -1320,5 +1365,27 @@ public class MainMenuUITKView : MonoBehaviour
         profileRegenerateButton = null;
         profileCopyPlayerIdButton = null;
         profileBackButton = null;
+    }
+
+    private void TryShowPendingCreateSuccessPanel()
+    {
+        if (string.IsNullOrWhiteSpace(pendingCreateSuccessGameId)
+            || multiplayerPanel == null
+            || multiplayerPanel.resolvedStyle.display == DisplayStyle.None)
+        {
+            return;
+        }
+
+        if (createSuccessGameCodeLabel != null)
+        {
+            createSuccessGameCodeLabel.text = pendingCreateSuccessGameId;
+        }
+
+        SetVisible(createSuccessPanel, true);
+    }
+
+    private void HideCreateSuccessPanel()
+    {
+        SetVisible(createSuccessPanel, false);
     }
 }

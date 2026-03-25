@@ -43,6 +43,18 @@
                 </ui:VisualElement>
             </ui:VisualElement>
 
+            <ui:VisualElement name="CreateSuccessPanel" class="multiplayer-create-success-overlay" style="display: none;">
+                <ui:VisualElement class="multiplayer-create-success-card">
+                    <ui:Label text="Game Created" class="multiplayer-create-success-title" />
+                    <ui:Label text="Send this code to your friend" class="multiplayer-create-success-instruction" />
+                    <ui:Label name="CreateSuccessGameCodeLabel" text="" class="multiplayer-create-success-code" />
+                    <ui:VisualElement class="multiplayer-create-success-actions">
+                        <ui:Button name="CreateSuccessCopyButton" text="Copy Code" class="menu-button multiplayer-details-button" />
+                        <ui:Button name="CreateSuccessCloseButton" text="Close" class="menu-button multiplayer-details-button" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:VisualElement>
+
             <ui:VisualElement class="multiplayer-action-bar">
                 <ui:Button name="CreateButton" text="Create" class="menu-button multiplayer-action-button" />
                 <ui:Button name="JoinButton" text="Join" class="menu-button multiplayer-action-button" />

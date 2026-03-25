@@ -13,44 +13,11 @@ using UnityEngine.UI;
 /// </summary>
 public class MainMenuController : MonoBehaviour
 {
-    /*
-     * Wiring Instructions (Multiplayer Screen)
-     * - Assign `mainMenuPanel` to the root GameObject of the main menu panel.
-     * - Assign `multiplayerPanel` to the root GameObject of the multiplayer panel.
-     * - Assign GameDetails popup references below to your existing popup panel/texts.
-     * - Main Menu "Multiplayer" button -> OpenMultiplayerScreen()
-     * - Multiplayer "Back" button -> CloseMultiplayerScreen()
-     * - Multiplayer "Create" button -> Multiplayer_CreateGame()
-     * - Multiplayer "Join" button -> Multiplayer_JoinGame()
-     * - Active game row click -> OpenSelectedGameDetails(summary) (via MultiplayerGameRow.Bind).
-     * - Popup Open button -> GameDetails_Open()
-     * - Popup Close button -> CloseGameDetailsPopup()
-     * - Popup Resign button -> GameDetails_ResignLocal()
-     */
-
     [Header("Scenes")]
     [SerializeField] private string gameplaySceneName = "SampleScene";
 
-    [Header("UI")]
     [SerializeField] private GameObject modeSelectionPanel;
     [SerializeField] private GameObject aiDifficultyPanel;
-    [SerializeField] private TMP_InputField joinGameIdInput;
-    [SerializeField] private TMP_Text importStatusText;
-    [SerializeField] private GameObject mainMenuPanel;
-    [SerializeField] private GameObject multiplayerPanel;
-    [SerializeField] private GameObject joinPopupPanel;
-    // Inspector wiring: assign the full-screen background used for the GameDetails state.
-    [SerializeField] private GameObject gameDetailsBackground;
-    // Inspector wiring: assign to the existing GameDetailsPopup panel.
-    [SerializeField] private GameObject gameDetailsPopupPanel;
-    // Inspector wiring: assign the popup title text (required for populated title).
-    [SerializeField] private TMP_Text gameDetailsTitleText;
-    // Inspector wiring: optional subtitle text ("Your turn", "Waiting...", fallback info).
-    [SerializeField] private TMP_Text gameDetailsSubtitleText;
-    // Inspector wiring: optional full game id label.
-    [SerializeField] private TMP_Text gameDetailsGameIdText;
-    [SerializeField] private Button createGameButton;
-    [SerializeField] private Button joinGameButton;
     [SerializeField] private string selectedGameId;
 
     [Header("Layout")]
@@ -59,6 +26,7 @@ public class MainMenuController : MonoBehaviour
     private const string PlayByPostGameIdKey = "pbp_gameId";
     private const string PlayByPostForceNewKey = "pbp_forceNew";
     private const string PlayByPostPendingNewGameIdKey = "pbp_pendingNewGameId";
+    private const string PendingCreateShareGameIdKey = "ui_pbp_pendingCreateShareGameId";
     private const string ReturnToMultiplayerPaneKey = "ui_returnToMultiplayerPane";
     private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
     private const string LegacySharedSaveFileName = "save.json";
@@ -71,10 +39,12 @@ public class MainMenuController : MonoBehaviour
     public event Action ActivePbpGamesChanged;
     public event Action<string> ImportStatusChanged;
     public event Action PbpBadgeChanged;
+    public event Action<string> MultiplayerCreateSucceeded;
     public IReadOnlyList<SaveManifestService.ManifestGameSummary> ActivePbpGames => activePbpGames;
     public string CurrentImportStatus { get; private set; } = string.Empty;
     public int PbpBadgeCountMyTurn { get; private set; }
     private List<SaveManifestService.ManifestGameSummary> activePbpGames = new List<SaveManifestService.ManifestGameSummary>();
+    private string pendingCreateShareGameId;
     private SaveManifestService.ManifestGameSummary selectedPbpGame;
     private bool hasSelectedPbpGame;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -84,13 +54,9 @@ public class MainMenuController : MonoBehaviour
     IEnumerator Start()
     {
         LocalPlayerProfileStore.GetOrCreateProfile();
+        pendingCreateShareGameId = PlayerPrefs.GetString(PendingCreateShareGameIdKey, string.Empty);
 
         bool returnToMultiplayerPane = ConsumeReturnToMultiplayerPaneFlag();
-
-        if (joinGameIdInput != null && IsPlaceholderGameId(joinGameIdInput.text))
-        {
-            joinGameIdInput.text = string.Empty;
-        }
 
         // Wait one frame so UI objects/panels are fully initialized and active state is stable.
         yield return null;
@@ -402,6 +368,8 @@ public class MainMenuController : MonoBehaviour
         LocalPlayerSeatStore.SetSeat(gameId, 0);
         PlayerPrefs.SetInt(PlayByPostForceNewKey, 1);
         PlayerPrefs.SetString(PlayByPostPendingNewGameIdKey, gameId);
+        PlayerPrefs.SetString(PendingCreateShareGameIdKey, gameId);
+        pendingCreateShareGameId = gameId;
         PlayerPrefs.Save();
 
         GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
@@ -415,16 +383,8 @@ public class MainMenuController : MonoBehaviour
 
     public void JoinPlayByPostFromInput()
     {
-        string gameId = joinGameIdInput != null ? joinGameIdInput.text : null;
-        if (!TryJoinPlayByPostInternal(gameId, out string normalizedGameId))
-        {
-            return;
-        }
-
-        if (joinGameIdInput != null)
-        {
-            joinGameIdInput.text = normalizedGameId;
-        }
+        // Legacy Canvas input has been retired; active joins now flow through UITK's text field.
+        TryJoinPlayByPostInternal(rawGameId: null, out _);
     }
 
     public bool TryJoinPlayByPost(string rawGameId)
@@ -462,16 +422,6 @@ public class MainMenuController : MonoBehaviour
 
     public void OpenMultiplayerScreen()
     {
-        if (mainMenuPanel != null)
-        {
-            mainMenuPanel.SetActive(false);
-        }
-
-        if (multiplayerPanel != null)
-        {
-            multiplayerPanel.SetActive(true);
-        }
-
         if (serverCheckRoutine != null)
         {
             StopCoroutine(serverCheckRoutine);
@@ -486,36 +436,17 @@ public class MainMenuController : MonoBehaviour
 
     public void CloseMultiplayerScreen()
     {
-        if (multiplayerPanel != null)
-        {
-            multiplayerPanel.SetActive(false);
-        }
-
-        if (mainMenuPanel != null)
-        {
-            mainMenuPanel.SetActive(true);
-        }
+        // UITK handles panel visibility locally.
     }
 
     public void OpenJoinPopup()
     {
-        if (joinPopupPanel != null)
-        {
-            joinPopupPanel.SetActive(true);
-        }
+        // Legacy popup retired; joins are initiated from UITK.
     }
 
     public void CloseJoinPopup()
     {
-        if (joinPopupPanel != null)
-        {
-            joinPopupPanel.SetActive(false);
-        }
-
-        if (joinGameIdInput != null)
-        {
-            joinGameIdInput.text = "";
-        }
+        // Legacy popup retired; joins are initiated from UITK.
     }
 
     public void RefreshMultiplayerList()
@@ -537,6 +468,7 @@ public class MainMenuController : MonoBehaviour
 #endif
         ActivePbpGamesChanged?.Invoke();
         RecomputePbpBadge();
+        TryEmitPendingCreateSuccess();
 
         if (isServerOnline)
         {
@@ -556,6 +488,32 @@ public class MainMenuController : MonoBehaviour
         else
         {
             SetImportStatus("Server offline");
+        }
+    }
+
+    private void TryEmitPendingCreateSuccess()
+    {
+        if (MultiplayerCreateSucceeded == null
+            || string.IsNullOrWhiteSpace(pendingCreateShareGameId)
+            || activePbpGames == null
+            || activePbpGames.Count == 0)
+        {
+            return;
+        }
+
+        for (int i = 0; i < activePbpGames.Count; i++)
+        {
+            if (!string.Equals(activePbpGames[i].gameId, pendingCreateShareGameId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            string createdGameId = pendingCreateShareGameId;
+            pendingCreateShareGameId = string.Empty;
+            PlayerPrefs.DeleteKey(PendingCreateShareGameIdKey);
+            PlayerPrefs.Save();
+            MultiplayerCreateSucceeded?.Invoke(createdGameId);
+            return;
         }
     }
 
@@ -613,43 +571,6 @@ public class MainMenuController : MonoBehaviour
     public void OpenSelectedGameDetails(SaveManifestService.ManifestGameSummary summary)
     {
         SelectPlayByPostGame(summary);
-
-        if (gameDetailsTitleText != null)
-        {
-            gameDetailsTitleText.text = BuildGameTitle(summary);
-        }
-
-        if (gameDetailsSubtitleText != null)
-        {
-            gameDetailsSubtitleText.text = $"{BuildGameSubtitle(summary)}\n{BuildPbpVersionText(summary.gameId)}";
-        }
-
-        if (gameDetailsGameIdText != null)
-        {
-            string gameIdText = string.IsNullOrWhiteSpace(summary.gameId)
-                ? "Game ID: -"
-                : $"Game ID: {summary.gameId}";
-            if (gameDetailsSubtitleText == null)
-            {
-                gameIdText = $"{gameIdText}\n{BuildPbpVersionText(summary.gameId)}";
-            }
-            gameDetailsGameIdText.text = gameIdText;
-        }
-
-        if (multiplayerPanel != null)
-        {
-            multiplayerPanel.SetActive(false);
-        }
-
-        if (gameDetailsBackground != null)
-        {
-            gameDetailsBackground.SetActive(true);
-        }
-
-        if (gameDetailsPopupPanel != null)
-        {
-            gameDetailsPopupPanel.SetActive(true);
-        }
     }
 
     public void SelectPlayByPostGameForUITK(SaveManifestService.ManifestGameSummary summary)
@@ -659,22 +580,7 @@ public class MainMenuController : MonoBehaviour
 
     public void CloseGameDetailsPopup()
     {
-        if (gameDetailsBackground != null)
-        {
-            gameDetailsBackground.SetActive(false);
-        }
-
-        if (gameDetailsPopupPanel != null)
-        {
-            gameDetailsPopupPanel.SetActive(false);
-        }
-
-        if (multiplayerPanel != null)
-        {
-            multiplayerPanel.SetActive(true);
-        }
-
-        // Rebind active game rows immediately after returning from details.
+        // UITK owns details visibility; keep only data refresh behavior.
         RefreshMultiplayerList();
     }
 
@@ -719,13 +625,7 @@ public class MainMenuController : MonoBehaviour
 
     public void Multiplayer_JoinGame()
     {
-        if (joinPopupPanel != null && joinPopupPanel.activeInHierarchy)
-        {
-            JoinPlayByPostFromInput();
-            return;
-        }
-
-        OpenJoinPopup();
+        JoinPlayByPostFromInput();
     }
 
     public void CopyCurrentPbpGameIdToClipboard()
@@ -742,6 +642,17 @@ public class MainMenuController : MonoBehaviour
             return;
         }
 
+        CopyPbpGameIdToClipboard(gameId);
+    }
+
+    public bool CopyPbpGameIdToClipboard(string gameId)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            SetImportStatus("No game code selected.");
+            return false;
+        }
+
         if (!ClipboardUtility.TryCopy(gameId))
         {
             GUIUtility.systemCopyBuffer = gameId;
@@ -749,6 +660,7 @@ public class MainMenuController : MonoBehaviour
         }
 
         SetImportStatus($"Game code copied: {gameId}");
+        return true;
     }
 
     public void ContinueLastSave()
@@ -877,26 +789,13 @@ public class MainMenuController : MonoBehaviour
     {
         CurrentImportStatus = message ?? string.Empty;
 
-        if (importStatusText != null)
-        {
-            importStatusText.text = CurrentImportStatus;
-        }
-        else
-        {
-            Debug.LogWarning(CurrentImportStatus);
-        }
-
         ImportStatusChanged?.Invoke(CurrentImportStatus);
     }
 
     // Allows runtime-built UI to register a status text field.
     public void ConfigureImportUI(GameObject panel, TMP_InputField input, TMP_Text status)
     {
-        importStatusText = status;
-        if (importStatusText != null)
-        {
-            importStatusText.text = CurrentImportStatus;
-        }
+        // Deprecated legacy hook kept for backwards compatibility.
     }
 
     public void QuitGame()
@@ -1068,15 +967,7 @@ public class MainMenuController : MonoBehaviour
 
     private void UpdateMultiplayerButtonStates()
     {
-        if (createGameButton != null)
-        {
-            createGameButton.interactable = isServerOnline;
-        }
-
-        if (joinGameButton != null)
-        {
-            joinGameButton.interactable = isServerOnline;
-        }
+        // Legacy uGUI button state updates retired with the hidden menu canvas path.
     }
 
     private static bool TryValidateJoinGameId(string rawGameId, out string normalizedGameId, out string error)
