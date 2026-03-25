@@ -8,6 +8,10 @@ public class MainMenuUITKView : MonoBehaviour
     private const string ThemeResourceName = "MainMenu_UITK_Theme";
     private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
     private const string LegacySharedSaveFileName = "save.json";
+    private const int InvalidPointerId = -1;
+    private const float NonOverflowListDragLimit = 352f;
+    private const float NonOverflowListDragDamping = 0.35f;
+    private const float NonOverflowListDragThreshold = 10f;
 
     [Header("Trial Toggle")]
     [SerializeField] private bool enableUITK = true;
@@ -30,11 +34,12 @@ public class MainMenuUITKView : MonoBehaviour
     private VisualElement mainPanel;
     private VisualElement multiplayerPanel;
     private VisualElement detailsPanel;
-    private VisualElement activeGamesList;
+    private ScrollView activeGamesList;
     private Label detailsTitleLabel;
     private Label detailsSubtitleLabel;
     private Label statusLabel;
     private Label versionLabel;
+    private Label multiplayerVersionLabel;
 
     private Button continueButton;
     private Button playVsAiButton;
@@ -51,8 +56,14 @@ public class MainMenuUITKView : MonoBehaviour
     private bool subscribedToMenuEvents;
     private bool uiReady;
     private bool hasSelectedGame;
+    private bool suppressNextGameCardClick;
+    private bool isDraggingNonOverflowGamesList;
+    private int activeGamesPointerId = InvalidPointerId;
+    private float activeGamesPointerStartY;
+    private float activeGamesElasticOffset;
     private Rect lastSafeArea = Rect.zero;
     private Vector2Int lastScreenSize = Vector2Int.zero;
+    private IVisualElementScheduledItem activeGamesElasticResetItem;
 
     private void Awake()
     {
@@ -188,6 +199,7 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         CacheElements();
+        ConfigureActiveGamesList();
         RefreshVersionLabel();
         BindButtons();
         RefreshContinueButtonVisibility();
@@ -195,7 +207,7 @@ public class MainMenuUITKView : MonoBehaviour
         SetVisible(mainPanel, true);
         SetVisible(multiplayerPanel, false);
         SetVisible(detailsPanel, false);
-        SetStatus(string.Empty);
+        SetStatus(mainMenuController != null ? mainMenuController.CurrentImportStatus : string.Empty);
 
         ApplySafeArea(force: true);
         uiReady = true;
@@ -206,11 +218,12 @@ public class MainMenuUITKView : MonoBehaviour
         mainPanel = root.Q<VisualElement>("MainPanel");
         multiplayerPanel = root.Q<VisualElement>("MultiplayerPanel");
         detailsPanel = root.Q<VisualElement>("DetailsPanel");
-        activeGamesList = root.Q<VisualElement>("ActiveGamesList");
+        activeGamesList = root.Q<ScrollView>("ActiveGamesList");
         detailsTitleLabel = root.Q<Label>("DetailsTitleLabel");
         detailsSubtitleLabel = root.Q<Label>("DetailsSubtitleLabel");
         statusLabel = root.Q<Label>("StatusLabel");
         versionLabel = root.Q<Label>("VersionLabel");
+        multiplayerVersionLabel = root.Q<Label>("MultiplayerVersionLabel");
 
         continueButton = root.Q<Button>("ContinueButton");
         playVsAiButton = root.Q<Button>("PlayVsAIButton");
@@ -223,6 +236,186 @@ public class MainMenuUITKView : MonoBehaviour
         detailsOpenButton = root.Q<Button>("DetailsOpenButton");
         detailsResignButton = root.Q<Button>("DetailsResignButton");
         detailsCloseButton = root.Q<Button>("DetailsCloseButton");
+    }
+
+    private void ConfigureActiveGamesList()
+    {
+        if (activeGamesList == null)
+        {
+            return;
+        }
+
+        activeGamesList.mode = ScrollViewMode.Vertical;
+        activeGamesList.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+        activeGamesList.verticalScrollerVisibility = ScrollerVisibility.Auto;
+        activeGamesList.mouseWheelScrollSize = 120f;
+        activeGamesList.scrollOffset = Vector2.zero;
+        activeGamesList.RegisterCallback<PointerDownEvent>(HandleActiveGamesPointerDown);
+        activeGamesList.RegisterCallback<PointerMoveEvent>(HandleActiveGamesPointerMove);
+        activeGamesList.RegisterCallback<PointerUpEvent>(HandleActiveGamesPointerUp);
+        activeGamesList.RegisterCallback<PointerCancelEvent>(HandleActiveGamesPointerCancel);
+        ResetActiveGamesElasticOffset();
+    }
+
+    private void HandleActiveGamesPointerDown(PointerDownEvent evt)
+    {
+        if (activeGamesList == null || evt.button != 0 || HasActiveGamesScrollableOverflow())
+        {
+            return;
+        }
+
+        StopActiveGamesElasticReset();
+        activeGamesPointerId = evt.pointerId;
+        activeGamesPointerStartY = evt.position.y - (activeGamesElasticOffset / NonOverflowListDragDamping);
+        isDraggingNonOverflowGamesList = false;
+    }
+
+    private void HandleActiveGamesPointerMove(PointerMoveEvent evt)
+    {
+        if (activeGamesList == null
+            || evt.pointerId != activeGamesPointerId
+            || HasActiveGamesScrollableOverflow())
+        {
+            return;
+        }
+
+        float dragDistance = evt.position.y - activeGamesPointerStartY;
+        activeGamesElasticOffset = ComputeElasticListOffset(dragDistance);
+        ApplyActiveGamesElasticOffset();
+
+        if (Mathf.Abs(dragDistance) > NonOverflowListDragThreshold)
+        {
+            if (!isDraggingNonOverflowGamesList)
+            {
+                isDraggingNonOverflowGamesList = true;
+                suppressNextGameCardClick = true;
+                activeGamesList.CapturePointer(evt.pointerId);
+            }
+
+            evt.StopPropagation();
+        }
+    }
+
+    private void HandleActiveGamesPointerUp(PointerUpEvent evt)
+    {
+        if (evt.pointerId != activeGamesPointerId)
+        {
+            return;
+        }
+
+        ReleaseActiveGamesPointer(evt.pointerId);
+        StartActiveGamesElasticReset();
+    }
+
+    private void HandleActiveGamesPointerCancel(PointerCancelEvent evt)
+    {
+        if (evt.pointerId != activeGamesPointerId)
+        {
+            return;
+        }
+
+        ReleaseActiveGamesPointer(evt.pointerId);
+        ResetActiveGamesElasticOffset();
+    }
+
+    private void ReleaseActiveGamesPointer(int pointerId)
+    {
+        if (activeGamesList != null && activeGamesList.HasPointerCapture(pointerId))
+        {
+            activeGamesList.ReleasePointer(pointerId);
+        }
+
+        activeGamesPointerId = InvalidPointerId;
+        if (isDraggingNonOverflowGamesList && activeGamesList != null)
+        {
+            activeGamesList.schedule.Execute(() => suppressNextGameCardClick = false);
+        }
+
+        isDraggingNonOverflowGamesList = false;
+    }
+
+    private static float ComputeElasticListOffset(float dragDistance)
+    {
+        return Mathf.Clamp(dragDistance * NonOverflowListDragDamping, -NonOverflowListDragLimit, NonOverflowListDragLimit);
+    }
+
+    private void ApplyActiveGamesElasticOffset()
+    {
+        if (activeGamesList == null)
+        {
+            return;
+        }
+
+        activeGamesList.contentContainer.transform.position = new Vector3(0f, activeGamesElasticOffset, 0f);
+    }
+
+    private void StartActiveGamesElasticReset()
+    {
+        StopActiveGamesElasticReset();
+
+        if (Mathf.Abs(activeGamesElasticOffset) <= 0.01f)
+        {
+            ResetActiveGamesElasticOffset();
+            return;
+        }
+
+        if (activeGamesList == null)
+        {
+            activeGamesElasticOffset = 0f;
+            return;
+        }
+
+        activeGamesElasticResetItem = activeGamesList.schedule.Execute(() =>
+        {
+            activeGamesElasticOffset = Mathf.Lerp(activeGamesElasticOffset, 0f, 0.28f);
+            if (Mathf.Abs(activeGamesElasticOffset) <= 0.5f)
+            {
+                ResetActiveGamesElasticOffset();
+                return;
+            }
+
+            ApplyActiveGamesElasticOffset();
+        }).Every(16);
+    }
+
+    private void StopActiveGamesElasticReset()
+    {
+        if (activeGamesElasticResetItem == null)
+        {
+            return;
+        }
+
+        activeGamesElasticResetItem.Pause();
+        activeGamesElasticResetItem = null;
+    }
+
+    private void ResetActiveGamesElasticOffset()
+    {
+        StopActiveGamesElasticReset();
+        activeGamesElasticOffset = 0f;
+        if (activeGamesList == null)
+        {
+            return;
+        }
+
+        activeGamesList.contentContainer.transform.position = Vector3.zero;
+    }
+
+    private bool HasActiveGamesScrollableOverflow()
+    {
+        if (activeGamesList == null)
+        {
+            return false;
+        }
+
+        VisualElement viewport = activeGamesList.Q(className: "unity-scroll-view__content-viewport")
+            ?? activeGamesList.Q(className: "unity-scroll-view__viewport");
+        if (viewport == null)
+        {
+            return false;
+        }
+
+        return activeGamesList.contentContainer.layout.height > viewport.layout.height + 1f;
     }
 
     private void BindButtons()
@@ -291,6 +484,8 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         mainMenuController.ActivePbpGamesChanged += RefreshGamesList;
+        mainMenuController.ImportStatusChanged += SetStatus;
+        SetStatus(mainMenuController.CurrentImportStatus);
         subscribedToMenuEvents = true;
     }
 
@@ -303,6 +498,7 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         mainMenuController.ActivePbpGamesChanged -= RefreshGamesList;
+        mainMenuController.ImportStatusChanged -= SetStatus;
         subscribedToMenuEvents = false;
     }
 
@@ -337,9 +533,9 @@ public class MainMenuUITKView : MonoBehaviour
             mainMenuController.OpenMultiplayerScreen();
         }
 
-        SetStatus(string.Empty);
         ShowMultiplayerPanel();
         RefreshGamesList();
+        SetStatus(mainMenuController != null ? mainMenuController.CurrentImportStatus : string.Empty);
     }
 
     private void HandleQuitClicked()
@@ -376,7 +572,6 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         HideDetailsPanel();
-        SetStatus(string.Empty);
         ShowMainPanel();
     }
 
@@ -415,6 +610,7 @@ public class MainMenuUITKView : MonoBehaviour
             return;
         }
 
+        ResetActiveGamesElasticOffset();
         activeGamesList.Clear();
 
         if (mainMenuController == null)
@@ -424,6 +620,11 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         IReadOnlyList<SaveManifestService.ManifestGameSummary> games = mainMenuController.ActivePbpGames;
+        bool isSingleGame = games != null && games.Count == 1;
+        bool hasMultipleGames = games != null && games.Count > 1;
+        activeGamesList.EnableInClassList("multiplayer-games-list--single", isSingleGame);
+        activeGamesList.EnableInClassList("multiplayer-games-list--multi", hasMultipleGames);
+
         if (games == null || games.Count == 0)
         {
             AddInfoRow("No active games");
@@ -433,17 +634,24 @@ public class MainMenuUITKView : MonoBehaviour
         for (int i = 0; i < games.Count; i++)
         {
             SaveManifestService.ManifestGameSummary summary = games[i];
-            activeGamesList.Add(CreateGameCard(summary));
+            bool isLastGame = i == games.Count - 1;
+            activeGamesList.Add(CreateGameCard(summary, isSingleGame, isLastGame));
         }
     }
 
     private void HandleGameRowClicked(SaveManifestService.ManifestGameSummary summary)
     {
+        if (suppressNextGameCardClick)
+        {
+            suppressNextGameCardClick = false;
+            return;
+        }
+
         hasSelectedGame = true;
 
         if (mainMenuController != null)
         {
-            mainMenuController.OpenSelectedGameDetails(summary);
+            mainMenuController.SelectPlayByPostGameForUITK(summary);
         }
 
         if (detailsTitleLabel != null)
@@ -470,17 +678,20 @@ public class MainMenuUITKView : MonoBehaviour
         return "Game " + shortId;
     }
 
-    private Button CreateGameCard(SaveManifestService.ManifestGameSummary summary)
+    private VisualElement CreateGameCard(SaveManifestService.ManifestGameSummary summary, bool isSingleGame, bool isLastGame)
     {
-        Button card = new Button(() => HandleGameRowClicked(summary));
-        card.AddToClassList("game-card");
+        VisualElement card = new VisualElement();
+        card.AddToClassList("multiplayer-game-card");
+        card.EnableInClassList("multiplayer-game-card--single", isSingleGame);
+        card.EnableInClassList("multiplayer-game-card--last", isLastGame);
+        card.RegisterCallback<ClickEvent>(_ => HandleGameRowClicked(summary));
 
         Label title = new Label(BuildGameTitle(summary.gameId));
-        title.AddToClassList("game-card-title");
+        title.AddToClassList("multiplayer-game-card-title");
         card.Add(title);
 
         Label status = new Label(MainMenuController.BuildPlayByPostTurnSubtitle(summary));
-        status.AddToClassList("game-card-status");
+        status.AddToClassList("multiplayer-game-card-status");
         card.Add(status);
 
         return card;
@@ -489,20 +700,42 @@ public class MainMenuUITKView : MonoBehaviour
     private void AddInfoRow(string text)
     {
         Label row = new Label(text);
-        row.AddToClassList("status");
+        row.AddToClassList("multiplayer-empty-state");
         activeGamesList.Add(row);
     }
 
     private void ShowMainPanel()
     {
+        ResetActiveGamesElasticOffset();
         SetVisible(mainPanel, true);
         SetVisible(multiplayerPanel, false);
+
+        if (versionLabel != null)
+        {
+            versionLabel.style.display = DisplayStyle.Flex;
+        }
+
+        if (multiplayerVersionLabel != null)
+        {
+            multiplayerVersionLabel.style.display = DisplayStyle.None;
+        }
     }
 
     private void ShowMultiplayerPanel()
     {
+        ResetActiveGamesElasticOffset();
         SetVisible(mainPanel, false);
         SetVisible(multiplayerPanel, true);
+
+        if (versionLabel != null)
+        {
+            versionLabel.style.display = DisplayStyle.None;
+        }
+
+        if (multiplayerVersionLabel != null)
+        {
+            multiplayerVersionLabel.style.display = DisplayStyle.None;
+        }
     }
 
     private void HideDetailsPanel()
@@ -525,15 +758,24 @@ public class MainMenuUITKView : MonoBehaviour
     {
         if (statusLabel != null)
         {
-            statusLabel.text = message ?? string.Empty;
+            string statusText = message ?? string.Empty;
+            statusLabel.text = statusText;
+            statusLabel.style.display = string.IsNullOrWhiteSpace(statusText) ? DisplayStyle.None : DisplayStyle.Flex;
         }
     }
 
     private void RefreshVersionLabel()
     {
+        string versionText = MenuVersionLabel.BuildVersionText();
+
         if (versionLabel != null)
         {
-            versionLabel.text = MenuVersionLabel.BuildVersionText();
+            versionLabel.text = versionText;
+        }
+
+        if (multiplayerVersionLabel != null)
+        {
+            multiplayerVersionLabel.text = versionText;
         }
     }
 

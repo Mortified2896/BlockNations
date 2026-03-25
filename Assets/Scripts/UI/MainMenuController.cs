@@ -69,8 +69,10 @@ public class MainMenuController : MonoBehaviour
     private HttpTurnTransport cachedHttpTransport;
 
     public event Action ActivePbpGamesChanged;
+    public event Action<string> ImportStatusChanged;
     public event Action PbpBadgeChanged;
     public IReadOnlyList<SaveManifestService.ManifestGameSummary> ActivePbpGames => activePbpGames;
+    public string CurrentImportStatus { get; private set; } = string.Empty;
     public int PbpBadgeCountMyTurn { get; private set; }
     private List<SaveManifestService.ManifestGameSummary> activePbpGames = new List<SaveManifestService.ManifestGameSummary>();
     private SaveManifestService.ManifestGameSummary selectedPbpGame;
@@ -521,9 +523,18 @@ public class MainMenuController : MonoBehaviour
 
         if (isServerOnline)
         {
-            SetImportStatus(activePbpGames.Count > 0
-                ? $"{activePbpGames.Count} active games"
-                : "No active games");
+            if (activePbpGames.Count <= 0)
+            {
+                SetImportStatus("No active games");
+            }
+            else if (activePbpGames.Count == 1)
+            {
+                SetImportStatus("1 active game");
+            }
+            else
+            {
+                SetImportStatus($"{activePbpGames.Count} active games");
+            }
         }
         else
         {
@@ -575,11 +586,16 @@ public class MainMenuController : MonoBehaviour
         SceneManager.LoadScene(gameplaySceneName);
     }
 
-    public void OpenSelectedGameDetails(SaveManifestService.ManifestGameSummary summary)
+    private void SelectPlayByPostGame(SaveManifestService.ManifestGameSummary summary)
     {
         selectedPbpGame = summary;
         hasSelectedPbpGame = true;
         selectedGameId = summary.gameId;
+    }
+
+    public void OpenSelectedGameDetails(SaveManifestService.ManifestGameSummary summary)
+    {
+        SelectPlayByPostGame(summary);
 
         if (gameDetailsTitleText != null)
         {
@@ -617,6 +633,11 @@ public class MainMenuController : MonoBehaviour
         {
             gameDetailsPopupPanel.SetActive(true);
         }
+    }
+
+    public void SelectPlayByPostGameForUITK(SaveManifestService.ManifestGameSummary summary)
+    {
+        SelectPlayByPostGame(summary);
     }
 
     public void CloseGameDetailsPopup()
@@ -837,14 +858,18 @@ public class MainMenuController : MonoBehaviour
 
     private void SetImportStatus(string message)
     {
+        CurrentImportStatus = message ?? string.Empty;
+
         if (importStatusText != null)
         {
-            importStatusText.text = message;
+            importStatusText.text = CurrentImportStatus;
         }
         else
         {
-            Debug.LogWarning(message);
+            Debug.LogWarning(CurrentImportStatus);
         }
+
+        ImportStatusChanged?.Invoke(CurrentImportStatus);
     }
 
     // Allows runtime-built UI to register a status text field.
@@ -853,7 +878,7 @@ public class MainMenuController : MonoBehaviour
         importStatusText = status;
         if (importStatusText != null)
         {
-            importStatusText.text = string.Empty;
+            importStatusText.text = CurrentImportStatus;
         }
     }
 

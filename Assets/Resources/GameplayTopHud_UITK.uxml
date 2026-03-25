@@ -1,0 +1,9 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:VisualElement name="GameplayTopHudRoot" class="gameplay-top-hud-root">
+        <ui:VisualElement name="TopBar" class="gameplay-top-hud-bar">
+            <ui:Label name="TurnLabel" text="Turn 1 - Player" class="gameplay-top-hud-label gameplay-top-hud-turn" />
+            <ui:Label name="GoldLabel" text="Gold 0" class="gameplay-top-hud-label gameplay-top-hud-gold" />
+            <ui:Label name="PbpStatusLabel" text="" class="gameplay-top-hud-label gameplay-top-hud-status" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

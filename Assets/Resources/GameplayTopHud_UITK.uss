@@ -1,0 +1,57 @@
+.gameplay-top-hud-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+.gameplay-top-hud-bar {
+    margin-top: 8px;
+    min-height: 112px;
+    padding-top: 18px;
+    padding-right: 28px;
+    padding-bottom: 18px;
+    padding-left: 28px;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 18px;
+    border-bottom-left-radius: 18px;
+    background-color: rgba(8, 14, 22, 0.76);
+    border-bottom-width: 1px;
+    border-left-width: 1px;
+    border-right-width: 1px;
+    border-top-width: 0;
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+    border-left-color: rgba(255, 255, 255, 0.05);
+    border-right-color: rgba(255, 255, 255, 0.05);
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    column-gap: 28px;
+    row-gap: 8px;
+    flex-wrap: wrap;
+    -unity-text-align: middle-center;
+}
+
+.gameplay-top-hud-label {
+    color: rgb(255, 255, 255);
+    font-size: 42px;
+    -unity-font-style: bold;
+    white-space: nowrap;
+}
+
+.gameplay-top-hud-turn {
+    min-width: 380px;
+}
+
+.gameplay-top-hud-gold {
+    min-width: 180px;
+}
+
+.gameplay-top-hud-status {
+    color: rgb(156, 222, 211);
+    min-width: 460px;
+}
