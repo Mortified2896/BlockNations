@@ -12,6 +12,8 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
     [Header("Optional Source Overrides")]
     [SerializeField] private TurnManager turnManager;
+    private TurnManager subscribedTurnManager;
+    private bool? lastKnownPbpServerReachable;
 
     private UIDocument uiDocument;
     private ThemeStyleSheet themeAsset;
@@ -40,11 +42,14 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
     private void OnEnable()
     {
         ResolveSceneReferences(force: true);
+        TrySubscribeToTurnManagerEvents();
         CacheUiElements(force: true);
     }
 
     private void OnDisable()
     {
+        UnsubscribeFromTurnManagerEvents();
+        lastKnownPbpServerReachable = null;
         ClearUiCache();
     }
 
@@ -98,6 +103,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             return false;
         }
 
+        TrySubscribeToTurnManagerEvents();
         return uiDocument != null && turnManager != null;
     }
 
@@ -213,13 +219,21 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             return;
         }
 
-        PbpTopHudStatusProvider.ConnectivityState connectivityState =
-            Application.internetReachability == NetworkReachability.NotReachable
-                ? PbpTopHudStatusProvider.ConnectivityState.Unreachable
-                : PbpTopHudStatusProvider.ConnectivityState.Unknown;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        Debug.Log($"[PBpUI] internetReachability={Application.internetReachability} connectivityState={connectivityState}", this);
-#endif
+        PbpTopHudStatusProvider.ConnectivityState connectivityState;
+        if (Application.internetReachability == NetworkReachability.NotReachable)
+        {
+            connectivityState = PbpTopHudStatusProvider.ConnectivityState.Unreachable;
+        }
+        else if (turnManager != null &&
+                 turnManager.currentMode == TurnManager.GameMode.PlayByPost &&
+                 lastKnownPbpServerReachable == false)
+        {
+            connectivityState = PbpTopHudStatusProvider.ConnectivityState.ServerUnreachable;
+        }
+        else
+        {
+            connectivityState = PbpTopHudStatusProvider.ConnectivityState.Unknown;
+        }
 
         PbpTopHudStatusProvider.StatusResult pbpStatus =
             PbpTopHudStatusProvider.Build(turnManager, connectivityState);
@@ -287,6 +301,87 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         safeAreaTarget.style.paddingRight = rightInset;
         safeAreaTarget.style.paddingTop = topInset;
         safeAreaTarget.style.paddingBottom = 0f;
+    }
+
+    private void TrySubscribeToTurnManagerEvents()
+    {
+        if (turnManager == null)
+        {
+            return;
+        }
+
+        if (subscribedTurnManager == turnManager)
+        {
+            return;
+        }
+
+        UnsubscribeFromTurnManagerEvents();
+        turnManager.PlayByPostSubmitResult += HandlePlayByPostSubmitResult;
+        turnManager.PlayByPostFetchResult += HandlePlayByPostFetchResult;
+        subscribedTurnManager = turnManager;
+    }
+
+    private void UnsubscribeFromTurnManagerEvents()
+    {
+        if (subscribedTurnManager == null)
+        {
+            return;
+        }
+
+        subscribedTurnManager.PlayByPostSubmitResult -= HandlePlayByPostSubmitResult;
+        subscribedTurnManager.PlayByPostFetchResult -= HandlePlayByPostFetchResult;
+        subscribedTurnManager = null;
+    }
+
+    private void HandlePlayByPostSubmitResult(bool ok, string err)
+    {
+        if (turnManager == null || turnManager.currentMode != TurnManager.GameMode.PlayByPost)
+        {
+            return;
+        }
+
+        if (ok)
+        {
+            lastKnownPbpServerReachable = true;
+            return;
+        }
+
+        if (IsConnectivityFailure(err))
+        {
+            lastKnownPbpServerReachable = false;
+        }
+    }
+
+    private void HandlePlayByPostFetchResult(bool reachable, string resultOrError)
+    {
+        if (turnManager == null || turnManager.currentMode != TurnManager.GameMode.PlayByPost)
+        {
+            return;
+        }
+
+        if (reachable)
+        {
+            lastKnownPbpServerReachable = true;
+            return;
+        }
+
+        if (IsConnectivityFailure(resultOrError))
+        {
+            lastKnownPbpServerReachable = false;
+        }
+    }
+
+    private static bool IsConnectivityFailure(string err)
+    {
+        if (string.IsNullOrEmpty(err))
+        {
+            return true;
+        }
+
+        return string.Equals(err, TurnTelemetryConstants.IoError, System.StringComparison.Ordinal) ||
+               string.Equals(err, TurnTelemetryConstants.Unavailable, System.StringComparison.Ordinal) ||
+               string.Equals(err, TurnTelemetryConstants.NullTransport, System.StringComparison.Ordinal) ||
+               string.Equals(err, TurnTelemetryConstants.Unknown, System.StringComparison.Ordinal);
     }
 
     private void DisableOverlay()

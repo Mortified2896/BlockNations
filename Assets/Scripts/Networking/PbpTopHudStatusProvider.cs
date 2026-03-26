@@ -16,7 +16,8 @@ public static class PbpTopHudStatusProvider
     {
         Unknown,
         Connected,
-        Unreachable
+        Unreachable,
+        ServerUnreachable
     }
 
     public readonly struct StatusResult
@@ -38,6 +39,7 @@ public static class PbpTopHudStatusProvider
     /// 
     /// - ConnectivityState.Unknown keeps the normal case clean with no prefix.
     /// - ConnectivityState.Unreachable adds an offline warning prefix.
+    /// - ConnectivityState.ServerUnreachable adds a server warning prefix.
     /// </summary>
     public static StatusResult Build(
         TurnManager turnManager,
@@ -89,6 +91,7 @@ public static class PbpTopHudStatusProvider
         return connectivityState switch
         {
             ConnectivityState.Unreachable => $"Offline • {baseText}",
+            ConnectivityState.ServerUnreachable => $"Server unreachable • {baseText}",
             _ => baseText
         };
     }

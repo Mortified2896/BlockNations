@@ -3895,8 +3895,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::GameplayTopHudUITKView
   enableGameplayTopHudUITK: 1
   turnManager: {fileID: 509509618}
-  sourceStatusText: {fileID: 1267728272}
-  legacyUpperHudRoot: {fileID: 255886247}
 --- !u!1 &1175018322
 GameObject:
   m_ObjectHideFlags: 0
