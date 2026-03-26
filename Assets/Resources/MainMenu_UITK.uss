@@ -100,7 +100,7 @@
     width: 100%;
     flex-direction: row;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     margin-bottom: 26px;
 }
 
@@ -320,10 +320,13 @@
 #MultiplayerPanel .multiplayer-status {
     width: 100%;
     min-height: 34px;
+    padding-left: 6px;
+    padding-right: 6px;
     color: rgb(232, 240, 252);
-    font-size: 30px;
+    font-size: 24px;
     -unity-font-style: bold;
     -unity-text-align: middle-center;
+    white-space: normal;
 }
 
 #MultiplayerPanel .multiplayer-join-overlay {
