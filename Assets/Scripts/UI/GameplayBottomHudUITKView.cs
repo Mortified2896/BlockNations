@@ -19,6 +19,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private const string ShareOverlayCopyButtonText = "Copy Code";
     private const string ShareOverlayCloseButtonText = "Close";
     private const string PlayByPostFetchOkResult = "OK";
+    private const string GameOverOverlayDefaultTitleText = "Game Over";
 
     [Header("Spike Toggle")]
     [SerializeField] private bool enableGameplayBottomHudUITK = true;
@@ -41,6 +42,10 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private Label pbpShareCodeLabel;
     private UnityEngine.UIElements.Button pbpShareCopyButton;
     private UnityEngine.UIElements.Button pbpShareCloseButton;
+    private VisualElement gameOverOverlay;
+    private Label gameOverTitleLabel;
+    private Label gameOverMessageLabel;
+    private UnityEngine.UIElements.Button gameOverPrimaryButton;
 
     private bool uiReady;
     private bool callbacksBound;
@@ -317,6 +322,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
 
         warnedMissingControls = false;
         EnsurePlayByPostShareOverlay();
+        EnsureGameOverOverlay();
         ConfigurePickingModes();
         BindButtons();
         ApplySafeArea(force: true);
@@ -384,6 +390,11 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             pbpShareCloseButton.clicked += HandlePbpShareCloseClicked;
         }
 
+        if (gameOverPrimaryButton != null)
+        {
+            gameOverPrimaryButton.clicked += HandleGameOverPrimaryClicked;
+        }
+
         callbacksBound = true;
     }
 
@@ -412,6 +423,11 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         if (pbpShareCloseButton != null)
         {
             pbpShareCloseButton.clicked -= HandlePbpShareCloseClicked;
+        }
+
+        if (gameOverPrimaryButton != null)
+        {
+            gameOverPrimaryButton.clicked -= HandleGameOverPrimaryClicked;
         }
 
         callbacksBound = false;
@@ -450,6 +466,14 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private void HandlePbpShareCloseClicked()
     {
         HidePlayByPostShareOverlay();
+    }
+
+    private void HandleGameOverPrimaryClicked()
+    {
+        if (turnManager != null)
+        {
+            turnManager.OnPlayAgainButtonPressed();
+        }
     }
 
     private void HandlePlayByPostSubmitResult(bool ok, string err)
@@ -505,6 +529,8 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             bool canAdvance = turnManager != null && turnManager.CanAdvanceTurn();
             nextButton.SetEnabled(showDefaultBottom && canAdvance);
         }
+
+        RefreshGameOverOverlayState();
     }
 
     private void EnsurePlayByPostShareOverlay()
@@ -644,6 +670,105 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         SetShareOverlayInteractionEnabled(false);
     }
 
+    private void EnsureGameOverOverlay()
+    {
+        if (hudRoot == null || root == null)
+        {
+            return;
+        }
+
+        gameOverOverlay = root.Q<VisualElement>("GameOverOverlay");
+        gameOverTitleLabel = root.Q<Label>("GameOverTitleLabel");
+        gameOverMessageLabel = root.Q<Label>("GameOverMessageLabel");
+        gameOverPrimaryButton = root.Q<UnityEngine.UIElements.Button>("GameOverPrimaryButton");
+        if (gameOverOverlay != null && gameOverTitleLabel != null && gameOverMessageLabel != null && gameOverPrimaryButton != null)
+        {
+            return;
+        }
+
+        if (gameOverOverlay == null)
+        {
+            gameOverOverlay = new VisualElement
+            {
+                name = "GameOverOverlay",
+                pickingMode = PickingMode.Position
+            };
+            hudRoot.Add(gameOverOverlay);
+        }
+        else
+        {
+            gameOverOverlay.Clear();
+        }
+
+        gameOverOverlay.style.position = Position.Absolute;
+        gameOverOverlay.style.left = 0f;
+        gameOverOverlay.style.right = 0f;
+        gameOverOverlay.style.top = 0f;
+        gameOverOverlay.style.bottom = 0f;
+        gameOverOverlay.style.alignItems = Align.Center;
+        gameOverOverlay.style.justifyContent = Justify.Center;
+        gameOverOverlay.style.backgroundColor = new Color(0f, 0f, 0f, 0.72f);
+        gameOverOverlay.style.display = DisplayStyle.None;
+        gameOverOverlay.style.visibility = Visibility.Hidden;
+
+        VisualElement card = new VisualElement
+        {
+            name = "GameOverCard",
+            pickingMode = PickingMode.Ignore
+        };
+        card.style.width = 760f;
+        card.style.maxWidth = new Length(92f, LengthUnit.Percent);
+        card.style.minHeight = 360f;
+        card.style.paddingLeft = 30f;
+        card.style.paddingRight = 30f;
+        card.style.paddingTop = 30f;
+        card.style.paddingBottom = 30f;
+        card.style.backgroundColor = new Color(0.08f, 0.10f, 0.14f, 0.98f);
+        card.style.borderTopLeftRadius = 16f;
+        card.style.borderTopRightRadius = 16f;
+        card.style.borderBottomLeftRadius = 16f;
+        card.style.borderBottomRightRadius = 16f;
+
+        gameOverTitleLabel = new Label(GameOverOverlayDefaultTitleText)
+        {
+            name = "GameOverTitleLabel",
+            pickingMode = PickingMode.Ignore
+        };
+        gameOverTitleLabel.style.fontSize = 44f;
+        gameOverTitleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+        gameOverTitleLabel.style.color = Color.white;
+        gameOverTitleLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+
+        gameOverMessageLabel = new Label(string.Empty)
+        {
+            name = "GameOverMessageLabel",
+            pickingMode = PickingMode.Ignore
+        };
+        gameOverMessageLabel.style.marginTop = 16f;
+        gameOverMessageLabel.style.marginBottom = 28f;
+        gameOverMessageLabel.style.fontSize = 30f;
+        gameOverMessageLabel.style.color = new Color(0.94f, 0.95f, 0.98f, 1f);
+        gameOverMessageLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+        gameOverMessageLabel.style.whiteSpace = WhiteSpace.Normal;
+
+        gameOverPrimaryButton = new UnityEngine.UIElements.Button
+        {
+            name = "GameOverPrimaryButton",
+            text = "Play Again",
+            pickingMode = PickingMode.Position
+        };
+        gameOverPrimaryButton.style.height = 84f;
+        gameOverPrimaryButton.style.fontSize = 30f;
+        gameOverPrimaryButton.style.color = Color.white;
+        gameOverPrimaryButton.style.backgroundColor = new Color(0.18f, 0.52f, 0.82f, 0.95f);
+
+        card.Add(gameOverTitleLabel);
+        card.Add(gameOverMessageLabel);
+        card.Add(gameOverPrimaryButton);
+        gameOverOverlay.Add(card);
+        SetGameOverOverlayInteractionEnabled(false);
+    }
+
     private void TryPresentPlayByPostSharePrompt(string gameId)
     {
         if (string.IsNullOrWhiteSpace(gameId))
@@ -701,6 +826,47 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         {
             pbpShareCloseButton.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
             pbpShareCloseButton.SetEnabled(enabled);
+        }
+    }
+
+    private void RefreshGameOverOverlayState()
+    {
+        if (gameOverOverlay == null || gameOverMessageLabel == null || gameOverPrimaryButton == null)
+        {
+            return;
+        }
+
+        bool visible = turnManager != null && turnManager.IsGameOverUiVisible;
+        gameOverOverlay.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
+        gameOverOverlay.style.visibility = visible ? Visibility.Visible : Visibility.Hidden;
+
+        if (!visible)
+        {
+            SetGameOverOverlayInteractionEnabled(false);
+            return;
+        }
+
+        string message = turnManager.GameOverUiMessage;
+        gameOverMessageLabel.text = string.IsNullOrWhiteSpace(message) ? GameOverOverlayDefaultTitleText : message;
+
+        string primaryLabel = turnManager.GameOverUiPrimaryButtonLabel;
+        gameOverPrimaryButton.text = string.IsNullOrWhiteSpace(primaryLabel) ? "Play Again" : primaryLabel;
+        gameOverPrimaryButton.SetEnabled(turnManager.GameOverUiPrimaryButtonInteractable);
+
+        SetGameOverOverlayInteractionEnabled(true);
+    }
+
+    private void SetGameOverOverlayInteractionEnabled(bool enabled)
+    {
+        if (gameOverOverlay != null)
+        {
+            gameOverOverlay.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
+            gameOverOverlay.SetEnabled(enabled);
+        }
+
+        if (gameOverPrimaryButton != null)
+        {
+            gameOverPrimaryButton.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
         }
     }
 
@@ -898,6 +1064,10 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         pbpShareCodeLabel = null;
         pbpShareCopyButton = null;
         pbpShareCloseButton = null;
+        gameOverOverlay = null;
+        gameOverTitleLabel = null;
+        gameOverMessageLabel = null;
+        gameOverPrimaryButton = null;
         visibleSharePromptGameId = string.Empty;
         uiReady = false;
         lastSafeArea = Rect.zero;

@@ -170,7 +170,7 @@ public class TurnManager : MonoBehaviour
         "UnitPanel",
         "CityPanel"
     };
-    private const int SupportedPbpProtocolVersion = 2;
+    private const int SupportedPbpProtocolVersion = 3;
     private const int LegacyPbpProtocolVersion = 0;
     public static int PbpProtocolVersion => SupportedPbpProtocolVersion;
 
@@ -3175,14 +3175,24 @@ public class TurnManager : MonoBehaviour
         City city = GridUtils.GetCityAtPosition(unit.transform.position);
         if (city != null && city.isPlayerOwned && !unit.isPlayerOwned)
         {
-            OnCityCaptured(false);
+            OnCityCaptured(false, city);
         }
     }
 
-    public void OnCityCaptured(bool capturedByPlayer)
+    public void OnCityCaptured(bool capturedByPlayer, City capturedCity = null)
     {
         if (gameOver)
             return;
+
+        if (capturedCity != null && capturedCity.isPlayerOwned != capturedByPlayer)
+        {
+            capturedCity.isPlayerOwned = capturedByPlayer;
+            OwnedSprite cityOwnerVisual = capturedCity.GetComponent<OwnedSprite>();
+            if (cityOwnerVisual != null)
+            {
+                cityOwnerVisual.SetOwner(capturedByPlayer);
+            }
+        }
 
         gameOver = true;
 

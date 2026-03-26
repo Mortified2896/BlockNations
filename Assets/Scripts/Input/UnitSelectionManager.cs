@@ -473,7 +473,7 @@ public class UnitSelectionManager : MonoBehaviour
             City city = GridUtils.GetCityAtPosition(selectedUnit.transform.position);
             if (city != null && city.isPlayerOwned != selectedUnit.isPlayerOwned)
             {
-                turnManager.OnCityCaptured(selectedUnit.isPlayerOwned);
+                turnManager.OnCityCaptured(selectedUnit.isPlayerOwned, city);
                 return;
             }
         }
