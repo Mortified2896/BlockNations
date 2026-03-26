@@ -36,6 +36,7 @@ public class PbpConnectionStatusView : MonoBehaviour
     private string currentStatusMessage = string.Empty;
     private bool isStatusVisible;
 
+
     public string CurrentStatusMessage => currentStatusMessage;
     public bool IsStatusVisible => isStatusVisible;
     public event Action<string, bool> StatusChanged;
@@ -430,6 +431,7 @@ public class PbpConnectionStatusView : MonoBehaviour
 
         return statusText != null && statusText.enabled;
     }
+
 
     private void NotifyStatusChanged()
     {

@@ -12,7 +12,6 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
     [Header("Optional Source Overrides")]
     [SerializeField] private TurnManager turnManager;
-    [SerializeField] private PbpConnectionStatusView pbpConnectionStatusView;
 
     private UIDocument uiDocument;
     private ThemeStyleSheet themeAsset;
@@ -99,11 +98,6 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             return false;
         }
 
-        if (pbpConnectionStatusView == null || force)
-        {
-            pbpConnectionStatusView = ResolvePbpConnectionStatusView(turnManager.gameObject.scene);
-        }
-
         return uiDocument != null && turnManager != null;
     }
 
@@ -112,23 +106,6 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         return mode == TurnManager.GameMode.None ||
                mode == TurnManager.GameMode.VsAI ||
                mode == TurnManager.GameMode.PlayByPost;
-    }
-
-    private static PbpConnectionStatusView ResolvePbpConnectionStatusView(UnityEngine.SceneManagement.Scene scene)
-    {
-        PbpConnectionStatusView[] statusViews = UnityEngine.Object.FindObjectsByType<PbpConnectionStatusView>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-        for (int i = 0; i < statusViews.Length; i++)
-        {
-            PbpConnectionStatusView view = statusViews[i];
-            if (view == null || view.gameObject.scene != scene)
-            {
-                continue;
-            }
-
-            return view;
-        }
-
-        return null;
     }
 
     private bool EnsureUiReady()
@@ -236,12 +213,11 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             return;
         }
 
-        bool showStatus = pbpConnectionStatusView != null &&
-                          pbpConnectionStatusView.IsStatusVisible &&
-                          !string.IsNullOrWhiteSpace(pbpConnectionStatusView.CurrentStatusMessage);
+        PbpTopHudStatusProvider.StatusResult pbpStatus =
+            PbpTopHudStatusProvider.Build(turnManager);
 
-        statusLabel.text = showStatus ? pbpConnectionStatusView.CurrentStatusMessage : string.Empty;
-        statusLabel.style.display = showStatus ? DisplayStyle.Flex : DisplayStyle.None;
+        statusLabel.text = pbpStatus.Visible ? pbpStatus.Message : string.Empty;
+        statusLabel.style.display = pbpStatus.Visible ? DisplayStyle.Flex : DisplayStyle.None;
     }
 
     private string BuildTurnLabel()
