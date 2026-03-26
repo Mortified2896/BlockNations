@@ -1,14 +1,10 @@
-using System;
-using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 using UnityEngine.UIElements;
 
 [DisallowMultipleComponent]
 [RequireComponent(typeof(UIDocument))]
 public sealed class GameplayTopHudUITKView : MonoBehaviour
 {
-    private const string LegacyTopHudName = "Upper HUD";
     private const string ThemeResourceName = "GameplayTopHud_UITK_Theme";
 
     [Header("Spike Toggle")]
@@ -16,8 +12,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
     [Header("Optional Source Overrides")]
     [SerializeField] private TurnManager turnManager;
-    [SerializeField] private TMP_Text sourceStatusText;
-    [SerializeField] private RectTransform legacyUpperHudRoot;
+    [SerializeField] private PbpConnectionStatusView pbpConnectionStatusView;
 
     private UIDocument uiDocument;
     private ThemeStyleSheet themeAsset;
@@ -30,16 +25,6 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
     private bool uiReady;
     private bool warnedMissingPanelSettings;
     private bool warnedMissingLabels;
-
-    private TMP_Text sourceTurnText;
-    private TMP_Text sourceGoldText;
-
-    private CanvasGroup legacyUpperHudCanvasGroup;
-    private bool cachedLegacyCanvasGroupState;
-    private float cachedLegacyAlpha = 1f;
-    private bool cachedLegacyInteractable = true;
-    private bool cachedLegacyBlocksRaycasts = true;
-    private bool legacyHudHidden;
 
     private Rect lastSafeArea = Rect.zero;
     private Vector2Int lastScreenSize = Vector2Int.zero;
@@ -61,13 +46,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
     private void OnDisable()
     {
-        RestoreLegacyUpperHud();
         ClearUiCache();
-    }
-
-    private void OnDestroy()
-    {
-        RestoreLegacyUpperHud();
     }
 
     private void Update()
@@ -92,13 +71,11 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
         if (!EnsureUiReady())
         {
-            RestoreLegacyUpperHud();
             return;
         }
 
         RefreshLabels();
         ApplySafeArea(force: false);
-        HideLegacyUpperHud();
     }
 
     private bool ResolveSceneReferences(bool force)
@@ -122,56 +99,12 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             return false;
         }
 
-        sourceTurnText = turnManager.turnText;
-        sourceGoldText = turnManager.goldText;
-        TryResolveFallbackSourceTexts(turnManager.gameObject.scene);
-
-        if (legacyUpperHudRoot == null || force)
+        if (pbpConnectionStatusView == null || force)
         {
-            legacyUpperHudRoot = ResolveLegacyUpperHudRoot(turnManager.gameObject.scene);
+            pbpConnectionStatusView = ResolvePbpConnectionStatusView(turnManager.gameObject.scene);
         }
 
-        if (sourceStatusText == null || force)
-        {
-            sourceStatusText = ResolveStatusSourceText(turnManager.gameObject.scene);
-        }
-
-        return uiDocument != null && sourceTurnText != null && sourceGoldText != null;
-    }
-
-    private void TryResolveFallbackSourceTexts(UnityEngine.SceneManagement.Scene scene)
-    {
-        if (sourceTurnText != null && sourceGoldText != null)
-        {
-            return;
-        }
-
-        TMP_Text[] texts = UnityEngine.Object.FindObjectsByType<TMP_Text>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-        for (int i = 0; i < texts.Length; i++)
-        {
-            TMP_Text text = texts[i];
-            if (text == null || text.gameObject.scene != scene)
-            {
-                continue;
-            }
-
-            string lowerName = text.name.ToLowerInvariant();
-
-            if (sourceTurnText == null && lowerName.Contains("turn"))
-            {
-                sourceTurnText = text;
-            }
-
-            if (sourceGoldText == null && lowerName.Contains("gold"))
-            {
-                sourceGoldText = text;
-            }
-
-            if (sourceTurnText != null && sourceGoldText != null)
-            {
-                return;
-            }
-        }
+        return uiDocument != null && turnManager != null;
     }
 
     private static bool ShouldShowForMode(TurnManager.GameMode mode)
@@ -181,47 +114,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
                mode == TurnManager.GameMode.PlayByPost;
     }
 
-    private RectTransform ResolveLegacyUpperHudRoot(UnityEngine.SceneManagement.Scene scene)
-    {
-        if (sourceTurnText != null)
-        {
-            Transform cursor = sourceTurnText.transform;
-            while (cursor != null)
-            {
-                if (string.Equals(cursor.name, LegacyTopHudName, StringComparison.Ordinal))
-                {
-                    return cursor as RectTransform;
-                }
-
-                cursor = cursor.parent;
-            }
-
-            RectTransform parentRect = sourceTurnText.transform.parent as RectTransform;
-            if (parentRect != null)
-            {
-                return parentRect;
-            }
-        }
-
-        RectTransform[] rects = UnityEngine.Object.FindObjectsByType<RectTransform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-        for (int i = 0; i < rects.Length; i++)
-        {
-            RectTransform rect = rects[i];
-            if (rect == null || rect.gameObject.scene != scene)
-            {
-                continue;
-            }
-
-            if (string.Equals(rect.name, LegacyTopHudName, StringComparison.Ordinal))
-            {
-                return rect;
-            }
-        }
-
-        return null;
-    }
-
-    private TMP_Text ResolveStatusSourceText(UnityEngine.SceneManagement.Scene scene)
+    private static PbpConnectionStatusView ResolvePbpConnectionStatusView(UnityEngine.SceneManagement.Scene scene)
     {
         PbpConnectionStatusView[] statusViews = UnityEngine.Object.FindObjectsByType<PbpConnectionStatusView>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         for (int i = 0; i < statusViews.Length; i++)
@@ -232,36 +125,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
                 continue;
             }
 
-            TMP_Text textOnSameObject = view.GetComponent<TMP_Text>();
-            if (textOnSameObject != null)
-            {
-                return textOnSameObject;
-            }
-
-            TMP_Text childText = view.GetComponentInChildren<TMP_Text>(true);
-            if (childText != null)
-            {
-                return childText;
-            }
-        }
-
-        if (legacyUpperHudRoot != null)
-        {
-            TMP_Text[] legacyTexts = legacyUpperHudRoot.GetComponentsInChildren<TMP_Text>(true);
-            for (int i = 0; i < legacyTexts.Length; i++)
-            {
-                TMP_Text text = legacyTexts[i];
-                if (text == null)
-                {
-                    continue;
-                }
-
-                string name = text.name.ToLowerInvariant();
-                if (name.Contains("pbp") || name.Contains("connection"))
-                {
-                    return text;
-                }
-            }
+            return view;
         }
 
         return null;
@@ -364,63 +228,48 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             return;
         }
 
-        turnLabel.text = sourceTurnText != null ? sourceTurnText.text : string.Empty;
-        goldLabel.text = sourceGoldText != null ? sourceGoldText.text : string.Empty;
+        turnLabel.text = BuildTurnLabel();
+        goldLabel.text = BuildGoldLabel();
 
         if (statusLabel == null)
         {
             return;
         }
 
-        bool showStatus = sourceStatusText != null &&
-                          sourceStatusText.gameObject.activeInHierarchy &&
-                          sourceStatusText.enabled &&
-                          !string.IsNullOrWhiteSpace(sourceStatusText.text);
+        bool showStatus = pbpConnectionStatusView != null &&
+                          pbpConnectionStatusView.IsStatusVisible &&
+                          !string.IsNullOrWhiteSpace(pbpConnectionStatusView.CurrentStatusMessage);
 
-        statusLabel.text = showStatus ? sourceStatusText.text : string.Empty;
+        statusLabel.text = showStatus ? pbpConnectionStatusView.CurrentStatusMessage : string.Empty;
         statusLabel.style.display = showStatus ? DisplayStyle.Flex : DisplayStyle.None;
     }
 
-    private void HideLegacyUpperHud()
+    private string BuildTurnLabel()
     {
-        if (legacyHudHidden || legacyUpperHudRoot == null)
+        if (turnManager == null)
         {
-            return;
+            return string.Empty;
         }
 
-        legacyUpperHudCanvasGroup = legacyUpperHudRoot.GetComponent<CanvasGroup>();
-        if (legacyUpperHudCanvasGroup == null)
-        {
-            legacyUpperHudCanvasGroup = legacyUpperHudRoot.gameObject.AddComponent<CanvasGroup>();
-        }
-
-        cachedLegacyAlpha = legacyUpperHudCanvasGroup.alpha;
-        cachedLegacyInteractable = legacyUpperHudCanvasGroup.interactable;
-        cachedLegacyBlocksRaycasts = legacyUpperHudCanvasGroup.blocksRaycasts;
-        cachedLegacyCanvasGroupState = true;
-
-        legacyUpperHudCanvasGroup.alpha = 0f;
-        legacyUpperHudCanvasGroup.interactable = false;
-        legacyUpperHudCanvasGroup.blocksRaycasts = false;
-        legacyHudHidden = true;
+        return $"Turn {turnManager.turnNumber} - {turnManager.GetCurrentSideName()}";
     }
 
-    private void RestoreLegacyUpperHud()
+    private string BuildGoldLabel()
     {
-        if (!legacyHudHidden || legacyUpperHudCanvasGroup == null)
+        if (turnManager == null)
         {
-            legacyHudHidden = false;
-            return;
+            return string.Empty;
         }
 
-        if (cachedLegacyCanvasGroupState)
+        int displayGold = turnManager.playerGold;
+        if ((turnManager.currentMode == TurnManager.GameMode.Hotseat ||
+             turnManager.currentMode == TurnManager.GameMode.PlayByPost) &&
+            !turnManager.isPlayerTurn)
         {
-            legacyUpperHudCanvasGroup.alpha = cachedLegacyAlpha;
-            legacyUpperHudCanvasGroup.interactable = cachedLegacyInteractable;
-            legacyUpperHudCanvasGroup.blocksRaycasts = cachedLegacyBlocksRaycasts;
+            displayGold = turnManager.aiGold;
         }
 
-        legacyHudHidden = false;
+        return $"Gold {displayGold}";
     }
 
     private void ApplySafeArea(bool force)
@@ -458,8 +307,6 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
     private void DisableOverlay()
     {
-        RestoreLegacyUpperHud();
-
         if (uiDocument != null)
         {
             uiDocument.enabled = false;

@@ -33,9 +33,16 @@ public class PbpConnectionStatusView : MonoBehaviour
     private Coroutine heartbeatRoutine;
     private TurnManager subscribedTurnManager;
     private ServerState serverState = ServerState.Checking;
+    private string currentStatusMessage = string.Empty;
+    private bool isStatusVisible;
+
+    public string CurrentStatusMessage => currentStatusMessage;
+    public bool IsStatusVisible => isStatusVisible;
+    public event Action<string, bool> StatusChanged;
 
     private void OnEnable()
     {
+        SyncExposedStatusState();
         TryResolveDependencies();
         TrySubscribeToTurnManagerEvents();
         StartModeMonitor();
@@ -99,6 +106,16 @@ public class PbpConnectionStatusView : MonoBehaviour
                     serverState = ServerState.Unreachable;
                 }
                 RefreshStatusText();
+            }
+
+            if (turnManager != null && turnManager.gameOver)
+            {
+                StopHeartbeat();
+                SetStatusText(string.Empty);
+                SetVisible(false);
+                wasPlayByPost = true;
+                yield return new WaitForSecondsRealtime(Mathf.Max(0.25f, modeCheckSeconds));
+                continue;
             }
 
             if (IsLocalPlayersTurn())
@@ -225,6 +242,12 @@ public class PbpConnectionStatusView : MonoBehaviour
             {
                 root.SetActive(visible);
             }
+
+            if (isStatusVisible != visible)
+            {
+                isStatusVisible = visible;
+                NotifyStatusChanged();
+            }
             return;
         }
 
@@ -232,13 +255,26 @@ public class PbpConnectionStatusView : MonoBehaviour
         {
             statusText.enabled = visible;
         }
+
+        if (isStatusVisible != visible)
+        {
+            isStatusVisible = visible;
+            NotifyStatusChanged();
+        }
     }
 
     private void SetStatusText(string message)
     {
+        string resolved = message ?? string.Empty;
         if (statusText != null)
         {
-            statusText.text = message ?? string.Empty;
+            statusText.text = resolved;
+        }
+
+        if (!string.Equals(currentStatusMessage, resolved, StringComparison.Ordinal))
+        {
+            currentStatusMessage = resolved;
+            NotifyStatusChanged();
         }
     }
 
@@ -320,12 +356,13 @@ public class PbpConnectionStatusView : MonoBehaviour
 
     private void RefreshStatusText()
     {
-        if (statusText == null)
+        if (!IsPlayByPostMode())
         {
+            SetStatusText(string.Empty);
             return;
         }
 
-        if (!IsPlayByPostMode())
+        if (turnManager != null && turnManager.gameOver)
         {
             SetStatusText(string.Empty);
             return;
@@ -357,12 +394,12 @@ public class PbpConnectionStatusView : MonoBehaviour
         {
             return isYourTurn
                 ? "Connected • Your turn"
-                : "Connected • Waiting for opponent…";
+                : "Connected • Waiting for opponent";
         }
 
         return isYourTurn
             ? "Offline • Your turn"
-            : "Offline • Waiting for opponent…";
+            : "Offline • Waiting for opponent";
     }
 
     private static bool IsConnectivityFailure(string err)
@@ -376,5 +413,38 @@ public class PbpConnectionStatusView : MonoBehaviour
                string.Equals(err, TurnTelemetryConstants.Unavailable, StringComparison.Ordinal) ||
                string.Equals(err, TurnTelemetryConstants.NullTransport, StringComparison.Ordinal) ||
                string.Equals(err, TurnTelemetryConstants.Unknown, StringComparison.Ordinal);
+    }
+
+    private void SyncExposedStatusState()
+    {
+        currentStatusMessage = statusText != null ? statusText.text ?? string.Empty : string.Empty;
+        isStatusVisible = GetCurrentVisibility();
+    }
+
+    private bool GetCurrentVisibility()
+    {
+        if (root != null && root != gameObject)
+        {
+            return root.activeSelf;
+        }
+
+        return statusText != null && statusText.enabled;
+    }
+
+    private void NotifyStatusChanged()
+    {
+        if (StatusChanged == null)
+        {
+            return;
+        }
+
+        try
+        {
+            StatusChanged.Invoke(currentStatusMessage, isStatusVisible);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogException(ex);
+        }
     }
 }
