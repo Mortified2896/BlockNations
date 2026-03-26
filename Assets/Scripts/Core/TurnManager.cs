@@ -170,7 +170,7 @@ public class TurnManager : MonoBehaviour
         "UnitPanel",
         "CityPanel"
     };
-    private const int SupportedPbpProtocolVersion = 3;
+    private const int SupportedPbpProtocolVersion = 2;
     private const int LegacyPbpProtocolVersion = 0;
     public static int PbpProtocolVersion => SupportedPbpProtocolVersion;
 
