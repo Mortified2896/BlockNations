@@ -213,8 +213,16 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             return;
         }
 
+        PbpTopHudStatusProvider.ConnectivityState connectivityState =
+            Application.internetReachability == NetworkReachability.NotReachable
+                ? PbpTopHudStatusProvider.ConnectivityState.Unreachable
+                : PbpTopHudStatusProvider.ConnectivityState.Unknown;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        Debug.Log($"[PBpUI] internetReachability={Application.internetReachability} connectivityState={connectivityState}", this);
+#endif
+
         PbpTopHudStatusProvider.StatusResult pbpStatus =
-            PbpTopHudStatusProvider.Build(turnManager);
+            PbpTopHudStatusProvider.Build(turnManager, connectivityState);
 
         statusLabel.text = pbpStatus.Visible ? pbpStatus.Message : string.Empty;
         statusLabel.style.display = pbpStatus.Visible ? DisplayStyle.Flex : DisplayStyle.None;

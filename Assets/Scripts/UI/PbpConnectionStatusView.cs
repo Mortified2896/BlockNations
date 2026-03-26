@@ -1,3 +1,5 @@
+// LEGACY BRIDGE - not used by active UITK Top HUD
+
 using System;
 using System.Collections;
 using TMPro;

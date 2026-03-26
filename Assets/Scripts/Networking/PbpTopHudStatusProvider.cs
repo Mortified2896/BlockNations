@@ -8,14 +8,7 @@ using System;
 /// - keep UITK Top HUD independent from legacy PBpConnectionStatusView
 /// - keep formatting/policy in one place
 /// - derive from authoritative gameplay/runtime state only
-///
-/// Current behavior:
-/// - hidden outside Play-by-Post
-/// - hidden during game over
-/// - shows "Your turn" when local player can act
-/// - shows "Waiting for opponent" when local player is waiting
-/// - if an opponent name is available later, can show "Waiting for {Name}"
-/// - optional connectivity prefix can be added when that state is available
+/// - optional offline warning prefix can be added when that state is available
 /// </summary>
 public static class PbpTopHudStatusProvider
 {
@@ -41,13 +34,10 @@ public static class PbpTopHudStatusProvider
     }
 
     /// <summary>
-    /// Computes the PBp status line for the gameplay Top HUD.
-    ///
-    /// Notes:
-    /// - This method intentionally does NOT derive match metadata such as opponent
-    ///   display name from save/network state. Pass it in if/when you have it.
-    /// - ConnectivityState.Unknown avoids pretending to know connected/offline state
-    ///   if no reliable source is available yet.
+    /// Build the status result to show on the top HUD.
+    /// 
+    /// - ConnectivityState.Unknown keeps the normal case clean with no prefix.
+    /// - ConnectivityState.Unreachable adds an offline warning prefix.
     /// </summary>
     public static StatusResult Build(
         TurnManager turnManager,
@@ -98,7 +88,6 @@ public static class PbpTopHudStatusProvider
 
         return connectivityState switch
         {
-            ConnectivityState.Connected => $"Connected • {baseText}",
             ConnectivityState.Unreachable => $"Offline • {baseText}",
             _ => baseText
         };
