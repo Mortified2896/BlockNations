@@ -62,6 +62,10 @@ public sealed class GameplayInputOrchestrator : MonoBehaviour
     private readonly List<RaycastResult> uiRaycastResults = new List<RaycastResult>(16);
     private PointerEventData cachedPointerEventData;
     private EventSystem cachedPointerEventSystem;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private float lastUiRaycastExceptionLogTime = -999f;
+    private const float UiRaycastExceptionLogCooldownSeconds = 1f;
+#endif
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void Bootstrap()
@@ -112,6 +116,14 @@ public sealed class GameplayInputOrchestrator : MonoBehaviour
         return true;
     }
 
+    public static void ResetTransientInputState()
+    {
+        if (Instance == null)
+            return;
+
+        Instance.ResetTransientInputStateInternal();
+    }
+
     private FrameSnapshot BuildSnapshot()
     {
         FrameSnapshot snapshot = default;
@@ -160,6 +172,7 @@ public sealed class GameplayInputOrchestrator : MonoBehaviour
             pointerPosition = releasedTouchPosition;
         }
 
+        int uiPointerId = ToUiSafePointerId(pointerId);
         bool pointerOverUiNow = IsPointerOverUi(pointerId, pointerPosition);
 
         bool hasPinchInput = activeTouches.Count >= 2;
@@ -384,22 +397,41 @@ public sealed class GameplayInputOrchestrator : MonoBehaviour
         if (eventSystem == null)
             return false;
 
-        if (eventSystem.IsPointerOverGameObject(pointerId))
-            return true;
+        int uiPointerId = ToUiSafePointerId(pointerId);
 
-        if (cachedPointerEventData == null || cachedPointerEventSystem != eventSystem)
+        try
         {
-            cachedPointerEventSystem = eventSystem;
-            cachedPointerEventData = new PointerEventData(eventSystem);
+            if (eventSystem.IsPointerOverGameObject(uiPointerId))
+                return true;
+
+            if (cachedPointerEventData == null || cachedPointerEventSystem != eventSystem)
+            {
+                cachedPointerEventSystem = eventSystem;
+                cachedPointerEventData = new PointerEventData(eventSystem);
+            }
+
+            cachedPointerEventData.Reset();
+            cachedPointerEventData.position = pointerPosition;
+            cachedPointerEventData.pointerId = uiPointerId;
+
+            uiRaycastResults.Clear();
+            eventSystem.RaycastAll(cachedPointerEventData, uiRaycastResults);
+            return uiRaycastResults.Count > 0;
         }
-
-        cachedPointerEventData.Reset();
-        cachedPointerEventData.position = pointerPosition;
-        cachedPointerEventData.pointerId = pointerId;
-
-        uiRaycastResults.Clear();
-        eventSystem.RaycastAll(cachedPointerEventData, uiRaycastResults);
-        return uiRaycastResults.Count > 0;
+        catch (System.Exception ex)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            float now = Time.unscaledTime;
+            if (now - lastUiRaycastExceptionLogTime >= UiRaycastExceptionLogCooldownSeconds)
+            {
+                lastUiRaycastExceptionLogTime = now;
+                Debug.LogWarning(
+                    $"GameplayInputOrchestrator: UI pointer raycast failed (rawPointerId={pointerId}, uiPointerId={uiPointerId}, pointerPos={pointerPosition}). Falling back to world-input-safe default. {ex.GetType().Name}: {ex.Message}");
+            }
+#endif
+            // Fail safe: if UITK/EventSystem throws internally, do not freeze gameplay input.
+            return false;
+        }
     }
 
     private bool DidTouchStartOverUi(int touchId)
@@ -408,6 +440,30 @@ public sealed class GameplayInputOrchestrator : MonoBehaviour
             return startedOverUi;
 
         return IsPointerOverUi(touchId, lastKnownPointerPosition);
+    }
+
+    private static int ToUiSafePointerId(int pointerId)
+    {
+        return pointerId >= 0 ? PointerInputModule.kMouseLeftId : pointerId;
+    }
+
+    private void ResetTransientInputStateInternal()
+    {
+        ClearPrimaryGestureState();
+        pinchActive = false;
+        pinchBlockedByUi = false;
+        lastPinchDistancePixels = 0f;
+        suppressPrimaryUntilReleaseAfterPinch = false;
+        lastKnownPointerPosition = new Vector2(-10000f, -10000f);
+        releasedTouchThisFrame = false;
+        releasedTouchId = -1;
+        releasedTouchPosition = lastKnownPointerPosition;
+        touchStartedOverUi.Clear();
+        activeTouches.Clear();
+        uiRaycastResults.Clear();
+        cachedPointerEventData = null;
+        cachedPointerEventSystem = null;
+        currentSnapshot = default;
     }
 
     private void ClearPrimaryGestureState()

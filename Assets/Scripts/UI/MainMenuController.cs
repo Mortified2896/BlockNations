@@ -26,7 +26,7 @@ public class MainMenuController : MonoBehaviour
     private const string PlayByPostGameIdKey = "pbp_gameId";
     private const string PlayByPostForceNewKey = "pbp_forceNew";
     private const string PlayByPostPendingNewGameIdKey = "pbp_pendingNewGameId";
-    private const string PendingCreateShareGameIdKey = "ui_pbp_pendingCreateShareGameId";
+    private const string PendingCreateShareReadyGameIdKey = "ui_pbp_createShareReadyGameId";
     private const string ReturnToMultiplayerPaneKey = "ui_returnToMultiplayerPane";
     private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
     private const string LegacySharedSaveFileName = "save.json";
@@ -39,12 +39,14 @@ public class MainMenuController : MonoBehaviour
     public event Action ActivePbpGamesChanged;
     public event Action<string> ImportStatusChanged;
     public event Action PbpBadgeChanged;
+    public event Action MultiplayerScreenRequested;
     public event Action<string> MultiplayerCreateSucceeded;
     public IReadOnlyList<SaveManifestService.ManifestGameSummary> ActivePbpGames => activePbpGames;
     public string CurrentImportStatus { get; private set; } = string.Empty;
     public int PbpBadgeCountMyTurn { get; private set; }
+    public bool IsMultiplayerScreenRequested { get; private set; }
     private List<SaveManifestService.ManifestGameSummary> activePbpGames = new List<SaveManifestService.ManifestGameSummary>();
-    private string pendingCreateShareGameId;
+    private string pendingCreateShareReadyGameId;
     private SaveManifestService.ManifestGameSummary selectedPbpGame;
     private bool hasSelectedPbpGame;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -54,7 +56,7 @@ public class MainMenuController : MonoBehaviour
     IEnumerator Start()
     {
         LocalPlayerProfileStore.GetOrCreateProfile();
-        pendingCreateShareGameId = PlayerPrefs.GetString(PendingCreateShareGameIdKey, string.Empty);
+        pendingCreateShareReadyGameId = PlayerPrefs.GetString(PendingCreateShareReadyGameIdKey, string.Empty);
 
         bool returnToMultiplayerPane = ConsumeReturnToMultiplayerPaneFlag();
 
@@ -368,8 +370,6 @@ public class MainMenuController : MonoBehaviour
         LocalPlayerSeatStore.SetSeat(gameId, 0);
         PlayerPrefs.SetInt(PlayByPostForceNewKey, 1);
         PlayerPrefs.SetString(PlayByPostPendingNewGameIdKey, gameId);
-        PlayerPrefs.SetString(PendingCreateShareGameIdKey, gameId);
-        pendingCreateShareGameId = gameId;
         PlayerPrefs.Save();
 
         GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
@@ -422,6 +422,10 @@ public class MainMenuController : MonoBehaviour
 
     public void OpenMultiplayerScreen()
     {
+        IsMultiplayerScreenRequested = true;
+        MultiplayerScreenRequested?.Invoke();
+        TryEmitPendingCreateSuccess();
+
         if (serverCheckRoutine != null)
         {
             StopCoroutine(serverCheckRoutine);
@@ -436,6 +440,7 @@ public class MainMenuController : MonoBehaviour
 
     public void CloseMultiplayerScreen()
     {
+        IsMultiplayerScreenRequested = false;
         // UITK handles panel visibility locally.
     }
 
@@ -468,7 +473,6 @@ public class MainMenuController : MonoBehaviour
 #endif
         ActivePbpGamesChanged?.Invoke();
         RecomputePbpBadge();
-        TryEmitPendingCreateSuccess();
 
         if (isServerOnline)
         {
@@ -494,27 +498,16 @@ public class MainMenuController : MonoBehaviour
     private void TryEmitPendingCreateSuccess()
     {
         if (MultiplayerCreateSucceeded == null
-            || string.IsNullOrWhiteSpace(pendingCreateShareGameId)
-            || activePbpGames == null
-            || activePbpGames.Count == 0)
+            || string.IsNullOrWhiteSpace(pendingCreateShareReadyGameId))
         {
             return;
         }
 
-        for (int i = 0; i < activePbpGames.Count; i++)
-        {
-            if (!string.Equals(activePbpGames[i].gameId, pendingCreateShareGameId, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            string createdGameId = pendingCreateShareGameId;
-            pendingCreateShareGameId = string.Empty;
-            PlayerPrefs.DeleteKey(PendingCreateShareGameIdKey);
-            PlayerPrefs.Save();
-            MultiplayerCreateSucceeded?.Invoke(createdGameId);
-            return;
-        }
+        string createdGameId = pendingCreateShareReadyGameId;
+        pendingCreateShareReadyGameId = string.Empty;
+        PlayerPrefs.DeleteKey(PendingCreateShareReadyGameIdKey);
+        PlayerPrefs.Save();
+        MultiplayerCreateSucceeded?.Invoke(createdGameId);
     }
 
     public void RecomputePbpBadge()
@@ -661,6 +654,16 @@ public class MainMenuController : MonoBehaviour
 
         SetImportStatus($"Game code copied: {gameId}");
         return true;
+    }
+
+    public void NotifyMultiplayerUiReady()
+    {
+        if (!IsMultiplayerScreenRequested)
+        {
+            return;
+        }
+
+        TryEmitPendingCreateSuccess();
     }
 
     public void ContinueLastSave()

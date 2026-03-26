@@ -162,6 +162,14 @@ public class TurnManager : MonoBehaviour
     private const string PlayByPostPerGameSavePrefix = "pbp_";
     private const string ReturnToMultiplayerPaneKey = "ui_returnToMultiplayerPane";
     private const string MainMenuSceneName = "MainMenu";
+    private const string DefaultGameOverMessage = "Game Over";
+    private const string DefaultGameOverPrimaryButtonLabel = "Play Again";
+    private static readonly string[] LegacyGameplayRaycastBlockerRootNames =
+    {
+        "BottomPopUp",
+        "UnitPanel",
+        "CityPanel"
+    };
     private const int SupportedPbpProtocolVersion = 2;
     private const int LegacyPbpProtocolVersion = 0;
     public static int PbpProtocolVersion => SupportedPbpProtocolVersion;
@@ -199,6 +207,9 @@ public class TurnManager : MonoBehaviour
     private string pbpEndgameCachedExportGameId;
     private Button gameOverPrimaryButton;
     private TMP_Text gameOverPrimaryButtonText;
+    private string gameOverUiMessage = string.Empty;
+    private string gameOverUiPrimaryButtonLabel = DefaultGameOverPrimaryButtonLabel;
+    private bool gameOverUiPrimaryButtonInteractable = true;
     [System.Serializable]
     private class SavedCity
     {
@@ -254,6 +265,12 @@ public class TurnManager : MonoBehaviour
     private string cachedGameIdHash;
     public event System.Action<bool, string> PlayByPostSubmitResult;
     public event System.Action<bool, string> PlayByPostFetchResult;
+    public bool IsGameOverUiVisible => gameOver;
+    public string GameOverUiMessage =>
+        string.IsNullOrWhiteSpace(gameOverUiMessage) ? DefaultGameOverMessage : gameOverUiMessage;
+    public string GameOverUiPrimaryButtonLabel =>
+        string.IsNullOrWhiteSpace(gameOverUiPrimaryButtonLabel) ? DefaultGameOverPrimaryButtonLabel : gameOverUiPrimaryButtonLabel;
+    public bool GameOverUiPrimaryButtonInteractable => gameOverUiPrimaryButtonInteractable;
     public bool IsPbpEndgameMenuExitBlocked =>
         currentMode == GameMode.PlayByPost &&
         gameOver &&
@@ -670,6 +687,18 @@ public class TurnManager : MonoBehaviour
         gameOverPrimaryButtonText = null;
     }
 
+    private void ResetGameOverUiState()
+    {
+        gameOverUiMessage = string.Empty;
+        gameOverUiPrimaryButtonLabel = DefaultGameOverPrimaryButtonLabel;
+        gameOverUiPrimaryButtonInteractable = true;
+    }
+
+    private void SetGameOverUiMessage(string message)
+    {
+        gameOverUiMessage = string.IsNullOrWhiteSpace(message) ? DefaultGameOverMessage : message.Trim();
+    }
+
     void Awake()
     {
         if (Instance != null && Instance != this)
@@ -695,14 +724,80 @@ public class TurnManager : MonoBehaviour
     void Start()
     {
         ResetPlayByPostRuntimeState();
+        ResetGameOverUiState();
         ResolveTurnTransport();
         lastAppliedTurnNumberForPolling = turnNumber;
         EnsureTurnAndGoldTexts();
         EnsureEventSystemExists();
         EnsureUIRaycasters();
+        SuppressLegacyGameplayRaycastBlockers();
+        GameplayInputOrchestrator.ResetTransientInputState();
         TryStartGameplayMusic();
         RefreshEndTurnButtonInteractable(force: true);
         StartCoroutine(StartupSequence());
+    }
+
+    private void SuppressLegacyGameplayRaycastBlockers()
+    {
+        if (!gameObject.scene.IsValid())
+            return;
+
+        for (int i = 0; i < LegacyGameplayRaycastBlockerRootNames.Length; i++)
+        {
+            SuppressLegacyRaycastBlockerByRootName(LegacyGameplayRaycastBlockerRootNames[i]);
+        }
+    }
+
+    private void SuppressLegacyRaycastBlockerByRootName(string rootName)
+    {
+        if (string.IsNullOrWhiteSpace(rootName))
+            return;
+
+        Transform[] transforms = Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        for (int i = 0; i < transforms.Length; i++)
+        {
+            Transform transform = transforms[i];
+            if (transform == null || transform.gameObject.scene != gameObject.scene)
+                continue;
+
+            if (!string.Equals(transform.name, rootName, System.StringComparison.Ordinal))
+                continue;
+
+            DisableGraphicRaycastTargets(transform);
+            DisableCanvasGroupBlocking(transform);
+        }
+    }
+
+    private static void DisableGraphicRaycastTargets(Transform root)
+    {
+        if (root == null)
+            return;
+
+        Graphic[] graphics = root.GetComponentsInChildren<Graphic>(true);
+        for (int i = 0; i < graphics.Length; i++)
+        {
+            Graphic graphic = graphics[i];
+            if (graphic != null)
+            {
+                graphic.raycastTarget = false;
+            }
+        }
+    }
+
+    private static void DisableCanvasGroupBlocking(Transform root)
+    {
+        if (root == null)
+            return;
+
+        CanvasGroup[] groups = root.GetComponentsInChildren<CanvasGroup>(true);
+        for (int i = 0; i < groups.Length; i++)
+        {
+            CanvasGroup group = groups[i];
+            if (group != null)
+            {
+                group.blocksRaycasts = false;
+            }
+        }
     }
 
     void Update()
@@ -862,6 +957,9 @@ public class TurnManager : MonoBehaviour
     private void SetGameOverPrimaryButtonState(string label, bool interactable, PbpEndgamePrimaryAction action)
     {
         pbpEndgamePrimaryAction = action;
+        string resolvedLabel = string.IsNullOrWhiteSpace(label) ? DefaultGameOverPrimaryButtonLabel : label;
+        gameOverUiPrimaryButtonLabel = resolvedLabel;
+        gameOverUiPrimaryButtonInteractable = interactable;
         EnsureGameOverPrimaryButtonReferences();
 
         if (gameOverPrimaryButton != null)
@@ -871,15 +969,27 @@ public class TurnManager : MonoBehaviour
 
         if (gameOverPrimaryButtonText != null)
         {
-            gameOverPrimaryButtonText.text = label;
+            gameOverPrimaryButtonText.text = resolvedLabel;
         }
     }
 
     private void ShowGameOverPopup(string message, bool writeLog = true)
     {
+        SetGameOverUiMessage(message);
+        if (currentMode != GameMode.PlayByPost)
+        {
+            gameOverUiPrimaryButtonLabel = DefaultGameOverPrimaryButtonLabel;
+            gameOverUiPrimaryButtonInteractable = true;
+        }
+        else if (pbpEndgamePrimaryAction == PbpEndgamePrimaryAction.None)
+        {
+            gameOverUiPrimaryButtonLabel = DefaultGameOverPrimaryButtonLabel;
+            gameOverUiPrimaryButtonInteractable = false;
+        }
+
         if (gameOverText != null)
         {
-            gameOverText.text = message;
+            gameOverText.text = GameOverUiMessage;
             gameOverText.gameObject.SetActive(true);
         }
 
@@ -917,6 +1027,38 @@ public class TurnManager : MonoBehaviour
         City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
         if (cities == null || cities.Length == 0)
             return false;
+
+        // Preferred PBp endgame inference for loaded snapshots:
+        // if a city is occupied by an opposite-owner unit, treat that
+        // unit owner as the capturing winner side.
+        bool foundCaptureMarker = false;
+        bool captureWinnerIsPlayerOwned = false;
+        for (int i = 0; i < cities.Length; i++)
+        {
+            City city = cities[i];
+            if (city == null)
+                continue;
+
+            Unit occupyingUnit = GridUtils.GetUnitAtPosition(city.transform.position);
+            if (occupyingUnit == null || occupyingUnit.isPlayerOwned == city.isPlayerOwned)
+                continue;
+
+            if (!foundCaptureMarker)
+            {
+                foundCaptureMarker = true;
+                captureWinnerIsPlayerOwned = occupyingUnit.isPlayerOwned;
+                continue;
+            }
+
+            if (occupyingUnit.isPlayerOwned != captureWinnerIsPlayerOwned)
+                return false;
+        }
+
+        if (foundCaptureMarker)
+        {
+            winnerSeatIndex = captureWinnerIsPlayerOwned ? 0 : 1;
+            return true;
+        }
 
         bool owner = cities[0].isPlayerOwned;
         for (int i = 1; i < cities.Length; i++)
@@ -976,7 +1118,20 @@ public class TurnManager : MonoBehaviour
         }
 
         if (!TryComputePbpLocalResult(winnerSeatIndex, out bool didLocalWin, out _))
+        {
+            ShowGameOverPopup("Game over.", writeLog: false);
+            pbpEndgameLocalWinner = false;
+            pbpEndgameSubmitPending = false;
+            pbpEndgameSubmitSucceeded = false;
+            pbpEndgameSubmitPayloadCached = false;
+            pbpEndgameCachedExportJson = null;
+            pbpEndgameCachedExportGameId = null;
+            pbpEndgameCachedTransportSeq = 0;
+            pbpEndgameCachedExportTurnNumber = 0;
+            pbpEndgameCachedExportIsPlayerTurn = false;
+            SetGameOverPrimaryButtonState("Back to Multiplayer & Delete local copy", true, PbpEndgamePrimaryAction.BackAndDelete);
             return;
+        }
 
         string message = didLocalWin ? "You won!" : "You lost!";
         ShowGameOverPopup(message, writeLog: false);
@@ -1494,8 +1649,11 @@ public class TurnManager : MonoBehaviour
                 PlayerPrefs.GetInt(shareShownKey, 0) != 1)
             {
                 playByPostPopup.SetActive(true);
-                PlayerPrefs.SetInt(shareShownKey, 1);
-                PlayerPrefs.Save();
+                if (playByPostPopup.activeInHierarchy)
+                {
+                    PlayerPrefs.SetInt(shareShownKey, 1);
+                    PlayerPrefs.Save();
+                }
             }
 
             StartPlayByPostPolling(transportSeq);
@@ -2026,6 +2184,7 @@ public class TurnManager : MonoBehaviour
         // Reset core state for a fresh game (important when reloading scenes in-editor).
         ResetPlayByPostRuntimeState();
         gameOver = false;
+        ResetGameOverUiState();
         turnNumber = 1;
         isPlayerTurn = true;
         playerGold = startingGold;
@@ -3985,6 +4144,24 @@ private void PBpDebugSyncNow_Context()
             playerGold = save.playerGold;
             aiGold = save.aiGold;
             gameOver = save.gameOver;
+            if (!gameOver)
+            {
+                ResetGameOverUiState();
+            }
+            else
+            {
+                SetGameOverUiMessage(DefaultGameOverMessage);
+                if (currentMode != GameMode.PlayByPost)
+                {
+                    gameOverUiPrimaryButtonLabel = DefaultGameOverPrimaryButtonLabel;
+                    gameOverUiPrimaryButtonInteractable = true;
+                }
+                else
+                {
+                    gameOverUiPrimaryButtonLabel = DefaultGameOverPrimaryButtonLabel;
+                    gameOverUiPrimaryButtonInteractable = false;
+                }
+            }
             visibilityRadius = save.visibilityRadius;
             isHotseatHandoff = false;
             isPlayByPostWaitingForExport = false;
@@ -4157,6 +4334,7 @@ private void PBpDebugSyncNow_Context()
             UpdateGoldText();
             RecalculatePlayerVisibility();
             UpdateTurnText();
+            SuppressLegacyGameplayRaycastBlockers();
             if (playByPostPopup != null)
             {
                 playByPostPopup.SetActive(false);
@@ -4235,6 +4413,7 @@ private void PBpDebugSyncNow_Context()
                 gameOver,
                 lastKnownRoundTurn: turnNumber,
                 lastKnownIsPlayerTurn: isPlayerTurn);
+            GameplayInputOrchestrator.ResetTransientInputState();
 
             if (currentMode == GameMode.VsAI && !isPlayerTurn && !gameOver)
             {
@@ -4244,9 +4423,16 @@ private void PBpDebugSyncNow_Context()
                 StartCoroutine(AITurn());
             }
 
-            if (currentMode == GameMode.PlayByPost && gameOver)
+            if (gameOver)
             {
-                ConfigurePbpEndgameFromLoadedState();
+                if (currentMode == GameMode.PlayByPost)
+                {
+                    ConfigurePbpEndgameFromLoadedState();
+                }
+                else
+                {
+                    ShowGameOverPopup(DefaultGameOverMessage, writeLog: false);
+                }
             }
 
             ScheduleAutoEndTurnCheck();

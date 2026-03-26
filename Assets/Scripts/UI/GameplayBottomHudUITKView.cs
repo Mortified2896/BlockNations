@@ -12,6 +12,13 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private const string LayoutResourceName = "GameplayBottomHud_UITK";
     private const string ThemeResourceName = "GameplayTopHud_UITK_Theme";
     private const string LegacyDefaultHudName = "Buttom HUD";
+    private const string PlayByPostGameIdKey = "pbp_gameId";
+    private const string PlayByPostShareShownKeyPrefix = "pbp_shareShown_";
+    private const string ShareOverlayTitleText = "Share Game Code";
+    private const string ShareOverlayInstructionText = "Send this code to your friend";
+    private const string ShareOverlayCopyButtonText = "Copy Code";
+    private const string ShareOverlayCloseButtonText = "Close";
+    private const string PlayByPostFetchOkResult = "OK";
 
     [Header("Spike Toggle")]
     [SerializeField] private bool enableGameplayBottomHudUITK = true;
@@ -30,12 +37,18 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private VisualElement defaultBottomPanel;
     private UnityEngine.UIElements.Button menuButton;
     private UnityEngine.UIElements.Button nextButton;
+    private VisualElement pbpShareOverlay;
+    private Label pbpShareCodeLabel;
+    private UnityEngine.UIElements.Button pbpShareCopyButton;
+    private UnityEngine.UIElements.Button pbpShareCloseButton;
 
     private bool uiReady;
     private bool callbacksBound;
     private bool warnedMissingPanelSettings;
     private bool warnedMissingLayout;
     private bool warnedMissingControls;
+    private TurnManager subscribedTurnManager;
+    private string visibleSharePromptGameId = string.Empty;
 
     private BottomStripController bottomStripController;
 
@@ -73,16 +86,20 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     {
         ResolveSceneReferences(force: true);
         CacheUiElements(force: true);
+        RefreshTurnManagerSubscription();
     }
 
     private void OnDisable()
     {
+        RefreshTurnManagerSubscription(forceClear: true);
+        HidePlayByPostShareOverlay();
         RestoreLegacyButtons();
         ClearUiCache();
     }
 
     private void OnDestroy()
     {
+        RefreshTurnManagerSubscription(forceClear: true);
         RestoreLegacyButtons();
     }
 
@@ -96,9 +113,12 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
 
         if (!ResolveSceneReferences(force: false))
         {
+            RefreshTurnManagerSubscription(forceClear: true);
             DisableOverlay();
             return;
         }
+
+        RefreshTurnManagerSubscription();
 
         if (!EnsureUiReady())
         {
@@ -156,6 +176,28 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         }
 
         return uiDocument != null && turnManager != null && gameMenuActions != null;
+    }
+
+    private void RefreshTurnManagerSubscription(bool forceClear = false)
+    {
+        TurnManager target = forceClear ? null : turnManager;
+        if (subscribedTurnManager == target)
+        {
+            return;
+        }
+
+        if (subscribedTurnManager != null)
+        {
+            subscribedTurnManager.PlayByPostSubmitResult -= HandlePlayByPostSubmitResult;
+            subscribedTurnManager.PlayByPostFetchResult -= HandlePlayByPostFetchResult;
+        }
+
+        subscribedTurnManager = target;
+        if (subscribedTurnManager != null)
+        {
+            subscribedTurnManager.PlayByPostSubmitResult += HandlePlayByPostSubmitResult;
+            subscribedTurnManager.PlayByPostFetchResult += HandlePlayByPostFetchResult;
+        }
     }
 
     private RectTransform ResolveLegacyDefaultHudRoot(UnityEngine.SceneManagement.Scene scene)
@@ -274,6 +316,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         }
 
         warnedMissingControls = false;
+        EnsurePlayByPostShareOverlay();
         ConfigurePickingModes();
         BindButtons();
         ApplySafeArea(force: true);
@@ -308,6 +351,10 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         {
             nextButton.pickingMode = PickingMode.Position;
         }
+
+        bool overlayVisible = pbpShareOverlay != null &&
+                              pbpShareOverlay.resolvedStyle.display != DisplayStyle.None;
+        SetShareOverlayInteractionEnabled(overlayVisible);
     }
 
     private void BindButtons()
@@ -325,6 +372,16 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         if (nextButton != null)
         {
             nextButton.clicked += HandleNextClicked;
+        }
+
+        if (pbpShareCopyButton != null)
+        {
+            pbpShareCopyButton.clicked += HandlePbpShareCopyClicked;
+        }
+
+        if (pbpShareCloseButton != null)
+        {
+            pbpShareCloseButton.clicked += HandlePbpShareCloseClicked;
         }
 
         callbacksBound = true;
@@ -347,6 +404,16 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             nextButton.clicked -= HandleNextClicked;
         }
 
+        if (pbpShareCopyButton != null)
+        {
+            pbpShareCopyButton.clicked -= HandlePbpShareCopyClicked;
+        }
+
+        if (pbpShareCloseButton != null)
+        {
+            pbpShareCloseButton.clicked -= HandlePbpShareCloseClicked;
+        }
+
         callbacksBound = false;
     }
 
@@ -364,6 +431,56 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         {
             turnManager.OnEndTurnButtonPressed();
         }
+    }
+
+    private void HandlePbpShareCopyClicked()
+    {
+        string gameId = visibleSharePromptGameId;
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            return;
+        }
+
+        if (!ClipboardUtility.TryCopy(gameId))
+        {
+            GUIUtility.systemCopyBuffer = gameId;
+        }
+    }
+
+    private void HandlePbpShareCloseClicked()
+    {
+        HidePlayByPostShareOverlay();
+    }
+
+    private void HandlePlayByPostSubmitResult(bool ok, string err)
+    {
+        if (!ok || turnManager == null || turnManager.currentMode != TurnManager.GameMode.PlayByPost)
+        {
+            return;
+        }
+
+        string gameId = GetCurrentPlayByPostGameId();
+        if (string.IsNullOrWhiteSpace(gameId) || !IsLocalHostForGame(gameId))
+        {
+            return;
+        }
+
+        if (PlayerPrefs.GetInt(GetShareShownKey(gameId), 0) == 1)
+        {
+            return;
+        }
+
+        TryPresentPlayByPostSharePrompt(gameId);
+    }
+
+    private void HandlePlayByPostFetchResult(bool reachable, string resultOrError)
+    {
+        if (!reachable || !string.Equals(resultOrError, PlayByPostFetchOkResult, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        HidePlayByPostShareOverlay();
     }
 
     private void RefreshUiState()
@@ -388,6 +505,227 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             bool canAdvance = turnManager != null && turnManager.CanAdvanceTurn();
             nextButton.SetEnabled(showDefaultBottom && canAdvance);
         }
+    }
+
+    private void EnsurePlayByPostShareOverlay()
+    {
+        if (hudRoot == null)
+        {
+            return;
+        }
+
+        pbpShareOverlay = root.Q<VisualElement>("PbpShareOverlay");
+        pbpShareCodeLabel = root.Q<Label>("PbpShareCodeLabel");
+        pbpShareCopyButton = root.Q<UnityEngine.UIElements.Button>("PbpShareCopyButton");
+        pbpShareCloseButton = root.Q<UnityEngine.UIElements.Button>("PbpShareCloseButton");
+        if (pbpShareOverlay != null && pbpShareCodeLabel != null && pbpShareCopyButton != null && pbpShareCloseButton != null)
+        {
+            return;
+        }
+
+        pbpShareOverlay = new VisualElement
+        {
+            name = "PbpShareOverlay",
+            pickingMode = PickingMode.Position
+        };
+        pbpShareOverlay.style.position = Position.Absolute;
+        pbpShareOverlay.style.left = 0f;
+        pbpShareOverlay.style.right = 0f;
+        pbpShareOverlay.style.top = 0f;
+        pbpShareOverlay.style.bottom = 0f;
+        pbpShareOverlay.style.alignItems = Align.Center;
+        pbpShareOverlay.style.justifyContent = Justify.Center;
+        pbpShareOverlay.style.backgroundColor = new Color(0f, 0f, 0f, 0.62f);
+        pbpShareOverlay.style.display = DisplayStyle.None;
+        pbpShareOverlay.style.visibility = Visibility.Hidden;
+
+        VisualElement card = new VisualElement
+        {
+            name = "PbpShareCard",
+            pickingMode = PickingMode.Ignore
+        };
+        card.style.width = 700f;
+        card.style.maxWidth = new Length(92f, LengthUnit.Percent);
+        card.style.minHeight = 320f;
+        card.style.paddingLeft = 28f;
+        card.style.paddingRight = 28f;
+        card.style.paddingTop = 28f;
+        card.style.paddingBottom = 28f;
+        card.style.backgroundColor = new Color(0.08f, 0.10f, 0.14f, 0.95f);
+        card.style.borderTopLeftRadius = 16f;
+        card.style.borderTopRightRadius = 16f;
+        card.style.borderBottomLeftRadius = 16f;
+        card.style.borderBottomRightRadius = 16f;
+
+        Label title = new Label(ShareOverlayTitleText)
+        {
+            name = "PbpShareTitleLabel",
+            pickingMode = PickingMode.Ignore
+        };
+        title.style.fontSize = 40f;
+        title.style.unityFontStyleAndWeight = FontStyle.Bold;
+        title.style.color = Color.white;
+        title.style.unityTextAlign = TextAnchor.MiddleCenter;
+
+        Label instruction = new Label(ShareOverlayInstructionText)
+        {
+            name = "PbpShareInstructionLabel",
+            pickingMode = PickingMode.Ignore
+        };
+        instruction.style.marginTop = 10f;
+        instruction.style.fontSize = 26f;
+        instruction.style.color = new Color(0.90f, 0.93f, 0.98f, 1f);
+        instruction.style.unityTextAlign = TextAnchor.MiddleCenter;
+
+        pbpShareCodeLabel = new Label(string.Empty)
+        {
+            name = "PbpShareCodeLabel",
+            pickingMode = PickingMode.Ignore
+        };
+        pbpShareCodeLabel.style.marginTop = 16f;
+        pbpShareCodeLabel.style.marginBottom = 24f;
+        pbpShareCodeLabel.style.paddingLeft = 16f;
+        pbpShareCodeLabel.style.paddingRight = 16f;
+        pbpShareCodeLabel.style.paddingTop = 14f;
+        pbpShareCodeLabel.style.paddingBottom = 14f;
+        pbpShareCodeLabel.style.fontSize = 34f;
+        pbpShareCodeLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+        pbpShareCodeLabel.style.color = new Color(0.96f, 0.97f, 1f, 1f);
+        pbpShareCodeLabel.style.backgroundColor = new Color(0.16f, 0.24f, 0.41f, 0.88f);
+        pbpShareCodeLabel.style.borderTopLeftRadius = 10f;
+        pbpShareCodeLabel.style.borderTopRightRadius = 10f;
+        pbpShareCodeLabel.style.borderBottomLeftRadius = 10f;
+        pbpShareCodeLabel.style.borderBottomRightRadius = 10f;
+        pbpShareCodeLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+
+        VisualElement actions = new VisualElement
+        {
+            name = "PbpShareActions",
+            pickingMode = PickingMode.Ignore
+        };
+        actions.style.flexDirection = FlexDirection.Row;
+        actions.style.alignItems = Align.Center;
+
+        pbpShareCopyButton = new UnityEngine.UIElements.Button
+        {
+            name = "PbpShareCopyButton",
+            text = ShareOverlayCopyButtonText,
+            pickingMode = PickingMode.Position
+        };
+        pbpShareCopyButton.style.flexGrow = 1f;
+        pbpShareCopyButton.style.height = 84f;
+        pbpShareCopyButton.style.fontSize = 32f;
+        pbpShareCopyButton.style.marginRight = 8f;
+        pbpShareCopyButton.style.color = Color.white;
+        pbpShareCopyButton.style.backgroundColor = new Color(0.18f, 0.52f, 0.82f, 0.95f);
+
+        pbpShareCloseButton = new UnityEngine.UIElements.Button
+        {
+            name = "PbpShareCloseButton",
+            text = ShareOverlayCloseButtonText,
+            pickingMode = PickingMode.Position
+        };
+        pbpShareCloseButton.style.flexGrow = 1f;
+        pbpShareCloseButton.style.height = 84f;
+        pbpShareCloseButton.style.fontSize = 32f;
+        pbpShareCloseButton.style.marginLeft = 8f;
+        pbpShareCloseButton.style.color = Color.white;
+        pbpShareCloseButton.style.backgroundColor = new Color(0.28f, 0.32f, 0.40f, 0.95f);
+
+        actions.Add(pbpShareCopyButton);
+        actions.Add(pbpShareCloseButton);
+
+        card.Add(title);
+        card.Add(instruction);
+        card.Add(pbpShareCodeLabel);
+        card.Add(actions);
+        pbpShareOverlay.Add(card);
+        hudRoot.Add(pbpShareOverlay);
+        SetShareOverlayInteractionEnabled(false);
+    }
+
+    private void TryPresentPlayByPostSharePrompt(string gameId)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            return;
+        }
+
+        if (!EnsureUiReady())
+        {
+            return;
+        }
+
+        EnsurePlayByPostShareOverlay();
+        if (pbpShareOverlay == null || pbpShareCodeLabel == null)
+        {
+            return;
+        }
+
+        visibleSharePromptGameId = gameId;
+        pbpShareCodeLabel.text = gameId;
+        pbpShareOverlay.style.display = DisplayStyle.Flex;
+        pbpShareOverlay.style.visibility = Visibility.Visible;
+        SetShareOverlayInteractionEnabled(true);
+        MarkSharePromptAsShown(gameId);
+    }
+
+    private void HidePlayByPostShareOverlay()
+    {
+        if (pbpShareOverlay != null)
+        {
+            pbpShareOverlay.style.display = DisplayStyle.None;
+            pbpShareOverlay.style.visibility = Visibility.Hidden;
+        }
+
+        SetShareOverlayInteractionEnabled(false);
+
+        visibleSharePromptGameId = string.Empty;
+    }
+
+    private void SetShareOverlayInteractionEnabled(bool enabled)
+    {
+        if (pbpShareOverlay != null)
+        {
+            pbpShareOverlay.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
+            pbpShareOverlay.SetEnabled(enabled);
+        }
+
+        if (pbpShareCopyButton != null)
+        {
+            pbpShareCopyButton.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
+            pbpShareCopyButton.SetEnabled(enabled);
+        }
+
+        if (pbpShareCloseButton != null)
+        {
+            pbpShareCloseButton.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
+            pbpShareCloseButton.SetEnabled(enabled);
+        }
+    }
+
+    private static string GetCurrentPlayByPostGameId()
+    {
+        string gameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
+        return string.IsNullOrWhiteSpace(gameId) ? string.Empty : gameId.Trim();
+    }
+
+    private static bool IsLocalHostForGame(string gameId)
+    {
+        return !string.IsNullOrWhiteSpace(gameId) &&
+               LocalPlayerSeatStore.TryGetSeat(gameId, out int seat) &&
+               seat == 0;
+    }
+
+    private static string GetShareShownKey(string gameId)
+    {
+        return PlayByPostShareShownKeyPrefix + gameId;
+    }
+
+    private static void MarkSharePromptAsShown(string gameId)
+    {
+        PlayerPrefs.SetInt(GetShareShownKey(gameId), 1);
+        PlayerPrefs.Save();
     }
 
     private void HideLegacyButtons()
@@ -536,6 +874,8 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
 
     private void DisableOverlay()
     {
+        RefreshTurnManagerSubscription(forceClear: true);
+        HidePlayByPostShareOverlay();
         RestoreLegacyButtons();
 
         if (uiDocument != null)
@@ -554,6 +894,11 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         defaultBottomPanel = null;
         menuButton = null;
         nextButton = null;
+        pbpShareOverlay = null;
+        pbpShareCodeLabel = null;
+        pbpShareCopyButton = null;
+        pbpShareCloseButton = null;
+        visibleSharePromptGameId = string.Empty;
         uiReady = false;
         lastSafeArea = Rect.zero;
         lastScreenSize = Vector2Int.zero;

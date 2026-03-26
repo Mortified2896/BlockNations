@@ -15,6 +15,7 @@ public class MainMenuUITKView : MonoBehaviour
     private const float NonOverflowListDragLimit = 352f;
     private const float NonOverflowListDragDamping = 0.35f;
     private const float NonOverflowListDragThreshold = 10f;
+    private const float DetailsGameIdFontSize = 30f;
 
     [Header("Trial Toggle")]
     [SerializeField] private bool enableUITK = true;
@@ -80,6 +81,7 @@ public class MainMenuUITKView : MonoBehaviour
     private IVisualElementScheduledItem viewInitializationItem;
     private LocalPlayerProfileStore.ProfileData profileData;
     private string pendingCreateSuccessGameId;
+    private string selectedDetailsGameId = string.Empty;
 
     private void Awake()
     {
@@ -272,6 +274,12 @@ public class MainMenuUITKView : MonoBehaviour
         detailsTitleLabel = root.Q<Label>("DetailsTitleLabel");
         detailsSubtitleLabel = root.Q<Label>("DetailsSubtitleLabel");
         detailsGameIdLabel = root.Q<Label>("DetailsGameIdLabel");
+        if (detailsGameIdLabel != null)
+        {
+            detailsGameIdLabel.style.fontSize = DetailsGameIdFontSize;
+            detailsGameIdLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            detailsGameIdLabel.pickingMode = PickingMode.Position;
+        }
         statusLabel = root.Q<Label>("StatusLabel");
         versionLabel = root.Q<Label>("VersionLabel");
         multiplayerVersionLabel = root.Q<Label>("MultiplayerVersionLabel");
@@ -570,6 +578,11 @@ public class MainMenuUITKView : MonoBehaviour
             detailsCloseButton.clicked += HandleDetailsCloseClicked;
         }
 
+        if (detailsGameIdLabel != null)
+        {
+            detailsGameIdLabel.RegisterCallback<ClickEvent>(HandleDetailsGameIdClicked);
+        }
+
         if (joinConfirmButton != null)
         {
             joinConfirmButton.clicked += HandleJoinConfirmClicked;
@@ -666,6 +679,11 @@ public class MainMenuUITKView : MonoBehaviour
         if (detailsCloseButton != null)
         {
             detailsCloseButton.clicked -= HandleDetailsCloseClicked;
+        }
+
+        if (detailsGameIdLabel != null)
+        {
+            detailsGameIdLabel.UnregisterCallback<ClickEvent>(HandleDetailsGameIdClicked);
         }
 
         if (joinConfirmButton != null)
@@ -905,6 +923,16 @@ public class MainMenuUITKView : MonoBehaviour
         HideDetailsPanel();
     }
 
+    private void HandleDetailsGameIdClicked(ClickEvent evt)
+    {
+        if (mainMenuController == null || string.IsNullOrWhiteSpace(selectedDetailsGameId))
+        {
+            return;
+        }
+
+        mainMenuController.CopyPbpGameIdToClipboard(selectedDetailsGameId);
+    }
+
     private void RefreshGamesList()
     {
         if (!enableUITK || activeGamesList == null)
@@ -950,6 +978,7 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         hasSelectedGame = true;
+        selectedDetailsGameId = summary.gameId;
 
         if (mainMenuController != null)
         {
@@ -1094,6 +1123,7 @@ public class MainMenuUITKView : MonoBehaviour
     private void HideDetailsPanel()
     {
         hasSelectedGame = false;
+        selectedDetailsGameId = string.Empty;
         SetVisible(detailsPanel, false);
     }
 
@@ -1322,6 +1352,7 @@ public class MainMenuUITKView : MonoBehaviour
         isDraggingNonOverflowGamesList = false;
         suppressNextGameCardClick = false;
         hasSelectedGame = false;
+        selectedDetailsGameId = string.Empty;
         uiReady = false;
     }
 
