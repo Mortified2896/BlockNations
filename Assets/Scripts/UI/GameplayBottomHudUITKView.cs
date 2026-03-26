@@ -614,7 +614,12 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         pbpShareCodeLabel.style.paddingRight = 16f;
         pbpShareCodeLabel.style.paddingTop = 14f;
         pbpShareCodeLabel.style.paddingBottom = 14f;
-        pbpShareCodeLabel.style.fontSize = 34f;
+        pbpShareCodeLabel.style.alignSelf = Align.Stretch;
+        pbpShareCodeLabel.style.width = new Length(100f, LengthUnit.Percent);
+        pbpShareCodeLabel.style.maxWidth = new Length(100f, LengthUnit.Percent);
+        pbpShareCodeLabel.style.minHeight = 96f;
+        pbpShareCodeLabel.style.whiteSpace = WhiteSpace.Normal;
+        pbpShareCodeLabel.style.fontSize = 28f;
         pbpShareCodeLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
         pbpShareCodeLabel.style.color = new Color(0.96f, 0.97f, 1f, 1f);
         pbpShareCodeLabel.style.backgroundColor = new Color(0.16f, 0.24f, 0.41f, 0.88f);
