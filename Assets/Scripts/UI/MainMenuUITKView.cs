@@ -259,7 +259,16 @@ public class MainMenuUITKView : MonoBehaviour
     {
         SubscribeMainMenuEvents();
         RefreshGamesList();
-        ShowMainPanel();
+
+        if (mainMenuController != null && mainMenuController.IsMultiplayerScreenRequested)
+        {
+            ShowMultiplayerPanel();
+            SetStatus(mainMenuController.CurrentImportStatus);
+        }
+        else
+        {
+            ShowMainPanel();
+        }
     }
 
     private void CacheElements()
@@ -721,6 +730,7 @@ public class MainMenuUITKView : MonoBehaviour
 
         mainMenuController.ActivePbpGamesChanged += RefreshGamesList;
         mainMenuController.ImportStatusChanged += SetStatus;
+        mainMenuController.MultiplayerScreenRequested += HandleMultiplayerScreenRequested;
         mainMenuController.MultiplayerCreateSucceeded += HandleMultiplayerCreateSucceeded;
         SetStatus(mainMenuController.CurrentImportStatus);
         subscribedToMenuEvents = true;
@@ -736,8 +746,21 @@ public class MainMenuUITKView : MonoBehaviour
 
         mainMenuController.ActivePbpGamesChanged -= RefreshGamesList;
         mainMenuController.ImportStatusChanged -= SetStatus;
+        mainMenuController.MultiplayerScreenRequested -= HandleMultiplayerScreenRequested;
         mainMenuController.MultiplayerCreateSucceeded -= HandleMultiplayerCreateSucceeded;
         subscribedToMenuEvents = false;
+    }
+
+    private void HandleMultiplayerScreenRequested()
+    {
+        if (!enableUITK || !uiReady)
+        {
+            return;
+        }
+
+        ShowMultiplayerPanel();
+        RefreshGamesList();
+        SetStatus(mainMenuController != null ? mainMenuController.CurrentImportStatus : string.Empty);
     }
 
     private void HandleContinueClicked()
