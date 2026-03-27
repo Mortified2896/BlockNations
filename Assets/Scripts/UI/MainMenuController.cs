@@ -404,7 +404,7 @@ public class MainMenuController : MonoBehaviour
 
         if (!isServerOnline)
         {
-            SetImportStatus("Server offline");
+            SetImportStatus(BuildConnectivityWarningStatus());
             return false;
         }
 
@@ -492,7 +492,7 @@ public class MainMenuController : MonoBehaviour
         }
         else
         {
-            SetImportStatus(connectivityState == PbpConnectivityState.Offline ? "Server offline" : "Server unreachable");
+            SetImportStatus(connectivityState == PbpConnectivityState.Offline ? "Offline" : "Can't reach server");
         }
     }
 
@@ -610,7 +610,7 @@ public class MainMenuController : MonoBehaviour
     {
         if (!isServerOnline)
         {
-            SetImportStatus("Server offline");
+            SetImportStatus(BuildConnectivityWarningStatus());
             return;
         }
 
@@ -893,7 +893,7 @@ public class MainMenuController : MonoBehaviour
         }
 #endif
 
-        SetImportStatus(isServerOnline ? "Server online" : "Server offline");
+        SetImportStatus(isServerOnline ? "Server online" : BuildConnectivityWarningStatus());
         RefreshMultiplayerList();
         serverCheckRoutine = null;
     }
@@ -910,7 +910,7 @@ public class MainMenuController : MonoBehaviour
             HttpTurnTransport httpTransport = cachedHttpTransport;
             if (httpTransport == null)
             {
-                SetImportStatus("Server offline. Can't verify game.");
+                SetImportStatus($"{BuildConnectivityWarningStatus()}. Can't verify game.");
                 yield break;
             }
 
@@ -954,7 +954,7 @@ public class MainMenuController : MonoBehaviour
                 yield break;
             }
 
-            SetImportStatus("Server offline. Can't verify game.");
+            SetImportStatus($"{BuildConnectivityWarningStatus()}. Can't verify game.");
         }
         finally
         {
@@ -998,6 +998,13 @@ public class MainMenuController : MonoBehaviour
     private static PbpConnectivityState ResolveSharedConnectivityState()
     {
         return PbpConnectivityStateModel.Resolve(Application.internetReachability).State;
+    }
+
+    private static string BuildConnectivityWarningStatus()
+    {
+        return ResolveSharedConnectivityState() == PbpConnectivityState.Offline
+            ? "Offline"
+            : "Can't reach server";
     }
 
     private static string BuildGameTitle(SaveManifestService.ManifestGameSummary summary)
