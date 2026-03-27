@@ -1,8 +1,5 @@
 using System;
-using System.Collections.Generic;
-using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 using UnityEngine.UIElements;
 
 [DisallowMultipleComponent]
@@ -11,7 +8,6 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
 {
     private const string LayoutResourceName = "GameplayBottomHud_UITK";
     private const string ThemeResourceName = "GameplayTopHud_UITK_Theme";
-    private const string LegacyDefaultHudName = "Buttom HUD";
     private const string PlayByPostGameIdKey = "pbp_gameId";
     private const string PlayByPostShareShownKeyPrefix = "pbp_shareShown_";
     private const string ShareOverlayTitleText = "Share Game Code";
@@ -27,7 +23,6 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     [Header("Optional Source Overrides")]
     [SerializeField] private TurnManager turnManager;
     [SerializeField] private GameMenuActions gameMenuActions;
-    [SerializeField] private RectTransform legacyDefaultHudRoot;
 
     private UIDocument uiDocument;
     private VisualTreeAsset layoutAsset;
@@ -60,19 +55,6 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private Rect lastSafeArea = Rect.zero;
     private Vector2Int lastScreenSize = Vector2Int.zero;
 
-    private bool legacyButtonsHidden;
-    private readonly List<LegacyButtonState> hiddenLegacyButtons = new List<LegacyButtonState>(2);
-
-    private sealed class LegacyButtonState
-    {
-        public UnityEngine.UI.Button button;
-        public CanvasGroup canvasGroup;
-        public float alpha;
-        public bool interactable;
-        public bool blocksRaycasts;
-        public bool buttonInteractable;
-    }
-
     private void Awake()
     {
         uiDocument = GetComponent<UIDocument>();
@@ -98,14 +80,12 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     {
         RefreshTurnManagerSubscription(forceClear: true);
         HidePlayByPostShareOverlay();
-        RestoreLegacyButtons();
         ClearUiCache();
     }
 
     private void OnDestroy()
     {
         RefreshTurnManagerSubscription(forceClear: true);
-        RestoreLegacyButtons();
     }
 
     private void Update()
@@ -127,13 +107,11 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
 
         if (!EnsureUiReady())
         {
-            RestoreLegacyButtons();
             return;
         }
 
         RefreshUiState();
         ApplySafeArea(force: false);
-        HideLegacyButtons();
     }
 
     private bool ResolveSceneReferences(bool force)
@@ -175,11 +153,6 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             }
         }
 
-        if (legacyDefaultHudRoot == null || force)
-        {
-            legacyDefaultHudRoot = ResolveLegacyDefaultHudRoot(gameObject.scene);
-        }
-
         return uiDocument != null && turnManager != null && gameMenuActions != null;
     }
 
@@ -203,26 +176,6 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             subscribedTurnManager.PlayByPostSubmitResult += HandlePlayByPostSubmitResult;
             subscribedTurnManager.PlayByPostFetchResult += HandlePlayByPostFetchResult;
         }
-    }
-
-    private RectTransform ResolveLegacyDefaultHudRoot(UnityEngine.SceneManagement.Scene scene)
-    {
-        RectTransform[] rects = UnityEngine.Object.FindObjectsByType<RectTransform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-        for (int i = 0; i < rects.Length; i++)
-        {
-            RectTransform rect = rects[i];
-            if (rect == null || rect.gameObject.scene != scene)
-            {
-                continue;
-            }
-
-            if (string.Equals(rect.name, LegacyDefaultHudName, StringComparison.Ordinal))
-            {
-                return rect;
-            }
-        }
-
-        return null;
     }
 
     private bool EnsureUiReady()
@@ -899,117 +852,6 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         PlayerPrefs.Save();
     }
 
-    private void HideLegacyButtons()
-    {
-        if (legacyButtonsHidden)
-        {
-            return;
-        }
-
-        if (legacyDefaultHudRoot == null)
-        {
-            return;
-        }
-
-        hiddenLegacyButtons.Clear();
-
-        UnityEngine.UI.Button[] buttons = legacyDefaultHudRoot.GetComponentsInChildren<UnityEngine.UI.Button>(true);
-        for (int i = 0; i < buttons.Length; i++)
-        {
-            UnityEngine.UI.Button button = buttons[i];
-            if (button == null)
-            {
-                continue;
-            }
-
-            string label = GetButtonLabel(button);
-            if (string.IsNullOrWhiteSpace(label))
-            {
-                continue;
-            }
-
-            bool isMenu = string.Equals(label, "Menu", StringComparison.OrdinalIgnoreCase);
-            bool isNext = string.Equals(label, "Next", StringComparison.OrdinalIgnoreCase) ||
-                          string.Equals(label, "End Turn", StringComparison.OrdinalIgnoreCase);
-
-            if (!isMenu && !isNext)
-            {
-                continue;
-            }
-
-            CanvasGroup group = button.GetComponent<CanvasGroup>();
-            if (group == null)
-            {
-                group = button.gameObject.AddComponent<CanvasGroup>();
-            }
-
-            hiddenLegacyButtons.Add(new LegacyButtonState
-            {
-                button = button,
-                canvasGroup = group,
-                alpha = group.alpha,
-                interactable = group.interactable,
-                blocksRaycasts = group.blocksRaycasts,
-                buttonInteractable = button.interactable
-            });
-
-            group.alpha = 0f;
-            group.interactable = false;
-            group.blocksRaycasts = false;
-            button.interactable = false;
-        }
-
-        legacyButtonsHidden = hiddenLegacyButtons.Count > 0;
-    }
-
-    private void RestoreLegacyButtons()
-    {
-        if (!legacyButtonsHidden)
-        {
-            hiddenLegacyButtons.Clear();
-            return;
-        }
-
-        for (int i = 0; i < hiddenLegacyButtons.Count; i++)
-        {
-            LegacyButtonState state = hiddenLegacyButtons[i];
-            if (state == null || state.button == null || state.canvasGroup == null)
-            {
-                continue;
-            }
-
-            state.canvasGroup.alpha = state.alpha;
-            state.canvasGroup.interactable = state.interactable;
-            state.canvasGroup.blocksRaycasts = state.blocksRaycasts;
-            state.button.interactable = state.buttonInteractable;
-        }
-
-        hiddenLegacyButtons.Clear();
-        legacyButtonsHidden = false;
-    }
-
-    private static string GetButtonLabel(UnityEngine.UI.Button button)
-    {
-        if (button == null)
-        {
-            return null;
-        }
-
-        TMP_Text tmp = button.GetComponentInChildren<TMP_Text>(true);
-        if (tmp != null && !string.IsNullOrWhiteSpace(tmp.text))
-        {
-            return tmp.text.Trim();
-        }
-
-        Text text = button.GetComponentInChildren<Text>(true);
-        if (text != null && !string.IsNullOrWhiteSpace(text.text))
-        {
-            return text.text.Trim();
-        }
-
-        return null;
-    }
-
     private void ApplySafeArea(bool force)
     {
         if (!uiReady || root == null)
@@ -1047,7 +889,6 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     {
         RefreshTurnManagerSubscription(forceClear: true);
         HidePlayByPostShareOverlay();
-        RestoreLegacyButtons();
 
         if (uiDocument != null)
         {

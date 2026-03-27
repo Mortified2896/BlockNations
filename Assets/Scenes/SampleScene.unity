@@ -1559,7 +1559,7 @@ MonoBehaviour:
   aiDifficulty: 1
   turnText: {fileID: 861704871}
   goldText: {fileID: 196768855}
-  endTurnButton: {fileID: 1385235132}
+  endTurnButton: {fileID: 0}
   gameOverPanel: {fileID: 1387167544}
   gameOverText: {fileID: 1415913224}
   gameOverPrimaryButtonOverride: {fileID: 0}
@@ -3536,7 +3536,6 @@ MonoBehaviour:
   enableGameplayBottomHudUITK: 1
   turnManager: {fileID: 509509618}
   gameMenuActions: {fileID: 305045619}
-  legacyDefaultHudRoot: {fileID: 2119934943}
 --- !u!1001 &1163451573
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -4959,7 +4958,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e5129a2a02bd4ec1a39aaf883292c48b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BottomStripController
-  defaultHudRoot: {fileID: 2119934942}
+  defaultHudRoot: {fileID: 0}
   bottomPanelsRoot: {fileID: 1816269696}
   initialMode: 0
 --- !u!114 &1759556952
@@ -5930,7 +5929,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &2119934943
 RectTransform:
   m_ObjectHideFlags: 0
