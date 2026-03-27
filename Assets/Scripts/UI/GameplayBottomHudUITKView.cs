@@ -23,6 +23,8 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     [Header("Optional Source Overrides")]
     [SerializeField] private TurnManager turnManager;
     [SerializeField] private GameMenuActions gameMenuActions;
+    [SerializeField] private UnitUIManager unitUIManager;
+    [SerializeField] private CityUIManager cityUIManager;
 
     private UIDocument uiDocument;
     private VisualTreeAsset layoutAsset;
@@ -49,8 +51,6 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private bool warnedMissingControls;
     private TurnManager subscribedTurnManager;
     private string visibleSharePromptGameId = string.Empty;
-
-    private BottomStripController bottomStripController;
 
     private Rect lastSafeArea = Rect.zero;
     private Vector2Int lastScreenSize = Vector2Int.zero;
@@ -135,21 +135,21 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             gameMenuActions = UnityEngine.Object.FindFirstObjectByType<GameMenuActions>();
         }
 
-        if (bottomStripController == null || force)
+        if (unitUIManager == null || force)
         {
-            bottomStripController = BottomStripController.Instance;
-            if (bottomStripController == null)
+            unitUIManager = UnitUIManager.Instance;
+            if (unitUIManager == null)
             {
-                bottomStripController = UnityEngine.Object.FindFirstObjectByType<BottomStripController>();
+                unitUIManager = UnityEngine.Object.FindFirstObjectByType<UnitUIManager>();
             }
+        }
 
-            if (bottomStripController == null)
+        if (cityUIManager == null || force)
+        {
+            cityUIManager = CityUIManager.Instance;
+            if (cityUIManager == null)
             {
-                BottomStripController[] controllers = UnityEngine.Object.FindObjectsByType<BottomStripController>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-                if (controllers != null && controllers.Length > 0)
-                {
-                    bottomStripController = controllers[0];
-                }
+                cityUIManager = UnityEngine.Object.FindFirstObjectByType<CityUIManager>();
             }
         }
 
@@ -467,8 +467,19 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             return;
         }
 
-        bool showDefaultBottom = bottomStripController == null ||
-                                 bottomStripController.CurrentMode == BottomStripController.BottomStripMode.DefaultHud;
+        if (unitUIManager == null)
+        {
+            unitUIManager = UnitUIManager.Instance;
+        }
+
+        if (cityUIManager == null)
+        {
+            cityUIManager = CityUIManager.Instance;
+        }
+
+        bool unitPanelOpen = unitUIManager != null && unitUIManager.IsPanelOpen;
+        bool cityPanelOpen = cityUIManager != null && cityUIManager.IsPanelOpen;
+        bool showDefaultBottom = !unitPanelOpen && !cityPanelOpen;
 
         defaultBottomPanel.style.display = showDefaultBottom ? DisplayStyle.Flex : DisplayStyle.None;
 

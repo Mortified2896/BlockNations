@@ -590,7 +590,6 @@ public class TurnManager : MonoBehaviour
         }
 
         Time.timeScale = 1f;
-        UpdateTurnText();
         RecalculatePlayerVisibility();
 
         if (UnitSelectionManager.Instance != null)
@@ -690,8 +689,6 @@ public class TurnManager : MonoBehaviour
         if (gameOver)
             return;
         RecordHumanInputIfAny();
-
-        // Gameplay UI scaling/offset is handled by GameplayUIScaler.
     }
 
     private void RefreshEndTurnButtonInteractable(bool force = false)
@@ -1098,7 +1095,6 @@ public class TurnManager : MonoBehaviour
         if (currentMode == GameMode.VsAI)
         {
             isPlayerTurn = false;
-            UpdateTurnText();
             AutoSaveIfEnabled();
             StartCoroutine(AITurn());
             return;
@@ -1476,7 +1472,6 @@ public class TurnManager : MonoBehaviour
             playByPostPollRoutine = null;
         }
 
-        UpdateTurnText();
         SavePlayByPostPerGameSnapshot();
         RefreshEndTurnButtonInteractable(force: true);
 
@@ -1588,10 +1583,6 @@ public class TurnManager : MonoBehaviour
             if (!string.IsNullOrEmpty(err) && err != TurnTelemetryConstants.NoTurn)
             {
                 Debug.LogWarning($"PBp fetch failed via {turnTransport.TransportName} (gameId={currentGameId}, after={afterTurnNumber}): {err}");
-            }
-            if (err == TurnTelemetryConstants.NoTurn && currentMode == GameMode.PlayByPost && !LocalIsPlayerOwned())
-            {
-                SetPlayByPostWaitingForHostText();
             }
             yield break;
         }
@@ -1717,7 +1708,6 @@ public class TurnManager : MonoBehaviour
 
         CollectPlayerIncome();
         RecalculatePlayerVisibility();
-        UpdateTurnText();
 
         ScheduleAutoEndTurnCheck();
 
@@ -1902,8 +1892,6 @@ public class TurnManager : MonoBehaviour
         // The other side receives income at the start of
         // its first turn (via Begin*Turn / AITurn).
         CollectPlayerIncome();
-        UpdateGoldText();
-        UpdateTurnText();
         RecalculatePlayerVisibility();
 
         ScheduleAutoEndTurnCheck();
@@ -1968,7 +1956,6 @@ public class TurnManager : MonoBehaviour
         {
             isPlayByPostWaitingForExport = true;
             lastAppliedTurnNumberForPolling = -1;
-            SetPlayByPostWaitingForHostText();
             if (playByPostAutoSyncEnabled && !string.IsNullOrWhiteSpace(currentGameId))
             {
                 ResolveTurnTransport();
@@ -2922,10 +2909,6 @@ public class TurnManager : MonoBehaviour
         }
     }
 
-    void UpdateGoldText()
-    {
-    }
-
     /// <summary>
     /// Computes which tiles are currently visible for a given side
     /// based on cities and units that side owns, using the same
@@ -3022,14 +3005,6 @@ public class TurnManager : MonoBehaviour
             }
             unit.SetFogVisibility(isVisible, isCurrentSideUnit);
         }
-    }
-
-    void UpdateTurnText()
-    {
-    }
-
-    private void SetPlayByPostWaitingForHostText()
-    {
     }
 
     string GetDefaultSavePath()
@@ -3455,11 +3430,6 @@ public class TurnManager : MonoBehaviour
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         Debug.Log($"Play-by-Post game id copied to clipboard ({gameId}).");
 #endif
-    }
-
-    public void ClosePlayByPostPopup()
-    {
-        RefreshEndTurnButtonInteractable(force: true);
     }
 
     internal bool TryBuildPlayByPostExportJson(out int exportTurnNumber, out string json)
@@ -3901,9 +3871,7 @@ private void PBpDebugSyncNow_Context()
                 UnitSelectionManager.Instance.RefreshMoveOutlinesForCurrentTurn();
             }
 
-            UpdateGoldText();
             RecalculatePlayerVisibility();
-            UpdateTurnText();
             if (currentMode == GameMode.PlayByPost)
             {
                 lastAppliedTurnNumberForPolling = ComputeTransportSeq(save);
@@ -3923,7 +3891,6 @@ private void PBpDebugSyncNow_Context()
 #endif
                 if (!localTurn)
                 {
-                    SetPlayByPostWaitingForHostText();
                     if (playByPostAutoSyncEnabled && playByPostPollRoutine == null)
                     {
                         ResolveTurnTransport();
@@ -4090,7 +4057,6 @@ private void PBpDebugSyncNow_Context()
             }
 
             playerGold -= amount;
-            UpdateGoldText();
             return true;
         }
         else
@@ -4105,10 +4071,6 @@ private void PBpDebugSyncNow_Context()
             }
 
             aiGold -= amount;
-            if (currentMode == GameMode.PlayByPost && !isPlayerTurn)
-            {
-                UpdateGoldText();
-            }
             return true;
         }
     }
@@ -4121,15 +4083,10 @@ private void PBpDebugSyncNow_Context()
         if (forPlayer)
         {
             playerGold += amount;
-            UpdateGoldText();
         }
         else
         {
             aiGold += amount;
-            if (currentMode == GameMode.PlayByPost && !isPlayerTurn)
-            {
-                UpdateGoldText();
-            }
         }
     }
 

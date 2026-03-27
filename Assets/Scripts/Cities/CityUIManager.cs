@@ -12,7 +12,6 @@ public class CityUIManager : MonoBehaviour
 
     private City currentCity;
     private bool isPanelOpen;
-    private static bool hasLoggedMissingBottomStripController;
 
     [Header("Debug")]
     public int lastRecruitAttemptFrame = -1;
@@ -79,13 +78,6 @@ public class CityUIManager : MonoBehaviour
             return;
         }
 
-        BottomStripController bottomStrip = GetBottomStripController();
-        if (bottomStrip != null)
-        {
-            // Claim the bottom strip mode first so handoffs do not flash DefaultHud.
-            bottomStrip.SetMode(BottomStripController.BottomStripMode.CityUi);
-        }
-
         if (UnitUIManager.Instance != null)
         {
             UnitUIManager.Instance.ClosePanel();
@@ -98,12 +90,6 @@ public class CityUIManager : MonoBehaviour
     {
         currentCity = null;
         isPanelOpen = false;
-
-        BottomStripController bottomStrip = GetBottomStripController();
-        if (bottomStrip != null)
-        {
-            bottomStrip.ReleaseMode(BottomStripController.BottomStripMode.CityUi);
-        }
     }
 
     public bool IsPanelOpen => isPanelOpen;
@@ -152,31 +138,6 @@ public class CityUIManager : MonoBehaviour
         return turnManager;
     }
 
-    private static BottomStripController GetBottomStripController()
-    {
-        BottomStripController bottomStrip = BottomStripController.Instance;
-        if (bottomStrip == null)
-        {
-            bottomStrip = UnityEngine.Object.FindFirstObjectByType<BottomStripController>();
-        }
-
-        if (bottomStrip == null)
-        {
-            BottomStripController[] controllers = UnityEngine.Object.FindObjectsByType<BottomStripController>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-            if (controllers != null && controllers.Length > 0)
-            {
-                bottomStrip = controllers[0];
-            }
-        }
-
-        if (bottomStrip == null && !hasLoggedMissingBottomStripController)
-        {
-            hasLoggedMissingBottomStripController = true;
-            Debug.LogError("CityUIManager requires BottomStripController in the gameplay scene.");
-        }
-
-        return bottomStrip;
-    }
     public void OnRecruitWarriorButton()
     {
         lastRecruitAttemptFrame = Time.frameCount;
