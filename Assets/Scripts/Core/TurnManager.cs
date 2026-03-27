@@ -166,7 +166,6 @@ public class TurnManager : MonoBehaviour
         "CityPanel"
     };
     private const int SupportedPbpProtocolVersion = 2;
-    private const int LegacyPbpProtocolVersion = 0;
     public static int PbpProtocolVersion => SupportedPbpProtocolVersion;
 
     // Controlled via Unity Scripting Define Symbols:
@@ -457,7 +456,7 @@ public class TurnManager : MonoBehaviour
             return true;
         }
 
-        // VsAI/other modes currently treat the local viewer as the player-owned side.
+        // VsAI mode currently treats the local viewer as the player-owned side.
         // If future modes support non-player-owned local viewpoints, update this helper.
         return true;
     }
