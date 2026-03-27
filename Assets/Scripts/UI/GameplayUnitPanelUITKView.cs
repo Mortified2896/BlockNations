@@ -1,5 +1,4 @@
 using System;
-using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
@@ -130,15 +129,6 @@ public sealed class GameplayUnitPanelUITKView : MonoBehaviour
 
     private RectTransform ResolveLegacyUnitPanelRoot(Scene scene)
     {
-        if (unitUIManager != null && unitUIManager.panelRoot != null)
-        {
-            RectTransform unitPanelRect = unitUIManager.panelRoot.transform as RectTransform;
-            if (unitPanelRect != null)
-            {
-                return unitPanelRect;
-            }
-        }
-
         RectTransform[] rects = UnityEngine.Object.FindObjectsByType<RectTransform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         for (int i = 0; i < rects.Length; i++)
         {
