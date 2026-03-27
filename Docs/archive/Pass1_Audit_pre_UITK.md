@@ -1,5 +1,7 @@
 ﻿# PASS 1 Script Audit (Assets/Scripts only)
 
+Historical note: Archived pre-UITK audit. Written before the gameplay UITK migration and before Tutorial/Hotseat removal. Keep for reference only.
+
 ## Status
 Pass 1 complete. Keep as reference/backlog only.
 Do not treat as active refactor plan during MVP stabilization unless a current bug directly points here.
