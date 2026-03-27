@@ -9,7 +9,6 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
-using TMPro;   // for TMP_Text
 
 public class TurnManager : MonoBehaviour
 {
@@ -65,20 +64,8 @@ public class TurnManager : MonoBehaviour
     public AIDifficulty aiDifficulty = AIDifficulty.Level1;
 
     [Header("UI")]
-    public TMP_Text turnText;      // assign in Inspector
-    public TMP_Text goldText;
     [Tooltip("Optional: assign End Turn / Next Turn button to keep interactable state synced with CanAdvanceTurn().")]
     public Button endTurnButton;
-
-    [Header("Game Over UI")]
-    public GameObject gameOverPanel;
-    public TMP_Text gameOverText;
-    [Tooltip("Optional: assign the endgame primary button (e.g., Play Again) to avoid runtime lookup.")]
-    public Button gameOverPrimaryButtonOverride;
-
-    [Header("Play By Post")]
-    [Tooltip("Optional panel shown when a Play-by-Post submit succeeds (e.g., with a 'Copy Game Code' button).")]
-    public GameObject playByPostPopup;
 
     [Header("Play By Post - Transport")]
     public bool playByPostAutoSyncEnabled = true;
@@ -159,12 +146,6 @@ public class TurnManager : MonoBehaviour
     private const string MainMenuSceneName = "MainMenu";
     private const string DefaultGameOverMessage = "Game Over";
     private const string DefaultGameOverPrimaryButtonLabel = "Play Again";
-    private static readonly string[] LegacyGameplayRaycastBlockerRootNames =
-    {
-        "BottomPopUp",
-        "UnitPanel",
-        "CityPanel"
-    };
     private const int SupportedPbpProtocolVersion = 2;
     public static int PbpProtocolVersion => SupportedPbpProtocolVersion;
 
@@ -199,8 +180,6 @@ public class TurnManager : MonoBehaviour
     private int pbpEndgameCachedExportTurnNumber;
     private bool pbpEndgameCachedExportIsPlayerTurn;
     private string pbpEndgameCachedExportGameId;
-    private Button gameOverPrimaryButton;
-    private TMP_Text gameOverPrimaryButtonText;
     private string gameOverUiMessage = string.Empty;
     private string gameOverUiPrimaryButtonLabel = DefaultGameOverPrimaryButtonLabel;
     private bool gameOverUiPrimaryButtonInteractable = true;
@@ -642,10 +621,6 @@ public class TurnManager : MonoBehaviour
             playByPostPollRoutine = null;
         }
 
-        if (playByPostPopup != null)
-        {
-            playByPostPopup.SetActive(false);
-        }
     }
 
     private void ResetPbpEndgameRuntimeState()
@@ -660,8 +635,6 @@ public class TurnManager : MonoBehaviour
         pbpEndgameCachedExportTurnNumber = 0;
         pbpEndgameCachedExportIsPlayerTurn = false;
         pbpEndgameCachedExportGameId = null;
-        gameOverPrimaryButton = null;
-        gameOverPrimaryButtonText = null;
     }
 
     private void ResetGameOverUiState()
@@ -704,77 +677,12 @@ public class TurnManager : MonoBehaviour
         ResetGameOverUiState();
         ResolveTurnTransport();
         lastAppliedTurnNumberForPolling = turnNumber;
-        EnsureTurnAndGoldTexts();
         EnsureEventSystemExists();
         EnsureUIRaycasters();
-        SuppressLegacyGameplayRaycastBlockers();
         GameplayInputOrchestrator.ResetTransientInputState();
         TryStartGameplayMusic();
         RefreshEndTurnButtonInteractable(force: true);
         StartCoroutine(StartupSequence());
-    }
-
-    private void SuppressLegacyGameplayRaycastBlockers()
-    {
-        if (!gameObject.scene.IsValid())
-            return;
-
-        for (int i = 0; i < LegacyGameplayRaycastBlockerRootNames.Length; i++)
-        {
-            SuppressLegacyRaycastBlockerByRootName(LegacyGameplayRaycastBlockerRootNames[i]);
-        }
-    }
-
-    private void SuppressLegacyRaycastBlockerByRootName(string rootName)
-    {
-        if (string.IsNullOrWhiteSpace(rootName))
-            return;
-
-        Transform[] transforms = Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-        for (int i = 0; i < transforms.Length; i++)
-        {
-            Transform transform = transforms[i];
-            if (transform == null || transform.gameObject.scene != gameObject.scene)
-                continue;
-
-            if (!string.Equals(transform.name, rootName, System.StringComparison.Ordinal))
-                continue;
-
-            DisableGraphicRaycastTargets(transform);
-            DisableCanvasGroupBlocking(transform);
-        }
-    }
-
-    private static void DisableGraphicRaycastTargets(Transform root)
-    {
-        if (root == null)
-            return;
-
-        Graphic[] graphics = root.GetComponentsInChildren<Graphic>(true);
-        for (int i = 0; i < graphics.Length; i++)
-        {
-            Graphic graphic = graphics[i];
-            if (graphic != null)
-            {
-                graphic.raycastTarget = false;
-            }
-        }
-    }
-
-    private static void DisableCanvasGroupBlocking(Transform root)
-    {
-        if (root == null)
-            return;
-
-        CanvasGroup[] groups = root.GetComponentsInChildren<CanvasGroup>(true);
-        for (int i = 0; i < groups.Length; i++)
-        {
-            CanvasGroup group = groups[i];
-            if (group != null)
-            {
-                group.blocksRaycasts = false;
-            }
-        }
     }
 
     void Update()
@@ -862,80 +770,12 @@ public class TurnManager : MonoBehaviour
         SceneManager.LoadScene(currentScene.name);
     }
 
-    private void EnsureGameOverPrimaryButtonReferences()
-    {
-        if (gameOverPanel == null)
-            return;
-
-        if (gameOverPrimaryButtonOverride != null)
-        {
-            gameOverPrimaryButton = gameOverPrimaryButtonOverride;
-            if (gameOverPrimaryButtonText == null)
-            {
-                gameOverPrimaryButtonText = gameOverPrimaryButton.GetComponentInChildren<TMP_Text>(true);
-            }
-            return;
-        }
-
-        if (gameOverPrimaryButton != null)
-        {
-            if (gameOverPrimaryButtonText == null)
-            {
-                gameOverPrimaryButtonText = gameOverPrimaryButton.GetComponentInChildren<TMP_Text>(true);
-            }
-            return;
-        }
-
-        Button[] buttons = gameOverPanel.GetComponentsInChildren<Button>(true);
-        if (buttons == null || buttons.Length == 0)
-            return;
-
-        Button fallback = null;
-        for (int i = 0; i < buttons.Length; i++)
-        {
-            Button b = buttons[i];
-            if (b == null)
-                continue;
-
-            if (fallback == null)
-                fallback = b;
-
-            string n = b.name != null ? b.name : string.Empty;
-            if (string.Equals(n, "Play Again", System.StringComparison.OrdinalIgnoreCase))
-            {
-                gameOverPrimaryButton = b;
-                break;
-            }
-        }
-
-        if (gameOverPrimaryButton == null)
-        {
-            gameOverPrimaryButton = fallback;
-        }
-
-        if (gameOverPrimaryButton != null)
-        {
-            gameOverPrimaryButtonText = gameOverPrimaryButton.GetComponentInChildren<TMP_Text>(true);
-        }
-    }
-
     private void SetGameOverPrimaryButtonState(string label, bool interactable, PbpEndgamePrimaryAction action)
     {
         pbpEndgamePrimaryAction = action;
         string resolvedLabel = string.IsNullOrWhiteSpace(label) ? DefaultGameOverPrimaryButtonLabel : label;
         gameOverUiPrimaryButtonLabel = resolvedLabel;
         gameOverUiPrimaryButtonInteractable = interactable;
-        EnsureGameOverPrimaryButtonReferences();
-
-        if (gameOverPrimaryButton != null)
-        {
-            gameOverPrimaryButton.interactable = interactable;
-        }
-
-        if (gameOverPrimaryButtonText != null)
-        {
-            gameOverPrimaryButtonText.text = resolvedLabel;
-        }
     }
 
     private void ShowGameOverPopup(string message, bool writeLog = true)
@@ -950,17 +790,6 @@ public class TurnManager : MonoBehaviour
         {
             gameOverUiPrimaryButtonLabel = DefaultGameOverPrimaryButtonLabel;
             gameOverUiPrimaryButtonInteractable = false;
-        }
-
-        if (gameOverText != null)
-        {
-            gameOverText.text = GameOverUiMessage;
-            gameOverText.gameObject.SetActive(true);
-        }
-
-        if (gameOverPanel != null)
-        {
-            gameOverPanel.SetActive(true);
         }
 
         if (writeLog)
@@ -1404,14 +1233,6 @@ public class TurnManager : MonoBehaviour
             null);
     }
 
-    private bool IsLocalHostForCurrentPbpGame()
-    {
-        if (string.IsNullOrWhiteSpace(currentGameId))
-            return false;
-
-        return LocalPlayerSeatStore.TryGetSeat(currentGameId, out int seat) && seat == 0;
-    }
-
     private void ResolveTelemetrySink()
     {
         if (telemetrySinkComponent != null && telemetrySinkComponent is ITurnTelemetrySink sink)
@@ -1600,19 +1421,6 @@ public class TurnManager : MonoBehaviour
                 turnTransport != null ? turnTransport.TransportName : null,
                 lastKnownRoundTurn: exportTurnNumber,
                 lastKnownIsPlayerTurn: exportIsPlayerTurn);
-            string shareShownKey = $"pbp_shareShown_{currentGameId}";
-            if (playByPostPopup != null &&
-                IsLocalHostForCurrentPbpGame() &&
-                PlayerPrefs.GetInt(shareShownKey, 0) != 1)
-            {
-                playByPostPopup.SetActive(true);
-                if (playByPostPopup.activeInHierarchy)
-                {
-                    PlayerPrefs.SetInt(shareShownKey, 1);
-                    PlayerPrefs.Save();
-                }
-            }
-
             StartPlayByPostPolling(transportSeq);
             yield break;
         }
@@ -1666,11 +1474,6 @@ public class TurnManager : MonoBehaviour
         {
             StopCoroutine(playByPostPollRoutine);
             playByPostPollRoutine = null;
-        }
-
-        if (playByPostPopup != null)
-        {
-            playByPostPopup.SetActive(false);
         }
 
         UpdateTurnText();
@@ -1808,10 +1611,6 @@ public class TurnManager : MonoBehaviour
         if (loaded)
         {
             lastAppliedTurnNumberForPolling = fetchedTurnNumber;
-            if (playByPostPopup != null)
-            {
-                playByPostPopup.SetActive(false);
-            }
             if (PbpDebugSettingsLoader.EnableSaveLoadLogs)
             {
                 Debug.Log($"PBp loaded turn {fetchedTurnNumber} successfully.");
@@ -2168,10 +1967,6 @@ public class TurnManager : MonoBehaviour
         if (!readinessOk || !LocalIsPlayerOwned())
         {
             isPlayByPostWaitingForExport = true;
-            if (playByPostPopup != null)
-            {
-                playByPostPopup.SetActive(false);
-            }
             lastAppliedTurnNumberForPolling = -1;
             SetPlayByPostWaitingForHostText();
             if (playByPostAutoSyncEnabled && !string.IsNullOrWhiteSpace(currentGameId))
@@ -3127,57 +2922,8 @@ public class TurnManager : MonoBehaviour
         }
     }
 
-    void EnsureTurnAndGoldTexts()
-    {
-        if (turnText == null || goldText == null)
-        {
-            var texts = Object.FindObjectsByType<TMP_Text>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-            foreach (var t in texts)
-            {
-                if (t == null) continue;
-                string name = t.name.ToLower();
-
-                if (turnText == null && name.Contains("turn"))
-                {
-                    turnText = t;
-                    t.gameObject.SetActive(true);
-                }
-
-                if (goldText == null && name.Contains("gold"))
-                {
-                    goldText = t;
-                    t.gameObject.SetActive(true);
-                }
-            }
-        }
-
-        if (turnText == null)
-        {
-            Debug.LogWarning("TurnManager: No turnText assigned and none found in scene (name containing 'turn').");
-        }
-    }
-
     void UpdateGoldText()
     {
-        EnsureTurnAndGoldTexts();
-
-        if (goldText == null)
-            return;
-
-        int displayGold = playerGold;
-
-        // In Play-by-Post, the second side's gold is stored in aiGold.
-        if (currentMode == GameMode.PlayByPost && !isPlayerTurn)
-        {
-            displayGold = aiGold;
-        }
-
-        // Force single-line display.
-        goldText.enableAutoSizing = false;
-        goldText.textWrappingMode = TextWrappingModes.NoWrap;
-        goldText.overflowMode = TextOverflowModes.Overflow;
-        goldText.richText = false;
-        goldText.text = $"Gold {displayGold}";
     }
 
     /// <summary>
@@ -3280,29 +3026,10 @@ public class TurnManager : MonoBehaviour
 
     void UpdateTurnText()
     {
-        EnsureTurnAndGoldTexts();
-
-        if (turnText == null)
-            return;
-
-        string who = GetCurrentSideName();
-
-        // Make sure the turn label is always visible and single-line.
-        turnText.enableAutoSizing = false;
-        turnText.textWrappingMode = TextWrappingModes.NoWrap;
-        turnText.overflowMode = TextOverflowModes.Overflow;
-        turnText.richText = false;
-        turnText.color = Color.white;
-        turnText.text = $"Turn {turnNumber} - {who}";
     }
 
     private void SetPlayByPostWaitingForHostText()
     {
-        EnsureTurnAndGoldTexts();
-        if (turnText == null)
-            return;
-
-        turnText.text = "Waiting for host";
     }
 
     string GetDefaultSavePath()
@@ -3732,11 +3459,6 @@ public class TurnManager : MonoBehaviour
 
     public void ClosePlayByPostPopup()
     {
-        if (playByPostPopup != null)
-        {
-            playByPostPopup.SetActive(false);
-        }
-
         RefreshEndTurnButtonInteractable(force: true);
     }
 
@@ -4182,11 +3904,6 @@ private void PBpDebugSyncNow_Context()
             UpdateGoldText();
             RecalculatePlayerVisibility();
             UpdateTurnText();
-            SuppressLegacyGameplayRaycastBlockers();
-            if (playByPostPopup != null)
-            {
-                playByPostPopup.SetActive(false);
-            }
             if (currentMode == GameMode.PlayByPost)
             {
                 lastAppliedTurnNumberForPolling = ComputeTransportSeq(save);
