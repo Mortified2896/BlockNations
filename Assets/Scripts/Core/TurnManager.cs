@@ -2277,8 +2277,7 @@ public class TurnManager : MonoBehaviour
     {
         // If a player is reading a panel, don't auto-end under them.
         if (CityUIManager.Instance != null &&
-            CityUIManager.Instance.panelRoot != null &&
-            CityUIManager.Instance.panelRoot.activeInHierarchy)
+            CityUIManager.Instance.IsPanelOpen)
         {
             return true;
         }

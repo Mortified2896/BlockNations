@@ -1,6 +1,4 @@
-using System;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 
 [DisallowMultipleComponent]
@@ -9,7 +7,6 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
 {
     private const string LayoutResourceName = "GameplayCityPanel_UITK";
     private const string ThemeResourceName = "GameplayTopHud_UITK_Theme";
-    private const string LegacyCityPanelName = "CityPanel";
 
     [Header("Spike Toggle")]
     [SerializeField] private bool enableCityPanelUITK = true;
@@ -17,7 +14,6 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
     [Header("Optional Source Overrides")]
     [SerializeField] private CityUIManager cityUIManager;
     [SerializeField] private TurnManager turnManager;
-    [SerializeField] private RectTransform legacyCityPanelRoot;
 
     private UIDocument uiDocument;
     private VisualTreeAsset layoutAsset;
@@ -36,13 +32,6 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
     private bool warnedMissingPanelSettings;
     private bool warnedMissingLayout;
     private bool warnedMissingControls;
-
-    private CanvasGroup legacyCityPanelCanvasGroup;
-    private bool cachedLegacyState;
-    private float cachedLegacyAlpha = 1f;
-    private bool cachedLegacyInteractable = true;
-    private bool cachedLegacyBlocksRaycasts = true;
-    private bool legacyPanelHidden;
 
     private Rect lastSafeArea = Rect.zero;
     private Vector2Int lastScreenSize = Vector2Int.zero;
@@ -69,13 +58,7 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
 
     private void OnDisable()
     {
-        RestoreLegacyCityPanel();
         ClearUiCache();
-    }
-
-    private void OnDestroy()
-    {
-        RestoreLegacyCityPanel();
     }
 
     private void Update()
@@ -94,13 +77,11 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
 
         if (!EnsureUiReady())
         {
-            RestoreLegacyCityPanel();
             return;
         }
 
         RefreshUiState();
         ApplySafeArea(force: false);
-        HideLegacyCityPanel();
     }
 
     private bool ResolveSceneReferences(bool force)
@@ -137,41 +118,7 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
             }
         }
 
-        if (legacyCityPanelRoot == null || force)
-        {
-            legacyCityPanelRoot = ResolveLegacyCityPanelRoot(gameObject.scene);
-        }
-
         return uiDocument != null && cityUIManager != null;
-    }
-
-    private RectTransform ResolveLegacyCityPanelRoot(Scene scene)
-    {
-        if (cityUIManager != null && cityUIManager.panelRoot != null)
-        {
-            RectTransform cityPanelRect = cityUIManager.panelRoot.transform as RectTransform;
-            if (cityPanelRect != null)
-            {
-                return cityPanelRect;
-            }
-        }
-
-        RectTransform[] rects = UnityEngine.Object.FindObjectsByType<RectTransform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-        for (int i = 0; i < rects.Length; i++)
-        {
-            RectTransform rect = rects[i];
-            if (rect == null || rect.gameObject.scene != scene)
-            {
-                continue;
-            }
-
-            if (string.Equals(rect.name, LegacyCityPanelName, StringComparison.Ordinal))
-            {
-                return rect;
-            }
-        }
-
-        return null;
     }
 
     private bool EnsureUiReady()
@@ -388,8 +335,8 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
 
         if (ownerLabel != null)
         {
-            string ownerText = cityUIManager != null && cityUIManager.ownerText != null
-                ? cityUIManager.ownerText.text
+            string ownerText = cityUIManager != null
+                ? cityUIManager.CurrentOwnerText
                 : string.Empty;
             ownerLabel.text = ownerText;
             ownerLabel.style.display = string.IsNullOrWhiteSpace(ownerText) ? DisplayStyle.None : DisplayStyle.Flex;
@@ -404,10 +351,9 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
     private string GetCityName()
     {
         if (cityUIManager != null &&
-            cityUIManager.cityNameText != null &&
-            !string.IsNullOrWhiteSpace(cityUIManager.cityNameText.text))
+            !string.IsNullOrWhiteSpace(cityUIManager.CurrentCityName))
         {
-            return cityUIManager.cityNameText.text;
+            return cityUIManager.CurrentCityName;
         }
 
         return "City";
@@ -416,10 +362,9 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
     private string GetRecruitWarriorLabel()
     {
         if (cityUIManager != null &&
-            cityUIManager.recruitWarriorButtonText != null &&
-            !string.IsNullOrWhiteSpace(cityUIManager.recruitWarriorButtonText.text))
+            !string.IsNullOrWhiteSpace(cityUIManager.RecruitWarriorLabel))
         {
-            return cityUIManager.recruitWarriorButtonText.text;
+            return cityUIManager.RecruitWarriorLabel;
         }
 
         if (turnManager != null)
@@ -428,48 +373,6 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
         }
 
         return "Warrior";
-    }
-
-    private void HideLegacyCityPanel()
-    {
-        if (legacyPanelHidden || legacyCityPanelRoot == null)
-        {
-            return;
-        }
-
-        legacyCityPanelCanvasGroup = legacyCityPanelRoot.GetComponent<CanvasGroup>();
-        if (legacyCityPanelCanvasGroup == null)
-        {
-            legacyCityPanelCanvasGroup = legacyCityPanelRoot.gameObject.AddComponent<CanvasGroup>();
-        }
-
-        cachedLegacyAlpha = legacyCityPanelCanvasGroup.alpha;
-        cachedLegacyInteractable = legacyCityPanelCanvasGroup.interactable;
-        cachedLegacyBlocksRaycasts = legacyCityPanelCanvasGroup.blocksRaycasts;
-        cachedLegacyState = true;
-
-        legacyCityPanelCanvasGroup.alpha = 0f;
-        legacyCityPanelCanvasGroup.interactable = false;
-        legacyCityPanelCanvasGroup.blocksRaycasts = false;
-        legacyPanelHidden = true;
-    }
-
-    private void RestoreLegacyCityPanel()
-    {
-        if (!legacyPanelHidden || legacyCityPanelCanvasGroup == null)
-        {
-            legacyPanelHidden = false;
-            return;
-        }
-
-        if (cachedLegacyState)
-        {
-            legacyCityPanelCanvasGroup.alpha = cachedLegacyAlpha;
-            legacyCityPanelCanvasGroup.interactable = cachedLegacyInteractable;
-            legacyCityPanelCanvasGroup.blocksRaycasts = cachedLegacyBlocksRaycasts;
-        }
-
-        legacyPanelHidden = false;
     }
 
     private void ApplySafeArea(bool force)
@@ -507,8 +410,6 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
 
     private void DisableOverlay()
     {
-        RestoreLegacyCityPanel();
-
         if (uiDocument != null)
         {
             uiDocument.enabled = false;

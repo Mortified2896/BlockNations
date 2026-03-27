@@ -1,6 +1,5 @@
 using System;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 
 [DisallowMultipleComponent]
@@ -9,14 +8,11 @@ public sealed class GameplayUnitPanelUITKView : MonoBehaviour
 {
     private const string LayoutResourceName = "GameplayUnitPanel_UITK";
     private const string ThemeResourceName = "GameplayTopHud_UITK_Theme";
-    private const string LegacyUnitPanelName = "UnitPanel";
-
     [Header("Migration Toggle")]
     [SerializeField] private bool enableUnitPanelUITK = true;
 
     [Header("Optional Source Overrides")]
     [SerializeField] private UnitUIManager unitUIManager;
-    [SerializeField] private RectTransform legacyUnitPanelRoot;
 
     private UIDocument uiDocument;
     private VisualTreeAsset layoutAsset;
@@ -36,13 +32,6 @@ public sealed class GameplayUnitPanelUITKView : MonoBehaviour
     private bool warnedMissingPanelSettings;
     private bool warnedMissingLayout;
     private bool warnedMissingControls;
-
-    private CanvasGroup legacyUnitPanelCanvasGroup;
-    private bool cachedLegacyState;
-    private float cachedLegacyAlpha = 1f;
-    private bool cachedLegacyInteractable = true;
-    private bool cachedLegacyBlocksRaycasts = true;
-    private bool legacyPanelHidden;
 
     private Rect lastSafeArea = Rect.zero;
     private Vector2Int lastScreenSize = Vector2Int.zero;
@@ -69,13 +58,7 @@ public sealed class GameplayUnitPanelUITKView : MonoBehaviour
 
     private void OnDisable()
     {
-        RestoreLegacyUnitPanel();
         ClearUiCache();
-    }
-
-    private void OnDestroy()
-    {
-        RestoreLegacyUnitPanel();
     }
 
     private void Update()
@@ -94,13 +77,11 @@ public sealed class GameplayUnitPanelUITKView : MonoBehaviour
 
         if (!EnsureUiReady())
         {
-            RestoreLegacyUnitPanel();
             return;
         }
 
         RefreshUiState();
         ApplySafeArea(force: false);
-        HideLegacyUnitPanel();
     }
 
     private bool ResolveSceneReferences(bool force)
@@ -119,32 +100,7 @@ public sealed class GameplayUnitPanelUITKView : MonoBehaviour
             }
         }
 
-        if (legacyUnitPanelRoot == null || force)
-        {
-            legacyUnitPanelRoot = ResolveLegacyUnitPanelRoot(gameObject.scene);
-        }
-
         return uiDocument != null && unitUIManager != null;
-    }
-
-    private RectTransform ResolveLegacyUnitPanelRoot(Scene scene)
-    {
-        RectTransform[] rects = UnityEngine.Object.FindObjectsByType<RectTransform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-        for (int i = 0; i < rects.Length; i++)
-        {
-            RectTransform rect = rects[i];
-            if (rect == null || rect.gameObject.scene != scene)
-            {
-                continue;
-            }
-
-            if (string.Equals(rect.name, LegacyUnitPanelName, StringComparison.Ordinal))
-            {
-                return rect;
-            }
-        }
-
-        return null;
     }
 
     private bool EnsureUiReady()
@@ -407,48 +363,6 @@ public sealed class GameplayUnitPanelUITKView : MonoBehaviour
         return string.IsNullOrWhiteSpace(rawName) ? fallback : rawName;
     }
 
-    private void HideLegacyUnitPanel()
-    {
-        if (legacyPanelHidden || legacyUnitPanelRoot == null)
-        {
-            return;
-        }
-
-        legacyUnitPanelCanvasGroup = legacyUnitPanelRoot.GetComponent<CanvasGroup>();
-        if (legacyUnitPanelCanvasGroup == null)
-        {
-            legacyUnitPanelCanvasGroup = legacyUnitPanelRoot.gameObject.AddComponent<CanvasGroup>();
-        }
-
-        cachedLegacyAlpha = legacyUnitPanelCanvasGroup.alpha;
-        cachedLegacyInteractable = legacyUnitPanelCanvasGroup.interactable;
-        cachedLegacyBlocksRaycasts = legacyUnitPanelCanvasGroup.blocksRaycasts;
-        cachedLegacyState = true;
-
-        legacyUnitPanelCanvasGroup.alpha = 0f;
-        legacyUnitPanelCanvasGroup.interactable = false;
-        legacyUnitPanelCanvasGroup.blocksRaycasts = false;
-        legacyPanelHidden = true;
-    }
-
-    private void RestoreLegacyUnitPanel()
-    {
-        if (!legacyPanelHidden || legacyUnitPanelCanvasGroup == null)
-        {
-            legacyPanelHidden = false;
-            return;
-        }
-
-        if (cachedLegacyState)
-        {
-            legacyUnitPanelCanvasGroup.alpha = cachedLegacyAlpha;
-            legacyUnitPanelCanvasGroup.interactable = cachedLegacyInteractable;
-            legacyUnitPanelCanvasGroup.blocksRaycasts = cachedLegacyBlocksRaycasts;
-        }
-
-        legacyPanelHidden = false;
-    }
-
     private void ApplySafeArea(bool force)
     {
         if (!uiReady || root == null)
@@ -484,8 +398,6 @@ public sealed class GameplayUnitPanelUITKView : MonoBehaviour
 
     private void DisableOverlay()
     {
-        RestoreLegacyUnitPanel();
-
         if (uiDocument != null)
         {
             uiDocument.enabled = false;

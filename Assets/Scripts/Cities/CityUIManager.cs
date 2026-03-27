@@ -1,5 +1,4 @@
 using UnityEngine;
-using TMPro;
 
 /// <summary>
 /// Manages the city UI panel and recruitment actions.
@@ -11,13 +10,8 @@ public class CityUIManager : MonoBehaviour
     [Header("References")]
     public TurnManager turnManager;
 
-    [Header("UI")]
-    public GameObject panelRoot;
-    public TMP_Text cityNameText;
-    public TMP_Text ownerText;
-    public TMP_Text recruitWarriorButtonText;
-
     private City currentCity;
+    private bool isPanelOpen;
     private static bool hasLoggedMissingBottomStripController;
 
     [Header("Debug")]
@@ -34,18 +28,10 @@ public class CityUIManager : MonoBehaviour
 
         Instance = this;
 
-        // Ensure the panel starts hidden
-        if (panelRoot != null)
-        {
-            panelRoot.SetActive(false);
-        }
-
         if (turnManager == null)
         {
             turnManager = TurnManager.Instance;
         }
-
-        EnsureRecruitWarriorButtonReference();
     }
 
     /// <summary>
@@ -87,15 +73,11 @@ public class CityUIManager : MonoBehaviour
 
     public void OpenPanel()
     {
-        if (panelRoot == null)
+        if (currentCity == null)
         {
-            Debug.LogWarning("CityUIManager panelRoot is not assigned.");
+            Debug.LogWarning("CityUIManager.OpenPanel called with no selected city.");
             return;
         }
-
-        // Try to auto-wire the Recruit Warrior button label if it
-        // has not been assigned in the Inspector.
-        EnsureRecruitWarriorButtonReference();
 
         BottomStripController bottomStrip = GetBottomStripController();
         if (bottomStrip != null)
@@ -109,65 +91,13 @@ public class CityUIManager : MonoBehaviour
             UnitUIManager.Instance.ClosePanel();
         }
 
-        panelRoot.SetActive(true);
-
-        if (cityNameText != null && currentCity != null)
-        {
-            cityNameText.text = currentCity.name;
-        }
-
-        if (ownerText != null && currentCity != null)
-        {
-            if (turnManager != null &&
-                turnManager.currentMode == TurnManager.GameMode.PlayByPost)
-            {
-                ownerText.text = currentCity.isPlayerOwned ? "Player 1 City" : "Player 2 City";
-            }
-            else
-            {
-                ownerText.text = currentCity.isPlayerOwned ? "Player City" : "AI City";
-            }
-        }
-
-        // Show the cost directly on the button label (cost on a separate line).
-        if (recruitWarriorButtonText != null && turnManager != null)
-        {
-            recruitWarriorButtonText.text = $"Warrior\n({turnManager.warriorCost} Gold)";
-            recruitWarriorButtonText.alignment = TextAlignmentOptions.Center;
-            recruitWarriorButtonText.textWrappingMode = TextWrappingModes.NoWrap;
-        }
-    }
-
-    private void EnsureRecruitWarriorButtonReference()
-    {
-        if (recruitWarriorButtonText != null || panelRoot == null)
-        {
-            return;
-        }
-
-        TMP_Text[] texts = panelRoot.GetComponentsInChildren<TMP_Text>(true);
-        foreach (TMP_Text t in texts)
-        {
-            if (t == null) continue;
-            string lowerName = t.name.ToLower();
-            string lowerText = t.text != null ? t.text.ToLower() : string.Empty;
-            if (lowerName.Contains("recruit") || lowerText.Contains("recruit") ||
-                lowerName.Contains("warrior") || lowerText.Contains("warrior"))
-            {
-                recruitWarriorButtonText = t;
-                break;
-            }
-        }
+        isPanelOpen = true;
     }
 
     public void ClosePanel()
     {
         currentCity = null;
-
-        if (panelRoot != null)
-        {
-            panelRoot.SetActive(false);
-        }
+        isPanelOpen = false;
 
         BottomStripController bottomStrip = GetBottomStripController();
         if (bottomStrip != null)
@@ -176,7 +106,51 @@ public class CityUIManager : MonoBehaviour
         }
     }
 
-    public bool IsPanelOpen => panelRoot != null && panelRoot.activeSelf;
+    public bool IsPanelOpen => isPanelOpen;
+    public City CurrentCity => currentCity;
+    public string CurrentCityName => currentCity != null ? currentCity.name : string.Empty;
+    public string CurrentOwnerText
+    {
+        get
+        {
+            if (currentCity == null)
+            {
+                return string.Empty;
+            }
+
+            TurnManager tm = ResolveTurnManager();
+            if (tm != null && tm.currentMode == TurnManager.GameMode.PlayByPost)
+            {
+                return currentCity.isPlayerOwned ? "Player 1 City" : "Player 2 City";
+            }
+
+            return currentCity.isPlayerOwned ? "Player City" : "AI City";
+        }
+    }
+
+    public string RecruitWarriorLabel
+    {
+        get
+        {
+            TurnManager tm = ResolveTurnManager();
+            if (tm != null)
+            {
+                return $"Warrior\n({tm.warriorCost} Gold)";
+            }
+
+            return "Warrior";
+        }
+    }
+
+    private TurnManager ResolveTurnManager()
+    {
+        if (turnManager == null)
+        {
+            turnManager = TurnManager.Instance;
+        }
+
+        return turnManager;
+    }
 
     private static BottomStripController GetBottomStripController()
     {
