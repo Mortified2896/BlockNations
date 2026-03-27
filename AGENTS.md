@@ -1,13 +1,20 @@
 Create a new repo-level AGENTS.md at the repository root.
 
-Use the finalized content below exactly as the base, with one extra bullet added under "Docs / Assumptions":
-
-- When architecture, MVP scope, or core workflows change substantially, update the relevant docs/status files as part of the task or explicitly call out the needed doc follow-up.
-
+Use the finalized content below exactly as the base.
 Do not add generic filler.
 Do not expand scope.
 Do not create it under Docs/.
 Create it at repo root as: AGENTS.md
+
+One required adjustment:
+Update the "Definition Of Done" / diff expectations so they match this repo preference:
+
+- For code or scene edits, include unified diff.
+- For pure deletion/asset cleanup passes, unified diff is optional unless:
+  - explicitly requested
+  - something failed
+  - or the change touched risky files.
+- If no file was edited, do not fabricate a diff.
 
 Final content:
 
@@ -148,14 +155,21 @@ A task is not done unless the response includes:
 - short explanation
 - manual test checklist
 - rollback plan
-- unified diff for file edits
+
+For code or scene edits, also include:
+- unified diff
 
 For visual/UI work, also include:
 - targeted manual visual smoke checks
+
+For pure deletion/asset cleanup passes, unified diff is optional unless:
+- explicitly requested
+- something failed
+- or the change touched risky files
 
 If no file was edited, do not fabricate a diff.
 
 Return:
 1) short explanation
 2) rollback plan
-3) unified diff only
+3) unified diff only when required by the rules above
