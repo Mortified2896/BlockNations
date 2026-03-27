@@ -47,7 +47,6 @@ public class MainMenuUITKView : MonoBehaviour
 
     private Button continueButton;
     private Button playVsAiButton;
-    private Button playHotseatButton;
     private Button multiplayerButton;
     private Button profileButton;
     private Button quitButton;
@@ -299,7 +298,6 @@ public class MainMenuUITKView : MonoBehaviour
 
         continueButton = root.Q<Button>("ContinueButton");
         playVsAiButton = root.Q<Button>("PlayVsAIButton");
-        playHotseatButton = root.Q<Button>("PlayHotseatButton");
         multiplayerButton = root.Q<Button>("MultiplayerButton");
         profileButton = root.Q<Button>("ProfileButton");
         quitButton = root.Q<Button>("QuitButton");
@@ -527,11 +525,6 @@ public class MainMenuUITKView : MonoBehaviour
             playVsAiButton.clicked += HandlePlayVsAiClicked;
         }
 
-        if (playHotseatButton != null)
-        {
-            playHotseatButton.clicked += HandlePlayHotseatClicked;
-        }
-
         if (multiplayerButton != null)
         {
             multiplayerButton.clicked += HandleMultiplayerClicked;
@@ -628,11 +621,6 @@ public class MainMenuUITKView : MonoBehaviour
         if (playVsAiButton != null)
         {
             playVsAiButton.clicked -= HandlePlayVsAiClicked;
-        }
-
-        if (playHotseatButton != null)
-        {
-            playHotseatButton.clicked -= HandlePlayHotseatClicked;
         }
 
         if (multiplayerButton != null)
@@ -776,14 +764,6 @@ public class MainMenuUITKView : MonoBehaviour
         if (mainMenuController != null)
         {
             mainMenuController.PlayVsAI();
-        }
-    }
-
-    private void HandlePlayHotseatClicked()
-    {
-        if (mainMenuController != null)
-        {
-            mainMenuController.PlayHotseat();
         }
     }
 
@@ -1401,7 +1381,6 @@ public class MainMenuUITKView : MonoBehaviour
         createSuccessGameCodeLabel = null;
         continueButton = null;
         playVsAiButton = null;
-        playHotseatButton = null;
         multiplayerButton = null;
         profileButton = null;
         quitButton = null;

@@ -566,57 +566,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ae5e8f0f0a498244491b27a6a2f2248b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SafeAreaApplier
---- !u!1 &2120047042
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2120047044}
-  - component: {fileID: 2120047043}
-  m_Layer: 0
-  m_Name: HotseatTurnOverlay
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &2120047043
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2120047042}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f5425ff7e58c3a346bad1de17b9c9b18, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::HotseatTurnOverlay
-  referenceWidth: 1170
-  referenceHeight: 2532
-  overlayColor: {r: 0.9547169, g: 0.9547169, b: 0.9547169, a: 1}
-  panelColor: {r: 0.16, g: 0.16, b: 0.16, a: 1}
-  textColor: {r: 1, g: 1, b: 1, a: 1}
-  buttonTextColor: {r: 1, g: 1, b: 1, a: 1}
-  font: {fileID: 0}
---- !u!4 &2120047044
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2120047042}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 1.17533, y: -0.2763, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2147001001
 GameObject:
   m_ObjectHideFlags: 0
@@ -750,7 +699,6 @@ SceneRoots:
   m_Roots:
   - {fileID: 345299356}
   - {fileID: 1678659298}
-  - {fileID: 2120047044}
   - {fileID: 9069711305470729211}
   - {fileID: 774234012}
   - {fileID: 948159471}

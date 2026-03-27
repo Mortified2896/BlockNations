@@ -611,15 +611,13 @@ public static class SaveManifestService
         if (Enum.TryParse(mode, out TurnManager.GameMode parsed))
             return parsed;
 
-        return TurnManager.GameMode.VsAI;
+        return TurnManager.GameMode.None;
     }
 
     private static string SlotTypeFromMode(TurnManager.GameMode mode)
     {
         switch (mode)
         {
-            case TurnManager.GameMode.Hotseat:
-                return "Hotseat";
             case TurnManager.GameMode.PlayByPost:
                 return "PlayByPost";
             default:

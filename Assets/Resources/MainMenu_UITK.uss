@@ -822,7 +822,3 @@
 
     -unity-text-align: upper-right;
 }
-
-.non-mvp-hidden {
-    display: none;
-}

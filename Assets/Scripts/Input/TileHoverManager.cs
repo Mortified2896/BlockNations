@@ -66,14 +66,13 @@ public class TileHoverManager : MonoBehaviour
         TurnManager turnManager = TurnManager.Instance;
         if (turnManager != null)
         {
-            if (turnManager.gameOver || turnManager.IsHotseatHandoff)
+            if (turnManager.gameOver)
             {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 if (isPrimaryClickDown && PbpDebugSettingsLoader.EnableInputLogs)
                 {
                     Unit selectedForLog = UnitSelectionManager.Instance != null ? UnitSelectionManager.Instance.SelectedUnit : null;
-                    string reason = turnManager.gameOver ? "game_over" : "hotseat_handoff";
-                    turnManager.LogPbpSelectionGateIfNeeded("ignored_input_lock", false, selectedForLog, reason);
+                    turnManager.LogPbpSelectionGateIfNeeded("ignored_input_lock", false, selectedForLog, "game_over");
                 }
 #endif
                 return;
@@ -125,7 +124,7 @@ public class TileHoverManager : MonoBehaviour
             }
         }
 
-        bool suppressHoverHighlight = TutorialGate.IsActive;
+        bool suppressHoverHighlight = false;
 
         // Update hover state if we moved to a different tile
         if (newHover != hoveredTile)
@@ -196,7 +195,7 @@ public class TileHoverManager : MonoBehaviour
             // 2c) Unit clicked: select/deselect unit (takes priority over city UI)
             if (hasUnit)
             {
-                if (!TutorialGate.IsActive && CityUIManager.Instance != null)
+                if (CityUIManager.Instance != null)
                 {
                     CityUIManager.Instance.ClosePanel();
                 }
@@ -221,17 +220,6 @@ public class TileHoverManager : MonoBehaviour
             }
 
             // 2f) No city/unit clicked: treat as tile interaction
-
-            // During the tutorial, keep tile clicks deterministic and avoid extra visual noise
-            // (no green tile selection, and don't auto-close city panels on misclicks).
-            if (TutorialGate.IsActive)
-            {
-                if (hoveredTile != null && UnitSelectionManager.Instance != null)
-                {
-                    UnitSelectionManager.Instance.OnTileClicked(hoveredTile.transform);
-                }
-                return;
-            }
 
             // Clicking an empty tile should close any open city panel.
             if (CityUIManager.Instance != null)

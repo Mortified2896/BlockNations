@@ -5,7 +5,6 @@
             <ui:Label name="TitleLabel" text="Block Nations" class="title" />
             <ui:Button name="PlayVsAIButton" text="Play vs AI" class="menu-button" />
             <ui:Button name="ContinueButton" text="Continue" class="menu-button" />
-            <ui:Button name="PlayHotseatButton" text="Play Hotseat" class="menu-button non-mvp-hidden" />
             <ui:Button name="MultiplayerButton" text="Multiplayer" class="menu-button" />
             <ui:Button name="ProfileButton" text="Profile" class="menu-button" />
         </ui:VisualElement>

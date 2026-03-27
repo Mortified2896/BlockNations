@@ -86,7 +86,7 @@ public class TileVisibility : MonoBehaviour
     }
 
     /// <summary>
-    /// Clears any visibility/exploration data (used for per-side fog in hotseat).
+    /// Clears any visibility/exploration data.
     /// </summary>
     public void ResetVisibilityState()
     {

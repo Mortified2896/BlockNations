@@ -167,8 +167,7 @@ public class City : MonoBehaviour
         }
         else if (!isPlayerOwned && TurnManager.Instance != null)
         {
-            // For AI units in hotseat, ensure fog respects the active side
-            bool isCurrentSideUnit = TurnManager.Instance.currentMode != TurnManager.GameMode.Hotseat || (TurnManager.Instance.isPlayerTurn == isPlayerOwned);
+            bool isCurrentSideUnit = TurnManager.Instance.currentMode != TurnManager.GameMode.PlayByPost || (TurnManager.Instance.isPlayerTurn == isPlayerOwned);
             Unit spawned = warrior.GetComponent<Unit>();
             if (spawned != null)
             {

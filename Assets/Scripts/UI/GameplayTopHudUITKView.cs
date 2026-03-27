@@ -250,8 +250,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         }
 
         int displayGold = turnManager.playerGold;
-        if ((turnManager.currentMode == TurnManager.GameMode.Hotseat ||
-             turnManager.currentMode == TurnManager.GameMode.PlayByPost) &&
+        if (turnManager.currentMode == TurnManager.GameMode.PlayByPost &&
             !turnManager.isPlayerTurn)
         {
             displayGold = turnManager.aiGold;

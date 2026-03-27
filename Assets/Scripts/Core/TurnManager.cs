@@ -17,7 +17,6 @@ public class TurnManager : MonoBehaviour
     {
         None,
         VsAI,
-        Hotseat,
         PlayByPost
     }
 
@@ -96,7 +95,6 @@ public class TurnManager : MonoBehaviour
     [Header("References")]
     public GridManager gridManager;
     public int visibilityRadius = 1;
-    public bool IsHotseatHandoff => isHotseatHandoff;
 
     [Header("Prefabs")]
     public GameObject unitPrefab; // used to respawn units on load
@@ -110,7 +108,7 @@ public class TurnManager : MonoBehaviour
     public string autoSaveFileName = "save.json";
     public bool playByPostExportPretty = true;
 
-    [Header("Tutorial")]
+    [Header("AI Debug")]
     public bool disableAI = false;
 
     [Header("Quality of Life")]
@@ -121,9 +119,6 @@ public class TurnManager : MonoBehaviour
     [Tooltip("Don't auto-end within this many seconds of the last player input (real time).")]
     public float autoEndTurnInputCooldownSeconds = 0.8f;
 
-    private bool isHotseatHandoff = false;
-    private bool nextHotseatIsPlayer = false;
-    private bool hotseatHandoffAdvancesTurn = false;
     private bool isLoadingFromSave = false;
     // When true in PlayByPost, the current side has ended
     // their turn and we are only waiting for the player
@@ -279,9 +274,6 @@ public class TurnManager : MonoBehaviour
 
     public bool IsHumanTurn()
     {
-        if (isHotseatHandoff)
-            return false;
-
         if (currentMode == GameMode.PlayByPost && isPlayByPostWaitingForExport)
             return false;
 
@@ -291,13 +283,12 @@ public class TurnManager : MonoBehaviour
         if (currentMode == GameMode.VsAI)
             return isPlayerTurn;
 
-        // Hotseat: both sides are human-controlled
-        return true;
+        return currentMode == GameMode.PlayByPost;
     }
 
     public bool CanAdvanceTurn()
     {
-        if (gameOver || isHotseatHandoff)
+        if (gameOver)
             return false;
 
         if (currentMode == GameMode.PlayByPost && isPlayByPostWaitingForExport)
@@ -308,9 +299,6 @@ public class TurnManager : MonoBehaviour
 
         if (currentMode == GameMode.VsAI)
             return isPlayerTurn;
-
-        if (currentMode == GameMode.Hotseat)
-            return true;
 
         // Play-by-Post: only allow advancing when it's this local seat's turn.
         if (currentMode == GameMode.PlayByPost)
@@ -469,11 +457,6 @@ public class TurnManager : MonoBehaviour
             return true;
         }
 
-        if (currentMode == GameMode.Hotseat)
-        {
-            return isPlayerTurn;
-        }
-
         // VsAI/other modes currently treat the local viewer as the player-owned side.
         // If future modes support non-player-owned local viewpoints, update this helper.
         return true;
@@ -488,11 +471,6 @@ public class TurnManager : MonoBehaviour
                 return false;
 
             return (isPlayerTurn == me) && (isPlayerOwned == me);
-        }
-
-        if (currentMode == GameMode.Hotseat)
-        {
-            return isPlayerTurn == isPlayerOwned;
         }
 
         // Vs AI: only player-owned units/cities are controllable during the player turn
@@ -585,7 +563,7 @@ public class TurnManager : MonoBehaviour
 
     public bool CanControlUnit(Unit unit)
     {
-        if (unit == null || gameOver || isHotseatHandoff)
+        if (unit == null || gameOver)
             return false;
 
         if (currentMode == GameMode.PlayByPost && !CanLocalPlayerIssueCommands())
@@ -596,7 +574,7 @@ public class TurnManager : MonoBehaviour
 
     public bool CanControlCity(City city)
     {
-        if (city == null || gameOver || isHotseatHandoff)
+        if (city == null || gameOver)
             return false;
 
         if (currentMode == GameMode.PlayByPost && !CanLocalPlayerIssueCommands())
@@ -607,7 +585,7 @@ public class TurnManager : MonoBehaviour
 
     public string GetCurrentSideName()
     {
-        if (currentMode == GameMode.Hotseat || currentMode == GameMode.PlayByPost)
+        if (currentMode == GameMode.PlayByPost)
         {
             return isPlayerTurn ? "Player 1" : "Player 2";
         }
@@ -802,11 +780,8 @@ public class TurnManager : MonoBehaviour
 
     void Update()
     {
-        if (gameOver || isHotseatHandoff)
+        if (gameOver)
             return;
-
-
-
         RecordHumanInputIfAny();
 
         // Gameplay UI scaling/offset is handled by GameplayUIScaler.
@@ -858,15 +833,6 @@ public class TurnManager : MonoBehaviour
             return;
         }
 
-        if (TutorialGate.IsActive && TutorialGate.CanEndTurn != null && !TutorialGate.CanEndTurn())
-        {
-            if (SoundManager.Instance != null)
-            {
-                SoundManager.Instance.PlayInvalid();
-            }
-            return;
-        }
-
         EndCurrentTurn(true);
     }
 
@@ -889,7 +855,7 @@ public class TurnManager : MonoBehaviour
             return;
         }
 
-        // Preserve the mode (VsAI / Hotseat / PlayByPost) for the next game.
+        // Preserve the mode (VsAI / PlayByPost) for the next game.
         GameModeSelection.SetPendingMode(currentMode);
 
         Time.timeScale = 1f;
@@ -1310,16 +1276,8 @@ public class TurnManager : MonoBehaviour
             return;
         }
 
-        // Hotseat / Play-by-Post: no AI, just human sides.
-        if (currentMode == GameMode.Hotseat)
-        {
-            // Advance to the next side locally and show the handoff overlay.
-            isPlayerTurn = !isPlayerTurn;
-            UpdateTurnText();
-            ShowHotseatHandoff(isPlayerTurn, true);
-            AutoSaveIfEnabled();
-        }
-        else if (currentMode == GameMode.PlayByPost)
+        // Play-by-Post: both sides are human-controlled with seat ownership.
+        if (currentMode == GameMode.PlayByPost)
         {
             // In Play-by-Post we do NOT start the next side's turn locally,
             // otherwise the local player would see the opponent's fog-of-war.
@@ -1897,52 +1855,6 @@ public class TurnManager : MonoBehaviour
         SoundManager.Instance.PlayBackgroundMusic(gameplayMusic);
     }
 
-    void ShowHotseatHandoff(bool nextIsPlayer, bool advanceTurnAfterReturn)
-    {
-        isHotseatHandoff = true;
-        nextHotseatIsPlayer = nextIsPlayer;
-        hotseatHandoffAdvancesTurn = advanceTurnAfterReturn;
-        Time.timeScale = 0f;
-
-        if (UnitSelectionManager.Instance != null)
-        {
-            UnitSelectionManager.Instance.ClearSelection();
-        }
-
-        if (TileHoverManager.Instance != null)
-        {
-            TileHoverManager.Instance.ClearSelection();
-        }
-
-        if (CityUIManager.Instance != null)
-        {
-            CityUIManager.Instance.ClosePanel();
-        }
-    }
-
-    public void ContinueHotseatTurn()
-    {
-        if (!isHotseatHandoff || currentMode != GameMode.Hotseat)
-            return;
-
-        isHotseatHandoff = false;
-        Time.timeScale = 1f;
-
-        if (nextHotseatIsPlayer)
-        {
-            if (hotseatHandoffAdvancesTurn)
-            {
-                // Completed a full round, advance the turn counter for Player 1.
-                turnNumber++;
-            }
-            BeginPlayerTurn();
-        }
-        else
-        {
-            BeginHotseatOpponentTurn();
-        }
-    }
-
     IEnumerator AITurn()
     {
         if (gameOver || currentMode != GameMode.VsAI)
@@ -2015,40 +1927,6 @@ public class TurnManager : MonoBehaviour
         {
             AutoSaveIfEnabled();
         }
-    }
-
-    void BeginHotseatOpponentTurn()
-    {
-        if (gameOver)
-            return;
-
-        if (SoundManager.Instance != null)
-        {
-            SoundManager.Instance.PlayTurnStart();
-        }
-
-        // Allow cities and units to act again
-        ResetRecruitmentForAICities();
-        if (UnitSelectionManager.Instance != null)
-        {
-            UnitSelectionManager.Instance.ResetMovementForSide(false, IsCurrentSideOwner(false));
-            UnitSelectionManager.Instance.ClearSelection();
-        }
-
-        if (TileHoverManager.Instance != null)
-        {
-            TileHoverManager.Instance.ClearSelection();
-        }
-
-        if (CityUIManager.Instance != null)
-        {
-            CityUIManager.Instance.ClosePanel();
-        }
-
-        CollectAIGold();
-        UpdateGoldText();
-        RecalculatePlayerVisibility();
-        UpdateTurnText();
     }
 
     System.Collections.IEnumerator StartupSequence()
@@ -2230,15 +2108,7 @@ public class TurnManager : MonoBehaviour
         UpdateTurnText();
         RecalculatePlayerVisibility();
 
-        EnsureTutorialOverlayIfNeeded();
         ScheduleAutoEndTurnCheck();
-
-        // If we start in Hotseat, show the handoff before the very first turn.
-        // PlayByPost should NOT use the hotseat handoff overlay.
-        if (currentMode == GameMode.Hotseat)
-        {
-            ShowHotseatHandoff(isPlayerTurn, false);
-        }
 
         RefreshEndTurnButtonInteractable(force: true);
     }
@@ -2313,27 +2183,12 @@ public class TurnManager : MonoBehaviour
         }
     }
 
-    void EnsureTutorialOverlayIfNeeded()
-    {
-        // Fallback: make sure the tutorial overlay exists in gameplay even if the runtime bootstrap
-        // didn't run (e.g., due to scene load order differences).
-        bool shouldShow = TutorialLaunch.IsShowRequested();
-        if (!shouldShow)
-            return;
-
-        if (Object.FindFirstObjectByType<TutorialOverlay>() != null)
-            return;
-
-        GameObject go = new GameObject("TutorialOverlay");
-        go.AddComponent<TutorialOverlay>();
-    }
-
     public void ScheduleAutoEndTurnCheck()
     {
         if (!autoEndTurnWhenNoActions)
             return;
 
-        if (gameOver || isHotseatHandoff || !IsHumanTurn())
+        if (gameOver || !IsHumanTurn())
             return;
 
         // Vs AI player only.
@@ -2359,7 +2214,7 @@ public class TurnManager : MonoBehaviour
             if (!autoEndTurnWhenNoActions)
                 break;
 
-            if (gameOver || isHotseatHandoff || !IsHumanTurn())
+            if (gameOver || !IsHumanTurn())
                 break;
 
             if (currentMode != GameMode.VsAI || !isPlayerTurn)
@@ -3214,11 +3069,7 @@ public class TurnManager : MonoBehaviour
 
         int winnerSeatIndex = capturedByPlayer ? 0 : 1;
         string message;
-        if (currentMode == GameMode.Hotseat)
-        {
-            message = capturedByPlayer ? "Player 1 wins!" : "Player 2 wins!";
-        }
-        else if (currentMode == GameMode.PlayByPost && TryComputePbpLocalResult(winnerSeatIndex, out bool didLocalWin, out _))
+        if (currentMode == GameMode.PlayByPost && TryComputePbpLocalResult(winnerSeatIndex, out bool didLocalWin, out _))
         {
             message = didLocalWin ? "You won!" : "You lost!";
             ConfigurePbpEndgameFromCapture(didLocalWin);
@@ -3230,7 +3081,7 @@ public class TurnManager : MonoBehaviour
 
         if (SoundManager.Instance != null)
         {
-            // In local Hotseat (and Play-by-Post), both sides are humans, so always treat game-over as a "win" cue.
+            // In Play-by-Post both sides are human-controlled, so always treat game-over as a "win" cue.
             bool playWinCue = (currentMode == GameMode.VsAI) ? capturedByPlayer : true;
             SoundManager.Instance.PlayGameOver(playWinCue);
         }
@@ -3317,9 +3168,8 @@ public class TurnManager : MonoBehaviour
 
         int displayGold = playerGold;
 
-        // In Hotseat and Play-by-Post, the second side's gold
-        // is stored in aiGold, so show that when it's their turn.
-        if ((currentMode == GameMode.Hotseat || currentMode == GameMode.PlayByPost) && !isPlayerTurn)
+        // In Play-by-Post, the second side's gold is stored in aiGold.
+        if (currentMode == GameMode.PlayByPost && !isPlayerTurn)
         {
             displayGold = aiGold;
         }
@@ -4131,11 +3981,14 @@ private void PBpDebugSyncNow_Context()
                 return false;
             }
 
-            // Apply basic state
-            if (System.Enum.TryParse(save.mode, out GameMode loadedMode))
+            // Apply basic state.
+            if (!System.Enum.TryParse(save.mode, out GameMode loadedMode))
             {
-                currentMode = loadedMode;
+                Debug.LogError($"Unsupported save mode '{save.mode}'. Load aborted.");
+                return false;
             }
+
+            currentMode = loadedMode;
 
             // AI difficulty (optional for older saves)
             aiDifficulty = AIDifficulty.Level1;
@@ -4173,7 +4026,6 @@ private void PBpDebugSyncNow_Context()
                 }
             }
             visibilityRadius = save.visibilityRadius;
-            isHotseatHandoff = false;
             isPlayByPostWaitingForExport = false;
             Time.timeScale = 1f;
             bool viewerIsPlayerOwnedForLoad = GetViewerIsPlayerOwned();
@@ -4255,11 +4107,7 @@ private void PBpDebugSyncNow_Context()
                     unit.movesUsedThisTurn = Mathf.Clamp(u.movesUsedThisTurn, 0, unit.maxMovesPerTurn);
                     unit.hasAttackedThisTurn = u.hasAttackedThisTurn;
                     bool isCurrentSideUnit = true;
-                    if (currentMode == GameMode.Hotseat)
-                    {
-                        isCurrentSideUnit = unit.isPlayerOwned == isPlayerTurn;
-                    }
-                    else if (currentMode == GameMode.PlayByPost)
+                    if (currentMode == GameMode.PlayByPost)
                     {
                         isCurrentSideUnit = unit.isPlayerOwned == viewerIsPlayerOwnedForLoad;
                     }
@@ -4320,15 +4168,7 @@ private void PBpDebugSyncNow_Context()
                 {
                     if (gridManager.TryGetTile(t.x, t.y, out TileVisibility tile))
                     {
-                        // Use current side to drive visuals; for symmetric modes
-                        // (Hotseat), respect whose turn it is.
-                        bool activeSideIsPlayer = true;
-                        if (currentMode == GameMode.Hotseat)
-                        {
-                            activeSideIsPlayer = isPlayerTurn;
-                        }
-
-                        tile.SetSeenState(t.playerSeen, t.opponentSeen, activeSideIsPlayer);
+                        tile.SetSeenState(t.playerSeen, t.opponentSeen, true);
                     }
                 }
             }
@@ -4510,9 +4350,9 @@ private void PBpDebugSyncNow_Context()
                 // Only play invalid for the human player's gold in Vs AI.
                 shouldPlayInvalid = forPlayer && isPlayerTurn;
             }
-            else if (currentMode == GameMode.Hotseat || currentMode == GameMode.PlayByPost)
+            else if (currentMode == GameMode.PlayByPost)
             {
-                // In Hotseat/Play-by-Post, both banks can be human-controlled depending on whose turn it is.
+                // In Play-by-Post, both banks can be human-controlled depending on whose turn it is.
                 bool spendingSideIsActive = isPlayerTurn == forPlayer;
                 shouldPlayInvalid = spendingSideIsActive && IsHumanTurn();
             }
@@ -4550,7 +4390,7 @@ private void PBpDebugSyncNow_Context()
             }
 
             aiGold -= amount;
-            if ((currentMode == GameMode.Hotseat || currentMode == GameMode.PlayByPost) && !isPlayerTurn)
+            if (currentMode == GameMode.PlayByPost && !isPlayerTurn)
             {
                 UpdateGoldText();
             }
@@ -4571,7 +4411,7 @@ private void PBpDebugSyncNow_Context()
         else
         {
             aiGold += amount;
-            if ((currentMode == GameMode.Hotseat || currentMode == GameMode.PlayByPost) && !isPlayerTurn)
+            if (currentMode == GameMode.PlayByPost && !isPlayerTurn)
             {
                 UpdateGoldText();
             }

@@ -62,35 +62,6 @@ public class UnitSelectionManager : MonoBehaviour
         bool canAttack = !unit.hasAttackedThisTurn;
         float tileSize = GetGridTileSize();
 
-        // Tutorial mode: highlight only one forced target to keep the tutorial deterministic and clear.
-        if (TutorialGate.IsActive && TutorialGate.ForceSingleTargetHighlight)
-        {
-            Vector3 forced = TutorialGate.ForcedTargetWorldPosition;
-            forced.z = 0f;
-
-            foreach (TileHighlighter tile in tiles)
-            {
-                if (tile == null) continue;
-                Vector3 tilePos = tile.transform.position;
-                tilePos.z = 0f;
-
-                if ((tilePos - forced).sqrMagnitude > (0.25f * 0.25f))
-                    continue;
-
-                if (TutorialGate.ForcedTargetIsAttack && canAttack)
-                {
-                    tile.SetAttackable(true);
-                }
-                else if (!TutorialGate.ForcedTargetIsAttack && canMove)
-                {
-                    tile.SetReachable(true);
-                }
-                break;
-            }
-
-            return;
-        }
-
         foreach (TileHighlighter tile in tiles)
         {
             if (tile == null) continue;
@@ -229,34 +200,6 @@ public class UnitSelectionManager : MonoBehaviour
         bool canAttack = !unit.hasAttackedThisTurn;
         float tileSize = GetGridTileSize();
 
-        if (TutorialGate.IsActive && TutorialGate.ForceSingleTargetHighlight)
-        {
-            Vector3 forced = TutorialGate.ForcedTargetWorldPosition;
-            forced.z = 0f;
-
-            foreach (TileHighlighter tile in tiles)
-            {
-                if (tile == null) continue;
-                Vector3 tilePos = tile.transform.position;
-                tilePos.z = 0f;
-
-                if ((tilePos - forced).sqrMagnitude > (0.25f * 0.25f))
-                    continue;
-
-                if (TutorialGate.ForcedTargetIsAttack && canAttack)
-                {
-                    attackableCount = 1;
-                }
-                else if (!TutorialGate.ForcedTargetIsAttack && canMove)
-                {
-                    reachableCount = 1;
-                }
-                break;
-            }
-
-            return;
-        }
-
         foreach (TileHighlighter tile in tiles)
         {
             if (tile == null) continue;
@@ -286,18 +229,6 @@ public class UnitSelectionManager : MonoBehaviour
     {
         if (unit == null)
             return;
-
-        if (TutorialGate.IsActive && TutorialGate.CanSelectUnit != null && !TutorialGate.CanSelectUnit(unit))
-        {
-            if (SoundManager.Instance != null)
-            {
-                SoundManager.Instance.PlayInvalid();
-            }
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            LogSelectionBlockedForDebug(unit, "tutorial_gate_blocked");
-#endif
-            return;
-        }
 
         // If this unit is already selected, clicking it again will deselect it
         if (unit == selectedUnit)
@@ -351,16 +282,6 @@ public class UnitSelectionManager : MonoBehaviour
     {
         if (selectedUnit == null)
             return;
-
-        if (TutorialGate.IsActive && TutorialGate.CanMoveOrAttackToPosition != null &&
-            !TutorialGate.CanMoveOrAttackToPosition(selectedUnit, targetWorldPosition))
-        {
-            if (SoundManager.Instance != null)
-            {
-                SoundManager.Instance.PlayInvalid();
-            }
-            return;
-        }
 
         if (turnManager != null)
         {

@@ -20,7 +20,7 @@ public class CityUIManager : MonoBehaviour
     private City currentCity;
     private static bool hasLoggedMissingBottomStripController;
 
-    [Header("Tutorial/Debug")]
+    [Header("Debug")]
     public int lastRecruitAttemptFrame = -1;
     public bool lastRecruitAttemptSucceeded = false;
 
@@ -55,15 +55,6 @@ public class CityUIManager : MonoBehaviour
     public void OnCityClicked(City city)
     {
         if (city == null) return;
-
-        if (TutorialGate.IsActive && TutorialGate.CanClickCity != null && !TutorialGate.CanClickCity(city))
-        {
-            if (SoundManager.Instance != null)
-            {
-                SoundManager.Instance.PlayInvalid();
-            }
-            return;
-        }
 
         // Only open UI for cities controlled by the current human side
         if (turnManager != null && !turnManager.CanControlCity(city))
@@ -128,8 +119,7 @@ public class CityUIManager : MonoBehaviour
         if (ownerText != null && currentCity != null)
         {
             if (turnManager != null &&
-                (turnManager.currentMode == TurnManager.GameMode.Hotseat ||
-                 turnManager.currentMode == TurnManager.GameMode.PlayByPost))
+                turnManager.currentMode == TurnManager.GameMode.PlayByPost)
             {
                 ownerText.text = currentCity.isPlayerOwned ? "Player 1 City" : "Player 2 City";
             }
@@ -237,15 +227,6 @@ public class CityUIManager : MonoBehaviour
             }
         }
 #endif
-
-        if (TutorialGate.IsActive && TutorialGate.CanRecruitWarrior != null && !TutorialGate.CanRecruitWarrior())
-        {
-            if (SoundManager.Instance != null)
-            {
-                SoundManager.Instance.PlayInvalid();
-            }
-            return;
-        }
 
         if (currentCity == null)
         {

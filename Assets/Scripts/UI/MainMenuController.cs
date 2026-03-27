@@ -22,7 +22,6 @@ public class MainMenuController : MonoBehaviour
 
     [Header("Layout")]
     [SerializeField] private bool autoFitMenuToScreenOnDesktop = true;
-    private bool tutorialLaunchQueued;
     private const string PlayByPostGameIdKey = "pbp_gameId";
     private const string PlayByPostForceNewKey = "pbp_forceNew";
     private const string PlayByPostPendingNewGameIdKey = "pbp_pendingNewGameId";
@@ -109,12 +108,6 @@ public class MainMenuController : MonoBehaviour
         }
     }
 
-    // Unity UI-friendly click handler for Canvas Buttons.
-    public void OnTutorialButtonClicked()
-    {
-        RequestTutorialAndStartVsAIGame();
-    }
-
     // Optional: hook dedicated buttons to these for different difficulties.
     public void PlayVsAI_Level1()
     {
@@ -151,16 +144,6 @@ public class MainMenuController : MonoBehaviour
         {
             aiDifficultyPanel.SetActive(false);
         }
-    }
-
-    private void RequestTutorialAndStartVsAIGame()
-    {
-        if (tutorialLaunchQueued || TutorialGate.IsActive)
-            return;
-
-        tutorialLaunchQueued = true;
-        TutorialLaunch.RequestShow(resetCompleted: true);
-        StartVsAIGame(TurnManager.AIDifficulty.Level1);
     }
 
     private void TryAutoFitActiveMenuButtonContainer()
@@ -350,17 +333,6 @@ public class MainMenuController : MonoBehaviour
         if (modeSelectionPanel != null)
         {
             modeSelectionPanel.SetActive(true);
-        }
-    }
-
-    public void PlayHotseat()
-    {
-        GameModeSelection.SetPendingMode(TurnManager.GameMode.Hotseat);
-        SceneManager.LoadScene(gameplaySceneName);
-
-        if (modeSelectionPanel != null)
-        {
-            modeSelectionPanel.SetActive(false);
         }
     }
 
