@@ -474,7 +474,8 @@ public class MainMenuController : MonoBehaviour
         ActivePbpGamesChanged?.Invoke();
         RecomputePbpBadge();
 
-        if (isServerOnline)
+        PbpConnectivityState connectivityState = ResolveSharedConnectivityState();
+        if (connectivityState == PbpConnectivityState.Normal)
         {
             if (activePbpGames.Count <= 0)
             {
@@ -491,7 +492,7 @@ public class MainMenuController : MonoBehaviour
         }
         else
         {
-            SetImportStatus("Server offline");
+            SetImportStatus(connectivityState == PbpConnectivityState.Offline ? "Server offline" : "Server unreachable");
         }
     }
 
@@ -882,6 +883,7 @@ public class MainMenuController : MonoBehaviour
         }
 
         isServerOnline = online;
+        PbpConnectivityStateModel.ObserveServerProbeResult(online);
         UpdateMultiplayerButtonStates();
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -991,6 +993,11 @@ public class MainMenuController : MonoBehaviour
         }
 
         return true;
+    }
+
+    private static PbpConnectivityState ResolveSharedConnectivityState()
+    {
+        return PbpConnectivityStateModel.Resolve(Application.internetReachability).State;
     }
 
     private static string BuildGameTitle(SaveManifestService.ManifestGameSummary summary)

@@ -13,7 +13,6 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
     [Header("Optional Source Overrides")]
     [SerializeField] private TurnManager turnManager;
     private TurnManager subscribedTurnManager;
-    private bool? lastKnownPbpServerReachable;
 
     private UIDocument uiDocument;
     private ThemeStyleSheet themeAsset;
@@ -49,7 +48,6 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
     private void OnDisable()
     {
         UnsubscribeFromTurnManagerEvents();
-        lastKnownPbpServerReachable = null;
         ClearUiCache();
     }
 
@@ -219,21 +217,13 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             return;
         }
 
-        PbpTopHudStatusProvider.ConnectivityState connectivityState;
-        if (Application.internetReachability == NetworkReachability.NotReachable)
+        PbpConnectivitySnapshot connectivity = PbpConnectivityStateModel.Resolve(Application.internetReachability);
+        PbpTopHudStatusProvider.ConnectivityState connectivityState = connectivity.State switch
         {
-            connectivityState = PbpTopHudStatusProvider.ConnectivityState.Unreachable;
-        }
-        else if (turnManager != null &&
-                 turnManager.currentMode == TurnManager.GameMode.PlayByPost &&
-                 lastKnownPbpServerReachable == false)
-        {
-            connectivityState = PbpTopHudStatusProvider.ConnectivityState.ServerUnreachable;
-        }
-        else
-        {
-            connectivityState = PbpTopHudStatusProvider.ConnectivityState.Unknown;
-        }
+            PbpConnectivityState.Offline => PbpTopHudStatusProvider.ConnectivityState.Unreachable,
+            PbpConnectivityState.ServerUnreachable => PbpTopHudStatusProvider.ConnectivityState.ServerUnreachable,
+            _ => PbpTopHudStatusProvider.ConnectivityState.Unknown
+        };
 
         PbpTopHudStatusProvider.StatusResult pbpStatus =
             PbpTopHudStatusProvider.Build(turnManager, connectivityState);
@@ -340,16 +330,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             return;
         }
 
-        if (ok)
-        {
-            lastKnownPbpServerReachable = true;
-            return;
-        }
-
-        if (IsConnectivityFailure(err))
-        {
-            lastKnownPbpServerReachable = false;
-        }
+        PbpConnectivityStateModel.ObserveSubmitResult(ok, err);
     }
 
     private void HandlePlayByPostFetchResult(bool reachable, string resultOrError)
@@ -359,29 +340,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             return;
         }
 
-        if (reachable)
-        {
-            lastKnownPbpServerReachable = true;
-            return;
-        }
-
-        if (IsConnectivityFailure(resultOrError))
-        {
-            lastKnownPbpServerReachable = false;
-        }
-    }
-
-    private static bool IsConnectivityFailure(string err)
-    {
-        if (string.IsNullOrEmpty(err))
-        {
-            return true;
-        }
-
-        return string.Equals(err, TurnTelemetryConstants.IoError, System.StringComparison.Ordinal) ||
-               string.Equals(err, TurnTelemetryConstants.Unavailable, System.StringComparison.Ordinal) ||
-               string.Equals(err, TurnTelemetryConstants.NullTransport, System.StringComparison.Ordinal) ||
-               string.Equals(err, TurnTelemetryConstants.Unknown, System.StringComparison.Ordinal);
+        PbpConnectivityStateModel.ObserveFetchResult(reachable, resultOrError);
     }
 
     private void DisableOverlay()
