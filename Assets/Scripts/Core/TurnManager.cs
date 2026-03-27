@@ -677,7 +677,6 @@ public class TurnManager : MonoBehaviour
         ResolveTurnTransport();
         lastAppliedTurnNumberForPolling = turnNumber;
         EnsureEventSystemExists();
-        EnsureUIRaycasters();
         GameplayInputOrchestrator.ResetTransientInputState();
         TryStartGameplayMusic();
         RefreshEndTurnButtonInteractable(force: true);
@@ -1038,32 +1037,6 @@ public class TurnManager : MonoBehaviour
             return;
 
         Debug.LogWarning("TurnManager: No EventSystem detected. Please add one to the gameplay scene.");
-    }
-
-    void EnsureUIRaycasters()
-    {
-        var canvases = FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-        foreach (var c in canvases)
-        {
-            if (c == null) continue;
-            var gr = c.GetComponent<GraphicRaycaster>();
-            if (gr == null)
-            {
-                c.gameObject.AddComponent<GraphicRaycaster>();
-                if (PbpDebugSettingsLoader.EnableInputLogs)
-                {
-                    Debug.Log($"Added GraphicRaycaster to canvas '{c.name}' so UI can receive clicks.");
-                }
-            }
-            else if (!gr.enabled)
-            {
-                gr.enabled = true;
-                if (PbpDebugSettingsLoader.EnableInputLogs)
-                {
-                    Debug.Log($"Enabled GraphicRaycaster on canvas '{c.name}' so UI can receive clicks.");
-                }
-            }
-        }
     }
 
     void EndCurrentTurn(bool userInitiated = false)
