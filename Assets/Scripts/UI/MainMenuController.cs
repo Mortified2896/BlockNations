@@ -651,6 +651,42 @@ public class MainMenuController : MonoBehaviour
         ResumePlayByPostGame(gameId, returnToMultiplayerPane: true);
     }
 
+    public bool CanSendReminderForGame(SaveManifestService.ManifestGameSummary summary)
+    {
+        if (!PlayByPostReminderShareAdapter.ShouldShowReminderShareUi())
+        {
+            return false;
+        }
+
+        if (summary.isFinished || string.IsNullOrWhiteSpace(summary.gameId))
+        {
+            return false;
+        }
+
+        string subtitle = BuildPlayByPostTurnSubtitleForMenu(summary);
+        return string.Equals(subtitle, "Waiting for opponent", StringComparison.Ordinal);
+    }
+
+    public void GameDetails_SendReminder()
+    {
+        if (!TryGetSelectedPbpGameSummary(out SaveManifestService.ManifestGameSummary summary) ||
+            !CanSendReminderForGame(summary))
+        {
+            SetImportStatus("Reminder unavailable for this game.");
+            return;
+        }
+
+        if (!PlayByPostReminderShareAdapter.TryPresentDefaultReminderShareSheet())
+        {
+            SetImportStatus("Reminder sharing is unavailable on this platform.");
+            return;
+        }
+
+#if UNITY_EDITOR
+        SetImportStatus("Editor preview: reminder text copied.");
+#endif
+    }
+
     public void GameDetails_ResignLocal()
     {
         string gameId = hasSelectedPbpGame ? selectedPbpGame.gameId : selectedGameId;
@@ -732,6 +768,31 @@ public class MainMenuController : MonoBehaviour
         }
 
         TryEmitPendingCreateSuccess();
+    }
+
+    private bool TryGetSelectedPbpGameSummary(out SaveManifestService.ManifestGameSummary summary)
+    {
+        string gameId = hasSelectedPbpGame ? selectedPbpGame.gameId : selectedGameId;
+        if (!string.IsNullOrWhiteSpace(gameId))
+        {
+            for (int i = 0; i < activePbpGames.Count; i++)
+            {
+                if (string.Equals(activePbpGames[i].gameId, gameId, StringComparison.Ordinal))
+                {
+                    summary = activePbpGames[i];
+                    return true;
+                }
+            }
+        }
+
+        if (hasSelectedPbpGame && !string.IsNullOrWhiteSpace(selectedPbpGame.gameId))
+        {
+            summary = selectedPbpGame;
+            return true;
+        }
+
+        summary = default;
+        return false;
     }
 
     public void ContinueLastSave()

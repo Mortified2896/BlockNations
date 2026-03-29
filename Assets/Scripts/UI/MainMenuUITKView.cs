@@ -58,6 +58,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Button createSuccessCopyButton;
     private Button createSuccessCloseButton;
     private Button detailsOpenButton;
+    private Button detailsSendReminderButton;
     private Button detailsResignButton;
     private Button detailsCloseButton;
     private TextField joinGameIdInput;
@@ -316,6 +317,7 @@ public class MainMenuUITKView : MonoBehaviour
         createSuccessCopyButton = root.Q<Button>("CreateSuccessCopyButton");
         createSuccessCloseButton = root.Q<Button>("CreateSuccessCloseButton");
         detailsOpenButton = root.Q<Button>("DetailsOpenButton");
+        detailsSendReminderButton = root.Q<Button>("DetailsSendReminderButton");
         detailsResignButton = root.Q<Button>("DetailsResignButton");
         detailsCloseButton = root.Q<Button>("DetailsCloseButton");
         joinGameIdInput = root.Q<TextField>("JoinGameIdInput");
@@ -579,6 +581,11 @@ public class MainMenuUITKView : MonoBehaviour
             detailsOpenButton.clicked += HandleDetailsOpenClicked;
         }
 
+        if (detailsSendReminderButton != null)
+        {
+            detailsSendReminderButton.clicked += HandleDetailsSendReminderClicked;
+        }
+
         if (detailsResignButton != null)
         {
             detailsResignButton.clicked += HandleDetailsResignClicked;
@@ -675,6 +682,11 @@ public class MainMenuUITKView : MonoBehaviour
         if (detailsOpenButton != null)
         {
             detailsOpenButton.clicked -= HandleDetailsOpenClicked;
+        }
+
+        if (detailsSendReminderButton != null)
+        {
+            detailsSendReminderButton.clicked -= HandleDetailsSendReminderClicked;
         }
 
         if (detailsResignButton != null)
@@ -921,6 +933,14 @@ public class MainMenuUITKView : MonoBehaviour
         }
     }
 
+    private void HandleDetailsSendReminderClicked()
+    {
+        if (mainMenuController != null && hasSelectedGame)
+        {
+            mainMenuController.GameDetails_SendReminder();
+        }
+    }
+
     private void HandleDetailsResignClicked()
     {
         if (mainMenuController != null && hasSelectedGame)
@@ -1090,6 +1110,7 @@ public class MainMenuUITKView : MonoBehaviour
             }
         }
 
+        RefreshDetailsReminderButton(summary);
         SetVisible(detailsPanel, true);
     }
 
@@ -1128,6 +1149,17 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         return $"Game ID: {gameId}";
+    }
+
+    private void RefreshDetailsReminderButton(SaveManifestService.ManifestGameSummary summary)
+    {
+        if (detailsSendReminderButton == null)
+        {
+            return;
+        }
+
+        bool visible = mainMenuController != null && mainMenuController.CanSendReminderForGame(summary);
+        detailsSendReminderButton.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
     }
 
     private VisualElement CreateGameCard(
@@ -1562,6 +1594,7 @@ public class MainMenuUITKView : MonoBehaviour
         createSuccessCopyButton = null;
         createSuccessCloseButton = null;
         detailsOpenButton = null;
+        detailsSendReminderButton = null;
         detailsResignButton = null;
         detailsCloseButton = null;
         joinGameIdInput = null;

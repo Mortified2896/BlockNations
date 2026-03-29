@@ -337,6 +337,12 @@
     margin-top: auto;
 }
 
+#MultiplayerPanel .multiplayer-details-actions-secondary {
+    justify-content: center;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
 #MultiplayerPanel .multiplayer-details-button {
     flex-grow: 1;
     max-width: none;
@@ -351,6 +357,20 @@
 #MultiplayerPanel .multiplayer-details-button .unity-text-element {
     color: rgb(0, 0, 0);
     -unity-font-style: bold;
+}
+
+#MultiplayerPanel .multiplayer-details-button-secondary {
+    flex-grow: 0;
+    width: 260px;
+    max-width: 100%;
+    font-size: 24px;
+    color: rgb(38, 43, 52);
+    background-color: rgb(226, 230, 238);
+}
+
+#MultiplayerPanel .multiplayer-details-button-secondary .unity-button__text,
+#MultiplayerPanel .multiplayer-details-button-secondary .unity-text-element {
+    color: rgb(38, 43, 52);
 }
 
 #MultiplayerPanel .multiplayer-details-button-danger {
