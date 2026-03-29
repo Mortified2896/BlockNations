@@ -995,7 +995,9 @@ public class MainMenuUITKView : MonoBehaviour
 
         if (detailsSubtitleLabel != null)
         {
-            detailsSubtitleLabel.text = MainMenuController.BuildPlayByPostTurnSubtitle(summary);
+            detailsSubtitleLabel.text = mainMenuController != null
+                ? mainMenuController.BuildPlayByPostTurnSubtitleForMenu(summary)
+                : MainMenuController.BuildPlayByPostTurnSubtitle(summary);
         }
 
         if (detailsGameIdLabel != null)
@@ -1065,7 +1067,10 @@ public class MainMenuUITKView : MonoBehaviour
         title.AddToClassList("multiplayer-game-card-title");
         card.Add(title);
 
-        Label status = new Label(MainMenuController.BuildPlayByPostTurnSubtitle(summary));
+        string subtitle = mainMenuController != null
+            ? mainMenuController.BuildPlayByPostTurnSubtitleForMenu(summary)
+            : MainMenuController.BuildPlayByPostTurnSubtitle(summary);
+        Label status = new Label(subtitle);
         status.AddToClassList("multiplayer-game-card-status");
         card.Add(status);
 

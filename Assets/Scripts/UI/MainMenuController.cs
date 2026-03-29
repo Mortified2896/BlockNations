@@ -30,6 +30,7 @@ public class MainMenuController : MonoBehaviour
     private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
     private const string LegacySharedSaveFileName = "save.json";
     private const string PbpVersionVerificationFailedMessage = "Unable to verify this game's PBp version. For safety, this match cannot be opened on this build.";
+    private const float RemoteTurnStatusFetchCooldownSeconds = 10f;
     private bool isServerOnline = true;
     private bool joinProbeInProgress;
     private Coroutine serverCheckRoutine;
@@ -48,9 +49,48 @@ public class MainMenuController : MonoBehaviour
     private string pendingCreateShareReadyGameId;
     private SaveManifestService.ManifestGameSummary selectedPbpGame;
     private bool hasSelectedPbpGame;
+    private bool remoteTurnStatusFetchInFlight;
+    private float remoteTurnStatusLastFetchRealtime = -1000f;
+    private string remoteTurnStatusLastRequestSignature = string.Empty;
+    private int remoteTurnStatusRequestSerial;
+    private readonly Dictionary<string, RemoteTurnStatusOverlay> remoteTurnStatusByGameId =
+        new Dictionary<string, RemoteTurnStatusOverlay>(StringComparer.Ordinal);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
     private static readonly HashSet<string> PbpSnapshotReadWarningLoggedGameIds = new HashSet<string>();
 #endif
+
+    private readonly struct RemoteTurnStatusOverlay
+    {
+        public readonly bool HasNewerThanKnown;
+        public readonly int TurnSeat;
+
+        public RemoteTurnStatusOverlay(bool hasNewerThanKnown, int turnSeat)
+        {
+            HasNewerThanKnown = hasNewerThanKnown;
+            TurnSeat = turnSeat;
+        }
+    }
+
+    private static bool ShouldLogRemoteTurnStatusDiagnostics()
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        return PbpDebugSettingsLoader.EnableSaveLoadLogs || PbpDebugSettingsLoader.EnableTransportLogs;
+#else
+        return false;
+#endif
+    }
+
+    private static void LogRemoteTurnStatusDiagnostics(string message)
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (!ShouldLogRemoteTurnStatusDiagnostics())
+        {
+            return;
+        }
+
+        Debug.Log(message);
+#endif
+    }
 
     IEnumerator Start()
     {
@@ -413,6 +453,8 @@ public class MainMenuController : MonoBehaviour
     public void CloseMultiplayerScreen()
     {
         IsMultiplayerScreenRequested = false;
+        remoteTurnStatusRequestSerial++;
+        ClearRemoteTurnStatusOverlay();
         // UITK handles panel visibility locally.
     }
 
@@ -466,6 +508,8 @@ public class MainMenuController : MonoBehaviour
         {
             SetImportStatus(connectivityState == PbpConnectivityState.Offline ? "Offline" : "Can't reach server");
         }
+
+        TryRefreshRemoteTurnStatusesForMenu();
     }
 
     private void TryEmitPendingCreateSuccess()
@@ -1021,6 +1065,65 @@ public class MainMenuController : MonoBehaviour
         return "Waiting for opponent";
     }
 
+    public string BuildPlayByPostTurnSubtitleForMenu(SaveManifestService.ManifestGameSummary summary)
+    {
+        string fallback = BuildPlayByPostTurnSubtitle(summary);
+        if (string.Equals(fallback, "Game Over", StringComparison.Ordinal))
+        {
+            LogRemoteTurnStatusDiagnostics(
+                $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason=FALLBACK_GAME_OVER fallback={fallback}");
+            return fallback;
+        }
+
+        if (!IsHttpPbpGame(summary))
+        {
+            LogRemoteTurnStatusDiagnostics(
+                $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason=FALLBACK_NOT_HTTP fallback={fallback} transportType={summary.transportType ?? "<null>"} slotType={summary.slotType ?? "<null>"}");
+            return fallback;
+        }
+
+        if (!remoteTurnStatusByGameId.TryGetValue(summary.gameId, out RemoteTurnStatusOverlay remote))
+        {
+            LogRemoteTurnStatusDiagnostics(
+                $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason=FALLBACK_NO_REMOTE_STATUS fallback={fallback}");
+            return fallback;
+        }
+
+        if (!remote.HasNewerThanKnown)
+        {
+            LogRemoteTurnStatusDiagnostics(
+                $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason=FALLBACK_NOT_NEWER fallback={fallback} turnSeat={remote.TurnSeat}");
+            return fallback;
+        }
+
+        if (remote.TurnSeat != 0 && remote.TurnSeat != 1)
+        {
+            LogRemoteTurnStatusDiagnostics(
+                $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason=FALLBACK_INVALID_TURN_SEAT fallback={fallback} turnSeat={remote.TurnSeat}");
+            return fallback;
+        }
+
+        if (!LocalPlayerSeatStore.TryGetSeat(summary.gameId, out int localSeat))
+        {
+            LogRemoteTurnStatusDiagnostics(
+                $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason=FALLBACK_SEAT_MISSING fallback={fallback} turnSeat={remote.TurnSeat}");
+            return fallback;
+        }
+
+        if (localSeat != 0 && localSeat != 1)
+        {
+            LogRemoteTurnStatusDiagnostics(
+                $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason=FALLBACK_INVALID_LOCAL_SEAT fallback={fallback} localSeat={localSeat} turnSeat={remote.TurnSeat}");
+            return fallback;
+        }
+
+        string overlayText = localSeat == remote.TurnSeat ? "Your turn" : "Waiting for opponent";
+        string reason = localSeat == remote.TurnSeat ? "OVERLAY_YOUR_TURN" : "OVERLAY_WAITING";
+        LogRemoteTurnStatusDiagnostics(
+            $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason={reason} overlay={overlayText} localSeat={localSeat} turnSeat={remote.TurnSeat}");
+        return overlayText;
+    }
+
     private static bool TryGetLocalPbpSnapshotGameOver(string gameId, out bool gameOver)
     {
         gameOver = false;
@@ -1256,6 +1359,281 @@ public class MainMenuController : MonoBehaviour
         isYourTurn = summary.lastKnownIsPlayerTurn == localIsPlayerOwned;
         reason = "OK";
         return true;
+    }
+
+    private void TryRefreshRemoteTurnStatusesForMenu(bool bypassCooldown = false)
+    {
+        if (!IsMultiplayerScreenRequested)
+        {
+            LogRemoteTurnStatusDiagnostics(
+                "[MPRemoteStatus] refresh skip=SCREEN_NOT_REQUESTED");
+            return;
+        }
+
+        if (!isServerOnline)
+        {
+            LogRemoteTurnStatusDiagnostics(
+                "[MPRemoteStatus] refresh skip=SERVER_OFFLINE");
+            ClearRemoteTurnStatusOverlay();
+            return;
+        }
+
+        ResolveServerCheckSources();
+        HttpTurnTransport httpTransport = cachedHttpTransport;
+        if (httpTransport == null)
+        {
+            LogRemoteTurnStatusDiagnostics(
+                "[MPRemoteStatus] refresh skip=HTTP_TRANSPORT_MISSING");
+            ClearRemoteTurnStatusOverlay();
+            return;
+        }
+
+        httpTransport.Initialize();
+        if (!httpTransport.IsAvailable)
+        {
+            LogRemoteTurnStatusDiagnostics(
+                "[MPRemoteStatus] refresh skip=HTTP_TRANSPORT_UNAVAILABLE");
+            ClearRemoteTurnStatusOverlay();
+            return;
+        }
+
+        if (!TryBuildRemoteTurnStatusQuery(out HttpTurnTransport.TurnStatusQuery[] queries, out string requestSignature))
+        {
+            LogRemoteTurnStatusDiagnostics(
+                "[MPRemoteStatus] refresh skip=NO_HTTP_ELIGIBLE_GAMES");
+            ClearRemoteTurnStatusOverlay();
+            return;
+        }
+
+        if (remoteTurnStatusFetchInFlight)
+        {
+            LogRemoteTurnStatusDiagnostics(
+                $"[MPRemoteStatus] refresh skip=IN_FLIGHT signature={requestSignature}");
+            return;
+        }
+
+        float now = Time.realtimeSinceStartup;
+        if (!bypassCooldown &&
+            string.Equals(remoteTurnStatusLastRequestSignature, requestSignature, StringComparison.Ordinal) &&
+            (now - remoteTurnStatusLastFetchRealtime) < RemoteTurnStatusFetchCooldownSeconds)
+        {
+            float remaining = RemoteTurnStatusFetchCooldownSeconds - (now - remoteTurnStatusLastFetchRealtime);
+            LogRemoteTurnStatusDiagnostics(
+                $"[MPRemoteStatus] refresh skip=COOLDOWN signature={requestSignature} remainingSec={Mathf.Max(0f, remaining):F2}");
+            return;
+        }
+
+        List<string> debugKnownSeq = new List<string>(queries.Length);
+        for (int i = 0; i < queries.Length; i++)
+        {
+            debugKnownSeq.Add($"{queries[i].GameId}:{queries[i].KnownSeq}");
+        }
+        LogRemoteTurnStatusDiagnostics(
+            $"[MPRemoteStatus] refresh start signature={requestSignature} queries=[{string.Join(", ", debugKnownSeq)}]");
+
+        remoteTurnStatusFetchInFlight = true;
+        int requestSerial = ++remoteTurnStatusRequestSerial;
+        StartCoroutine(FetchRemoteTurnStatusesCoroutine(httpTransport, queries, requestSignature, requestSerial));
+    }
+
+    private IEnumerator FetchRemoteTurnStatusesCoroutine(
+        HttpTurnTransport httpTransport,
+        HttpTurnTransport.TurnStatusQuery[] queries,
+        string requestSignature,
+        int requestSerial)
+    {
+        bool ok = false;
+        HttpTurnTransport.TurnStatusItem[] items = null;
+
+        yield return StartCoroutine(httpTransport.FetchTurnStatuses(queries, (success, error, resultItems) =>
+        {
+            ok = success;
+            items = resultItems;
+        }));
+
+        remoteTurnStatusFetchInFlight = false;
+        remoteTurnStatusLastFetchRealtime = Time.realtimeSinceStartup;
+        remoteTurnStatusLastRequestSignature = requestSignature;
+        LogRemoteTurnStatusDiagnostics(
+            $"[MPRemoteStatus] fetch complete ok={ok} items={(items != null ? items.Length : 0)} requestSerial={requestSerial} currentSerial={remoteTurnStatusRequestSerial} signature={requestSignature}");
+
+        if (requestSerial != remoteTurnStatusRequestSerial)
+        {
+            LogRemoteTurnStatusDiagnostics(
+                $"[MPRemoteStatus] fetch discard=STALE_SERIAL requestSerial={requestSerial} currentSerial={remoteTurnStatusRequestSerial}");
+            yield break;
+        }
+
+        if (!IsMultiplayerScreenRequested)
+        {
+            LogRemoteTurnStatusDiagnostics(
+                "[MPRemoteStatus] fetch discard=SCREEN_NOT_REQUESTED");
+            yield break;
+        }
+
+        if (!ok || items == null)
+        {
+            LogRemoteTurnStatusDiagnostics(
+                $"[MPRemoteStatus] fetch apply=FAILED_CLEAR ok={ok} itemsNull={(items == null)}");
+            ClearRemoteTurnStatusOverlay();
+            yield break;
+        }
+
+        string currentSignature = BuildRemoteTurnStatusRequestSignature();
+        if (!string.Equals(currentSignature, requestSignature, StringComparison.Ordinal))
+        {
+            LogRemoteTurnStatusDiagnostics(
+                $"[MPRemoteStatus] fetch discard=SIGNATURE_CHANGED requestSignature={requestSignature} currentSignature={currentSignature}");
+            TryRefreshRemoteTurnStatusesForMenu(bypassCooldown: true);
+            yield break;
+        }
+
+        Dictionary<string, RemoteTurnStatusOverlay> next = new Dictionary<string, RemoteTurnStatusOverlay>(StringComparer.Ordinal);
+        for (int i = 0; i < items.Length; i++)
+        {
+            HttpTurnTransport.TurnStatusItem item = items[i];
+            if (string.IsNullOrWhiteSpace(item.GameId))
+            {
+                LogRemoteTurnStatusDiagnostics(
+                    $"[MPRemoteStatus] fetch item skip=EMPTY_GAME_ID index={i}");
+                continue;
+            }
+
+            LogRemoteTurnStatusDiagnostics(
+                $"[MPRemoteStatus] fetch item gameId={item.GameId} hasNewerThanKnown={item.HasNewerThanKnown} turnSeat={item.TurnSeat} knownSeq={item.KnownSeq} latestSeq={item.LatestSeq} nextSeqAfterKnown={item.NextSeqAfterKnown}");
+            next[item.GameId] = new RemoteTurnStatusOverlay(item.HasNewerThanKnown, item.TurnSeat);
+        }
+
+        bool changed = !AreRemoteTurnStatusOverlaysEqual(next);
+        remoteTurnStatusByGameId.Clear();
+        foreach (KeyValuePair<string, RemoteTurnStatusOverlay> kv in next)
+        {
+            remoteTurnStatusByGameId[kv.Key] = kv.Value;
+        }
+
+        LogRemoteTurnStatusDiagnostics(
+            $"[MPRemoteStatus] fetch applied changed={changed} overlayCount={remoteTurnStatusByGameId.Count}");
+
+        if (changed)
+        {
+            ActivePbpGamesChanged?.Invoke();
+        }
+    }
+
+    private bool TryBuildRemoteTurnStatusQuery(
+        out HttpTurnTransport.TurnStatusQuery[] queries,
+        out string signature)
+    {
+        List<HttpTurnTransport.TurnStatusQuery> requestList = new List<HttpTurnTransport.TurnStatusQuery>();
+        List<string> signatureParts = new List<string>();
+        HashSet<string> seenGameIds = new HashSet<string>(StringComparer.Ordinal);
+
+        for (int i = 0; i < activePbpGames.Count; i++)
+        {
+            SaveManifestService.ManifestGameSummary summary = activePbpGames[i];
+            if (!IsHttpPbpGame(summary))
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(summary.gameId))
+            {
+                continue;
+            }
+
+            if (!seenGameIds.Add(summary.gameId))
+            {
+                continue;
+            }
+
+            int knownSeq = GetKnownTransportSeqOrUnknown(summary);
+            requestList.Add(new HttpTurnTransport.TurnStatusQuery(summary.gameId, knownSeq));
+            signatureParts.Add($"{summary.gameId}|{knownSeq}");
+        }
+
+        if (requestList.Count <= 0)
+        {
+            queries = null;
+            signature = string.Empty;
+            return false;
+        }
+
+        queries = requestList.ToArray();
+        signature = string.Join(";", signatureParts);
+        return true;
+    }
+
+    private string BuildRemoteTurnStatusRequestSignature()
+    {
+        return TryBuildRemoteTurnStatusQuery(out _, out string signature)
+            ? signature
+            : string.Empty;
+    }
+
+    private static int GetKnownTransportSeqOrUnknown(SaveManifestService.ManifestGameSummary summary)
+    {
+        if (summary.lastKnownTransportSeq > 0)
+        {
+            return summary.lastKnownTransportSeq;
+        }
+
+        if (summary.hasLastKnownTurnState)
+        {
+            return SaveManifestService.ComputePlayByPostTransportSeq(summary.lastKnownRoundTurn, summary.lastKnownIsPlayerTurn);
+        }
+
+        return -1;
+    }
+
+    private static bool IsHttpPbpGame(SaveManifestService.ManifestGameSummary summary)
+    {
+        if (!string.Equals(summary.slotType, "PlayByPost", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        // File transport should never use server status overlay.
+        if (string.Equals(summary.transportType, "File", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool AreRemoteTurnStatusOverlaysEqual(Dictionary<string, RemoteTurnStatusOverlay> next)
+    {
+        if (next.Count != remoteTurnStatusByGameId.Count)
+        {
+            return false;
+        }
+
+        foreach (KeyValuePair<string, RemoteTurnStatusOverlay> kv in next)
+        {
+            if (!remoteTurnStatusByGameId.TryGetValue(kv.Key, out RemoteTurnStatusOverlay existing))
+            {
+                return false;
+            }
+
+            if (existing.HasNewerThanKnown != kv.Value.HasNewerThanKnown ||
+                existing.TurnSeat != kv.Value.TurnSeat)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private void ClearRemoteTurnStatusOverlay()
+    {
+        if (remoteTurnStatusByGameId.Count <= 0)
+        {
+            return;
+        }
+
+        remoteTurnStatusByGameId.Clear();
+        ActivePbpGamesChanged?.Invoke();
     }
 
     public static void DeleteLocalPlayByPostGameData(string gameId, bool clearActiveGameSelection = true)

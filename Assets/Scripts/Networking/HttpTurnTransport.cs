@@ -249,9 +249,180 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         done?.Invoke(reachable);
     }
 
+    public readonly struct TurnStatusQuery
+    {
+        public readonly string GameId;
+        public readonly int KnownSeq;
+
+        public TurnStatusQuery(string gameId, int knownSeq)
+        {
+            GameId = gameId;
+            KnownSeq = knownSeq;
+        }
+    }
+
+    public readonly struct TurnStatusItem
+    {
+        public readonly string GameId;
+        public readonly int KnownSeq;
+        public readonly bool HasAnyTurn;
+        public readonly int LatestSeq;
+        public readonly int NextSeqAfterKnown;
+        public readonly bool HasNewerThanKnown;
+        public readonly int TurnSeat;
+
+        public TurnStatusItem(
+            string gameId,
+            int knownSeq,
+            bool hasAnyTurn,
+            int latestSeq,
+            int nextSeqAfterKnown,
+            bool hasNewerThanKnown,
+            int turnSeat)
+        {
+            GameId = gameId;
+            KnownSeq = knownSeq;
+            HasAnyTurn = hasAnyTurn;
+            LatestSeq = latestSeq;
+            NextSeqAfterKnown = nextSeqAfterKnown;
+            HasNewerThanKnown = hasNewerThanKnown;
+            TurnSeat = turnSeat;
+        }
+    }
+
+    public IEnumerator FetchTurnStatuses(TurnStatusQuery[] games, Action<bool, string, TurnStatusItem[]> done)
+    {
+        if (games == null || games.Length == 0)
+        {
+            done?.Invoke(false, "INVALID_INPUT", null);
+            yield break;
+        }
+
+        for (int i = 0; i < games.Length; i++)
+        {
+            string gameId = games[i].GameId;
+            int knownSeq = games[i].KnownSeq;
+
+            if (!IsValidGameId(gameId))
+            {
+                done?.Invoke(false, "INVALID_GAME_ID", null);
+                yield break;
+            }
+
+            if (!IsValidKnownSeq(knownSeq))
+            {
+                done?.Invoke(false, "INVALID_TURN", null);
+                yield break;
+            }
+        }
+
+        if (!IsAvailable)
+        {
+            done?.Invoke(false, TurnTelemetryConstants.Unavailable, null);
+            yield break;
+        }
+
+        yield return null;
+
+        string url = BuildUrl("pbp/turn/status");
+        var payload = new TurnStatusRequest
+        {
+            games = new TurnStatusRequestItem[games.Length]
+        };
+
+        for (int i = 0; i < games.Length; i++)
+        {
+            payload.games[i] = new TurnStatusRequestItem
+            {
+                gameId = games[i].GameId,
+                knownSeq = games[i].KnownSeq
+            };
+        }
+
+        string body = JsonUtility.ToJson(payload);
+        byte[] bodyBytes = Encoding.UTF8.GetBytes(body);
+
+        using (var req = new UnityWebRequest(url, UnityWebRequest.kHttpVerbPOST))
+        {
+            req.uploadHandler = new UploadHandlerRaw(bodyBytes);
+            req.downloadHandler = new DownloadHandlerBuffer();
+            req.SetRequestHeader("Content-Type", "application/json");
+            ApplyPbpApiKeyHeader(req);
+            req.timeout = GetTimeoutSeconds();
+
+            yield return req.SendWebRequest();
+
+            long status = req.responseCode;
+            bool hasHttpResponse = status > 0;
+            if (req.result == UnityWebRequest.Result.ConnectionError ||
+                req.result == UnityWebRequest.Result.DataProcessingError ||
+                (!hasHttpResponse && req.result != UnityWebRequest.Result.Success))
+            {
+                done?.Invoke(false, TurnTelemetryConstants.IoError, null);
+                yield break;
+            }
+
+            string text = req.downloadHandler != null ? req.downloadHandler.text : null;
+
+            if (status == 200)
+            {
+                if (TryParseStatusOk(text, out TurnStatusItem[] items))
+                {
+                    done?.Invoke(true, null, items);
+                }
+                else
+                {
+                    done?.Invoke(false, TurnTelemetryConstants.IoError, null);
+                }
+                yield break;
+            }
+
+            if (status == 400)
+            {
+                done?.Invoke(false, "INVALID_INPUT", null);
+                yield break;
+            }
+
+            if (status == 401)
+            {
+                done?.Invoke(false, "UNAUTHORIZED", null);
+                yield break;
+            }
+
+            if (status == 429)
+            {
+                done?.Invoke(false, "RATE_LIMITED", null);
+                yield break;
+            }
+
+            if (status >= 500)
+            {
+                done?.Invoke(false, TurnTelemetryConstants.IoError, null);
+                yield break;
+            }
+
+            done?.Invoke(false, TurnTelemetryConstants.IoError, null);
+        }
+    }
+
     private static bool IsValidGameId(string gameId)
     {
         return !string.IsNullOrWhiteSpace(gameId);
+    }
+
+    private static bool IsValidKnownSeq(int knownSeq)
+    {
+        if (knownSeq < -1)
+        {
+            return false;
+        }
+
+        if (knownSeq >= 0 && knownSeq.ToString().Length > 12)
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private static string GetConfiguredPbpApiKey()
@@ -443,6 +614,46 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         return resp != null && string.Equals(resp.error, error, StringComparison.Ordinal);
     }
 
+    private static bool TryParseStatusOk(string text, out TurnStatusItem[] items)
+    {
+        items = null;
+
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        TurnStatusResponse response;
+        try
+        {
+            response = JsonUtility.FromJson<TurnStatusResponse>(text);
+        }
+        catch
+        {
+            return false;
+        }
+
+        if (response == null || !response.ok || response.games == null)
+            return false;
+
+        items = new TurnStatusItem[response.games.Length];
+        for (int i = 0; i < response.games.Length; i++)
+        {
+            TurnStatusResponseItem g = response.games[i];
+            if (g == null || !IsValidGameId(g.gameId) || !IsValidKnownSeq(g.knownSeq))
+                return false;
+
+            items[i] = new TurnStatusItem(
+                g.gameId,
+                g.knownSeq,
+                g.hasAnyTurn,
+                g.latestSeq,
+                g.nextSeqAfterKnown,
+                g.hasNewerThanKnown,
+                g.turnSeat);
+        }
+
+        return true;
+    }
+
     [Serializable]
     private class SubmitRequest
     {
@@ -472,5 +683,37 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
     private class ErrorResponse
     {
         public string error;
+    }
+
+    [Serializable]
+    private class TurnStatusRequest
+    {
+        public TurnStatusRequestItem[] games;
+    }
+
+    [Serializable]
+    private class TurnStatusRequestItem
+    {
+        public string gameId;
+        public int knownSeq;
+    }
+
+    [Serializable]
+    private class TurnStatusResponse
+    {
+        public bool ok;
+        public TurnStatusResponseItem[] games;
+    }
+
+    [Serializable]
+    private class TurnStatusResponseItem
+    {
+        public string gameId;
+        public int knownSeq;
+        public bool hasAnyTurn;
+        public int latestSeq;
+        public int nextSeqAfterKnown;
+        public bool hasNewerThanKnown;
+        public int turnSeat;
     }
 }
