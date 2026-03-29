@@ -180,11 +180,15 @@
 }
 
 #MultiplayerPanel .multiplayer-games-section-header {
-    margin-top: 4px;
-    margin-bottom: 14px;
-    padding-left: 16px;
-    color: rgba(232, 240, 252, 0.9);
-    font-size: 22px;
+    margin-top: 6px;
+    margin-bottom: 12px;
+    padding-top: 6px;
+    padding-left: 24px;
+    border-top-width: 1px;
+    border-top-color: rgba(232, 240, 252, 0.14);
+    color: rgba(232, 240, 252, 0.82);
+    font-size: 20px;
+    -unity-font-style: bold;
     -unity-text-align: middle-left;
 }
 
@@ -208,19 +212,19 @@
 }
 
 #MultiplayerPanel .multiplayer-game-card.multiplayer-game-card--waiting {
-    background-color: rgba(145, 170, 214, 0.3);
-    border-top-color: rgba(255, 255, 255, 0.22);
-    border-right-color: rgba(255, 255, 255, 0.22);
-    border-bottom-color: rgba(0, 0, 0, 0.1);
-    border-left-color: rgba(255, 255, 255, 0.22);
+    background-color: rgba(145, 170, 214, 0.38);
+    border-top-color: rgba(255, 255, 255, 0.26);
+    border-right-color: rgba(255, 255, 255, 0.26);
+    border-bottom-color: rgba(0, 0, 0, 0.12);
+    border-left-color: rgba(255, 255, 255, 0.26);
 }
 
 #MultiplayerPanel .multiplayer-game-card-title.multiplayer-game-card-title--waiting {
-    color: rgba(243, 250, 255, 0.94);
+    color: rgba(243, 250, 255, 0.97);
 }
 
 #MultiplayerPanel .multiplayer-game-card-status.multiplayer-game-card-status--waiting {
-    color: rgba(243, 250, 255, 0.72);
+    color: rgba(243, 250, 255, 0.76);
 }
 
 #MultiplayerPanel .multiplayer-empty-state {
