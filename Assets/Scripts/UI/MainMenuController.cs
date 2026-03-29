@@ -31,9 +31,16 @@ public class MainMenuController : MonoBehaviour
     private const string LegacySharedSaveFileName = "save.json";
     private const string PbpVersionVerificationFailedMessage = "Unable to verify this game's PBp version. For safety, this match cannot be opened on this build.";
     private const float RemoteTurnStatusFetchCooldownSeconds = 10f;
+    private const float MenuClosedRefreshIntervalSeconds = 60f;
+    private const float MenuOpenRefreshIntervalSeconds = 10f;
+    private const float MenuResumeImmediateRefreshStaleAfterSeconds = 15f;
+    private const float MenuRefreshLoopTickSeconds = 1f;
+    private const float MenuClosedFailureBackoffMaxSeconds = 180f;
+    private const float MenuOpenFailureBackoffMaxSeconds = 60f;
     private bool isServerOnline = true;
     private bool joinProbeInProgress;
     private Coroutine serverCheckRoutine;
+    private Coroutine menuRefreshLoopRoutine;
     private HttpTurnTransport cachedHttpTransport;
 
     public event Action ActivePbpGamesChanged;
@@ -58,6 +65,26 @@ public class MainMenuController : MonoBehaviour
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
     private static readonly HashSet<string> PbpSnapshotReadWarningLoggedGameIds = new HashSet<string>();
 #endif
+
+    private enum MenuRefreshMode
+    {
+        Inactive,
+        ClosedPane,
+        OpenPane
+    }
+
+    private sealed class MenuRefreshRuntimeState
+    {
+        public MenuRefreshMode Mode = MenuRefreshMode.Inactive;
+        public float LastAttemptRealtime = -1000f;
+        public float LastSuccessRealtime = -1000f;
+        public float NextAllowedPullRealtime;
+        public int ConsecutiveFailureCount;
+        public bool IsFetchInFlight;
+        public string LastRequestSignature = string.Empty;
+    }
+
+    private static readonly MenuRefreshRuntimeState SharedMenuRefreshState = new MenuRefreshRuntimeState();
 
     private readonly struct RemoteTurnStatusOverlay
     {
@@ -108,11 +135,34 @@ public class MainMenuController : MonoBehaviour
             TryAutoFitActiveMenuButtonContainer();
         }
 
+        UpdateMenuRefreshMode(returnToMultiplayerPane ? MenuRefreshMode.OpenPane : MenuRefreshMode.ClosedPane);
         RefreshMultiplayerList();
 
         if (returnToMultiplayerPane)
         {
             OpenMultiplayerScreen();
+        }
+    }
+
+    private void OnDisable()
+    {
+        StopMenuRefreshLoop();
+        SharedMenuRefreshState.IsFetchInFlight = false;
+    }
+
+    private void OnApplicationPause(bool paused)
+    {
+        if (!paused)
+        {
+            HandleMenuAppResume();
+        }
+    }
+
+    private void OnApplicationFocus(bool hasFocus)
+    {
+        if (hasFocus)
+        {
+            HandleMenuAppResume();
         }
     }
 
@@ -435,6 +485,7 @@ public class MainMenuController : MonoBehaviour
     public void OpenMultiplayerScreen()
     {
         IsMultiplayerScreenRequested = true;
+        UpdateMenuRefreshMode(MenuRefreshMode.OpenPane);
         MultiplayerScreenRequested?.Invoke();
         TryEmitPendingCreateSuccess();
 
@@ -453,8 +504,7 @@ public class MainMenuController : MonoBehaviour
     public void CloseMultiplayerScreen()
     {
         IsMultiplayerScreenRequested = false;
-        remoteTurnStatusRequestSerial++;
-        ClearRemoteTurnStatusOverlay();
+        UpdateMenuRefreshMode(MenuRefreshMode.ClosedPane);
         // UITK handles panel visibility locally.
     }
 
@@ -485,8 +535,8 @@ public class MainMenuController : MonoBehaviour
             }
         }
 #endif
-        ActivePbpGamesChanged?.Invoke();
         RecomputePbpBadge();
+        ActivePbpGamesChanged?.Invoke();
 
         PbpConnectivityState connectivityState = ResolveSharedConnectivityState();
         if (connectivityState == PbpConnectivityState.Normal)
@@ -510,6 +560,7 @@ public class MainMenuController : MonoBehaviour
         }
 
         TryRefreshRemoteTurnStatusesForMenu();
+        UpdateMenuRefreshLoopState();
     }
 
     private void TryEmitPendingCreateSuccess()
@@ -533,7 +584,7 @@ public class MainMenuController : MonoBehaviour
         for (int i = 0; i < activePbpGames.Count; i++)
         {
             SaveManifestService.ManifestGameSummary summary = activePbpGames[i];
-            if (TryGetIsYourTurnFromManifest(summary, out bool isYourTurn, out _, out _) && isYourTurn)
+            if (string.Equals(BuildPlayByPostTurnSubtitleForMenu(summary), "Your turn", StringComparison.Ordinal))
             {
                 countMyTurn++;
             }
@@ -1363,10 +1414,10 @@ public class MainMenuController : MonoBehaviour
 
     private void TryRefreshRemoteTurnStatusesForMenu(bool bypassCooldown = false)
     {
-        if (!IsMultiplayerScreenRequested)
+        if (SharedMenuRefreshState.Mode == MenuRefreshMode.Inactive)
         {
             LogRemoteTurnStatusDiagnostics(
-                "[MPRemoteStatus] refresh skip=SCREEN_NOT_REQUESTED");
+                "[MPRemoteStatus] refresh skip=MENU_INACTIVE");
             return;
         }
 
@@ -1374,6 +1425,7 @@ public class MainMenuController : MonoBehaviour
         {
             LogRemoteTurnStatusDiagnostics(
                 "[MPRemoteStatus] refresh skip=SERVER_OFFLINE");
+            SharedMenuRefreshState.NextAllowedPullRealtime = Time.realtimeSinceStartup + GetCurrentMenuRefreshIntervalSeconds();
             ClearRemoteTurnStatusOverlay();
             return;
         }
@@ -1384,6 +1436,7 @@ public class MainMenuController : MonoBehaviour
         {
             LogRemoteTurnStatusDiagnostics(
                 "[MPRemoteStatus] refresh skip=HTTP_TRANSPORT_MISSING");
+            SharedMenuRefreshState.NextAllowedPullRealtime = Time.realtimeSinceStartup + GetCurrentMenuRefreshIntervalSeconds();
             ClearRemoteTurnStatusOverlay();
             return;
         }
@@ -1393,6 +1446,7 @@ public class MainMenuController : MonoBehaviour
         {
             LogRemoteTurnStatusDiagnostics(
                 "[MPRemoteStatus] refresh skip=HTTP_TRANSPORT_UNAVAILABLE");
+            SharedMenuRefreshState.NextAllowedPullRealtime = Time.realtimeSinceStartup + GetCurrentMenuRefreshIntervalSeconds();
             ClearRemoteTurnStatusOverlay();
             return;
         }
@@ -1401,11 +1455,12 @@ public class MainMenuController : MonoBehaviour
         {
             LogRemoteTurnStatusDiagnostics(
                 "[MPRemoteStatus] refresh skip=NO_HTTP_ELIGIBLE_GAMES");
+            SharedMenuRefreshState.NextAllowedPullRealtime = Time.realtimeSinceStartup + GetCurrentMenuRefreshIntervalSeconds();
             ClearRemoteTurnStatusOverlay();
             return;
         }
 
-        if (remoteTurnStatusFetchInFlight)
+        if (remoteTurnStatusFetchInFlight || SharedMenuRefreshState.IsFetchInFlight)
         {
             LogRemoteTurnStatusDiagnostics(
                 $"[MPRemoteStatus] refresh skip=IN_FLIGHT signature={requestSignature}");
@@ -1431,6 +1486,9 @@ public class MainMenuController : MonoBehaviour
         LogRemoteTurnStatusDiagnostics(
             $"[MPRemoteStatus] refresh start signature={requestSignature} queries=[{string.Join(", ", debugKnownSeq)}]");
 
+        SharedMenuRefreshState.LastAttemptRealtime = Time.realtimeSinceStartup;
+        SharedMenuRefreshState.IsFetchInFlight = true;
+        SharedMenuRefreshState.LastRequestSignature = requestSignature;
         remoteTurnStatusFetchInFlight = true;
         int requestSerial = ++remoteTurnStatusRequestSerial;
         StartCoroutine(FetchRemoteTurnStatusesCoroutine(httpTransport, queries, requestSignature, requestSerial));
@@ -1452,10 +1510,13 @@ public class MainMenuController : MonoBehaviour
         }));
 
         remoteTurnStatusFetchInFlight = false;
+        SharedMenuRefreshState.IsFetchInFlight = false;
         remoteTurnStatusLastFetchRealtime = Time.realtimeSinceStartup;
         remoteTurnStatusLastRequestSignature = requestSignature;
         LogRemoteTurnStatusDiagnostics(
             $"[MPRemoteStatus] fetch complete ok={ok} items={(items != null ? items.Length : 0)} requestSerial={requestSerial} currentSerial={remoteTurnStatusRequestSerial} signature={requestSignature}");
+
+        UpdateMenuRefreshBackoff(ok && items != null, requestSignature);
 
         if (requestSerial != remoteTurnStatusRequestSerial)
         {
@@ -1464,10 +1525,10 @@ public class MainMenuController : MonoBehaviour
             yield break;
         }
 
-        if (!IsMultiplayerScreenRequested)
+        if (SharedMenuRefreshState.Mode == MenuRefreshMode.Inactive)
         {
             LogRemoteTurnStatusDiagnostics(
-                "[MPRemoteStatus] fetch discard=SCREEN_NOT_REQUESTED");
+                "[MPRemoteStatus] fetch discard=MENU_INACTIVE");
             yield break;
         }
 
@@ -1516,6 +1577,7 @@ public class MainMenuController : MonoBehaviour
 
         if (changed)
         {
+            RecomputePbpBadge();
             ActivePbpGamesChanged?.Invoke();
         }
     }
@@ -1633,7 +1695,162 @@ public class MainMenuController : MonoBehaviour
         }
 
         remoteTurnStatusByGameId.Clear();
+        RecomputePbpBadge();
         ActivePbpGamesChanged?.Invoke();
+    }
+
+    public bool HasHttpEligiblePbpGamesForMenuRefresh()
+    {
+        for (int i = 0; i < activePbpGames.Count; i++)
+        {
+            if (IsHttpPbpGame(activePbpGames[i]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public bool IsMenuRefreshInFlight()
+    {
+        return SharedMenuRefreshState.IsFetchInFlight || remoteTurnStatusFetchInFlight;
+    }
+
+    public int GetMenuRefreshCountdownSeconds()
+    {
+        if (SharedMenuRefreshState.Mode != MenuRefreshMode.OpenPane || !HasHttpEligiblePbpGamesForMenuRefresh())
+        {
+            return -1;
+        }
+
+        if (IsMenuRefreshInFlight())
+        {
+            return 0;
+        }
+
+        float remaining = SharedMenuRefreshState.NextAllowedPullRealtime - Time.realtimeSinceStartup;
+        return Mathf.Max(0, Mathf.CeilToInt(remaining));
+    }
+
+    private void HandleMenuAppResume()
+    {
+        if (!isActiveAndEnabled)
+        {
+            return;
+        }
+
+        UpdateMenuRefreshLoopState();
+        if (!HasHttpEligiblePbpGamesForMenuRefresh())
+        {
+            return;
+        }
+
+        float now = Time.realtimeSinceStartup;
+        if ((now - SharedMenuRefreshState.LastSuccessRealtime) >= MenuResumeImmediateRefreshStaleAfterSeconds)
+        {
+            SharedMenuRefreshState.NextAllowedPullRealtime = now;
+        }
+    }
+
+    private void UpdateMenuRefreshMode(MenuRefreshMode mode)
+    {
+        SharedMenuRefreshState.Mode = mode;
+        if (mode == MenuRefreshMode.OpenPane)
+        {
+            float now = Time.realtimeSinceStartup;
+            if (SharedMenuRefreshState.LastSuccessRealtime < 0f ||
+                (now - SharedMenuRefreshState.LastSuccessRealtime) >= MenuOpenRefreshIntervalSeconds)
+            {
+                SharedMenuRefreshState.NextAllowedPullRealtime = now;
+            }
+        }
+        UpdateMenuRefreshLoopState();
+    }
+
+    private void UpdateMenuRefreshLoopState()
+    {
+        bool shouldRun = isActiveAndEnabled &&
+            SharedMenuRefreshState.Mode != MenuRefreshMode.Inactive &&
+            HasHttpEligiblePbpGamesForMenuRefresh();
+
+        if (!shouldRun)
+        {
+            StopMenuRefreshLoop();
+            return;
+        }
+
+        if (menuRefreshLoopRoutine == null)
+        {
+            menuRefreshLoopRoutine = StartCoroutine(MenuRefreshLoop());
+        }
+    }
+
+    private void StopMenuRefreshLoop()
+    {
+        if (menuRefreshLoopRoutine == null)
+        {
+            return;
+        }
+
+        StopCoroutine(menuRefreshLoopRoutine);
+        menuRefreshLoopRoutine = null;
+    }
+
+    private IEnumerator MenuRefreshLoop()
+    {
+        while (isActiveAndEnabled)
+        {
+            if (SharedMenuRefreshState.Mode == MenuRefreshMode.Inactive || !HasHttpEligiblePbpGamesForMenuRefresh())
+            {
+                break;
+            }
+
+            float now = Time.realtimeSinceStartup;
+            if (!IsMenuRefreshInFlight() && now >= SharedMenuRefreshState.NextAllowedPullRealtime)
+            {
+                RefreshMultiplayerList();
+            }
+
+            yield return new WaitForSecondsRealtime(MenuRefreshLoopTickSeconds);
+        }
+
+        menuRefreshLoopRoutine = null;
+    }
+
+    private void UpdateMenuRefreshBackoff(bool success, string requestSignature)
+    {
+        float now = Time.realtimeSinceStartup;
+        SharedMenuRefreshState.LastRequestSignature = requestSignature ?? string.Empty;
+
+        if (success)
+        {
+            SharedMenuRefreshState.LastSuccessRealtime = now;
+            SharedMenuRefreshState.ConsecutiveFailureCount = 0;
+            SharedMenuRefreshState.NextAllowedPullRealtime = now + GetCurrentMenuRefreshIntervalSeconds();
+            return;
+        }
+
+        SharedMenuRefreshState.ConsecutiveFailureCount++;
+        SharedMenuRefreshState.NextAllowedPullRealtime = now + GetMenuRefreshFailureDelaySeconds();
+    }
+
+    private float GetCurrentMenuRefreshIntervalSeconds()
+    {
+        return SharedMenuRefreshState.Mode == MenuRefreshMode.OpenPane
+            ? MenuOpenRefreshIntervalSeconds
+            : MenuClosedRefreshIntervalSeconds;
+    }
+
+    private float GetMenuRefreshFailureDelaySeconds()
+    {
+        float baseDelay = GetCurrentMenuRefreshIntervalSeconds();
+        int backoffStep = Mathf.Max(0, SharedMenuRefreshState.ConsecutiveFailureCount - 1);
+        float delay = baseDelay * Mathf.Pow(2f, backoffStep);
+        float maxDelay = SharedMenuRefreshState.Mode == MenuRefreshMode.OpenPane
+            ? MenuOpenFailureBackoffMaxSeconds
+            : MenuClosedFailureBackoffMaxSeconds;
+        return Mathf.Min(delay, maxDelay);
     }
 
     public static void DeleteLocalPlayByPostGameData(string gameId, bool clearActiveGameSelection = true)

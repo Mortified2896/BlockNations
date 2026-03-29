@@ -5,13 +5,16 @@
             <ui:Label name="TitleLabel" text="Block Nations" class="title" />
             <ui:Button name="PlayVsAIButton" text="Play vs AI" class="menu-button" />
             <ui:Button name="ContinueButton" text="Continue" class="menu-button" />
-            <ui:Button name="MultiplayerButton" text="Multiplayer" class="menu-button" />
+            <ui:Button name="MultiplayerButton" text="Multiplayer" class="menu-button">
+                <ui:VisualElement name="MultiplayerBadge" class="multiplayer-button-badge" style="display: none;" />
+            </ui:Button>
             <ui:Button name="ProfileButton" text="Profile" class="menu-button" />
         </ui:VisualElement>
 
         <ui:VisualElement name="MultiplayerPanel" class="multiplayer-pane" style="display: none;">
             <ui:VisualElement class="multiplayer-header-row">
                 <ui:Label name="StatusLabel" text="" class="multiplayer-status" style="display: none;" />
+                <ui:Label name="MultiplayerRefreshCountdownLabel" text="" class="multiplayer-refresh-countdown" style="display: none;" />
                 <ui:Label name="MultiplayerVersionLabel" text="" class="multiplayer-version-label" />
             </ui:VisualElement>
             <ui:ScrollView name="ActiveGamesList" class="multiplayer-games-list" />

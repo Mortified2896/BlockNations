@@ -16,6 +16,7 @@ public class MainMenuUITKView : MonoBehaviour
     private const float NonOverflowListDragDamping = 0.35f;
     private const float NonOverflowListDragThreshold = 10f;
     private const float DetailsGameIdFontSize = 30f;
+    private const int RefreshCountdownTickMs = 1000;
 
     [Header("Trial Toggle")]
     [SerializeField] private bool enableUITK = true;
@@ -38,6 +39,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Label detailsSubtitleLabel;
     private Label detailsGameIdLabel;
     private Label statusLabel;
+    private Label multiplayerRefreshCountdownLabel;
     private Label versionLabel;
     private Label multiplayerVersionLabel;
     private Label profileUsernameValueLabel;
@@ -64,6 +66,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Button profileRegenerateButton;
     private Button profileCopyPlayerIdButton;
     private Button profileBackButton;
+    private VisualElement multiplayerBadge;
 
     private bool subscribedToMenuEvents;
     private bool uiReady;
@@ -76,6 +79,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Rect lastSafeArea = Rect.zero;
     private Vector2Int lastScreenSize = Vector2Int.zero;
     private IVisualElementScheduledItem activeGamesElasticResetItem;
+    private IVisualElementScheduledItem refreshCountdownItem;
     private IVisualElementScheduledItem profileStatusClearItem;
     private IVisualElementScheduledItem viewInitializationItem;
     private LocalPlayerProfileStore.ProfileData profileData;
@@ -107,6 +111,7 @@ public class MainMenuUITKView : MonoBehaviour
     private void OnDisable()
     {
         StopViewInitialization();
+        StopRefreshCountdownTimer();
         StopProfileStatusClearTimer();
         UnsubscribeMainMenuEvents();
         UnbindButtons();
@@ -241,6 +246,8 @@ public class MainMenuUITKView : MonoBehaviour
         RefreshContinueButtonVisibility();
         RefreshProfileLabels();
         ClearProfileStatus();
+        RefreshMultiplayerBadge();
+        RefreshMultiplayerRefreshCountdown();
 
         SetVisible(mainPanel, true);
         SetVisible(multiplayerPanel, false);
@@ -289,6 +296,7 @@ public class MainMenuUITKView : MonoBehaviour
             detailsGameIdLabel.pickingMode = PickingMode.Position;
         }
         statusLabel = root.Q<Label>("StatusLabel");
+        multiplayerRefreshCountdownLabel = root.Q<Label>("MultiplayerRefreshCountdownLabel");
         versionLabel = root.Q<Label>("VersionLabel");
         multiplayerVersionLabel = root.Q<Label>("MultiplayerVersionLabel");
         profileUsernameValueLabel = root.Q<Label>("ProfileUsernameValueLabel");
@@ -299,6 +307,7 @@ public class MainMenuUITKView : MonoBehaviour
         continueButton = root.Q<Button>("ContinueButton");
         playVsAiButton = root.Q<Button>("PlayVsAIButton");
         multiplayerButton = root.Q<Button>("MultiplayerButton");
+        multiplayerBadge = root.Q<VisualElement>("MultiplayerBadge");
         profileButton = root.Q<Button>("ProfileButton");
         quitButton = root.Q<Button>("QuitButton");
         createButton = root.Q<Button>("CreateButton");
@@ -718,9 +727,12 @@ public class MainMenuUITKView : MonoBehaviour
 
         mainMenuController.ActivePbpGamesChanged += RefreshGamesList;
         mainMenuController.ImportStatusChanged += SetStatus;
+        mainMenuController.PbpBadgeChanged += RefreshMultiplayerBadge;
         mainMenuController.MultiplayerScreenRequested += HandleMultiplayerScreenRequested;
         mainMenuController.MultiplayerCreateSucceeded += HandleMultiplayerCreateSucceeded;
         SetStatus(mainMenuController.CurrentImportStatus);
+        RefreshMultiplayerBadge();
+        RefreshMultiplayerRefreshCountdown();
         subscribedToMenuEvents = true;
     }
 
@@ -734,6 +746,7 @@ public class MainMenuUITKView : MonoBehaviour
 
         mainMenuController.ActivePbpGamesChanged -= RefreshGamesList;
         mainMenuController.ImportStatusChanged -= SetStatus;
+        mainMenuController.PbpBadgeChanged -= RefreshMultiplayerBadge;
         mainMenuController.MultiplayerScreenRequested -= HandleMultiplayerScreenRequested;
         mainMenuController.MultiplayerCreateSucceeded -= HandleMultiplayerCreateSucceeded;
         subscribedToMenuEvents = false;
@@ -748,6 +761,7 @@ public class MainMenuUITKView : MonoBehaviour
 
         ShowMultiplayerPanel();
         RefreshGamesList();
+        RefreshMultiplayerRefreshCountdown();
         SetStatus(mainMenuController != null ? mainMenuController.CurrentImportStatus : string.Empty);
     }
 
@@ -776,6 +790,7 @@ public class MainMenuUITKView : MonoBehaviour
 
         ShowMultiplayerPanel();
         RefreshGamesList();
+        RefreshMultiplayerRefreshCountdown();
         SetStatus(mainMenuController != null ? mainMenuController.CurrentImportStatus : string.Empty);
     }
 
@@ -949,6 +964,7 @@ public class MainMenuUITKView : MonoBehaviour
         if (mainMenuController == null)
         {
             AddInfoRow("MainMenuController not found.");
+            RefreshMultiplayerRefreshCountdown();
             return;
         }
 
@@ -961,6 +977,7 @@ public class MainMenuUITKView : MonoBehaviour
         if (games == null || games.Count == 0)
         {
             AddInfoRow("No active games");
+            RefreshMultiplayerRefreshCountdown();
             return;
         }
 
@@ -1007,6 +1024,8 @@ public class MainMenuUITKView : MonoBehaviour
             activeGamesList.Add(CreateGameCard(waitingGames[i], waitingSubtitles[i], isSingleGame, isLastGame, waitingStyle: true));
             renderedGameCount++;
         }
+
+        RefreshMultiplayerRefreshCountdown();
     }
 
     private string BuildActiveGameSubtitle(SaveManifestService.ManifestGameSummary summary)
@@ -1148,6 +1167,7 @@ public class MainMenuUITKView : MonoBehaviour
     private void ShowMainPanel()
     {
         ResetActiveGamesElasticOffset();
+        StopRefreshCountdownTimer();
         HideCreateSuccessPanel();
         HideJoinPanel();
         HideDetailsPanel();
@@ -1186,6 +1206,8 @@ public class MainMenuUITKView : MonoBehaviour
             multiplayerVersionLabel.style.display = DisplayStyle.None;
         }
 
+        StartRefreshCountdownTimer();
+        RefreshMultiplayerRefreshCountdown();
         TryShowPendingCreateSuccessPanel();
     }
 
@@ -1198,6 +1220,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void ShowProfilePanel()
     {
+        StopRefreshCountdownTimer();
         profileData = LocalPlayerProfileStore.GetOrCreateProfile();
         RefreshProfileLabels();
         ClearProfileStatus();
@@ -1255,6 +1278,87 @@ public class MainMenuUITKView : MonoBehaviour
             statusLabel.text = statusText;
             statusLabel.style.display = string.IsNullOrWhiteSpace(statusText) ? DisplayStyle.None : DisplayStyle.Flex;
         }
+    }
+
+    private void RefreshMultiplayerBadge()
+    {
+        if (multiplayerBadge == null)
+        {
+            return;
+        }
+
+        int badgeCount = mainMenuController != null ? mainMenuController.PbpBadgeCountMyTurn : 0;
+        multiplayerBadge.style.display = badgeCount > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+    }
+
+    private void RefreshMultiplayerRefreshCountdown()
+    {
+        if (multiplayerRefreshCountdownLabel == null)
+        {
+            return;
+        }
+
+        if (mainMenuController == null || multiplayerPanel == null || multiplayerPanel.resolvedStyle.display == DisplayStyle.None)
+        {
+            multiplayerRefreshCountdownLabel.text = string.Empty;
+            multiplayerRefreshCountdownLabel.style.display = DisplayStyle.None;
+            return;
+        }
+
+        if (!mainMenuController.HasHttpEligiblePbpGamesForMenuRefresh())
+        {
+            multiplayerRefreshCountdownLabel.text = string.Empty;
+            multiplayerRefreshCountdownLabel.style.display = DisplayStyle.None;
+            return;
+        }
+
+        if (mainMenuController.IsMenuRefreshInFlight())
+        {
+            multiplayerRefreshCountdownLabel.text = "Refreshing...";
+            multiplayerRefreshCountdownLabel.style.display = DisplayStyle.Flex;
+            return;
+        }
+
+        int remainingSeconds = mainMenuController.GetMenuRefreshCountdownSeconds();
+        if (remainingSeconds < 0)
+        {
+            multiplayerRefreshCountdownLabel.text = string.Empty;
+            multiplayerRefreshCountdownLabel.style.display = DisplayStyle.None;
+            return;
+        }
+
+        multiplayerRefreshCountdownLabel.text = $"Next check in {FormatCountdownMinutesSeconds(remainingSeconds)}";
+        multiplayerRefreshCountdownLabel.style.display = DisplayStyle.Flex;
+    }
+
+    private static string FormatCountdownMinutesSeconds(int totalSeconds)
+    {
+        int safeSeconds = Mathf.Max(0, totalSeconds);
+        int minutes = safeSeconds / 60;
+        int seconds = safeSeconds % 60;
+        return $"{minutes}:{seconds:00}";
+    }
+
+    private void StartRefreshCountdownTimer()
+    {
+        StopRefreshCountdownTimer();
+        if (multiplayerPanel == null)
+        {
+            return;
+        }
+
+        refreshCountdownItem = multiplayerPanel.schedule.Execute(RefreshMultiplayerRefreshCountdown).Every(RefreshCountdownTickMs);
+    }
+
+    private void StopRefreshCountdownTimer()
+    {
+        if (refreshCountdownItem == null)
+        {
+            return;
+        }
+
+        refreshCountdownItem.Pause();
+        refreshCountdownItem = null;
     }
 
     private void RefreshProfileLabels()
@@ -1439,6 +1543,7 @@ public class MainMenuUITKView : MonoBehaviour
         detailsSubtitleLabel = null;
         detailsGameIdLabel = null;
         statusLabel = null;
+        multiplayerRefreshCountdownLabel = null;
         versionLabel = null;
         multiplayerVersionLabel = null;
         profileUsernameValueLabel = null;
@@ -1448,6 +1553,7 @@ public class MainMenuUITKView : MonoBehaviour
         continueButton = null;
         playVsAiButton = null;
         multiplayerButton = null;
+        multiplayerBadge = null;
         profileButton = null;
         quitButton = null;
         createButton = null;
