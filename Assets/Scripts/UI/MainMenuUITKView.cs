@@ -995,7 +995,7 @@ public class MainMenuUITKView : MonoBehaviour
             renderedGameCount++;
         }
 
-        bool showWaitingHeader = yourTurnGames.Count > 0 && waitingGames.Count > 0;
+        bool showWaitingHeader = waitingGames.Count > 0;
         if (showWaitingHeader)
         {
             AddSectionHeader("Waiting for opponent");
