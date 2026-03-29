@@ -8,6 +8,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
 {
     private const string LayoutResourceName = "GameplayBottomHud_UITK";
     private const string ThemeResourceName = "GameplayTopHud_UITK_Theme";
+    private const string ReminderShareText = "It’s your turn in Block Nations!";
     private const string PlayByPostGameIdKey = "pbp_gameId";
     private const string PlayByPostShareShownKeyPrefix = "pbp_shareShown_";
     private const string ShareOverlayTitleText = "Share Game Code";
@@ -432,6 +433,11 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private void HandlePlayByPostSubmitResult(bool ok, string err)
     {
         if (!ok || turnManager == null || turnManager.currentMode != TurnManager.GameMode.PlayByPost)
+        {
+            return;
+        }
+
+        if (PlayByPostReminderShareAdapter.TryPresentReminderShareSheet(ReminderShareText))
         {
             return;
         }

@@ -125,6 +125,7 @@ Use practical checks only.
 
 ### Default code smoke check
 - `dotnet build Assembly-CSharp.csproj -nologo`
+- If a patch adds or moves Unity C# source files and this smoke check fails in a way that suggests Unity's regenerated project files do not include the new script yet, do not assume the patch is broken immediately. First ask the user to switch back to the Unity Editor and let it recompile / run `Assets > Refresh` (or regenerate project files), then rerun the smoke test.
 
 ### Unity tests
 - There is at least one editor UITK test at `Assets/Editor/Tests/MultiplayerScrollViewTests.cs`.
