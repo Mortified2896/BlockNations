@@ -964,12 +964,68 @@ public class MainMenuUITKView : MonoBehaviour
             return;
         }
 
+        List<SaveManifestService.ManifestGameSummary> yourTurnGames = new List<SaveManifestService.ManifestGameSummary>();
+        List<string> yourTurnSubtitles = new List<string>();
+        List<SaveManifestService.ManifestGameSummary> waitingGames = new List<SaveManifestService.ManifestGameSummary>();
+        List<string> waitingSubtitles = new List<string>();
+
         for (int i = 0; i < games.Count; i++)
         {
             SaveManifestService.ManifestGameSummary summary = games[i];
-            bool isLastGame = i == games.Count - 1;
-            activeGamesList.Add(CreateGameCard(summary, isSingleGame, isLastGame));
+            string subtitle = BuildActiveGameSubtitle(summary);
+            if (IsYourTurnSubtitle(subtitle))
+            {
+                yourTurnGames.Add(summary);
+                yourTurnSubtitles.Add(subtitle);
+            }
+            else
+            {
+                waitingGames.Add(summary);
+                waitingSubtitles.Add(subtitle);
+            }
         }
+
+        int totalGameCount = games.Count;
+        int renderedGameCount = 0;
+
+        for (int i = 0; i < yourTurnGames.Count; i++)
+        {
+            bool isLastGame = renderedGameCount == totalGameCount - 1;
+            activeGamesList.Add(CreateGameCard(yourTurnGames[i], yourTurnSubtitles[i], isSingleGame, isLastGame, waitingStyle: false));
+            renderedGameCount++;
+        }
+
+        bool showWaitingHeader = yourTurnGames.Count > 0 && waitingGames.Count > 0;
+        if (showWaitingHeader)
+        {
+            AddSectionHeader("Waiting for opponent");
+        }
+
+        for (int i = 0; i < waitingGames.Count; i++)
+        {
+            bool isLastGame = renderedGameCount == totalGameCount - 1;
+            activeGamesList.Add(CreateGameCard(waitingGames[i], waitingSubtitles[i], isSingleGame, isLastGame, waitingStyle: true));
+            renderedGameCount++;
+        }
+    }
+
+    private string BuildActiveGameSubtitle(SaveManifestService.ManifestGameSummary summary)
+    {
+        return mainMenuController != null
+            ? mainMenuController.BuildPlayByPostTurnSubtitleForMenu(summary)
+            : MainMenuController.BuildPlayByPostTurnSubtitle(summary);
+    }
+
+    private static bool IsYourTurnSubtitle(string subtitle)
+    {
+        return string.Equals(subtitle, "Your turn", System.StringComparison.Ordinal);
+    }
+
+    private void AddSectionHeader(string text)
+    {
+        Label row = new Label(text);
+        row.AddToClassList("multiplayer-games-section-header");
+        activeGamesList.Add(row);
     }
 
     private void HandleGameRowClicked(SaveManifestService.ManifestGameSummary summary)
@@ -1055,23 +1111,28 @@ public class MainMenuUITKView : MonoBehaviour
         return $"Game ID: {gameId}";
     }
 
-    private VisualElement CreateGameCard(SaveManifestService.ManifestGameSummary summary, bool isSingleGame, bool isLastGame)
+    private VisualElement CreateGameCard(
+        SaveManifestService.ManifestGameSummary summary,
+        string subtitle,
+        bool isSingleGame,
+        bool isLastGame,
+        bool waitingStyle)
     {
         VisualElement card = new VisualElement();
         card.AddToClassList("multiplayer-game-card");
         card.EnableInClassList("multiplayer-game-card--single", isSingleGame);
         card.EnableInClassList("multiplayer-game-card--last", isLastGame);
+        card.EnableInClassList("multiplayer-game-card--waiting", waitingStyle);
         card.RegisterCallback<ClickEvent>(_ => HandleGameRowClicked(summary));
 
         Label title = new Label(BuildGameTitle(summary));
         title.AddToClassList("multiplayer-game-card-title");
+        title.EnableInClassList("multiplayer-game-card-title--waiting", waitingStyle);
         card.Add(title);
 
-        string subtitle = mainMenuController != null
-            ? mainMenuController.BuildPlayByPostTurnSubtitleForMenu(summary)
-            : MainMenuController.BuildPlayByPostTurnSubtitle(summary);
         Label status = new Label(subtitle);
         status.AddToClassList("multiplayer-game-card-status");
+        status.EnableInClassList("multiplayer-game-card-status--waiting", waitingStyle);
         card.Add(status);
 
         return card;
