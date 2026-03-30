@@ -523,6 +523,7 @@ public class MainMenuController : MonoBehaviour
 
     public void RefreshMultiplayerList()
     {
+        ResolveServerCheckSources();
         activePbpGames = SaveManifestService.GetActivePlayByPostGames();
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (PbpDebugSettingsLoader.EnableSaveLoadLogs)
@@ -539,6 +540,7 @@ public class MainMenuController : MonoBehaviour
         }
 #endif
         RecomputePbpBadge();
+        IosPbpBackgroundNotificationExperiment.SyncState(activePbpGames, cachedHttpTransport);
         ActivePbpGamesChanged?.Invoke();
 
         PbpConnectivityState connectivityState = ResolveSharedConnectivityState();
@@ -727,6 +729,16 @@ public class MainMenuController : MonoBehaviour
     public void Multiplayer_JoinGame()
     {
         JoinPlayByPostFromInput();
+    }
+
+    public bool ShouldShowIosDebugNotificationTrigger()
+    {
+        return IosDebugNotificationAdapter.IsAvailable();
+    }
+
+    public bool TriggerIosDebugNotification()
+    {
+        return IosDebugNotificationAdapter.TryScheduleTestNotification();
     }
 
     public void CopyCurrentPbpGameIdToClipboard()
@@ -1975,6 +1987,8 @@ public class MainMenuController : MonoBehaviour
             PlayerPrefs.Save();
         }
 
+        IosPbpBackgroundNotificationExperiment.RemoveGame(gameId);
+
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         Debug.Log($"[MP] Local cleanup gameId={gameId} manifestUpdated={manifestUpdated} deletedTurnsFolder={deletedTurnsFolder} deletedSaveJson={deletedSaveJson} deletedImportedJson={deletedImportedJson} prefsChanged={prefsChanged}");
 #endif
@@ -2037,5 +2051,41 @@ internal static class IosBadgePermissionAdapter
 #if UNITY_IOS && !UNITY_EDITOR
         BNRequestBadgeAuthorization();
 #endif
+    }
+}
+
+internal static class IosDebugNotificationAdapter
+{
+#if UNITY_IOS && !UNITY_EDITOR
+    [DllImport("__Internal")]
+    private static extern void BNTriggerDebugLocalNotification();
+#endif
+
+    public static bool IsAvailable()
+    {
+#if UNITY_IOS && !UNITY_EDITOR && DEVELOPMENT_BUILD
+        return true;
+#else
+        return false;
+#endif
+    }
+
+    public static bool TryScheduleTestNotification()
+    {
+        if (!IsAvailable())
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.Log("[iOS Debug Notification] Test notification unavailable on this build/platform.");
+#endif
+            return false;
+        }
+
+#if UNITY_IOS && !UNITY_EDITOR
+#if DEVELOPMENT_BUILD
+        Debug.Log("[iOS Debug Notification] Calling native test notification bridge.");
+#endif
+        BNTriggerDebugLocalNotification();
+#endif
+        return true;
     }
 }

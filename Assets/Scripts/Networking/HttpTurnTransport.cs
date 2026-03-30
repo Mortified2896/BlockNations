@@ -25,6 +25,8 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
     public string TransportName => "Http";
     public bool IsAvailable => isAvailable;
+    public string BackgroundExperimentBaseUrl => NormalizeBaseUrl(baseUrl);
+    public static string BackgroundExperimentApiKey => GetConfiguredPbpApiKey();
 
     public void Initialize()
     {

@@ -55,6 +55,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Button createButton;
     private Button joinButton;
     private Button multiplayerBackButton;
+    private Button debugNotificationButton;
     private Button createSuccessCopyButton;
     private Button createSuccessCloseButton;
     private Button detailsOpenButton;
@@ -314,6 +315,8 @@ public class MainMenuUITKView : MonoBehaviour
         createButton = root.Q<Button>("CreateButton");
         joinButton = root.Q<Button>("JoinButton");
         multiplayerBackButton = root.Q<Button>("MultiplayerBackButton");
+        EnsureDebugNotificationButton();
+        debugNotificationButton = root.Q<Button>("DebugNotificationButton");
         createSuccessCopyButton = root.Q<Button>("CreateSuccessCopyButton");
         createSuccessCloseButton = root.Q<Button>("CreateSuccessCloseButton");
         detailsOpenButton = root.Q<Button>("DetailsOpenButton");
@@ -346,6 +349,41 @@ public class MainMenuUITKView : MonoBehaviour
         activeGamesList.RegisterCallback<PointerUpEvent>(HandleActiveGamesPointerUp);
         activeGamesList.RegisterCallback<PointerCancelEvent>(HandleActiveGamesPointerCancel);
         ResetActiveGamesElasticOffset();
+    }
+
+    private void EnsureDebugNotificationButton()
+    {
+        VisualElement actionBar = root.Q(className: "multiplayer-action-bar");
+        if (actionBar == null)
+        {
+            return;
+        }
+
+        Button existingButton = actionBar.Q<Button>("DebugNotificationButton");
+        bool shouldShow = mainMenuController != null && mainMenuController.ShouldShowIosDebugNotificationTrigger();
+        if (!shouldShow)
+        {
+            if (existingButton != null)
+            {
+                actionBar.Remove(existingButton);
+            }
+
+            return;
+        }
+
+        if (existingButton != null)
+        {
+            return;
+        }
+
+        Button button = new Button
+        {
+            name = "DebugNotificationButton",
+            text = "Test iOS Notification"
+        };
+        button.AddToClassList("menu-button");
+        button.AddToClassList("multiplayer-action-button");
+        actionBar.Insert(0, button);
     }
 
     private void UnregisterActiveGamesListCallbacks()
@@ -566,6 +604,11 @@ public class MainMenuUITKView : MonoBehaviour
             multiplayerBackButton.clicked += HandleMultiplayerBackClicked;
         }
 
+        if (debugNotificationButton != null)
+        {
+            debugNotificationButton.clicked += HandleDebugNotificationClicked;
+        }
+
         if (createSuccessCopyButton != null)
         {
             createSuccessCopyButton.clicked += HandleCreateSuccessCopyClicked;
@@ -667,6 +710,11 @@ public class MainMenuUITKView : MonoBehaviour
         if (multiplayerBackButton != null)
         {
             multiplayerBackButton.clicked -= HandleMultiplayerBackClicked;
+        }
+
+        if (debugNotificationButton != null)
+        {
+            debugNotificationButton.clicked -= HandleDebugNotificationClicked;
         }
 
         if (createSuccessCopyButton != null)
@@ -896,6 +944,22 @@ public class MainMenuUITKView : MonoBehaviour
         HideJoinPanel();
         HideDetailsPanel();
         ShowMainPanel();
+    }
+
+    private void HandleDebugNotificationClicked()
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        Debug.Log("[iOS Debug Notification] Test button tapped in Multiplayer pane.");
+#endif
+        if (mainMenuController == null)
+        {
+            return;
+        }
+
+        bool scheduled = mainMenuController.TriggerIosDebugNotification();
+        SetStatus(scheduled
+            ? "Dev iOS test notification scheduled."
+            : string.Empty);
     }
 
     private void HandleMultiplayerCreateSucceeded(string gameId)

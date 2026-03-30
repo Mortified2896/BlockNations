@@ -126,13 +126,13 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             turnManager = TurnManager.Instance;
             if (turnManager == null)
             {
-                turnManager = UnityEngine.Object.FindFirstObjectByType<TurnManager>();
+                turnManager = UnityEngine.Object.FindAnyObjectByType<TurnManager>();
             }
         }
 
         if (gameMenuActions == null || force)
         {
-            gameMenuActions = UnityEngine.Object.FindFirstObjectByType<GameMenuActions>();
+            gameMenuActions = UnityEngine.Object.FindAnyObjectByType<GameMenuActions>();
         }
 
         if (unitUIManager == null || force)
@@ -140,7 +140,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             unitUIManager = UnitUIManager.Instance;
             if (unitUIManager == null)
             {
-                unitUIManager = UnityEngine.Object.FindFirstObjectByType<UnitUIManager>();
+                unitUIManager = UnityEngine.Object.FindAnyObjectByType<UnitUIManager>();
             }
         }
 
@@ -149,7 +149,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             cityUIManager = CityUIManager.Instance;
             if (cityUIManager == null)
             {
-                cityUIManager = UnityEngine.Object.FindFirstObjectByType<CityUIManager>();
+                cityUIManager = UnityEngine.Object.FindAnyObjectByType<CityUIManager>();
             }
         }
 
