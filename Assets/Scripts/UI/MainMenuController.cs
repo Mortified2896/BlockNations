@@ -5,6 +5,7 @@ using System;
 using System.IO;
 using System.Collections;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using UnityEngine.UI;
 
 /// <summary>
@@ -122,6 +123,7 @@ public class MainMenuController : MonoBehaviour
     IEnumerator Start()
     {
         LocalPlayerProfileStore.GetOrCreateProfile();
+        IosBadgePermissionAdapter.EnsureBadgeAuthorizationRequested();
         pendingCreateShareReadyGameId = PlayerPrefs.GetString(PendingCreateShareReadyGameIdKey, string.Empty);
 
         bool returnToMultiplayerPane = ConsumeReturnToMultiplayerPaneFlag();
@@ -137,6 +139,7 @@ public class MainMenuController : MonoBehaviour
 
         UpdateMenuRefreshMode(returnToMultiplayerPane ? MenuRefreshMode.OpenPane : MenuRefreshMode.ClosedPane);
         RefreshMultiplayerList();
+        SyncAppIconBadge(force: true);
 
         if (returnToMultiplayerPane)
         {
@@ -594,6 +597,7 @@ public class MainMenuController : MonoBehaviour
             return;
 
         PbpBadgeCountMyTurn = countMyTurn;
+        SyncAppIconBadge(force: false);
         PbpBadgeChanged?.Invoke();
     }
 
@@ -1801,6 +1805,7 @@ public class MainMenuController : MonoBehaviour
             return;
         }
 
+        SyncAppIconBadge(force: true);
         UpdateMenuRefreshLoopState();
         if (!HasHttpEligiblePbpGamesForMenuRefresh())
         {
@@ -1914,6 +1919,11 @@ public class MainMenuController : MonoBehaviour
         return Mathf.Min(delay, maxDelay);
     }
 
+    private void SyncAppIconBadge(bool force)
+    {
+        AppIconBadgeAdapter.SetBadgeCount(PbpBadgeCountMyTurn, force);
+    }
+
     public static void DeleteLocalPlayByPostGameData(string gameId, bool clearActiveGameSelection = true)
     {
         if (string.IsNullOrWhiteSpace(gameId))
@@ -1967,6 +1977,65 @@ public class MainMenuController : MonoBehaviour
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         Debug.Log($"[MP] Local cleanup gameId={gameId} manifestUpdated={manifestUpdated} deletedTurnsFolder={deletedTurnsFolder} deletedSaveJson={deletedSaveJson} deletedImportedJson={deletedImportedJson} prefsChanged={prefsChanged}");
+#endif
+    }
+}
+
+internal static class AppIconBadgeAdapter
+{
+    private static bool hasAppliedCount;
+    private static int lastAppliedCount;
+
+#if UNITY_IOS && !UNITY_EDITOR
+    [DllImport("__Internal")]
+    private static extern void BNSetApplicationIconBadgeNumber(int count);
+#endif
+
+    public static void SetBadgeCount(int count, bool force = false)
+    {
+        int clampedCount = Mathf.Max(0, count);
+        if (!force && hasAppliedCount && lastAppliedCount == clampedCount)
+        {
+            return;
+        }
+
+        ApplyPlatformBadgeCount(clampedCount);
+        lastAppliedCount = clampedCount;
+        hasAppliedCount = true;
+    }
+
+    private static void ApplyPlatformBadgeCount(int count)
+    {
+#if UNITY_IOS && !UNITY_EDITOR
+        BNSetApplicationIconBadgeNumber(count);
+#endif
+    }
+}
+
+internal static class IosBadgePermissionAdapter
+{
+    private static bool hasRequestedAuthorization;
+
+#if UNITY_IOS && !UNITY_EDITOR
+    [DllImport("__Internal")]
+    private static extern void BNRequestBadgeAuthorization();
+#endif
+
+    public static void EnsureBadgeAuthorizationRequested()
+    {
+        if (hasRequestedAuthorization)
+        {
+            return;
+        }
+
+        hasRequestedAuthorization = true;
+        RequestPlatformAuthorization();
+    }
+
+    private static void RequestPlatformAuthorization()
+    {
+#if UNITY_IOS && !UNITY_EDITOR
+        BNRequestBadgeAuthorization();
 #endif
     }
 }
