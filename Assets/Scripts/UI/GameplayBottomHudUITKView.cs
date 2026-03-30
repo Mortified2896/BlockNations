@@ -15,6 +15,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private const string ShareOverlayCopyButtonText = "Copy Code";
     private const string ShareOverlayCloseButtonText = "Close";
     private const string PlayByPostFetchOkResult = "OK";
+    private const string PlayByPostEndgameShareText = "Well played! Want to play again?";
     private const string GameOverOverlayDefaultTitleText = "Game Over";
 
     [Header("Spike Toggle")]
@@ -433,6 +434,12 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     {
         if (!ok || turnManager == null || turnManager.currentMode != TurnManager.GameMode.PlayByPost)
         {
+            return;
+        }
+
+        if (turnManager.IsGameOverUiVisible)
+        {
+            PlayByPostReminderShareAdapter.TryPresentReminderShareSheet(PlayByPostEndgameShareText);
             return;
         }
 
