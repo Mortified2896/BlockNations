@@ -436,23 +436,23 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             return;
         }
 
-        if (PlayByPostReminderShareAdapter.TryPresentDefaultReminderShareSheet())
-        {
-            return;
-        }
-
         string gameId = GetCurrentPlayByPostGameId();
-        if (string.IsNullOrWhiteSpace(gameId) || !IsLocalHostForGame(gameId))
+        bool isLocalHost = !string.IsNullOrWhiteSpace(gameId) && IsLocalHostForGame(gameId);
+        bool shouldShowSharePrompt = isLocalHost &&
+                                     PlayerPrefs.GetInt(GetShareShownKey(gameId), 0) == 0;
+        if (shouldShowSharePrompt)
         {
+            TryPresentPlayByPostSharePrompt(gameId);
             return;
         }
 
-        if (PlayerPrefs.GetInt(GetShareShownKey(gameId), 0) == 1)
+        int reminderTurnNumber = turnManager.turnNumber;
+        if (!turnManager.isPlayerTurn)
         {
-            return;
+            reminderTurnNumber++;
         }
 
-        TryPresentPlayByPostSharePrompt(gameId);
+        PlayByPostReminderShareAdapter.TryPresentReminderShareSheetForTurn(reminderTurnNumber);
     }
 
     private void HandlePlayByPostFetchResult(bool reachable, string resultOrError)
