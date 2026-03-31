@@ -37,6 +37,20 @@ Current snapshot of the repo after the gameplay UITK migration. This is a factua
 - Do not assume older menu-only polling notes are current.
 - File-based PBp support still exists in code, but the MVP multiplayer direction is HTTP PBp.
 
+## PBp Display Name Notes
+
+- There are two separate local name concepts:
+  - rolled/generated profile name
+  - typed playtesting name
+- The typed playtesting name is display-only metadata used to help players identify opponents during PBp testing.
+- The typed playtesting name may appear in:
+  - active game cards
+  - selected game details
+  - in-game waiting text
+- The typed playtesting name is serialized in PBp snapshots by seat.
+- The typed playtesting name must not affect viewer POV, turn ownership, or transport state.
+- If no valid typed playtesting name is available, the UI falls back to `Opponent`.
+
 ## High-Risk Files
 
 - `Assets/Scripts/Core/TurnManager.cs`
