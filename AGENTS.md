@@ -147,6 +147,7 @@ Use practical checks only.
 - Do not commit or push unless explicitly asked.
 - Do not create or switch branches unless explicitly asked.
 - If the user wants isolation for risky, broad, or throwaway work, use a short-lived feature/spike branch.
+- After a likely-ready Phase 2 implementation, provide one short copy-paste-ready commit message specific to the patch; skip this for Phase 1 planning-only responses and clearly experimental or unfinished work.
 - If asked to commit:
   - use a concise scoped message
   - report the exact commit message used
