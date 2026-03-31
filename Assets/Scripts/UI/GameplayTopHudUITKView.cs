@@ -16,6 +16,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
     private UIDocument uiDocument;
     private ThemeStyleSheet themeAsset;
+    private readonly UITKResponsiveSizeTierController responsiveSizeTierController = new UITKResponsiveSizeTierController();
 
     private VisualElement root;
     private VisualElement hudRoot;
@@ -78,6 +79,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
         RefreshLabels();
         ApplySafeArea(force: false);
+        responsiveSizeTierController.Apply(root);
     }
 
     private bool ResolveSceneReferences(bool force)
@@ -184,6 +186,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         warnedMissingLabels = false;
         SetNonInteractive(root);
         ApplySafeArea(force: true);
+        responsiveSizeTierController.Apply(root);
         uiReady = true;
         return true;
     }
@@ -360,6 +363,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
     private void ClearUiCache()
     {
+        responsiveSizeTierController.Reset(root);
         root = null;
         hudRoot = null;
         turnLabel = null;

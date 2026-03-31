@@ -5,6 +5,7 @@ using UnityEngine.UIElements;
 
 public class MainMenuUITKView : MonoBehaviour
 {
+    private const bool EnableProfileResponsiveDebugLogs = true;
     private const string ThemeResourceName = "MainMenu_UITK_Theme";
     private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
     private const string LegacySharedSaveFileName = "save.json";
@@ -12,9 +13,20 @@ public class MainMenuUITKView : MonoBehaviour
     private const int VisiblePlayerIdSuffixLength = 5;
     private const int ProfileStatusHideDelayMs = 1800;
     private const int InvalidPointerId = -1;
+    private const string WidePhoneMenuClass = "menu-phone-wide";
+    private const float WidePhoneShortestSideMin = 428f;
+    private const float WidePhoneHeightMin = 900f;
+    private const float MainMenuTitleCompactBaseFontSize = 68f;
+    private const float MainMenuTitleWidePhoneBaseFontSize = 104f;
+    private const float MainMenuTitleRegularBaseFontSize = 148f;
+    private const float MainMenuTitleLargeBaseFontSize = 172f;
+    private const float MainMenuTitleMinimumFontSize = 48f;
+    private const float MainMenuTitleFitPadding = 8f;
     private const float NonOverflowListDragLimit = 352f;
     private const float NonOverflowListDragDamping = 0.35f;
     private const float NonOverflowListDragThreshold = 10f;
+    private const float PullToRefreshTriggerOffset = 56f;
+    private const float PullToRefreshTopScrollTolerance = 1f;
     private const float DetailsGameIdFontSize = 30f;
     private const int RefreshCountdownTickMs = 1000;
 
@@ -26,6 +38,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private UIDocument uiDocument;
     private ThemeStyleSheet themeAsset;
+    private readonly UITKResponsiveSizeTierController responsiveSizeTierController = new UITKResponsiveSizeTierController();
 
     private VisualElement root;
     private VisualElement mainPanel;
@@ -42,6 +55,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Label multiplayerRefreshCountdownLabel;
     private Label versionLabel;
     private Label multiplayerVersionLabel;
+    private Label titleLabel;
     private Label profileUsernameValueLabel;
     private Label profilePlayerIdValueLabel;
     private Label profileStatusLabel;
@@ -74,6 +88,8 @@ public class MainMenuUITKView : MonoBehaviour
     private bool subscribedToMenuEvents;
     private bool uiReady;
     private bool hasSelectedGame;
+    private bool activeGamesPullStartedFromRest;
+    private bool activeGamesPullRefreshArmed;
     private bool suppressNextGameCardClick;
     private bool isDraggingNonOverflowGamesList;
     private int activeGamesPointerId = InvalidPointerId;
@@ -131,6 +147,9 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         ApplySafeArea(force: false);
+        responsiveSizeTierController.Apply(root);
+        ApplyMenuPhoneLayoutClasses();
+        FitMainMenuTitleToWidth();
     }
 
     private void ResolveReferences()
@@ -260,6 +279,9 @@ public class MainMenuUITKView : MonoBehaviour
         SetStatus(mainMenuController != null ? mainMenuController.CurrentImportStatus : string.Empty);
 
         ApplySafeArea(force: true);
+        responsiveSizeTierController.Apply(root);
+        ApplyMenuPhoneLayoutClasses();
+        FitMainMenuTitleToWidth();
         uiReady = true;
         return true;
     }
@@ -302,6 +324,7 @@ public class MainMenuUITKView : MonoBehaviour
         multiplayerRefreshCountdownLabel = root.Q<Label>("MultiplayerRefreshCountdownLabel");
         versionLabel = root.Q<Label>("VersionLabel");
         multiplayerVersionLabel = root.Q<Label>("MultiplayerVersionLabel");
+        titleLabel = root.Q<Label>("TitleLabel");
         profileUsernameValueLabel = root.Q<Label>("ProfileUsernameValueLabel");
         profilePlayerIdValueLabel = root.Q<Label>("ProfilePlayerIdValueLabel");
         profileStatusLabel = root.Q<Label>("ProfileStatusLabel");
@@ -350,13 +373,45 @@ public class MainMenuUITKView : MonoBehaviour
         activeGamesList.mode = ScrollViewMode.Vertical;
         activeGamesList.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
         activeGamesList.verticalScrollerVisibility = ScrollerVisibility.Auto;
+        activeGamesList.touchScrollBehavior = ScrollView.TouchScrollBehavior.Elastic;
         activeGamesList.mouseWheelScrollSize = 120f;
         activeGamesList.scrollOffset = Vector2.zero;
+        HideActiveGamesScrollbars();
         activeGamesList.RegisterCallback<PointerDownEvent>(HandleActiveGamesPointerDown);
         activeGamesList.RegisterCallback<PointerMoveEvent>(HandleActiveGamesPointerMove);
         activeGamesList.RegisterCallback<PointerUpEvent>(HandleActiveGamesPointerUp);
         activeGamesList.RegisterCallback<PointerCancelEvent>(HandleActiveGamesPointerCancel);
         ResetActiveGamesElasticOffset();
+    }
+
+    private void HideActiveGamesScrollbars()
+    {
+        if (activeGamesList == null)
+        {
+            return;
+        }
+
+        Scroller verticalScroller = activeGamesList.verticalScroller;
+        if (verticalScroller != null)
+        {
+            verticalScroller.pickingMode = PickingMode.Ignore;
+            verticalScroller.style.opacity = 0f;
+            verticalScroller.style.width = 0f;
+            verticalScroller.style.minWidth = 0f;
+            verticalScroller.style.marginLeft = 0f;
+            verticalScroller.style.marginRight = 0f;
+        }
+
+        Scroller horizontalScroller = activeGamesList.horizontalScroller;
+        if (horizontalScroller != null)
+        {
+            horizontalScroller.pickingMode = PickingMode.Ignore;
+            horizontalScroller.style.opacity = 0f;
+            horizontalScroller.style.height = 0f;
+            horizontalScroller.style.minHeight = 0f;
+            horizontalScroller.style.marginTop = 0f;
+            horizontalScroller.style.marginBottom = 0f;
+        }
     }
 
     private void EnsureDebugNotificationButton()
@@ -409,7 +464,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HandleActiveGamesPointerDown(PointerDownEvent evt)
     {
-        if (activeGamesList == null || evt.button != 0 || HasActiveGamesScrollableOverflow())
+        if (activeGamesList == null || evt.button != 0)
         {
             return;
         }
@@ -417,20 +472,29 @@ public class MainMenuUITKView : MonoBehaviour
         StopActiveGamesElasticReset();
         activeGamesPointerId = evt.pointerId;
         activeGamesPointerStartY = evt.position.y - (activeGamesElasticOffset / NonOverflowListDragDamping);
+        activeGamesPullStartedFromRest = IsActiveGamesListAtRest();
+        activeGamesPullRefreshArmed = false;
         isDraggingNonOverflowGamesList = false;
     }
 
     private void HandleActiveGamesPointerMove(PointerMoveEvent evt)
     {
-        if (activeGamesList == null
-            || evt.pointerId != activeGamesPointerId
-            || HasActiveGamesScrollableOverflow())
+        if (activeGamesList == null || evt.pointerId != activeGamesPointerId)
         {
             return;
         }
 
         float dragDistance = evt.position.y - activeGamesPointerStartY;
+        if (HasActiveGamesScrollableOverflow())
+        {
+            HandleScrollableActiveGamesPullMove(evt, dragDistance);
+            return;
+        }
+
         activeGamesElasticOffset = ComputeElasticListOffset(dragDistance);
+        activeGamesPullRefreshArmed = activeGamesPullStartedFromRest &&
+                                      CanTriggerActiveGamesPullRefresh() &&
+                                      activeGamesElasticOffset >= PullToRefreshTriggerOffset;
         ApplyActiveGamesElasticOffset();
 
         if (Mathf.Abs(dragDistance) > NonOverflowListDragThreshold)
@@ -446,6 +510,29 @@ public class MainMenuUITKView : MonoBehaviour
         }
     }
 
+    private void HandleScrollableActiveGamesPullMove(PointerMoveEvent evt, float dragDistance)
+    {
+        if (!isDraggingNonOverflowGamesList)
+        {
+            if (dragDistance <= NonOverflowListDragThreshold || !IsActiveGamesListAtTop())
+            {
+                return;
+            }
+
+            isDraggingNonOverflowGamesList = true;
+            suppressNextGameCardClick = true;
+            activeGamesList.CapturePointer(evt.pointerId);
+            activeGamesPointerStartY = evt.position.y;
+            dragDistance = 0f;
+        }
+
+        activeGamesElasticOffset = ComputeElasticListOffset(Mathf.Max(0f, dragDistance));
+        activeGamesPullRefreshArmed = CanTriggerActiveGamesPullRefresh() &&
+                                      activeGamesElasticOffset >= PullToRefreshTriggerOffset;
+        ApplyActiveGamesElasticOffset();
+        evt.StopPropagation();
+    }
+
     private void HandleActiveGamesPointerUp(PointerUpEvent evt)
     {
         if (evt.pointerId != activeGamesPointerId)
@@ -453,8 +540,14 @@ public class MainMenuUITKView : MonoBehaviour
             return;
         }
 
+        bool shouldTriggerPullRefresh = activeGamesPullRefreshArmed;
         ReleaseActiveGamesPointer(evt.pointerId);
         StartActiveGamesElasticReset();
+
+        if (shouldTriggerPullRefresh)
+        {
+            TriggerActiveGamesPullRefresh();
+        }
     }
 
     private void HandleActiveGamesPointerCancel(PointerCancelEvent evt)
@@ -476,6 +569,8 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         activeGamesPointerId = InvalidPointerId;
+        activeGamesPullStartedFromRest = false;
+        activeGamesPullRefreshArmed = false;
         if (isDraggingNonOverflowGamesList && activeGamesList != null)
         {
             activeGamesList.schedule.Execute(() => suppressNextGameCardClick = false);
@@ -543,12 +638,46 @@ public class MainMenuUITKView : MonoBehaviour
     {
         StopActiveGamesElasticReset();
         activeGamesElasticOffset = 0f;
+        activeGamesPullStartedFromRest = false;
+        activeGamesPullRefreshArmed = false;
         if (activeGamesList == null)
         {
             return;
         }
 
         activeGamesList.contentContainer.transform.position = Vector3.zero;
+    }
+
+    private bool IsActiveGamesListAtTop()
+    {
+        return activeGamesList != null && activeGamesList.scrollOffset.y <= PullToRefreshTopScrollTolerance;
+    }
+
+    private bool IsActiveGamesListAtRest()
+    {
+        return Mathf.Abs(activeGamesElasticOffset) <= 0.01f;
+    }
+
+    private bool CanTriggerActiveGamesPullRefresh()
+    {
+        return mainMenuController != null &&
+               mainMenuController.HasHttpEligiblePbpGamesForMenuRefresh() &&
+               !mainMenuController.IsMenuRefreshInFlight();
+    }
+
+    private void TriggerActiveGamesPullRefresh()
+    {
+        if (mainMenuController == null)
+        {
+            return;
+        }
+
+        if (!mainMenuController.TryManualRefreshMultiplayerList())
+        {
+            return;
+        }
+
+        RefreshMultiplayerRefreshCountdown();
     }
 
     private bool HasActiveGamesScrollableOverflow()
@@ -903,7 +1032,11 @@ public class MainMenuUITKView : MonoBehaviour
             return;
         }
 
-        ShowJoinPanel();
+        if (!TryStartClipboardFirstJoin(allowTypedFallback: false))
+        {
+            SetStatus("No valid copied code found. Enter or paste a game code.");
+            ShowJoinPanel();
+        }
     }
 
     private void HandleJoinConfirmClicked()
@@ -913,8 +1046,8 @@ public class MainMenuUITKView : MonoBehaviour
             return;
         }
 
-        string rawGameId = joinGameIdInput != null ? joinGameIdInput.value : null;
-        bool joinStarted = mainMenuController.TryJoinPlayByPost(rawGameId);
+        bool joinStarted = TryStartClipboardFirstJoin(allowTypedFallback: true);
+
         if (joinStarted)
         {
             HideJoinPanel();
@@ -1358,6 +1491,8 @@ public class MainMenuUITKView : MonoBehaviour
         {
             multiplayerVersionLabel.style.display = DisplayStyle.None;
         }
+
+        FitMainMenuTitleToWidth();
     }
 
     private void ShowMultiplayerPanel()
@@ -1412,6 +1547,59 @@ public class MainMenuUITKView : MonoBehaviour
         {
             multiplayerVersionLabel.style.display = DisplayStyle.None;
         }
+
+        if (EnableProfileResponsiveDebugLogs && profilePanel != null)
+        {
+            profilePanel.schedule.Execute(LogProfileResponsiveDebugInfo).ExecuteLater(0);
+        }
+    }
+
+    private void LogProfileResponsiveDebugInfo()
+    {
+        if (!EnableProfileResponsiveDebugLogs || root == null || profilePanel == null)
+        {
+            return;
+        }
+
+        responsiveSizeTierController.Apply(root);
+
+        Label profileTitle = root.Q<Label>(className: "profile-title");
+        Label helperLabel = root.Q<Label>(className: "profile-typed-display-name-label");
+        Label playerIdLabel = root.Q<Label>(className: "profile-field-label");
+        Label playerIdValue = profilePlayerIdValueLabel;
+        VisualElement typedDisplayInput = profileTypedDisplayNameInput?.Q(className: "unity-base-text-field__input")
+            ?? profileTypedDisplayNameInput?.Q(className: "unity-text-field__input");
+        VisualElement regenerateButtonText = profileRegenerateButton?.Q(className: "unity-button__text");
+        VisualElement copyButtonText = profileCopyPlayerIdButton?.Q(className: "unity-button__text");
+        VisualElement backButtonText = profileBackButton?.Q(className: "unity-button__text");
+
+        Debug.Log(
+            "MainMenuUITKView profile responsive debug\n" +
+            $"rootClasses=[{string.Join(", ", root.GetClasses())}]\n" +
+            $"tier={responsiveSizeTierController.CurrentTierClass}\n" +
+            $"sharedResponsiveStyleAttached={responsiveSizeTierController.IsSharedStyleSheetAttached(root)}\n" +
+            $"screen={Screen.width}x{Screen.height} dpi={Screen.dpi:F1} safeArea={Screen.safeArea} responsiveSize={responsiveSizeTierController.LastResponsiveSize}\n" +
+            DescribeElement("profileTitle", profileTitle) +
+            DescribeElement("helperLabel", helperLabel) +
+            DescribeElement("typedDisplayInput", typedDisplayInput) +
+            DescribeElement("playerIdLabel", playerIdLabel) +
+            DescribeElement("playerIdValue", playerIdValue) +
+            DescribeElement("regenerateButtonText", regenerateButtonText) +
+            DescribeElement("copyButtonText", copyButtonText) +
+            DescribeElement("backButtonText", backButtonText),
+            this);
+    }
+
+    private static string DescribeElement(string label, VisualElement element)
+    {
+        if (element == null)
+        {
+            return $"{label}=missing\n";
+        }
+
+        return
+            $"{label}: type={element.GetType().Name} name={element.name} classes=[{string.Join(", ", element.GetClasses())}] " +
+            $"display={element.resolvedStyle.display} fontSize={element.resolvedStyle.fontSize} size={element.resolvedStyle.width}x{element.resolvedStyle.height}\n";
     }
 
     private void ShowJoinPanel()
@@ -1451,6 +1639,30 @@ public class MainMenuUITKView : MonoBehaviour
             statusLabel.text = statusText;
             statusLabel.style.display = string.IsNullOrWhiteSpace(statusText) ? DisplayStyle.None : DisplayStyle.Flex;
         }
+    }
+
+    private bool TryStartClipboardFirstJoin(bool allowTypedFallback)
+    {
+        if (mainMenuController == null)
+        {
+            return false;
+        }
+
+        SetStatus("Trying copied game code...");
+        if (mainMenuController.TryResolvePlayByPostJoinGameId(GUIUtility.systemCopyBuffer, out string clipboardGameId))
+        {
+            SetStatus("Joining copied game code...");
+            return mainMenuController.TryJoinPlayByPost(clipboardGameId);
+        }
+
+        if (!allowTypedFallback)
+        {
+            return false;
+        }
+
+        SetStatus("No valid copied code found. Trying typed code...");
+        string rawGameId = joinGameIdInput != null ? joinGameIdInput.value : null;
+        return mainMenuController.TryJoinPlayByPost(rawGameId);
     }
 
     private void RefreshMultiplayerBadge()
@@ -1688,6 +1900,88 @@ public class MainMenuUITKView : MonoBehaviour
         root.style.paddingTop = top;
     }
 
+    private void ApplyMenuPhoneLayoutClasses()
+    {
+        if (root == null)
+        {
+            return;
+        }
+
+        Rect safeArea = Screen.safeArea;
+        Vector2Int screenSize = new Vector2Int(Screen.width, Screen.height);
+        if (safeArea.width <= 0f || safeArea.height <= 0f)
+        {
+            safeArea = new Rect(0f, 0f, screenSize.x, screenSize.y);
+        }
+
+        float shortestSide = Mathf.Min(safeArea.width, safeArea.height);
+        float usableHeight = Mathf.Max(safeArea.width, safeArea.height);
+        bool isWidePhone = shortestSide >= WidePhoneShortestSideMin && usableHeight >= WidePhoneHeightMin;
+        root.EnableInClassList(WidePhoneMenuClass, isWidePhone);
+    }
+
+    private void FitMainMenuTitleToWidth()
+    {
+        if (root == null || mainPanel == null || titleLabel == null)
+        {
+            return;
+        }
+
+        if (mainPanel.resolvedStyle.display == DisplayStyle.None)
+        {
+            return;
+        }
+
+        float availableWidth = mainPanel.contentRect.width - MainMenuTitleFitPadding;
+        if (availableWidth <= 0f)
+        {
+            return;
+        }
+
+        float fontSize = ResolveMainMenuTitleBaseFontSize();
+        titleLabel.style.fontSize = fontSize;
+
+        // Shrink only when needed so the title never collides with the side margins.
+        Vector2 measuredSize = titleLabel.MeasureTextSize(
+            titleLabel.text,
+            0f,
+            VisualElement.MeasureMode.Undefined,
+            0f,
+            VisualElement.MeasureMode.Undefined);
+
+        while (measuredSize.x > availableWidth && fontSize > MainMenuTitleMinimumFontSize)
+        {
+            fontSize -= 1f;
+            titleLabel.style.fontSize = fontSize;
+            measuredSize = titleLabel.MeasureTextSize(
+                titleLabel.text,
+                0f,
+                VisualElement.MeasureMode.Undefined,
+                0f,
+                VisualElement.MeasureMode.Undefined);
+        }
+    }
+
+    private float ResolveMainMenuTitleBaseFontSize()
+    {
+        if (root.ClassListContains("ui-large"))
+        {
+            return MainMenuTitleLargeBaseFontSize;
+        }
+
+        if (root.ClassListContains("ui-regular"))
+        {
+            return MainMenuTitleRegularBaseFontSize;
+        }
+
+        if (root.ClassListContains(WidePhoneMenuClass))
+        {
+            return MainMenuTitleWidePhoneBaseFontSize;
+        }
+
+        return MainMenuTitleCompactBaseFontSize;
+    }
+
     private void ResetActiveGamesInteractionState()
     {
         StopActiveGamesElasticReset();
@@ -1700,6 +1994,8 @@ public class MainMenuUITKView : MonoBehaviour
         activeGamesPointerId = InvalidPointerId;
         activeGamesPointerStartY = 0f;
         activeGamesElasticOffset = 0f;
+        activeGamesPullStartedFromRest = false;
+        activeGamesPullRefreshArmed = false;
         isDraggingNonOverflowGamesList = false;
         suppressNextGameCardClick = false;
         hasSelectedGame = false;
@@ -1709,6 +2005,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void ClearCachedElements()
     {
+        responsiveSizeTierController.Reset(root);
         root = null;
         mainPanel = null;
         multiplayerPanel = null;
@@ -1719,6 +2016,7 @@ public class MainMenuUITKView : MonoBehaviour
         activeGamesList = null;
         detailsTitleLabel = null;
         detailsSubtitleLabel = null;
+        titleLabel = null;
         detailsGameIdLabel = null;
         statusLabel = null;
         multiplayerRefreshCountdownLabel = null;

@@ -1,0 +1,509 @@
+.ui-responsive-root .gameplay-top-hud-bar,
+.ui-responsive-root .gameplay-bottom-panel,
+.ui-responsive-root .gameplay-unit-panel,
+.ui-responsive-root .gameplay-city-panel {
+    width: 100%;
+    max-width: 100%;
+}
+
+.ui-responsive-root .gameplay-top-hud-label,
+.ui-responsive-root .gameplay-unit-name,
+.ui-responsive-root .gameplay-unit-stat,
+.ui-responsive-root .gameplay-city-name,
+.ui-responsive-root .gameplay-city-owner,
+.ui-responsive-root .gameplay-bottom-button,
+.ui-responsive-root .gameplay-city-recruit-button,
+.ui-responsive-root .gameplay-city-close-button,
+.ui-responsive-root .gameplay-unit-close-button {
+    min-width: 0;
+}
+
+.ui-responsive-root .gameplay-top-hud-turn,
+.ui-responsive-root .gameplay-top-hud-gold,
+.ui-responsive-root .gameplay-top-hud-status {
+    width: auto;
+    max-width: 92%;
+    padding-left: 16px;
+    padding-right: 16px;
+}
+
+.ui-responsive-root .gameplay-top-hud-status {
+    white-space: normal;
+}
+
+.ui-responsive-root .gameplay-bottom-button {
+    flex-grow: 1;
+    flex-shrink: 1;
+    max-width: 420px;
+}
+
+.ui-responsive-root .gameplay-bottom-button + .gameplay-bottom-button {
+    margin-left: 18px;
+}
+
+.ui-responsive-root .gameplay-city-name {
+    height: auto;
+    max-width: 100%;
+}
+
+.ui-responsive-root .gameplay-city-owner,
+.ui-responsive-root .gameplay-unit-name,
+.ui-responsive-root .gameplay-unit-stat {
+    max-width: 100%;
+    text-overflow: ellipsis;
+}
+
+.ui-responsive-root .gameplay-city-recruit-button {
+    width: 100%;
+    max-width: 360px;
+}
+
+.ui-compact .ui-text-body,
+.ui-compact .ui-text-body .unity-text-element,
+.ui-compact .ui-text-body .unity-base-text-field__input,
+.ui-compact .ui-text-body .unity-text-field__input {
+    font-size: 24px;
+}
+
+.ui-compact .ui-text-button,
+.ui-compact .ui-text-button .unity-button__text,
+.ui-compact .ui-text-button .unity-text-element {
+    font-size: 24px;
+}
+
+.ui-compact .ui-text-meta,
+.ui-compact .ui-text-meta .unity-text-element {
+    font-size: 22px;
+}
+
+.ui-compact .ui-text-title,
+.ui-compact .ui-text-title .unity-text-element {
+    font-size: 36px;
+}
+
+.ui-regular .ui-text-body,
+.ui-regular .ui-text-body .unity-text-element,
+.ui-regular .ui-text-body .unity-base-text-field__input,
+.ui-regular .ui-text-body .unity-text-field__input {
+    font-size: 24px;
+}
+
+.ui-regular .ui-text-button,
+.ui-regular .ui-text-button .unity-button__text,
+.ui-regular .ui-text-button .unity-text-element {
+    font-size: 26px;
+}
+
+.ui-regular .ui-text-meta,
+.ui-regular .ui-text-meta .unity-text-element {
+    font-size: 22px;
+}
+
+.ui-regular .ui-text-title,
+.ui-regular .ui-text-title .unity-text-element {
+    font-size: 38px;
+}
+
+.ui-large .ui-text-body,
+.ui-large .ui-text-body .unity-text-element,
+.ui-large .ui-text-body .unity-base-text-field__input,
+.ui-large .ui-text-body .unity-text-field__input {
+    font-size: 26px;
+}
+
+.ui-large .ui-text-button,
+.ui-large .ui-text-button .unity-button__text,
+.ui-large .ui-text-button .unity-text-element {
+    font-size: 28px;
+}
+
+.ui-large .ui-text-meta,
+.ui-large .ui-text-meta .unity-text-element {
+    font-size: 24px;
+}
+
+.ui-large .ui-text-title,
+.ui-large .ui-text-title .unity-text-element {
+    font-size: 42px;
+}
+
+.ui-compact #ProfilePanel {
+    justify-content: flex-start;
+    padding-top: 8px;
+    padding-bottom: 8px;
+}
+
+.ui-compact #ProfilePanel .profile-card {
+    min-height: 540px;
+    padding-left: 26px;
+    padding-right: 26px;
+    padding-top: 24px;
+    padding-bottom: 20px;
+}
+
+.ui-compact #ProfilePanel .profile-title-row {
+    margin-bottom: 14px;
+}
+
+.ui-compact #ProfilePanel .profile-title,
+.ui-compact #ProfilePanel .profile-title .unity-text-element {
+    font-size: 42px;
+}
+
+.ui-compact #ProfilePanel .profile-username-value {
+    margin-bottom: 18px;
+    font-size: 60px;
+}
+
+.ui-compact #ProfilePanel .profile-field-label,
+.ui-compact #ProfilePanel .profile-field-label .unity-text-element {
+    font-size: 26px;
+}
+
+.ui-compact #ProfilePanel .profile-typed-display-name-label,
+.ui-compact #ProfilePanel .profile-typed-display-name-label .unity-text-element {
+    font-size: 24px;
+}
+
+.ui-compact #ProfilePanel .profile-divider {
+    margin-top: 18px;
+    margin-bottom: 14px;
+}
+
+.ui-compact #ProfilePanel .profile-id-row {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.ui-compact #ProfilePanel .profile-player-id-value {
+    min-height: 68px;
+    margin-right: 0;
+    margin-bottom: 10px;
+    font-size: 26px;
+}
+
+.ui-compact #ProfilePanel .profile-player-id-value .unity-text-element {
+    font-size: 26px;
+}
+
+.ui-compact #ProfilePanel .profile-typed-display-name-input,
+.ui-compact #ProfilePanel .profile-typed-display-name-input .unity-base-text-field__input,
+.ui-compact #ProfilePanel .profile-typed-display-name-input .unity-text-field__input {
+    min-height: 68px;
+    font-size: 26px;
+}
+
+.ui-compact #ProfilePanel .profile-action-button {
+    height: 82px;
+}
+
+.ui-compact #ProfilePanel .profile-action-button .unity-button__text,
+.ui-compact #ProfilePanel .profile-action-button .unity-text-element,
+.ui-compact #ProfilePanel .profile-action-button-primary .unity-button__text,
+.ui-compact #ProfilePanel .profile-action-button-primary .unity-text-element,
+.ui-compact #ProfilePanel .profile-copy-button .unity-button__text,
+.ui-compact #ProfilePanel .profile-copy-button .unity-text-element,
+.ui-compact #ProfilePanel .profile-back-button .unity-button__text,
+.ui-compact #ProfilePanel .profile-back-button .unity-text-element {
+    font-size: 28px;
+}
+
+.ui-compact #ProfilePanel .profile-copy-button {
+    width: 100%;
+    max-width: none;
+    height: 68px;
+}
+
+.ui-compact #ProfilePanel .profile-status-label {
+    margin-top: 10px;
+    margin-bottom: 10px;
+    font-size: 24px;
+}
+
+.ui-compact #ProfilePanel .profile-back-button {
+    height: 80px;
+}
+
+.ui-compact .gameplay-top-hud-bar {
+    min-height: 178px;
+    padding-top: 16px;
+    padding-bottom: 14px;
+}
+
+.ui-compact .gameplay-top-hud-bar > * + * {
+    margin-top: 14px;
+}
+
+.ui-compact .gameplay-top-hud-label {
+    font-size: 40px;
+}
+
+.ui-compact .gameplay-top-hud-status {
+    font-size: 30px;
+}
+
+.ui-compact .gameplay-bottom-panel {
+    min-height: 228px;
+    padding-top: 18px;
+    padding-right: 28px;
+    padding-bottom: 18px;
+    padding-left: 28px;
+}
+
+.ui-compact .gameplay-bottom-button {
+    min-width: 200px;
+    height: 120px;
+    font-size: 52px;
+}
+
+.ui-compact .gameplay-unit-panel {
+    min-height: 236px;
+    padding-top: 18px;
+    padding-right: 18px;
+    padding-bottom: 20px;
+    padding-left: 18px;
+}
+
+.ui-compact .gameplay-unit-panel > * + * {
+    margin-top: 16px;
+}
+
+.ui-compact .gameplay-unit-name {
+    font-size: 42px;
+}
+
+.ui-compact .gameplay-unit-stat {
+    font-size: 28px;
+}
+
+.ui-compact .gameplay-unit-close-button {
+    width: 62px;
+    min-width: 62px;
+    height: 48px;
+    font-size: 24px;
+}
+
+.ui-compact .gameplay-city-panel {
+    min-height: 236px;
+    padding-top: 12px;
+    padding-right: 16px;
+    padding-bottom: 18px;
+    padding-left: 20px;
+}
+
+.ui-compact .gameplay-city-panel > * + * {
+    margin-top: 10px;
+}
+
+.ui-compact .gameplay-city-name {
+    font-size: 48px;
+}
+
+.ui-compact .gameplay-city-owner {
+    font-size: 32px;
+}
+
+.ui-compact .gameplay-city-recruit-button {
+    min-width: 0;
+    height: 92px;
+    font-size: 32px;
+}
+
+.ui-compact .gameplay-city-close-button {
+    width: 116px;
+    height: 76px;
+    font-size: 36px;
+}
+
+.ui-regular .gameplay-top-hud-bar {
+    min-height: 200px;
+    padding-top: 18px;
+    padding-bottom: 16px;
+}
+
+.ui-regular .gameplay-top-hud-bar > * + * {
+    margin-top: 16px;
+}
+
+.ui-regular .gameplay-top-hud-label {
+    font-size: 46px;
+}
+
+.ui-regular .gameplay-top-hud-status {
+    font-size: 34px;
+}
+
+.ui-regular .gameplay-bottom-panel {
+    min-height: 252px;
+    padding-top: 22px;
+    padding-right: 42px;
+    padding-bottom: 22px;
+    padding-left: 42px;
+}
+
+.ui-regular .gameplay-bottom-button + .gameplay-bottom-button {
+    margin-left: 22px;
+}
+
+.ui-regular .gameplay-bottom-button {
+    min-width: 240px;
+    height: 132px;
+    font-size: 58px;
+}
+
+.ui-regular .gameplay-unit-panel {
+    min-height: 252px;
+    padding-top: 20px;
+    padding-right: 24px;
+    padding-bottom: 24px;
+    padding-left: 24px;
+}
+
+.ui-regular .gameplay-unit-panel > * + * {
+    margin-top: 18px;
+}
+
+.ui-regular .gameplay-unit-name {
+    font-size: 46px;
+}
+
+.ui-regular .gameplay-unit-stat {
+    font-size: 30px;
+}
+
+.ui-regular .gameplay-unit-close-button {
+    width: 66px;
+    min-width: 66px;
+    height: 50px;
+    font-size: 25px;
+}
+
+.ui-regular .gameplay-city-panel {
+    min-height: 252px;
+    padding-top: 16px;
+    padding-right: 22px;
+    padding-bottom: 18px;
+    padding-left: 26px;
+}
+
+.ui-regular .gameplay-city-panel > * + * {
+    margin-top: 12px;
+}
+
+.ui-regular .gameplay-city-name {
+    font-size: 54px;
+}
+
+.ui-regular .gameplay-city-owner {
+    font-size: 34px;
+}
+
+.ui-regular .gameplay-city-recruit-button {
+    min-width: 0;
+    height: 96px;
+    max-width: 420px;
+    font-size: 34px;
+}
+
+.ui-regular .gameplay-city-close-button {
+    width: 122px;
+    height: 80px;
+    font-size: 38px;
+}
+
+.ui-large .gameplay-top-hud-bar {
+    min-height: 224px;
+    padding-top: 22px;
+    padding-bottom: 20px;
+}
+
+.ui-large .gameplay-top-hud-bar > * + * {
+    margin-top: 18px;
+}
+
+.ui-large .gameplay-top-hud-label {
+    font-size: 52px;
+}
+
+.ui-large .gameplay-top-hud-status {
+    font-size: 38px;
+}
+
+.ui-large .gameplay-bottom-panel {
+    min-height: 278px;
+    padding-top: 24px;
+    padding-right: 56px;
+    padding-bottom: 24px;
+    padding-left: 56px;
+}
+
+.ui-large .gameplay-bottom-button + .gameplay-bottom-button {
+    margin-left: 28px;
+}
+
+.ui-large .gameplay-bottom-button {
+    min-width: 280px;
+    height: 144px;
+    max-width: 480px;
+    font-size: 64px;
+}
+
+.ui-large .gameplay-unit-panel {
+    min-height: 278px;
+    padding-top: 24px;
+    padding-right: 28px;
+    padding-bottom: 28px;
+    padding-left: 28px;
+}
+
+.ui-large .gameplay-unit-panel > * + * {
+    margin-top: 22px;
+}
+
+.ui-large .gameplay-unit-name {
+    font-size: 52px;
+}
+
+.ui-large .gameplay-unit-stat {
+    font-size: 34px;
+}
+
+.ui-large .gameplay-unit-close-button {
+    width: 74px;
+    min-width: 74px;
+    height: 56px;
+    font-size: 28px;
+}
+
+.ui-large .gameplay-city-panel {
+    min-height: 278px;
+    padding-top: 18px;
+    padding-right: 26px;
+    padding-bottom: 22px;
+    padding-left: 30px;
+}
+
+.ui-large .gameplay-city-panel > * + * {
+    margin-top: 14px;
+}
+
+.ui-large .gameplay-city-name {
+    font-size: 60px;
+}
+
+.ui-large .gameplay-city-owner {
+    font-size: 38px;
+}
+
+.ui-large .gameplay-city-recruit-button {
+    min-width: 0;
+    height: 104px;
+    max-width: 480px;
+    font-size: 38px;
+}
+
+.ui-large .gameplay-city-close-button {
+    width: 132px;
+    height: 88px;
+    font-size: 42px;
+}

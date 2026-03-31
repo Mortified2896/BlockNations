@@ -18,6 +18,7 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
     private UIDocument uiDocument;
     private VisualTreeAsset layoutAsset;
     private ThemeStyleSheet themeAsset;
+    private readonly UITKResponsiveSizeTierController responsiveSizeTierController = new UITKResponsiveSizeTierController();
 
     private VisualElement root;
     private VisualElement hudRoot;
@@ -82,6 +83,7 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
 
         RefreshUiState();
         ApplySafeArea(force: false);
+        responsiveSizeTierController.Apply(root);
     }
 
     private bool ResolveSceneReferences(bool force)
@@ -222,6 +224,7 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
         ConfigurePickingModes();
         BindButtons();
         ApplySafeArea(force: true);
+        responsiveSizeTierController.Apply(root);
         cityPanelContainer.style.display = DisplayStyle.None;
         uiReady = true;
         return true;
@@ -421,6 +424,7 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
     private void ClearUiCache()
     {
         UnbindButtons();
+        responsiveSizeTierController.Reset(root);
         root = null;
         hudRoot = null;
         cityPanelContainer = null;

@@ -6,6 +6,7 @@ using System.IO;
 using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using UnityEngine.UI;
 
 /// <summary>
@@ -38,6 +39,9 @@ public class MainMenuController : MonoBehaviour
     private const float MenuRefreshLoopTickSeconds = 1f;
     private const float MenuClosedFailureBackoffMaxSeconds = 180f;
     private const float MenuOpenFailureBackoffMaxSeconds = 60f;
+    private static readonly Regex PbpGameIdCandidateRegex = new Regex(
+        @"(?<![0-9A-Fa-f])(?:\{[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}\}|\([0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}\)|[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}|[0-9A-Fa-f]{32})(?![0-9A-Fa-f])",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
     private bool isServerOnline = true;
     private bool joinProbeInProgress;
     private Coroutine serverCheckRoutine;
@@ -448,13 +452,18 @@ public class MainMenuController : MonoBehaviour
 
     public void JoinPlayByPostFromInput()
     {
-        // Legacy Canvas input has been retired; active joins now flow through UITK's text field.
-        TryJoinPlayByPostInternal(rawGameId: null, out _);
+        // Legacy/non-UITK entrypoint retained for older wiring paths.
+        TryJoinPlayByPostInternal(GUIUtility.systemCopyBuffer, out _);
     }
 
     public bool TryJoinPlayByPost(string rawGameId)
     {
         return TryJoinPlayByPostInternal(rawGameId, out _);
+    }
+
+    public bool TryResolvePlayByPostJoinGameId(string rawGameId, out string normalizedGameId)
+    {
+        return TryNormalizeJoinGameId(rawGameId, out normalizedGameId, out _);
     }
 
     private bool TryJoinPlayByPostInternal(string rawGameId, out string normalizedGameId)
@@ -473,7 +482,7 @@ public class MainMenuController : MonoBehaviour
             return false;
         }
 
-        if (!TryValidateJoinGameId(rawGameId, out normalizedGameId, out string validationError))
+        if (!TryNormalizeJoinGameId(rawGameId, out normalizedGameId, out string validationError))
         {
             SetImportStatus(validationError);
             return false;
@@ -523,6 +532,22 @@ public class MainMenuController : MonoBehaviour
 
     public void RefreshMultiplayerList()
     {
+        RefreshMultiplayerListInternal(bypassRemoteCooldown: false);
+    }
+
+    public bool TryManualRefreshMultiplayerList()
+    {
+        if (IsMenuRefreshInFlight())
+        {
+            return false;
+        }
+
+        RefreshMultiplayerListInternal(bypassRemoteCooldown: true);
+        return true;
+    }
+
+    private void RefreshMultiplayerListInternal(bool bypassRemoteCooldown)
+    {
         ResolveServerCheckSources();
         activePbpGames = SaveManifestService.GetActivePlayByPostGames();
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -564,7 +589,7 @@ public class MainMenuController : MonoBehaviour
             SetImportStatus(connectivityState == PbpConnectivityState.Offline ? "Offline" : "Can't reach server");
         }
 
-        TryRefreshRemoteTurnStatusesForMenu();
+        TryRefreshRemoteTurnStatusesForMenu(bypassRemoteCooldown);
         UpdateMenuRefreshLoopState();
     }
 
@@ -1139,6 +1164,103 @@ public class MainMenuController : MonoBehaviour
         }
 
         return true;
+    }
+
+    private static bool TryNormalizeJoinGameId(string rawGameId, out string normalizedGameId, out string error)
+    {
+        if (TryValidateJoinGameId(rawGameId, out normalizedGameId, out error))
+        {
+            return true;
+        }
+
+        if (TryExtractPbpGameIdFromNoisyText(rawGameId, out string extractedGameId) &&
+            TryValidateJoinGameId(extractedGameId, out normalizedGameId, out error))
+        {
+            return true;
+        }
+
+        normalizedGameId = null;
+        return false;
+    }
+
+    private static bool TryExtractPbpGameIdFromNoisyText(string text, out string gameId)
+    {
+        gameId = null;
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        int bestScore = int.MinValue;
+        int bestIndex = int.MaxValue;
+        string bestCandidate = null;
+
+        foreach (Match match in PbpGameIdCandidateRegex.Matches(text))
+        {
+            string candidate = TrimPbpGameIdDecorations(match.Value);
+            if (!Guid.TryParse(candidate, out _))
+            {
+                continue;
+            }
+
+            int score = candidate.Length == 36 ? 100 : 90;
+            score += ScorePbpGameIdContext(text, match.Index, match.Length);
+
+            if (score > bestScore || (score == bestScore && match.Index < bestIndex))
+            {
+                bestScore = score;
+                bestIndex = match.Index;
+                bestCandidate = candidate;
+            }
+        }
+
+        gameId = bestCandidate;
+        return !string.IsNullOrWhiteSpace(gameId);
+    }
+
+    private static string TrimPbpGameIdDecorations(string candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return candidate;
+        }
+
+        return candidate.Trim(' ', '\t', '\r', '\n', '{', '}', '(', ')', '[', ']', '<', '>', '"', '\'', '`');
+    }
+
+    private static int ScorePbpGameIdContext(string text, int index, int length)
+    {
+        int windowStart = Math.Max(0, index - 24);
+        int windowLength = Math.Min(text.Length, index + length + 24) - windowStart;
+        if (windowLength <= 0)
+        {
+            return 0;
+        }
+
+        string window = text.Substring(windowStart, windowLength);
+        int score = 0;
+
+        if (window.IndexOf("game code", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            score += 12;
+        }
+        else if (window.IndexOf("code", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            score += 6;
+        }
+
+        if (window.IndexOf("join", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            score += 4;
+        }
+
+        if (window.IndexOf("invite", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            score += 4;
+        }
+
+        return score;
     }
 
     private static PbpConnectivityState ResolveSharedConnectivityState()

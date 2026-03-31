@@ -581,24 +581,25 @@
 
 #ProfilePanel {
     position: absolute;
-    left: 18px;
-    right: 18px;
-    top: 18px;
-    bottom: 18px;
+    left: 8px;
+    right: 8px;
+    top: 8px;
+    bottom: 8px;
     flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    padding-left: 12px;
-    padding-right: 12px;
-    padding-top: 12px;
-    padding-bottom: 12px;
+    justify-content: flex-start;
+    align-items: stretch;
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 4px;
+    padding-bottom: 4px;
 }
 
 #ProfilePanel .profile-card {
     width: 100%;
-    max-width: 760px;
+    max-width: none;
     min-height: 500px;
     flex-direction: column;
+    align-self: stretch;
     padding-left: 34px;
     padding-right: 34px;
     padding-top: 30px;
@@ -674,7 +675,7 @@
 #ProfilePanel .profile-typed-display-name-label {
     width: 100%;
     font-size: 20px;
-    -unity-text-align: upper-left;
+    -unity-text-align: upper-center;
     white-space: normal;
 }
 
@@ -903,4 +904,696 @@
     color: rgba(255, 255, 255, 0.7);
 
     -unity-text-align: upper-right;
+}
+
+.ui-responsive-root #MainPanel {
+    width: 100%;
+    max-width: none;
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
+.ui-responsive-root #MultiplayerPanel .multiplayer-game-card,
+.ui-responsive-root #MultiplayerPanel .multiplayer-games-list.multiplayer-games-list--single .multiplayer-game-card.multiplayer-game-card--single {
+    max-height: none;
+}
+
+.ui-responsive-root #MainPanel .menu-button {
+    width: 100%;
+}
+
+.ui-responsive-root #ProfilePanel {
+    left: 8px;
+    right: 8px;
+    top: 8px;
+    bottom: 8px;
+    justify-content: flex-start;
+    align-items: stretch;
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+.ui-responsive-root #ProfilePanel .profile-card {
+    width: 100%;
+    max-width: none;
+    align-self: stretch;
+}
+
+.ui-responsive-root #MultiplayerPanel .multiplayer-game-card-title,
+.ui-responsive-root #MultiplayerPanel .multiplayer-game-card-status {
+    white-space: normal;
+}
+
+.ui-responsive-root.ui-compact #MainPanel {
+    min-height: 100%;
+    padding-top: 72px;
+    padding-bottom: 18px;
+}
+
+.ui-responsive-root.ui-compact #MainPanel .title {
+    font-size: 68px;
+    margin-bottom: 32px;
+}
+
+.ui-responsive-root.ui-compact #MainPanel .menu-button {
+    height: 112px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    font-size: 40px;
+}
+
+.ui-responsive-root.ui-compact #MainPanel #PlayVsAIButton {
+    margin-top: 24px;
+    height: 120px;
+}
+
+.ui-responsive-root.ui-compact .version-label {
+    top: 18px;
+    right: 18px;
+    font-size: 40px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-header-row {
+    margin-bottom: 24px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-refresh-countdown {
+    margin-top: 8px;
+    font-size: 26px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-version-label {
+    font-size: 24px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-games-section-header {
+    margin-bottom: 14px;
+    padding-left: 28px;
+    font-size: 24px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-game-card {
+    min-height: 184px;
+    margin-bottom: 16px;
+    padding-left: 28px;
+    padding-right: 28px;
+    padding-top: 22px;
+    padding-bottom: 22px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-games-list.multiplayer-games-list--single .multiplayer-game-card.multiplayer-game-card--single {
+    min-height: 198px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-game-card-title {
+    font-size: 38px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-game-card-status {
+    margin-top: 10px;
+    font-size: 28px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-empty-state {
+    font-size: 26px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-details-card,
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-join-card,
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-create-success-card {
+    max-width: 920px;
+    padding-left: 32px;
+    padding-right: 32px;
+    padding-top: 32px;
+    padding-bottom: 28px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-details-title,
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-join-title,
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-create-success-title {
+    font-size: 44px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-details-subtitle {
+    margin-top: 12px;
+    font-size: 32px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-details-gameid {
+    margin-bottom: 24px;
+    font-size: 24px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-details-button,
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-action-button {
+    height: 92px;
+    font-size: 30px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-details-button-secondary {
+    width: 320px;
+    font-size: 28px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-details-button-danger-corner {
+    width: 210px;
+    min-width: 210px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-status {
+    min-height: 40px;
+    font-size: 28px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-join-input .unity-base-field__label {
+    min-width: 164px;
+    font-size: 28px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-join-input .unity-base-text-field__input {
+    min-height: 72px;
+    font-size: 28px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-create-success-instruction {
+    margin-top: 14px;
+    font-size: 30px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-create-success-code {
+    min-height: 80px;
+    font-size: 36px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-action-bar {
+    padding-top: 10px;
+    padding-bottom: 16px;
+}
+
+.ui-responsive-root.ui-compact #ProfilePanel .profile-card {
+    min-height: 560px;
+    padding-left: 22px;
+    padding-right: 22px;
+    padding-top: 24px;
+    padding-bottom: 22px;
+}
+
+.ui-responsive-root.ui-compact #ProfilePanel {
+    justify-content: center;
+}
+
+.ui-responsive-root.ui-compact #ProfilePanel .profile-title-row {
+    margin-bottom: 16px;
+}
+
+.ui-responsive-root.ui-compact #ProfilePanel .profile-title,
+.ui-responsive-root.ui-compact #ProfilePanel .profile-title .unity-text-element {
+    font-size: 56px;
+}
+
+.ui-responsive-root.ui-compact #ProfilePanel .profile-username-value {
+    margin-bottom: 22px;
+    font-size: 82px;
+}
+
+.ui-responsive-root.ui-compact #ProfilePanel .profile-field-label,
+.ui-responsive-root.ui-compact #ProfilePanel .profile-field-label .unity-text-element {
+    font-size: 32px;
+}
+
+.ui-responsive-root.ui-compact #ProfilePanel .profile-typed-display-name-label,
+.ui-responsive-root.ui-compact #ProfilePanel .profile-typed-display-name-label .unity-text-element {
+    font-size: 30px;
+}
+
+.ui-responsive-root.ui-compact #ProfilePanel .profile-divider {
+    margin-top: 20px;
+    margin-bottom: 16px;
+}
+
+.ui-responsive-root.ui-compact #ProfilePanel .profile-player-id-value,
+.ui-responsive-root.ui-compact #ProfilePanel .profile-player-id-value .unity-text-element,
+.ui-responsive-root.ui-compact #ProfilePanel .profile-typed-display-name-input,
+.ui-responsive-root.ui-compact #ProfilePanel .profile-typed-display-name-input .unity-base-text-field__input,
+.ui-responsive-root.ui-compact #ProfilePanel .profile-typed-display-name-input .unity-text-field__input {
+    min-height: 88px;
+    font-size: 32px;
+}
+
+.ui-responsive-root.ui-compact #ProfilePanel .profile-action-button {
+    height: 112px;
+}
+
+.ui-responsive-root.ui-compact #ProfilePanel .profile-action-button .unity-button__text,
+.ui-responsive-root.ui-compact #ProfilePanel .profile-action-button .unity-text-element,
+.ui-responsive-root.ui-compact #ProfilePanel .profile-action-button-primary .unity-button__text,
+.ui-responsive-root.ui-compact #ProfilePanel .profile-action-button-primary .unity-text-element,
+.ui-responsive-root.ui-compact #ProfilePanel .profile-copy-button .unity-button__text,
+.ui-responsive-root.ui-compact #ProfilePanel .profile-copy-button .unity-text-element,
+.ui-responsive-root.ui-compact #ProfilePanel .profile-back-button .unity-button__text,
+.ui-responsive-root.ui-compact #ProfilePanel .profile-back-button .unity-text-element {
+    font-size: 34px;
+}
+
+.ui-responsive-root.ui-compact #ProfilePanel .profile-copy-button {
+    height: 92px;
+}
+
+.ui-responsive-root.ui-compact #ProfilePanel .profile-status-label {
+    margin-top: 12px;
+    margin-bottom: 12px;
+    font-size: 30px;
+}
+
+.ui-responsive-root.ui-compact #ProfilePanel .profile-back-button {
+    height: 108px;
+}
+
+.ui-responsive-root.ui-regular #MainPanel {
+    min-height: 100%;
+    padding-top: 92px;
+    padding-bottom: 26px;
+}
+
+.ui-responsive-root.ui-regular #MainPanel .title {
+    font-size: 148px;
+    margin-bottom: 56px;
+}
+
+.ui-responsive-root.ui-regular #MainPanel .menu-button {
+    height: 164px;
+    margin-top: 16px;
+    margin-bottom: 16px;
+    font-size: 62px;
+}
+
+.ui-responsive-root.ui-regular #MainPanel #PlayVsAIButton {
+    margin-top: 38px;
+    height: 176px;
+}
+
+.ui-responsive-root.ui-regular .version-label {
+    top: 24px;
+    right: 24px;
+    font-size: 74px;
+}
+
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-game-card {
+    min-height: 192px;
+    padding-left: 30px;
+    padding-right: 30px;
+    padding-top: 24px;
+    padding-bottom: 24px;
+}
+
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-games-list.multiplayer-games-list--single .multiplayer-game-card.multiplayer-game-card--single {
+    min-height: 206px;
+}
+
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-game-card-title {
+    font-size: 40px;
+}
+
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-game-card-status {
+    font-size: 30px;
+}
+
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-details-card,
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-join-card,
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-create-success-card {
+    max-width: 980px;
+    padding-left: 36px;
+    padding-right: 36px;
+    padding-top: 36px;
+    padding-bottom: 30px;
+}
+
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-details-title,
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-join-title,
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-create-success-title {
+    font-size: 48px;
+}
+
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-details-subtitle {
+    font-size: 34px;
+}
+
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-details-button,
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-action-button {
+    height: 98px;
+    font-size: 32px;
+}
+
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-status,
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-refresh-countdown,
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-empty-state {
+    font-size: 30px;
+}
+
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-join-input .unity-base-field__label,
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-join-input .unity-base-text-field__input {
+    font-size: 30px;
+}
+
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-join-input .unity-base-text-field__input {
+    min-height: 78px;
+}
+
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-create-success-instruction {
+    font-size: 32px;
+}
+
+.ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-create-success-code {
+    min-height: 84px;
+    font-size: 40px;
+}
+
+.ui-responsive-root.ui-regular #ProfilePanel .profile-card {
+    min-height: 600px;
+    padding-left: 24px;
+    padding-right: 24px;
+    padding-top: 26px;
+    padding-bottom: 24px;
+}
+
+.ui-responsive-root.ui-regular #ProfilePanel .profile-title,
+.ui-responsive-root.ui-regular #ProfilePanel .profile-title .unity-text-element {
+    font-size: 68px;
+}
+
+.ui-responsive-root.ui-regular #ProfilePanel .profile-username-value {
+    font-size: 98px;
+}
+
+.ui-responsive-root.ui-regular #ProfilePanel .profile-field-label,
+.ui-responsive-root.ui-regular #ProfilePanel .profile-field-label .unity-text-element,
+.ui-responsive-root.ui-regular #ProfilePanel .profile-typed-display-name-label,
+.ui-responsive-root.ui-regular #ProfilePanel .profile-typed-display-name-label .unity-text-element {
+    font-size: 40px;
+}
+
+.ui-responsive-root.ui-regular #ProfilePanel .profile-player-id-value,
+.ui-responsive-root.ui-regular #ProfilePanel .profile-player-id-value .unity-text-element,
+.ui-responsive-root.ui-regular #ProfilePanel .profile-typed-display-name-input,
+.ui-responsive-root.ui-regular #ProfilePanel .profile-typed-display-name-input .unity-base-text-field__input,
+.ui-responsive-root.ui-regular #ProfilePanel .profile-typed-display-name-input .unity-text-field__input {
+    min-height: 92px;
+    font-size: 40px;
+}
+
+.ui-responsive-root.ui-regular #ProfilePanel .profile-action-button {
+    height: 116px;
+}
+
+.ui-responsive-root.ui-regular #ProfilePanel .profile-action-button .unity-button__text,
+.ui-responsive-root.ui-regular #ProfilePanel .profile-action-button .unity-text-element,
+.ui-responsive-root.ui-regular #ProfilePanel .profile-action-button-primary .unity-button__text,
+.ui-responsive-root.ui-regular #ProfilePanel .profile-action-button-primary .unity-text-element,
+.ui-responsive-root.ui-regular #ProfilePanel .profile-copy-button .unity-button__text,
+.ui-responsive-root.ui-regular #ProfilePanel .profile-copy-button .unity-text-element,
+.ui-responsive-root.ui-regular #ProfilePanel .profile-back-button .unity-button__text,
+.ui-responsive-root.ui-regular #ProfilePanel .profile-back-button .unity-text-element {
+    font-size: 42px;
+}
+
+.ui-responsive-root.ui-regular #ProfilePanel .profile-copy-button {
+    max-width: none;
+    height: 96px;
+}
+
+.ui-responsive-root.ui-regular #ProfilePanel .profile-status-label {
+    font-size: 36px;
+}
+
+.ui-responsive-root.ui-regular #ProfilePanel .profile-back-button {
+    height: 112px;
+}
+
+.ui-responsive-root.ui-large #MainPanel {
+    min-height: 100%;
+    padding-top: 104px;
+    padding-bottom: 30px;
+}
+
+.ui-responsive-root.ui-large #MainPanel .title {
+    font-size: 172px;
+    margin-bottom: 68px;
+}
+
+.ui-responsive-root.ui-large #MainPanel .menu-button {
+    height: 182px;
+    margin-top: 18px;
+    margin-bottom: 18px;
+    padding-left: 24px;
+    padding-right: 24px;
+    font-size: 72px;
+}
+
+.ui-responsive-root.ui-large #MainPanel #PlayVsAIButton {
+    margin-top: 42px;
+    height: 194px;
+}
+
+.ui-responsive-root.ui-large .version-label {
+    top: 28px;
+    right: 28px;
+    font-size: 92px;
+}
+
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-game-card {
+    min-height: 204px;
+    padding-left: 34px;
+    padding-right: 34px;
+    padding-top: 26px;
+    padding-bottom: 26px;
+}
+
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-games-list.multiplayer-games-list--single .multiplayer-game-card.multiplayer-game-card--single {
+    min-height: 220px;
+}
+
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-game-card-title {
+    font-size: 44px;
+}
+
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-game-card-status {
+    font-size: 32px;
+}
+
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-details-card,
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-join-card,
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-create-success-card {
+    max-width: 1040px;
+    padding-left: 40px;
+    padding-right: 40px;
+    padding-top: 40px;
+    padding-bottom: 34px;
+}
+
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-details-title,
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-join-title,
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-create-success-title {
+    font-size: 54px;
+}
+
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-details-subtitle {
+    font-size: 38px;
+}
+
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-details-button,
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-action-button {
+    height: 106px;
+    font-size: 36px;
+}
+
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-status,
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-refresh-countdown,
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-empty-state {
+    font-size: 34px;
+}
+
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-join-input .unity-base-field__label,
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-join-input .unity-base-text-field__input {
+    font-size: 32px;
+}
+
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-join-input .unity-base-text-field__input {
+    min-height: 84px;
+}
+
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-create-success-instruction {
+    font-size: 36px;
+}
+
+.ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-create-success-code {
+    min-height: 90px;
+    font-size: 44px;
+}
+
+.ui-responsive-root.ui-large #ProfilePanel .profile-card {
+    min-height: 660px;
+    padding-left: 28px;
+    padding-right: 28px;
+    padding-top: 30px;
+    padding-bottom: 28px;
+}
+
+.ui-responsive-root.ui-large #ProfilePanel .profile-title,
+.ui-responsive-root.ui-large #ProfilePanel .profile-title .unity-text-element {
+    font-size: 74px;
+}
+
+.ui-responsive-root.ui-large #ProfilePanel .profile-username-value {
+    font-size: 108px;
+}
+
+.ui-responsive-root.ui-large #ProfilePanel .profile-field-label,
+.ui-responsive-root.ui-large #ProfilePanel .profile-field-label .unity-text-element,
+.ui-responsive-root.ui-large #ProfilePanel .profile-typed-display-name-label,
+.ui-responsive-root.ui-large #ProfilePanel .profile-typed-display-name-label .unity-text-element {
+    font-size: 44px;
+}
+
+.ui-responsive-root.ui-large #ProfilePanel .profile-player-id-value,
+.ui-responsive-root.ui-large #ProfilePanel .profile-player-id-value .unity-text-element,
+.ui-responsive-root.ui-large #ProfilePanel .profile-typed-display-name-input,
+.ui-responsive-root.ui-large #ProfilePanel .profile-typed-display-name-input .unity-base-text-field__input,
+.ui-responsive-root.ui-large #ProfilePanel .profile-typed-display-name-input .unity-text-field__input {
+    min-height: 100px;
+    font-size: 44px;
+}
+
+.ui-responsive-root.ui-large #ProfilePanel .profile-action-button {
+    height: 126px;
+}
+
+.ui-responsive-root.ui-large #ProfilePanel .profile-action-button .unity-button__text,
+.ui-responsive-root.ui-large #ProfilePanel .profile-action-button .unity-text-element,
+.ui-responsive-root.ui-large #ProfilePanel .profile-action-button-primary .unity-button__text,
+.ui-responsive-root.ui-large #ProfilePanel .profile-action-button-primary .unity-text-element,
+.ui-responsive-root.ui-large #ProfilePanel .profile-copy-button .unity-button__text,
+.ui-responsive-root.ui-large #ProfilePanel .profile-copy-button .unity-text-element,
+.ui-responsive-root.ui-large #ProfilePanel .profile-back-button .unity-button__text,
+.ui-responsive-root.ui-large #ProfilePanel .profile-back-button .unity-text-element {
+    font-size: 48px;
+}
+
+.ui-responsive-root.ui-large #ProfilePanel .profile-copy-button {
+    max-width: none;
+    height: 104px;
+}
+
+.ui-responsive-root.ui-large #ProfilePanel .profile-status-label {
+    font-size: 40px;
+}
+
+.ui-responsive-root.ui-large #ProfilePanel .profile-back-button {
+    height: 122px;
+}
+
+.ui-responsive-root.menu-phone-wide #MainPanel {
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 76px;
+    padding-bottom: 18px;
+}
+
+.ui-responsive-root.menu-phone-wide #MainPanel .title {
+    font-size: 104px;
+    margin-bottom: 38px;
+}
+
+.ui-responsive-root.menu-phone-wide #MainPanel .menu-button {
+    height: 128px;
+    margin-top: 12px;
+    margin-bottom: 12px;
+    font-size: 46px;
+}
+
+.ui-responsive-root.menu-phone-wide #MainPanel #PlayVsAIButton {
+    margin-top: 28px;
+    height: 136px;
+}
+
+.ui-responsive-root.menu-phone-wide .version-label {
+    top: 20px;
+    right: 20px;
+    font-size: 52px;
+}
+
+.ui-responsive-root.menu-phone-wide #ProfilePanel {
+    left: 6px;
+    right: 6px;
+    top: 6px;
+    bottom: 6px;
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-card {
+    min-height: 640px;
+    padding-left: 24px;
+    padding-right: 24px;
+    padding-top: 26px;
+    padding-bottom: 24px;
+}
+
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-title,
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-title .unity-text-element {
+    font-size: 66px;
+}
+
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-username-value {
+    font-size: 98px;
+}
+
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-field-label,
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-field-label .unity-text-element {
+    font-size: 40px;
+}
+
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-typed-display-name-label,
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-typed-display-name-label .unity-text-element {
+    font-size: 36px;
+}
+
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-player-id-value,
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-player-id-value .unity-text-element,
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-typed-display-name-input,
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-typed-display-name-input .unity-base-text-field__input,
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-typed-display-name-input .unity-text-field__input {
+    min-height: 88px;
+    font-size: 40px;
+}
+
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-action-button {
+    height: 108px;
+}
+
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-action-button .unity-button__text,
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-action-button .unity-text-element,
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-action-button-primary .unity-button__text,
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-action-button-primary .unity-text-element,
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-copy-button .unity-button__text,
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-copy-button .unity-text-element,
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-back-button .unity-button__text,
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-back-button .unity-text-element {
+    font-size: 42px;
+}
+
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-copy-button {
+    max-width: none;
+    height: 92px;
+}
+
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-status-label {
+    font-size: 36px;
+}
+
+.ui-responsive-root.menu-phone-wide #ProfilePanel .profile-back-button {
+    height: 104px;
 }

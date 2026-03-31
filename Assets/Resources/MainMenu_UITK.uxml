@@ -71,30 +71,30 @@
             <ui:VisualElement class="profile-card">
                 <ui:VisualElement class="profile-title-row">
                     <ui:VisualElement class="profile-title-line" />
-                    <ui:Label text="Profile" class="profile-title" />
+                    <ui:Label text="Profile" class="profile-title ui-text-title" />
                     <ui:VisualElement class="profile-title-line" />
                 </ui:VisualElement>
 
                 <ui:Label name="ProfileUsernameValueLabel" text="" class="profile-username-value" />
-                <ui:Button name="ProfileRegenerateButton" text="Regenerate Name" class="menu-button profile-action-button profile-action-button-primary" />
+                <ui:Button name="ProfileRegenerateButton" text="Regenerate Name" class="menu-button profile-action-button profile-action-button-primary ui-text-button" />
 
                 <ui:VisualElement class="profile-divider" />
 
                 <ui:VisualElement class="profile-field">
-                    <ui:Label text="Please set a recognizable name for playtesting (2–12 chars)" class="profile-field-label profile-typed-display-name-label" />
-                    <ui:TextField name="ProfileTypedDisplayNameInput" value="" />
+                    <ui:Label text="Please set a recognizable name for playtesting (2–12 chars)" class="profile-field-label profile-typed-display-name-label ui-text-body" />
+                    <ui:TextField name="ProfileTypedDisplayNameInput" value="" class="profile-typed-display-name-input ui-text-body" />
                 </ui:VisualElement>
 
                 <ui:VisualElement class="profile-field profile-player-id-section">
-                    <ui:Label text="Player ID" class="profile-field-label" />
+                    <ui:Label text="Player ID" class="profile-field-label ui-text-meta" />
                     <ui:VisualElement class="profile-id-row">
-                        <ui:Label name="ProfilePlayerIdValueLabel" text="" class="profile-player-id-value" />
-                        <ui:Button name="ProfileCopyPlayerIdButton" text="Copy Player ID" class="menu-button profile-copy-button" />
+                        <ui:Label name="ProfilePlayerIdValueLabel" text="" class="profile-player-id-value ui-text-body" />
+                        <ui:Button name="ProfileCopyPlayerIdButton" text="Copy Player ID" class="menu-button profile-copy-button ui-text-button" />
                     </ui:VisualElement>
                 </ui:VisualElement>
 
-                <ui:Label name="ProfileStatusLabel" text="" class="profile-status-label" style="display: none;" />
-                <ui:Button name="ProfileBackButton" text="Back" class="menu-button profile-back-button" />
+                <ui:Label name="ProfileStatusLabel" text="" class="profile-status-label ui-text-meta" style="display: none;" />
+                <ui:Button name="ProfileBackButton" text="Back" class="menu-button profile-back-button ui-text-button" />
             </ui:VisualElement>
         </ui:VisualElement>
 

@@ -30,6 +30,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private UIDocument uiDocument;
     private VisualTreeAsset layoutAsset;
     private ThemeStyleSheet themeAsset;
+    private readonly UITKResponsiveSizeTierController responsiveSizeTierController = new UITKResponsiveSizeTierController();
 
     private VisualElement root;
     private VisualElement topGutterMask;
@@ -117,6 +118,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
 
         RefreshUiState();
         ApplySafeArea(force: false);
+        responsiveSizeTierController.Apply(root);
     }
 
     private bool ResolveSceneReferences(bool force)
@@ -285,6 +287,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         ConfigurePickingModes();
         BindButtons();
         ApplySafeArea(force: true);
+        responsiveSizeTierController.Apply(root);
         uiReady = true;
         return true;
     }
@@ -1050,6 +1053,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private void ClearUiCache()
     {
         UnbindButtons();
+        responsiveSizeTierController.Reset(root);
         root = null;
         topGutterMask = null;
         bottomGutterMask = null;
