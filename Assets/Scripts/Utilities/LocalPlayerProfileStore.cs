@@ -78,7 +78,6 @@ public static class LocalPlayerProfileStore
     {
         string normalized = NormalizeTypedDisplayName(typedDisplayName);
         PlayerPrefs.SetString(TypedDisplayNameKey, normalized);
-        PlayerPrefs.Save();
         return normalized;
     }
 

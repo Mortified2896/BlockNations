@@ -948,6 +948,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HandleProfileBackClicked()
     {
+        PlayerPrefs.Save();
         ShowMainPanel();
     }
 
