@@ -55,9 +55,7 @@ public class TurnManager : MonoBehaviour
     public int playerGold = 2;
     public int aiGold = 0;
     public int goldPerCity = 1;
-    // Single source of truth for Warrior recruitment cost.
-    public const int WarriorCost = 2;
-    public int warriorCost => WarriorCost;
+    public int warriorCost => GetRecruitCost(UnitRegistry.WarriorTypeId);
 
     [Header("AI Settings")]
     public float aiTurnDelay = 1f; // seconds the AI "thinks" before ending its turn
@@ -195,6 +193,7 @@ public class TurnManager : MonoBehaviour
     [System.Serializable]
     private class SavedUnit
     {
+        public string unitTypeId;
         public bool isPlayerOwned;
         public float x;
         public float y;
@@ -288,6 +287,113 @@ public class TurnManager : MonoBehaviour
             return CanLocalPlayerIssueCommands();
 
         return false;
+    }
+
+    public int GetRecruitCost(string unitTypeId)
+    {
+        return UnitRegistry.GetDefinitionOrDefault(unitTypeId).RecruitCost;
+    }
+
+    public GameObject GetUnitPrefabForType(string unitTypeId)
+    {
+        string resolvedUnitTypeId = UnitRegistry.NormalizeTypeId(unitTypeId);
+        if (resolvedUnitTypeId == UnitRegistry.WarriorTypeId)
+        {
+            if (unitPrefab != null)
+            {
+                return unitPrefab;
+            }
+
+            City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+            foreach (City city in cities)
+            {
+                if (city != null && city.warriorPrefab != null)
+                {
+                    return city.warriorPrefab;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    public GameObject InstantiateConfiguredUnit(
+        string unitTypeId,
+        GameObject prefab,
+        Vector3 position,
+        bool isPlayerOwned,
+        City currentCity,
+        bool resetTurnState)
+    {
+        if (prefab == null)
+        {
+            return null;
+        }
+
+        if (!UnitRegistry.TryGetDefinition(unitTypeId, out UnitDefinition definition))
+        {
+            return null;
+        }
+
+        GameObject spawnedObject = Instantiate(prefab, position, Quaternion.identity);
+        Unit unit = spawnedObject.GetComponent<Unit>();
+        if (unit != null)
+        {
+            if (!unit.ApplyDefinition(definition.TypeId, preserveCurrentHealth: false))
+            {
+                Destroy(spawnedObject);
+                return null;
+            }
+
+            unit.isPlayerOwned = isPlayerOwned;
+            unit.currentCity = currentCity;
+            if (resetTurnState)
+            {
+                unit.ResetMovementForTurn();
+            }
+
+            bool isActiveTurn = IsCurrentSideOwner(isPlayerOwned);
+            unit.UpdateMoveOutline(resetTurnState && isActiveTurn);
+        }
+
+        OwnedSprite owned = spawnedObject.GetComponent<OwnedSprite>();
+        if (owned != null)
+        {
+            owned.SetOwner(isPlayerOwned);
+        }
+
+        return spawnedObject;
+    }
+
+    private bool TryResolveLoadedUnitTypeId(
+        string savedUnitTypeId,
+        bool loadedModeIsPbp,
+        out string resolvedUnitTypeId,
+        out string error)
+    {
+        error = null;
+        if (string.IsNullOrWhiteSpace(savedUnitTypeId))
+        {
+            resolvedUnitTypeId = UnitRegistry.WarriorTypeId;
+            return true;
+        }
+
+        resolvedUnitTypeId = savedUnitTypeId.Trim();
+        if (UnitRegistry.TryGetDefinition(resolvedUnitTypeId, out UnitDefinition definition))
+        {
+            resolvedUnitTypeId = definition.TypeId;
+            return true;
+        }
+
+        if (loadedModeIsPbp)
+        {
+            error = $"PBp load blocked: unknown unitTypeId '{savedUnitTypeId}'.";
+            return false;
+        }
+
+        Debug.LogWarning($"Unknown unitTypeId '{savedUnitTypeId}' in non-PBp save. Falling back to {UnitRegistry.WarriorTypeId}.");
+        resolvedUnitTypeId = UnitRegistry.WarriorTypeId;
+        return true;
     }
 
     private bool LocalIsPlayerOwned()
@@ -2137,7 +2243,8 @@ public class TurnManager : MonoBehaviour
             return false;
 
         // 1) Recruitment options
-        if (playerGold >= warriorCost)
+        int warriorRecruitCost = GetRecruitCost(UnitRegistry.WarriorTypeId);
+        if (playerGold >= warriorRecruitCost)
         {
             City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
             foreach (City city in cities)
@@ -2498,13 +2605,14 @@ public class TurnManager : MonoBehaviour
 
             int aiGoldNow = aiGold;
             int turnsUntilCanRecruit;
-            if (aiGoldNow >= warriorCost)
+            int warriorRecruitCost = GetRecruitCost(UnitRegistry.WarriorTypeId);
+            if (aiGoldNow >= warriorRecruitCost)
             {
                 turnsUntilCanRecruit = 0;
             }
             else if (aiIncomePerTurn > 0)
             {
-                turnsUntilCanRecruit = Mathf.CeilToInt((warriorCost - aiGoldNow) / (float)aiIncomePerTurn);
+                turnsUntilCanRecruit = Mathf.CeilToInt((warriorRecruitCost - aiGoldNow) / (float)aiIncomePerTurn);
             }
             else
             {
@@ -2519,27 +2627,31 @@ public class TurnManager : MonoBehaviour
             {
                 // Spawn defender at the AI city if the tile is free.
                 Vector3 spawnPosition = primaryAICity.transform.position;
-                if (!GridUtils.IsTileOccupied(spawnPosition, null) && unitPrefab != null)
+                GameObject warriorPrefab = GetUnitPrefabForType(UnitRegistry.WarriorTypeId);
+                if (!GridUtils.IsTileOccupied(spawnPosition, null) && warriorPrefab != null)
                 {
                     // TrySpendGold(false, ...) will also update AI gold and UI when appropriate.
-                    if (TrySpendGold(false, warriorCost))
+                    if (TrySpendGold(false, warriorRecruitCost))
                     {
-                        GameObject defender = Instantiate(unitPrefab, spawnPosition, Quaternion.identity);
+                        GameObject defender = InstantiateConfiguredUnit(
+                            UnitRegistry.WarriorTypeId,
+                            warriorPrefab,
+                            spawnPosition,
+                            isPlayerOwned: false,
+                            currentCity: primaryAICity,
+                            resetTurnState: true);
+                        if (defender == null)
+                        {
+                            return;
+                        }
+
                         Unit defenderUnit = defender.GetComponent<Unit>();
                         if (defenderUnit != null)
                         {
-                            defenderUnit.isPlayerOwned = false;
-                            defenderUnit.currentCity = primaryAICity;
-                            defenderUnit.ResetMovementForTurn();
+                            defenderUnit.UpdateMoveOutline(isTurnForThisUnit: false);
                         }
 
                         primaryAICity.stationedUnit = defender;
-
-                        OwnedSprite owned = defender.GetComponent<OwnedSprite>();
-                        if (owned != null)
-                        {
-                            owned.SetOwner(false);
-                        }
                     }
                 }
             }
@@ -3411,6 +3523,7 @@ public class TurnManager : MonoBehaviour
             Vector3 pos = unit.transform.position;
             save.units.Add(new SavedUnit
             {
+                unitTypeId = unit.UnitTypeId,
                 isPlayerOwned = unit.isPlayerOwned,
                 x = pos.x,
                 y = pos.y,
@@ -3825,35 +3938,39 @@ private void PBpDebugSyncNow_Context()
                 }
             }
 
-            // Restore units
-            GameObject prefab = unitPrefab;
-            if (prefab == null)
-            {
-                // fallback: try grab from any city
-                foreach (City city in cities)
-                {
-                    if (city.warriorPrefab != null)
-                    {
-                        prefab = city.warriorPrefab;
-                        break;
-                    }
-                }
-            }
-
-            if (prefab == null)
-            {
-                Debug.LogError("No unit prefab configured (TurnManager.unitPrefab or any City.warriorPrefab). Cannot restore units; load aborted.");
-                return false;
-            }
-
             foreach (SavedUnit u in save.units)
             {
+                if (!TryResolveLoadedUnitTypeId(u.unitTypeId, loadedModeIsPbp, out string resolvedUnitTypeId, out string typeResolutionError))
+                {
+                    Debug.LogError(typeResolutionError);
+                    return false;
+                }
+
+                GameObject prefab = GetUnitPrefabForType(resolvedUnitTypeId);
+                if (prefab == null)
+                {
+                    Debug.LogError($"No unit prefab configured for unit type '{resolvedUnitTypeId}'. Cannot restore units; load aborted.");
+                    return false;
+                }
+
                 Vector3 pos = new Vector3(u.x, u.y, u.z);
-                GameObject go = Instantiate(prefab, pos, Quaternion.identity);
+                GameObject go = InstantiateConfiguredUnit(
+                    resolvedUnitTypeId,
+                    prefab,
+                    pos,
+                    u.isPlayerOwned,
+                    currentCity: null,
+                    resetTurnState: false);
+                if (go == null)
+                {
+                    Debug.LogError($"Failed to instantiate unit type '{resolvedUnitTypeId}' while loading.");
+                    return false;
+                }
+
                 Unit unit = go.GetComponent<Unit>();
                 if (unit != null)
                 {
-                    unit.isPlayerOwned = u.isPlayerOwned;
+                    unit.ApplyDefinition(resolvedUnitTypeId, preserveCurrentHealth: false);
                     unit.currentHealth = Mathf.Clamp(u.currentHealth, 1, unit.maxHealth);
                     unit.movesUsedThisTurn = Mathf.Clamp(u.movesUsedThisTurn, 0, unit.maxMovesPerTurn);
                     unit.hasAttackedThisTurn = u.hasAttackedThisTurn;
@@ -3863,12 +3980,6 @@ private void PBpDebugSyncNow_Context()
                         isCurrentSideUnit = unit.isPlayerOwned == viewerIsPlayerOwnedForLoad;
                     }
                     unit.SetFogVisibility(true, isCurrentSideUnit); // will be updated after visibility recalculation
-                }
-
-                OwnedSprite owned = go.GetComponent<OwnedSprite>();
-                if (owned != null)
-                {
-                    owned.SetOwner(u.isPlayerOwned);
                 }
 
                 // Link to city if occupying one

@@ -310,6 +310,7 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
 
     private string GetRecruitWarriorLabel()
     {
+        UnitDefinition warrior = UnitRegistry.Warrior;
         if (cityUIManager != null &&
             !string.IsNullOrWhiteSpace(cityUIManager.RecruitWarriorLabel))
         {
@@ -318,10 +319,10 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
 
         if (turnManager != null)
         {
-            return $"Warrior\n({turnManager.warriorCost} Gold)";
+            return $"{warrior.DisplayName}\n({turnManager.GetRecruitCost(warrior.TypeId)} Gold)";
         }
 
-        return "Warrior";
+        return warrior.DisplayName;
     }
 
     private void ApplySafeArea(bool force)

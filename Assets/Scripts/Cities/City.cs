@@ -58,17 +58,31 @@ public class City : MonoBehaviour
 
     public void SpawnWarrior()
     {
-        if (warriorPrefab == null)
+        TrySpawnUnit(UnitRegistry.WarriorTypeId);
+    }
+
+    public bool TrySpawnUnit(string unitTypeId)
+    {
+        string resolvedUnitTypeId = UnitRegistry.NormalizeTypeId(unitTypeId);
+        if (!UnitRegistry.TryGetDefinition(resolvedUnitTypeId, out UnitDefinition definition))
         {
-            Debug.LogWarning("City has no Warrior prefab assigned.", this);
+            Debug.LogWarning($"City cannot spawn unknown unit type '{unitTypeId}'.", this);
             PlayInvalidIfHuman();
-            return;
+            return false;
+        }
+
+        GameObject prefab = ResolveRecruitPrefab(resolvedUnitTypeId);
+        if (prefab == null)
+        {
+            Debug.LogWarning($"City has no prefab assigned for {definition.DisplayName}.", this);
+            PlayInvalidIfHuman();
+            return false;
         }
 
         if (!CanRecruit())
         {
             PlayInvalidIfHuman();
-            return;
+            return false;
         }
 
         // Spawn at the city position for now, but only if no other unit is already there
@@ -77,18 +91,18 @@ public class City : MonoBehaviour
         {
             if (PbpDebugSettingsLoader.EnableInputLogs)
             {
-                Debug.Log("Cannot spawn Warrior in city " + name + " because the tile is already occupied by a unit.", this);
+                Debug.Log($"Cannot spawn {definition.DisplayName} in city {name} because the tile is already occupied by a unit.", this);
             }
             PlayInvalidIfHuman();
-            return;
+            return false;
         }
 
         // Pay the recruitment cost through the TurnManager
         if (TurnManager.Instance == null)
         {
-            Debug.LogWarning("Cannot spawn Warrior because TurnManager instance is missing.", this);
+            Debug.LogWarning($"Cannot spawn {definition.DisplayName} because TurnManager instance is missing.", this);
             PlayInvalidIfHuman();
-            return;
+            return false;
         }
 
         if (TurnManager.Instance.currentMode == TurnManager.GameMode.PlayByPost &&
@@ -101,33 +115,45 @@ public class City : MonoBehaviour
             }
 #endif
             PlayInvalidIfHuman();
-            return;
+            return false;
         }
 
-        if (!TurnManager.Instance.TrySpendGold(isPlayerOwned, TurnManager.Instance.warriorCost))
+        if (!TurnManager.Instance.TrySpendGold(isPlayerOwned, definition.RecruitCost))
         {
             if (isPlayerOwned)
             {
                 if (PbpDebugSettingsLoader.EnableInputLogs)
                 {
-                    Debug.Log("Not enough gold to recruit a Warrior in " + name);
+                    Debug.Log($"Not enough gold to recruit a {definition.DisplayName} in {name}");
                 }
             }
             else
             {
                 if (PbpDebugSettingsLoader.EnableInputLogs)
                 {
-                    Debug.Log("AI lacks gold to recruit a Warrior in " + name);
+                    Debug.Log($"AI lacks gold to recruit a {definition.DisplayName} in {name}");
                 }
             }
 
             // If the player attempted to recruit and still has no actions, auto-end can kick in.
             TurnManager.Instance.ScheduleAutoEndTurnCheck();
-            return;
+            return false;
         }
 
-        GameObject warrior = Instantiate(warriorPrefab, spawnPosition, Quaternion.identity);
-        stationedUnit = warrior;
+        GameObject spawnedUnit = TurnManager.Instance.InstantiateConfiguredUnit(
+            resolvedUnitTypeId,
+            prefab,
+            spawnPosition,
+            isPlayerOwned,
+            this,
+            resetTurnState: true);
+        if (spawnedUnit == null)
+        {
+            PlayInvalidIfHuman();
+            return false;
+        }
+
+        stationedUnit = spawnedUnit;
         hasRecruitedThisTurn = true;
 
         if (SoundManager.Instance != null)
@@ -135,28 +161,9 @@ public class City : MonoBehaviour
             SoundManager.Instance.PlayRecruit();
         }
 
-        // Set up the Unit component with ownership and city link
-        Unit unit = warrior.GetComponent<Unit>();
-        if (unit != null)
-        {
-            unit.isPlayerOwned = isPlayerOwned;
-            unit.currentCity = this;
-            unit.ResetMovementForTurn();
-
-            bool isActiveTurn = TurnManager.Instance != null && TurnManager.Instance.IsCurrentSideOwner(isPlayerOwned);
-            unit.UpdateMoveOutline(isActiveTurn);
-        }
-
-        // Apply ownership color if the unit has an OwnedSprite
-        OwnedSprite owned = warrior.GetComponent<OwnedSprite>();
-        if (owned != null)
-        {
-            owned.SetOwner(isPlayerOwned);
-        }
-
         if (PbpDebugSettingsLoader.EnableInputLogs)
         {
-            Debug.Log($"Spawned Warrior from city {name} at world position {spawnPosition}.");
+            Debug.Log($"Spawned {definition.DisplayName} from city {name} at world position {spawnPosition}.");
         }
 
         if (isPlayerOwned && TurnManager.Instance != null)
@@ -168,11 +175,25 @@ public class City : MonoBehaviour
         else if (!isPlayerOwned && TurnManager.Instance != null)
         {
             bool isCurrentSideUnit = TurnManager.Instance.currentMode != TurnManager.GameMode.PlayByPost || (TurnManager.Instance.isPlayerTurn == isPlayerOwned);
-            Unit spawned = warrior.GetComponent<Unit>();
+            Unit spawned = spawnedUnit.GetComponent<Unit>();
             if (spawned != null)
             {
                 spawned.SetFogVisibility(true, isCurrentSideUnit);
             }
         }
+
+        return true;
+    }
+
+    private GameObject ResolveRecruitPrefab(string unitTypeId)
+    {
+        if (unitTypeId == UnitRegistry.WarriorTypeId && warriorPrefab != null)
+        {
+            return warriorPrefab;
+        }
+
+        return TurnManager.Instance != null
+            ? TurnManager.Instance.GetUnitPrefabForType(unitTypeId)
+            : null;
     }
 }

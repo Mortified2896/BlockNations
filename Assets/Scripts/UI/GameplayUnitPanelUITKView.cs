@@ -351,7 +351,17 @@ public sealed class GameplayUnitPanelUITKView : MonoBehaviour
 
     private static string GetUnitNameOrFallback(Unit unit, string fallback)
     {
-        if (unit == null || string.IsNullOrWhiteSpace(unit.name))
+        if (unit == null)
+        {
+            return fallback;
+        }
+
+        if (!string.IsNullOrWhiteSpace(unit.DisplayName))
+        {
+            return unit.DisplayName;
+        }
+
+        if (string.IsNullOrWhiteSpace(unit.name))
         {
             return fallback;
         }

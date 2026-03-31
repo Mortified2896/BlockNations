@@ -2,6 +2,9 @@ using UnityEngine;
 
 public class Unit : MonoBehaviour
 {
+    [Header("Identity")]
+    [SerializeField] private string unitTypeId = UnitRegistry.WarriorTypeId;
+
     [Header("Owner")]
     public bool isPlayerOwned = true;
 
@@ -52,19 +55,43 @@ public class Unit : MonoBehaviour
 
     private SpriteRenderer spriteRenderer;
 
+    public string UnitTypeId => UnitRegistry.NormalizeTypeId(unitTypeId);
+    public string DisplayName => UnitRegistry.GetDefinitionOrDefault(UnitTypeId).DisplayName;
+
     void Awake()
     {
-        // Only initialize HP if it hasn't been set yet (e.g., by load/spawn logic).
-        // This prevents overwriting loaded values that are assigned right after Instantiate().
-        if (currentHealth <= 0)
-        {
-            currentHealth = maxHealth;
-        }
+        ApplyDefinition(UnitTypeId, preserveCurrentHealth: currentHealth > 0);
         spriteRenderer = GetComponent<SpriteRenderer>();
         if (spriteRenderer == null)
         {
             spriteRenderer = GetComponentInChildren<SpriteRenderer>();
         }
+    }
+
+    public bool ApplyDefinition(string requestedUnitTypeId, bool preserveCurrentHealth)
+    {
+        if (!UnitRegistry.TryGetDefinition(requestedUnitTypeId, out UnitDefinition definition))
+        {
+            return false;
+        }
+
+        unitTypeId = definition.TypeId;
+        maxMovesPerTurn = definition.MaxMovesPerTurn;
+        maxHealth = definition.MaxHealth;
+        attack = definition.Attack;
+        defense = definition.Defense;
+
+        if (!preserveCurrentHealth || currentHealth <= 0)
+        {
+            currentHealth = maxHealth;
+        }
+        else
+        {
+            currentHealth = Mathf.Clamp(currentHealth, 1, maxHealth);
+        }
+
+        movesUsedThisTurn = Mathf.Clamp(movesUsedThisTurn, 0, maxMovesPerTurn);
+        return true;
     }
 
     public bool Attack(Unit target)

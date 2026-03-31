@@ -118,13 +118,14 @@ public class CityUIManager : MonoBehaviour
     {
         get
         {
+            UnitDefinition warrior = UnitRegistry.Warrior;
             TurnManager tm = ResolveTurnManager();
             if (tm != null)
             {
-                return $"Warrior\n({tm.warriorCost} Gold)";
+                return $"{warrior.DisplayName}\n({tm.GetRecruitCost(warrior.TypeId)} Gold)";
             }
 
-            return "Warrior";
+            return warrior.DisplayName;
         }
     }
 
@@ -165,7 +166,7 @@ public class CityUIManager : MonoBehaviour
 
         if (currentCity == null)
         {
-            Debug.LogWarning("Tried to recruit a Warrior but no city is selected.");
+            Debug.LogWarning($"Tried to recruit a {UnitRegistry.Warrior.DisplayName} but no city is selected.");
             if (SoundManager.Instance != null)
             {
                 SoundManager.Instance.PlayInvalid();
