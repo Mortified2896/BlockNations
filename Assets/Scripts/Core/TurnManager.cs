@@ -3123,9 +3123,10 @@ public class TurnManager : MonoBehaviour
             if (!gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility originTile))
                 continue;
 
-            for (int dx = -visibilityRadius; dx <= visibilityRadius; dx++)
+            int unitVisionRange = Mathf.Max(1, unit.VisionRange);
+            for (int dx = -unitVisionRange; dx <= unitVisionRange; dx++)
             {
-                for (int dy = -visibilityRadius; dy <= visibilityRadius; dy++)
+                for (int dy = -unitVisionRange; dy <= unitVisionRange; dy++)
                 {
                     int tx = originTile.gridX + dx;
                     int ty = originTile.gridY + dy;

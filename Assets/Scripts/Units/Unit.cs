@@ -54,9 +54,11 @@ public class Unit : MonoBehaviour
     public int defense = 0;
 
     private SpriteRenderer spriteRenderer;
+    private UnitDefinition resolvedDefinition;
 
     public string UnitTypeId => UnitRegistry.NormalizeTypeId(unitTypeId);
-    public string DisplayName => UnitRegistry.GetDefinitionOrDefault(UnitTypeId).DisplayName;
+    public string DisplayName => resolvedDefinition != null ? resolvedDefinition.DisplayName : UnitRegistry.GetDefinitionOrDefault(UnitTypeId).DisplayName;
+    public int VisionRange => resolvedDefinition != null ? resolvedDefinition.VisionRange : UnitRegistry.GetDefinitionOrDefault(UnitTypeId).VisionRange;
 
     void Awake()
     {
@@ -75,6 +77,7 @@ public class Unit : MonoBehaviour
             return false;
         }
 
+        resolvedDefinition = definition;
         unitTypeId = definition.TypeId;
         maxMovesPerTurn = definition.MaxMovesPerTurn;
         maxHealth = definition.MaxHealth;
