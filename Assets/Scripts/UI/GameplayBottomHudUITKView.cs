@@ -32,6 +32,10 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private ThemeStyleSheet themeAsset;
 
     private VisualElement root;
+    private VisualElement topGutterMask;
+    private VisualElement bottomGutterMask;
+    private VisualElement leftGutterMask;
+    private VisualElement rightGutterMask;
     private VisualElement hudRoot;
     private VisualElement defaultBottomPanel;
     private UnityEngine.UIElements.Button menuButton;
@@ -257,6 +261,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         UnbindButtons();
 
         root = currentRoot;
+        EnsureSafeAreaGutterMask();
         hudRoot = root.Q<VisualElement>("GameplayBottomHudRoot") ?? root;
         defaultBottomPanel = root.Q<VisualElement>("DefaultBottomPanel");
         menuButton = root.Q<UnityEngine.UIElements.Button>("MenuButton");
@@ -282,6 +287,38 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         ApplySafeArea(force: true);
         uiReady = true;
         return true;
+    }
+
+    private void EnsureSafeAreaGutterMask()
+    {
+        if (root == null)
+        {
+            return;
+        }
+
+        topGutterMask = EnsureGutterMaskBar("TopSafeAreaGutterMask");
+        bottomGutterMask = EnsureGutterMaskBar("BottomSafeAreaGutterMask");
+        leftGutterMask = EnsureGutterMaskBar("LeftSafeAreaGutterMask");
+        rightGutterMask = EnsureGutterMaskBar("RightSafeAreaGutterMask");
+    }
+
+    private VisualElement EnsureGutterMaskBar(string elementName)
+    {
+        VisualElement gutterMask = root.Q<VisualElement>(elementName);
+        if (gutterMask == null)
+        {
+            gutterMask = new VisualElement
+            {
+                name = elementName,
+                pickingMode = PickingMode.Ignore
+            };
+            root.Insert(0, gutterMask);
+        }
+
+        gutterMask.style.position = Position.Absolute;
+        gutterMask.style.backgroundColor = Color.black;
+        gutterMask.style.display = DisplayStyle.None;
+        return gutterMask;
     }
 
     private void ConfigurePickingModes()
@@ -898,14 +935,103 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         lastScreenSize = screenSize;
 
         float leftInset = safeArea.xMin;
-        float rightInset = screenSize.x - safeArea.xMax;
-        float bottomInset = safeArea.yMin;
+        float rightInset = Mathf.Max(0f, screenSize.x - safeArea.xMax);
+        float bottomInset = Mathf.Max(0f, safeArea.yMin);
+        float topInset = Mathf.Max(0f, screenSize.y - safeArea.yMax);
 
         VisualElement safeAreaTarget = hudRoot ?? root;
         safeAreaTarget.style.paddingLeft = leftInset;
         safeAreaTarget.style.paddingRight = rightInset;
         safeAreaTarget.style.paddingTop = 0f;
         safeAreaTarget.style.paddingBottom = bottomInset;
+
+        UpdateHorizontalGutterMask(topGutterMask, 0f, topInset);
+        UpdateHorizontalGutterMask(bottomGutterMask, screenSize.y - bottomInset, bottomInset);
+        UpdateLeftGutterMask(leftGutterMask, topInset, bottomInset, leftInset);
+        UpdateRightGutterMask(rightGutterMask, topInset, bottomInset, rightInset);
+    }
+
+    private static void UpdateHorizontalGutterMask(
+        VisualElement gutterMask,
+        float top,
+        float height)
+    {
+        if (gutterMask == null)
+        {
+            return;
+        }
+
+        gutterMask.style.left = 0f;
+        gutterMask.style.top = top;
+        gutterMask.style.right = 0f;
+        gutterMask.style.bottom = StyleKeyword.Auto;
+        gutterMask.style.width = StyleKeyword.Auto;
+        gutterMask.style.height = StyleKeyword.Auto;
+
+        if (Mathf.Approximately(height, 0f))
+        {
+            gutterMask.style.display = DisplayStyle.None;
+            return;
+        }
+
+        gutterMask.style.height = height;
+        gutterMask.style.display = DisplayStyle.Flex;
+    }
+
+    private static void UpdateLeftGutterMask(
+        VisualElement gutterMask,
+        float top,
+        float bottom,
+        float width)
+    {
+        if (gutterMask == null)
+        {
+            return;
+        }
+
+        gutterMask.style.left = 0f;
+        gutterMask.style.top = top;
+        gutterMask.style.right = StyleKeyword.Auto;
+        gutterMask.style.bottom = bottom;
+        gutterMask.style.width = StyleKeyword.Auto;
+        gutterMask.style.height = StyleKeyword.Auto;
+
+        if (Mathf.Approximately(width, 0f))
+        {
+            gutterMask.style.display = DisplayStyle.None;
+            return;
+        }
+
+        gutterMask.style.width = width;
+        gutterMask.style.display = DisplayStyle.Flex;
+    }
+
+    private static void UpdateRightGutterMask(
+        VisualElement gutterMask,
+        float top,
+        float bottom,
+        float width)
+    {
+        if (gutterMask == null)
+        {
+            return;
+        }
+
+        gutterMask.style.left = StyleKeyword.Auto;
+        gutterMask.style.top = top;
+        gutterMask.style.right = 0f;
+        gutterMask.style.bottom = bottom;
+        gutterMask.style.width = StyleKeyword.Auto;
+        gutterMask.style.height = StyleKeyword.Auto;
+
+        if (Mathf.Approximately(width, 0f))
+        {
+            gutterMask.style.display = DisplayStyle.None;
+            return;
+        }
+
+        gutterMask.style.width = width;
+        gutterMask.style.display = DisplayStyle.Flex;
     }
 
     private void DisableOverlay()
@@ -925,6 +1051,10 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     {
         UnbindButtons();
         root = null;
+        topGutterMask = null;
+        bottomGutterMask = null;
+        leftGutterMask = null;
+        rightGutterMask = null;
         hudRoot = null;
         defaultBottomPanel = null;
         menuButton = null;

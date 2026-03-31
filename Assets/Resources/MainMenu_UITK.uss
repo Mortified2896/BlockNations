@@ -2,7 +2,7 @@
     flex-grow: 1;
     align-items: center;
     justify-content: center;
-    background-color: rgb(52, 74, 118);
+    background-color: rgb(49, 77, 121);
     padding-left: 12px;
     padding-right: 12px;
     padding-top: 12px;
