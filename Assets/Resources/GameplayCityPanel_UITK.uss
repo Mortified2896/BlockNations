@@ -29,22 +29,23 @@
 
 .gameplay-city-recruit-row {
     flex-direction: row;
-    align-items: stretch;
+    align-items: center;
     justify-content: center;
     flex-grow: 1;
     min-height: 140px;
     width: 100%;
     padding-top: 6px;
     padding-bottom: 6px;
+    column-gap: 8px;
 }
 
 .gameplay-city-recruit-button {
     min-width: 240px;
-    width: 100%;
+    width: 240px;
     max-width: 360px;
     min-height: 88px;
     flex-grow: 1;
-    align-self: stretch;
+    align-self: center;
     color: rgb(255, 255, 255);
     font-size: 30px;
     background-color: rgba(0, 0, 0, 0.62);

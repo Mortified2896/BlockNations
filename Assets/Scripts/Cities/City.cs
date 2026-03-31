@@ -111,7 +111,7 @@ public class City : MonoBehaviour
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (PbpDebugSettingsLoader.EnableInputLogs)
             {
-                Debug.Log($"Ignored SpawnWarrior in PBp while local commands are locked (city={name}).", this);
+                Debug.Log($"Ignored spawn of {definition.DisplayName} in PBp while local commands are locked (city={name}).", this);
             }
 #endif
             PlayInvalidIfHuman();

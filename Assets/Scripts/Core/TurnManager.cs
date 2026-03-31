@@ -144,7 +144,7 @@ public class TurnManager : MonoBehaviour
     private const string MainMenuSceneName = "MainMenu";
     private const string DefaultGameOverMessage = "Game Over";
     private const string DefaultGameOverPrimaryButtonLabel = "Play Again";
-    private const int SupportedPbpProtocolVersion = 2;
+    private const int SupportedPbpProtocolVersion = 3;
     public static int PbpProtocolVersion => SupportedPbpProtocolVersion;
 
     // Controlled via Unity Scripting Define Symbols:
@@ -296,8 +296,13 @@ public class TurnManager : MonoBehaviour
 
     public GameObject GetUnitPrefabForType(string unitTypeId)
     {
-        string resolvedUnitTypeId = UnitRegistry.NormalizeTypeId(unitTypeId);
-        if (resolvedUnitTypeId == UnitRegistry.WarriorTypeId)
+        if (!UnitRegistry.TryGetDefinition(unitTypeId, out UnitDefinition definition))
+        {
+            return null;
+        }
+
+        string resolvedPrefabTypeId = UnitRegistry.NormalizeTypeId(definition.PrefabTypeId);
+        if (resolvedPrefabTypeId == UnitRegistry.WarriorTypeId)
         {
             if (unitPrefab != null)
             {
@@ -2243,10 +2248,12 @@ public class TurnManager : MonoBehaviour
             return false;
 
         // 1) Recruitment options
-        int warriorRecruitCost = GetRecruitCost(UnitRegistry.WarriorTypeId);
-        if (playerGold >= warriorRecruitCost)
+        City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        foreach (UnitDefinition unitDefinition in UnitRegistry.AllDefinitions)
         {
-            City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+            if (unitDefinition == null || playerGold < unitDefinition.RecruitCost)
+                continue;
+
             foreach (City city in cities)
             {
                 if (city == null || !city.isPlayerOwned)
@@ -2256,7 +2263,7 @@ public class TurnManager : MonoBehaviour
                 if (city.stationedUnit != null || city.hasRecruitedThisTurn)
                     continue;
 
-                // SpawnWarrior also checks occupancy; match that here.
+                // Spawn logic also checks occupancy; match that here.
                 if (GridUtils.IsTileOccupied(city.transform.position, null))
                     continue;
 
@@ -2644,13 +2651,6 @@ public class TurnManager : MonoBehaviour
                         {
                             return;
                         }
-
-                        Unit defenderUnit = defender.GetComponent<Unit>();
-                        if (defenderUnit != null)
-                        {
-                            defenderUnit.UpdateMoveOutline(isTurnForThisUnit: false);
-                        }
-
                         primaryAICity.stationedUnit = defender;
                     }
                 }

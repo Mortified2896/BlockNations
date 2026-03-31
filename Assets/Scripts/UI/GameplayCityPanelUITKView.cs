@@ -24,6 +24,7 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
     private VisualElement hudRoot;
     private VisualElement cityPanelContainer;
     private Button recruitWarriorButton;
+    private Button recruitScoutButton;
 
     private bool uiReady;
     private bool callbacksBound;
@@ -201,13 +202,14 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
         hudRoot = root.Q<VisualElement>("CityPanelHudRoot") ?? root;
         cityPanelContainer = root.Q<VisualElement>("CityPanelContainer");
         recruitWarriorButton = root.Q<Button>("RecruitWarriorButton");
+        recruitScoutButton = root.Q<Button>("RecruitScoutButton");
 
-        if (cityPanelContainer == null || recruitWarriorButton == null)
+        if (cityPanelContainer == null || recruitWarriorButton == null || recruitScoutButton == null)
         {
             if (!warnedMissingControls)
             {
                 warnedMissingControls = true;
-                Debug.LogWarning("GameplayCityPanelUITKView: CityPanelContainer/RecruitWarriorButton not found in UIDocument source asset.", this);
+                Debug.LogWarning("GameplayCityPanelUITKView: CityPanelContainer/RecruitWarriorButton/RecruitScoutButton not found in UIDocument source asset.", this);
             }
 
             uiReady = false;
@@ -245,6 +247,11 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
         {
             recruitWarriorButton.pickingMode = PickingMode.Position;
         }
+
+        if (recruitScoutButton != null)
+        {
+            recruitScoutButton.pickingMode = PickingMode.Position;
+        }
     }
 
     private void BindButtons()
@@ -257,6 +264,11 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
         if (recruitWarriorButton != null)
         {
             recruitWarriorButton.clicked += HandleRecruitWarriorClicked;
+        }
+
+        if (recruitScoutButton != null)
+        {
+            recruitScoutButton.clicked += HandleRecruitScoutClicked;
         }
 
         callbacksBound = true;
@@ -274,6 +286,11 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
             recruitWarriorButton.clicked -= HandleRecruitWarriorClicked;
         }
 
+        if (recruitScoutButton != null)
+        {
+            recruitScoutButton.clicked -= HandleRecruitScoutClicked;
+        }
+
         callbacksBound = false;
     }
 
@@ -282,6 +299,16 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
         if (cityUIManager != null)
         {
             cityUIManager.OnRecruitWarriorButton();
+        }
+
+        RefreshUiState();
+    }
+
+    private void HandleRecruitScoutClicked()
+    {
+        if (cityUIManager != null)
+        {
+            cityUIManager.OnRecruitScoutButton();
         }
 
         RefreshUiState();
@@ -306,23 +333,44 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
         {
             recruitWarriorButton.text = GetRecruitWarriorLabel();
         }
+
+        if (recruitScoutButton != null)
+        {
+            recruitScoutButton.text = GetRecruitScoutLabel();
+        }
     }
 
     private string GetRecruitWarriorLabel()
     {
-        UnitDefinition warrior = UnitRegistry.Warrior;
         if (cityUIManager != null &&
             !string.IsNullOrWhiteSpace(cityUIManager.RecruitWarriorLabel))
         {
             return cityUIManager.RecruitWarriorLabel;
         }
 
-        if (turnManager != null)
+        return BuildRecruitLabel(UnitRegistry.WarriorTypeId);
+    }
+
+    private string GetRecruitScoutLabel()
+    {
+        if (cityUIManager != null &&
+            !string.IsNullOrWhiteSpace(cityUIManager.RecruitScoutLabel))
         {
-            return $"{warrior.DisplayName}\n({turnManager.GetRecruitCost(warrior.TypeId)} Gold)";
+            return cityUIManager.RecruitScoutLabel;
         }
 
-        return warrior.DisplayName;
+        return BuildRecruitLabel(UnitRegistry.ScoutTypeId);
+    }
+
+    private string BuildRecruitLabel(string unitTypeId)
+    {
+        UnitDefinition unitDefinition = UnitRegistry.GetDefinitionOrDefault(unitTypeId);
+        if (turnManager != null)
+        {
+            return $"{unitDefinition.DisplayName}\n({turnManager.GetRecruitCost(unitDefinition.TypeId)} Gold)";
+        }
+
+        return unitDefinition.DisplayName;
     }
 
     private void ApplySafeArea(bool force)
@@ -376,6 +424,7 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
         hudRoot = null;
         cityPanelContainer = null;
         recruitWarriorButton = null;
+        recruitScoutButton = null;
         uiReady = false;
         lastSafeArea = Rect.zero;
         lastScreenSize = Vector2Int.zero;

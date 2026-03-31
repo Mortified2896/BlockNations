@@ -4,6 +4,7 @@
         <ui:VisualElement name="CityPanelContainer" class="gameplay-city-panel">
             <ui:VisualElement name="CityRecruitRow" class="gameplay-city-recruit-row">
                 <ui:Button name="RecruitWarriorButton" text="Warrior&#10;(0 Gold)" class="gameplay-city-recruit-button" />
+                <ui:Button name="RecruitScoutButton" text="Scout&#10;(0 Gold)" class="gameplay-city-recruit-button" />
             </ui:VisualElement>
         </ui:VisualElement>
     </ui:VisualElement>

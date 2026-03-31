@@ -6,6 +6,7 @@ public sealed class UnitDefinition
         string typeId,
         string displayName,
         int recruitCost,
+        string prefabTypeId,
         int maxHealth,
         int attack,
         int defense,
@@ -19,6 +20,7 @@ public sealed class UnitDefinition
         TypeId = typeId.Trim();
         DisplayName = string.IsNullOrWhiteSpace(displayName) ? TypeId : displayName.Trim();
         RecruitCost = Math.Max(0, recruitCost);
+        PrefabTypeId = string.IsNullOrWhiteSpace(prefabTypeId) ? TypeId : prefabTypeId.Trim();
         MaxHealth = Math.Max(1, maxHealth);
         Attack = Math.Max(0, attack);
         Defense = Math.Max(0, defense);
@@ -28,6 +30,7 @@ public sealed class UnitDefinition
     public string TypeId { get; }
     public string DisplayName { get; }
     public int RecruitCost { get; }
+    public string PrefabTypeId { get; }
     public int MaxHealth { get; }
     public int Attack { get; }
     public int Defense { get; }

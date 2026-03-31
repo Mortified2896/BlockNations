@@ -3,6 +3,7 @@ using System.Collections.Generic;
 public static class UnitRegistry
 {
     public const string WarriorTypeId = "warrior";
+    public const string ScoutTypeId = "scout";
 
     private static readonly Dictionary<string, UnitDefinition> Definitions =
         new Dictionary<string, UnitDefinition>(System.StringComparer.Ordinal)
@@ -11,6 +12,16 @@ public static class UnitRegistry
                 typeId: WarriorTypeId,
                 displayName: "Warrior",
                 recruitCost: 2,
+                prefabTypeId: WarriorTypeId,
+                maxHealth: 1,
+                attack: 1,
+                defense: 0,
+                maxMovesPerTurn: 1),
+            [ScoutTypeId] = new UnitDefinition(
+                typeId: ScoutTypeId,
+                displayName: "Scout",
+                recruitCost: 3,
+                prefabTypeId: WarriorTypeId,
                 maxHealth: 1,
                 attack: 1,
                 defense: 0,
@@ -18,6 +29,9 @@ public static class UnitRegistry
         };
 
     public static UnitDefinition Warrior => Definitions[WarriorTypeId];
+    public static UnitDefinition Scout => Definitions[ScoutTypeId];
+
+    public static System.Collections.Generic.IEnumerable<UnitDefinition> AllDefinitions => Definitions.Values;
 
     public static bool TryGetDefinition(string unitTypeId, out UnitDefinition definition)
     {

@@ -118,14 +118,15 @@ public class CityUIManager : MonoBehaviour
     {
         get
         {
-            UnitDefinition warrior = UnitRegistry.Warrior;
-            TurnManager tm = ResolveTurnManager();
-            if (tm != null)
-            {
-                return $"{warrior.DisplayName}\n({tm.GetRecruitCost(warrior.TypeId)} Gold)";
-            }
+            return BuildRecruitLabel(UnitRegistry.WarriorTypeId);
+        }
+    }
 
-            return warrior.DisplayName;
+    public string RecruitScoutLabel
+    {
+        get
+        {
+            return BuildRecruitLabel(UnitRegistry.ScoutTypeId);
         }
     }
 
@@ -141,6 +142,28 @@ public class CityUIManager : MonoBehaviour
 
     public void OnRecruitWarriorButton()
     {
+        OnRecruitUnitButton(UnitRegistry.WarriorTypeId);
+    }
+
+    public void OnRecruitScoutButton()
+    {
+        OnRecruitUnitButton(UnitRegistry.ScoutTypeId);
+    }
+
+    private string BuildRecruitLabel(string unitTypeId)
+    {
+        UnitDefinition unitDefinition = UnitRegistry.GetDefinitionOrDefault(unitTypeId);
+        TurnManager tm = ResolveTurnManager();
+        if (tm != null)
+        {
+            return $"{unitDefinition.DisplayName}\n({tm.GetRecruitCost(unitDefinition.TypeId)} Gold)";
+        }
+
+        return unitDefinition.DisplayName;
+    }
+
+    private void OnRecruitUnitButton(string unitTypeId)
+    {
         lastRecruitAttemptFrame = Time.frameCount;
         lastRecruitAttemptSucceeded = false;
 
@@ -154,11 +177,12 @@ public class CityUIManager : MonoBehaviour
             bool canControl = tm != null && currentCity != null && tm.CanControlCity(currentCity);
             int goldP1 = tm != null ? tm.playerGold : -1;
             int goldP2 = tm != null ? tm.aiGold : -1;
+            string unitLabel = UnitRegistry.GetDefinitionOrDefault(unitTypeId).DisplayName;
 
             if (PbpDebugSettingsLoader.EnableInputLogs)
             {
                 Debug.Log(
-                    $"[recruit] click city={cityName} cityNull={(currentCity == null)} mode={mode} isPlayerTurn={(tm != null ? tm.isPlayerTurn : false)} pbpSeat={pbpSeat} cityOwned={(currentCity != null ? currentCity.isPlayerOwned : false)} canControl={canControl} goldP1={goldP1} goldP2={goldP2} hasUnit={(currentCity != null && currentCity.stationedUnit != null)} recruitedThisTurn={(currentCity != null && currentCity.hasRecruitedThisTurn)}"
+                    $"[recruit] click unit={unitLabel} city={cityName} cityNull={(currentCity == null)} mode={mode} isPlayerTurn={(tm != null ? tm.isPlayerTurn : false)} pbpSeat={pbpSeat} cityOwned={(currentCity != null ? currentCity.isPlayerOwned : false)} canControl={canControl} goldP1={goldP1} goldP2={goldP2} hasUnit={(currentCity != null && currentCity.stationedUnit != null)} recruitedThisTurn={(currentCity != null && currentCity.hasRecruitedThisTurn)}"
                 );
             }
         }
@@ -166,7 +190,7 @@ public class CityUIManager : MonoBehaviour
 
         if (currentCity == null)
         {
-            Debug.LogWarning($"Tried to recruit a {UnitRegistry.Warrior.DisplayName} but no city is selected.");
+            Debug.LogWarning($"Tried to recruit a {UnitRegistry.GetDefinitionOrDefault(unitTypeId).DisplayName} but no city is selected.");
             if (SoundManager.Instance != null)
             {
                 SoundManager.Instance.PlayInvalid();
@@ -183,9 +207,7 @@ public class CityUIManager : MonoBehaviour
             return;
         }
 
-        // Let the city handle spawning the Warrior
-        currentCity.SpawnWarrior();
-        lastRecruitAttemptSucceeded = currentCity.stationedUnit != null;
+        lastRecruitAttemptSucceeded = currentCity.TrySpawnUnit(unitTypeId);
 
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
         {
