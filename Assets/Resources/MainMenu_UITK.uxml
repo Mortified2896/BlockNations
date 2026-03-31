@@ -81,7 +81,7 @@
                 <ui:VisualElement class="profile-divider" />
 
                 <ui:VisualElement class="profile-field">
-                    <ui:Label text="Typed Display Name" class="profile-field-label" />
+                    <ui:Label text="Please set a recognizable name for playtesting (2–12 chars)" class="profile-field-label profile-typed-display-name-label" />
                     <ui:TextField name="ProfileTypedDisplayNameInput" value="" />
                 </ui:VisualElement>
 

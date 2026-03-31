@@ -671,6 +671,13 @@
     color: rgba(236, 240, 250, 0.88);
 }
 
+#ProfilePanel .profile-typed-display-name-label {
+    width: 100%;
+    font-size: 20px;
+    -unity-text-align: upper-left;
+    white-space: normal;
+}
+
 #ProfilePanel .profile-id-row {
     width: 100%;
     flex-direction: row;
