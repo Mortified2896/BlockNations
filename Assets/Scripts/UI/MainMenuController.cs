@@ -589,7 +589,7 @@ public class MainMenuController : MonoBehaviour
         for (int i = 0; i < activePbpGames.Count; i++)
         {
             SaveManifestService.ManifestGameSummary summary = activePbpGames[i];
-            if (string.Equals(BuildPlayByPostTurnSubtitleForMenu(summary), "Your turn", StringComparison.Ordinal))
+            if (string.Equals(BuildPlayByPostTurnStateForMenu(summary), "Your turn", StringComparison.Ordinal))
             {
                 countMyTurn++;
             }
@@ -669,7 +669,7 @@ public class MainMenuController : MonoBehaviour
             return false;
         }
 
-        string subtitle = BuildPlayByPostTurnSubtitleForMenu(summary);
+        string subtitle = BuildPlayByPostTurnStateForMenu(summary);
         return string.Equals(subtitle, "Waiting for opponent", StringComparison.Ordinal);
     }
 
@@ -1197,6 +1197,23 @@ public class MainMenuController : MonoBehaviour
 
     public string BuildPlayByPostTurnSubtitleForMenu(SaveManifestService.ManifestGameSummary summary)
     {
+        string turnState = BuildPlayByPostTurnStateForMenu(summary);
+        if (string.Equals(turnState, "Game Over", StringComparison.Ordinal))
+        {
+            return turnState;
+        }
+
+        string opponentTypedDisplayName = TryGetOpponentTypedDisplayNameForMenu(summary.gameId, out string foundOpponentTypedDisplayName)
+            ? foundOpponentTypedDisplayName
+            : "Opponent";
+
+        return string.Equals(turnState, "Your turn", StringComparison.Ordinal)
+            ? $"Your turn against {opponentTypedDisplayName}"
+            : $"Waiting for {opponentTypedDisplayName}";
+    }
+
+    private string BuildPlayByPostTurnStateForMenu(SaveManifestService.ManifestGameSummary summary)
+    {
         string fallback = BuildPlayByPostTurnSubtitle(summary);
         if (string.Equals(fallback, "Game Over", StringComparison.Ordinal))
         {
@@ -1256,7 +1273,7 @@ public class MainMenuController : MonoBehaviour
 
     public string BuildPlayByPostDetailsSubtitleForMenu(SaveManifestService.ManifestGameSummary summary)
     {
-        string subtitle = BuildPlayByPostTurnSubtitleForMenu(summary);
+        string subtitle = BuildPlayByPostTurnStateForMenu(summary);
         if (!TryGetOpponentTypedDisplayNameForMenu(summary.gameId, out string opponentTypedDisplayName))
         {
             return subtitle;
