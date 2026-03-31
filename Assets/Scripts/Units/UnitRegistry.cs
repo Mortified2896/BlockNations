@@ -24,7 +24,7 @@ public static class UnitRegistry
                 displayName: "Scout",
                 recruitCost: 3,
                 visionRange: 2,
-                prefabTypeId: WarriorTypeId,
+                prefabTypeId: ScoutTypeId,
                 maxHealth: 1,
                 attack: 0,
                 defense: 0,
