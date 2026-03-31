@@ -1212,7 +1212,7 @@ public class MainMenuController : MonoBehaviour
             : $"Waiting for {opponentTypedDisplayName}";
     }
 
-    private string BuildPlayByPostTurnStateForMenu(SaveManifestService.ManifestGameSummary summary)
+    public string BuildPlayByPostTurnStateForMenu(SaveManifestService.ManifestGameSummary summary)
     {
         string fallback = BuildPlayByPostTurnSubtitle(summary);
         if (string.Equals(fallback, "Game Over", StringComparison.Ordinal))

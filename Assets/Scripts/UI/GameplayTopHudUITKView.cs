@@ -225,8 +225,14 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             _ => PbpTopHudStatusProvider.ConnectivityState.Unknown
         };
 
+        string opponentDisplayName = turnManager.GetCurrentPlayByPostOpponentTypedDisplayName();
+        if (string.IsNullOrWhiteSpace(opponentDisplayName))
+        {
+            opponentDisplayName = "Opponent";
+        }
+
         PbpTopHudStatusProvider.StatusResult pbpStatus =
-            PbpTopHudStatusProvider.Build(turnManager, connectivityState);
+            PbpTopHudStatusProvider.Build(turnManager, connectivityState, opponentDisplayName);
 
         statusLabel.text = pbpStatus.Visible ? pbpStatus.Message : string.Empty;
         statusLabel.style.display = pbpStatus.Visible ? DisplayStyle.Flex : DisplayStyle.None;

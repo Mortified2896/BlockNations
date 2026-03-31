@@ -379,6 +379,26 @@ public class TurnManager : MonoBehaviour
         return string.IsNullOrEmpty(normalized) ? null : normalized;
     }
 
+    public string GetCurrentPlayByPostOpponentTypedDisplayName()
+    {
+        if (currentMode != GameMode.PlayByPost ||
+            string.IsNullOrWhiteSpace(currentGameId) ||
+            !string.Equals(typedDisplayMetadataGameId, currentGameId, System.StringComparison.Ordinal))
+        {
+            return string.Empty;
+        }
+
+        if (!TryGetLocalSeatIndexForPbp(currentGameId, out int localSeat) ||
+            (localSeat != 0 && localSeat != 1))
+        {
+            return string.Empty;
+        }
+
+        return localSeat == 0
+            ? (knownPlayerTwoTypedDisplayName ?? string.Empty)
+            : (knownPlayerOneTypedDisplayName ?? string.Empty);
+    }
+
     private bool EnsurePlayByPostControlReadiness()
     {
         if (currentMode != GameMode.PlayByPost)

@@ -1118,7 +1118,12 @@ public class MainMenuUITKView : MonoBehaviour
         {
             SaveManifestService.ManifestGameSummary summary = games[i];
             string subtitle = BuildActiveGameSubtitle(summary);
-            if (IsYourTurnSubtitle(subtitle))
+            bool isYourTurn = mainMenuController != null &&
+                              string.Equals(
+                                  mainMenuController.BuildPlayByPostTurnStateForMenu(summary),
+                                  "Your turn",
+                                  System.StringComparison.Ordinal);
+            if (isYourTurn)
             {
                 yourTurnGames.Add(summary);
                 yourTurnSubtitles.Add(subtitle);
@@ -1161,11 +1166,6 @@ public class MainMenuUITKView : MonoBehaviour
         return mainMenuController != null
             ? mainMenuController.BuildPlayByPostTurnSubtitleForMenu(summary)
             : MainMenuController.BuildPlayByPostTurnSubtitle(summary);
-    }
-
-    private static bool IsYourTurnSubtitle(string subtitle)
-    {
-        return string.Equals(subtitle, "Your turn", System.StringComparison.Ordinal);
     }
 
     private void AddSectionHeader(string text)
