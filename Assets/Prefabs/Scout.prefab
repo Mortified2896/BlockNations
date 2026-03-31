@@ -39,6 +39,7 @@ Transform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!212 &4738797993818610448
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -84,6 +85,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 15
+  m_MaskInteraction: 0
   m_Sprite: {fileID: 21300000, guid: a7a192fb5638419f85e688d75a9840cd, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -93,7 +95,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!114 &3386971002771052272
 MonoBehaviour:
@@ -168,16 +169,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8aa89e99e1b8fbf47bd4d428363ac2f2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Unit
+  unitTypeId: warrior
   isPlayerOwned: 1
   maxMovesPerTurn: 1
   movesUsedThisTurn: 0
-  maxAttacksPerTurn: 0
+  maxAttacksPerTurn: 1
   attacksUsedThisTurn: 0
   moveOutline: {fileID: 1604908280818827660}
   currentCity: {fileID: 0}
   maxHealth: 1
   currentHealth: 1
-  attack: 0
+  attack: 1
   defense: 0
 --- !u!114 &-1158699919067656540
 MonoBehaviour:
@@ -225,6 +227,7 @@ Transform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!212 &1604908280818827660
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -270,6 +273,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 14
+  m_MaskInteraction: 0
   m_Sprite: {fileID: 10913, guid: 0000000000000000f000000000000000, type: 0}
   m_Color: {r: 0.86415094, g: 0.7444677, b: 0.11576363, a: 1}
   m_FlipX: 0
@@ -279,5 +283,4 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0

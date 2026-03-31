@@ -83,6 +83,7 @@ public class TurnManager : MonoBehaviour
 
     [Header("Prefabs")]
     public GameObject unitPrefab; // used to respawn units on load
+    public GameObject scoutPrefab;
 
     [Header("Audio")]
     public bool playMusicOnStart = true;
@@ -95,6 +96,10 @@ public class TurnManager : MonoBehaviour
 
     [Header("AI Debug")]
     public bool disableAI = false;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    [Tooltip("Debug only: when enabled in VsAI, both sides are driven by the existing AI turn flow.")]
+    public bool enableAIVsAIDebugMode = false;
+#endif
 
     [Header("Quality of Life")]
     [Tooltip("Vs AI only: if the player has no legal moves or recruit actions, automatically end the turn.")]
@@ -117,6 +122,7 @@ public class TurnManager : MonoBehaviour
     private bool isPlayByPostFetchInProgress = false;
     private bool playByPostLastFetchWasNoTurn = false;
     private float playByPostLastNoTurnLogTime = -999f;
+    private Coroutine aiVsAiDebugRoutine;
 #if DEVELOPMENT_BUILD
     private int lastSubmittedTransportSeqForTelemetry = -1;
     private string lastSubmittedGameIdForTelemetry;
@@ -257,6 +263,10 @@ public class TurnManager : MonoBehaviour
 
     public bool IsHumanTurn()
     {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (IsAIVsAIDebugModeActive())
+            return false;
+#endif
         if (currentMode == GameMode.PlayByPost && isPlayByPostWaitingForExport)
             return false;
 
@@ -274,6 +284,10 @@ public class TurnManager : MonoBehaviour
         if (gameOver)
             return false;
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (IsAIVsAIDebugModeActive())
+            return false;
+#endif
         if (currentMode == GameMode.PlayByPost && isPlayByPostWaitingForExport)
             return false;
 
@@ -317,6 +331,13 @@ public class TurnManager : MonoBehaviour
                 {
                     return city.warriorPrefab;
                 }
+            }
+        }
+        else if (resolvedPrefabTypeId == UnitRegistry.ScoutTypeId)
+        {
+            if (scoutPrefab != null)
+            {
+                return scoutPrefab;
             }
         }
 
@@ -639,6 +660,10 @@ public class TurnManager : MonoBehaviour
 
     public bool IsCurrentSideOwner(bool isPlayerOwned)
     {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (IsAIVsAIDebugModeActive())
+            return false;
+#endif
         if (currentMode == GameMode.PlayByPost)
         {
             bool me = GetLocalIsPlayerOneForGame(currentGameId, out bool hasSeat, out _);
@@ -1827,64 +1852,19 @@ public class TurnManager : MonoBehaviour
         // Simulate thinking time
         yield return new WaitForSeconds(aiTurnDelay);
 
-        // Collect AI income at the start of its turn
-        CollectAIGold();
-
-        // AI actions: recruit and move units
-        ResetRecruitmentForAICities();
-        if (!disableAI)
-        {
-            RunAI();
-        }
+        RunAITurnForSide(false);
 
         if (gameOver)
             yield break;
 
         // Back to player
         turnNumber++;
-        BeginPlayerTurn();
+        BeginSideTurn(true, playTurnStartSound: true);
     }
 
     void BeginPlayerTurn()
     {
-        if (gameOver)
-            return;
-
-        autoEndTurnDisabledLoggedThisTurn = false;
-        isPlayerTurn = true;
-
-        if (SoundManager.Instance != null)
-        {
-            SoundManager.Instance.PlayTurnStart();
-        }
-
-        // Allow cities and units to act again
-        ResetRecruitmentForPlayerCities();
-        if (UnitSelectionManager.Instance != null)
-        {
-            UnitSelectionManager.Instance.ResetMovementForSide(true, IsCurrentSideOwner(true));
-            UnitSelectionManager.Instance.ClearSelection();
-        }
-
-        if (TileHoverManager.Instance != null)
-        {
-            TileHoverManager.Instance.ClearSelection();
-        }
-
-        if (CityUIManager.Instance != null)
-        {
-            CityUIManager.Instance.ClosePanel();
-        }
-
-        CollectPlayerIncome();
-        RecalculatePlayerVisibility();
-
-        ScheduleAutoEndTurnCheck();
-
-        if (currentMode == GameMode.VsAI)
-        {
-            AutoSaveIfEnabled();
-        }
+        BeginSideTurn(true, playTurnStartSound: true);
     }
 
     System.Collections.IEnumerator StartupSequence()
