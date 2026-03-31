@@ -10,7 +10,7 @@
 
 .gameplay-city-panel {
     width: 100%;
-    min-height: 220px;
+    min-height: 180px;
     padding-top: 10px;
     padding-right: 12px;
     padding-bottom: 14px;
@@ -27,59 +27,24 @@
     row-gap: 8px;
 }
 
-.gameplay-city-header-row {
-    flex-direction: row;
-    align-items: flex-start;
-    justify-content: space-between;
-    column-gap: 18px;
-    min-height: 84px;
-}
-
-.gameplay-city-info-column {
-    flex-grow: 1;
-    flex-shrink: 1;
-    flex-direction: column;
-    justify-content: center;
-    align-items: flex-start;
-    row-gap: 2px;
-    min-width: 0;
-}
-
-.gameplay-city-name {
-    color: rgb(255, 255, 255);
-    font-size: 46px;
-    -unity-font-style: bold;
-    -unity-text-align: middle-left;
-    flex-shrink: 1;
-    min-width: 0;
-    height: 50px;
-    white-space: nowrap;
-    overflow: hidden;
-}
-
-.gameplay-city-owner {
-    color: rgba(255, 255, 255, 0.88);
-    font-size: 30px;
-    -unity-font-style: normal;
-    -unity-text-align: middle-left;
-    min-height: 32px;
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-}
-
 .gameplay-city-recruit-row {
     flex-direction: row;
-    align-items: center;
+    align-items: stretch;
     justify-content: center;
-    min-height: 92px;
+    flex-grow: 1;
+    min-height: 140px;
     width: 100%;
+    padding-top: 6px;
+    padding-bottom: 6px;
 }
 
 .gameplay-city-recruit-button {
-    min-width: 220px;
-    width: 220px;
-    height: 88px;
+    min-width: 240px;
+    width: 100%;
+    max-width: 360px;
+    min-height: 88px;
+    flex-grow: 1;
+    align-self: stretch;
     color: rgb(255, 255, 255);
     font-size: 30px;
     background-color: rgba(0, 0, 0, 0.62);
@@ -99,28 +64,4 @@
     white-space: normal;
     flex-shrink: 0;
     overflow: hidden;
-}
-
-.gameplay-city-close-button {
-    width: 112px;
-    height: 72px;
-    color: rgb(255, 255, 255);
-    font-size: 34px;
-    background-color: rgba(0, 0, 0, 0.62);
-    border-top-width: 2px;
-    border-right-width: 2px;
-    border-bottom-width: 2px;
-    border-left-width: 2px;
-    border-top-color: rgba(255, 255, 255, 0.52);
-    border-right-color: rgba(255, 255, 255, 0.52);
-    border-bottom-color: rgba(255, 255, 255, 0.52);
-    border-left-color: rgba(255, 255, 255, 0.52);
-    border-top-left-radius: 14px;
-    border-top-right-radius: 14px;
-    border-bottom-right-radius: 14px;
-    border-bottom-left-radius: 14px;
-    flex-shrink: 0;
-    align-self: flex-start;
-    margin-top: 0;
-    margin-right: 0;
 }

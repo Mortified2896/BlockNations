@@ -23,10 +23,7 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
     private VisualElement root;
     private VisualElement hudRoot;
     private VisualElement cityPanelContainer;
-    private Label cityNameLabel;
-    private Label ownerLabel;
     private Button recruitWarriorButton;
-    private Button closeButton;
 
     private bool uiReady;
     private bool callbacksBound;
@@ -203,17 +200,14 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
         root = currentRoot;
         hudRoot = root.Q<VisualElement>("CityPanelHudRoot") ?? root;
         cityPanelContainer = root.Q<VisualElement>("CityPanelContainer");
-        cityNameLabel = root.Q<Label>("CityNameLabel");
-        ownerLabel = root.Q<Label>("CityOwnerLabel");
         recruitWarriorButton = root.Q<Button>("RecruitWarriorButton");
-        closeButton = root.Q<Button>("CityCloseButton");
 
-        if (cityPanelContainer == null || cityNameLabel == null || recruitWarriorButton == null)
+        if (cityPanelContainer == null || recruitWarriorButton == null)
         {
             if (!warnedMissingControls)
             {
                 warnedMissingControls = true;
-                Debug.LogWarning("GameplayCityPanelUITKView: CityPanelContainer/CityNameLabel/RecruitWarriorButton not found in UIDocument source asset.", this);
+                Debug.LogWarning("GameplayCityPanelUITKView: CityPanelContainer/RecruitWarriorButton not found in UIDocument source asset.", this);
             }
 
             uiReady = false;
@@ -251,11 +245,6 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
         {
             recruitWarriorButton.pickingMode = PickingMode.Position;
         }
-
-        if (closeButton != null)
-        {
-            closeButton.pickingMode = PickingMode.Position;
-        }
     }
 
     private void BindButtons()
@@ -268,11 +257,6 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
         if (recruitWarriorButton != null)
         {
             recruitWarriorButton.clicked += HandleRecruitWarriorClicked;
-        }
-
-        if (closeButton != null)
-        {
-            closeButton.clicked += HandleCloseClicked;
         }
 
         callbacksBound = true;
@@ -290,11 +274,6 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
             recruitWarriorButton.clicked -= HandleRecruitWarriorClicked;
         }
 
-        if (closeButton != null)
-        {
-            closeButton.clicked -= HandleCloseClicked;
-        }
-
         callbacksBound = false;
     }
 
@@ -306,14 +285,6 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
         }
 
         RefreshUiState();
-    }
-
-    private void HandleCloseClicked()
-    {
-        if (cityUIManager != null)
-        {
-            cityUIManager.ClosePanel();
-        }
     }
 
     private void RefreshUiState()
@@ -331,35 +302,10 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
             return;
         }
 
-        if (cityNameLabel != null)
-        {
-            cityNameLabel.text = GetCityName();
-        }
-
-        if (ownerLabel != null)
-        {
-            string ownerText = cityUIManager != null
-                ? cityUIManager.CurrentOwnerText
-                : string.Empty;
-            ownerLabel.text = ownerText;
-            ownerLabel.style.display = string.IsNullOrWhiteSpace(ownerText) ? DisplayStyle.None : DisplayStyle.Flex;
-        }
-
         if (recruitWarriorButton != null)
         {
             recruitWarriorButton.text = GetRecruitWarriorLabel();
         }
-    }
-
-    private string GetCityName()
-    {
-        if (cityUIManager != null &&
-            !string.IsNullOrWhiteSpace(cityUIManager.CurrentCityName))
-        {
-            return cityUIManager.CurrentCityName;
-        }
-
-        return "City";
     }
 
     private string GetRecruitWarriorLabel()
@@ -428,10 +374,7 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
         root = null;
         hudRoot = null;
         cityPanelContainer = null;
-        cityNameLabel = null;
-        ownerLabel = null;
         recruitWarriorButton = null;
-        closeButton = null;
         uiReady = false;
         lastSafeArea = Rect.zero;
         lastScreenSize = Vector2Int.zero;
