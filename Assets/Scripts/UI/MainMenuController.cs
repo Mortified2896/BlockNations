@@ -450,12 +450,6 @@ public class MainMenuController : MonoBehaviour
         }
     }
 
-    public void JoinPlayByPostFromInput()
-    {
-        // Legacy/non-UITK entrypoint retained for older wiring paths.
-        TryJoinPlayByPostInternal(GUIUtility.systemCopyBuffer, out _);
-    }
-
     public bool TryJoinPlayByPost(string rawGameId)
     {
         return TryJoinPlayByPostInternal(rawGameId, out _);
@@ -753,7 +747,7 @@ public class MainMenuController : MonoBehaviour
 
     public void Multiplayer_JoinGame()
     {
-        JoinPlayByPostFromInput();
+        TryJoinPlayByPostInternal(GUIUtility.systemCopyBuffer, out _);
     }
 
     public bool ShouldShowIosDebugNotificationTrigger()
