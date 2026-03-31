@@ -950,6 +950,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HandleProfileBackClicked()
     {
+        CommitOrRestoreTypedDisplayNameInput();
         PlayerPrefs.Save();
         ShowMainPanel();
     }
@@ -963,7 +964,8 @@ public class MainMenuUITKView : MonoBehaviour
             profileTypedDisplayNameInput.SetValueWithoutNotify(normalized);
         }
 
-        if (string.Equals(profileData.TypedDisplayName, normalized, System.StringComparison.Ordinal))
+        if (!LocalPlayerProfileStore.IsValidTypedDisplayName(normalized) ||
+            string.Equals(profileData.TypedDisplayName, normalized, System.StringComparison.Ordinal))
         {
             return;
         }
@@ -974,7 +976,38 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HandleProfileTypedDisplayNameFocusOut(FocusOutEvent evt)
     {
+        CommitOrRestoreTypedDisplayNameInput();
         PlayerPrefs.Save();
+    }
+
+    private void CommitOrRestoreTypedDisplayNameInput()
+    {
+        if (profileTypedDisplayNameInput == null)
+        {
+            return;
+        }
+
+        string normalized = LocalPlayerProfileStore.NormalizeTypedDisplayName(profileTypedDisplayNameInput.value);
+        if (LocalPlayerProfileStore.IsValidTypedDisplayName(normalized))
+        {
+            if (!string.Equals(profileData.TypedDisplayName, normalized, System.StringComparison.Ordinal))
+            {
+                profileData.TypedDisplayName = LocalPlayerProfileStore.SetTypedDisplayName(normalized);
+                ClearProfileStatus();
+            }
+
+            profileTypedDisplayNameInput.SetValueWithoutNotify(profileData.TypedDisplayName ?? string.Empty);
+            return;
+        }
+
+        if (!LocalPlayerProfileStore.IsValidTypedDisplayName(profileData.TypedDisplayName))
+        {
+            profileData.TypedDisplayName = LocalPlayerProfileStore.SetTypedDisplayName(
+                LocalPlayerProfileStore.GenerateValidTypedDisplayNameFallback());
+            ClearProfileStatus();
+        }
+
+        profileTypedDisplayNameInput.SetValueWithoutNotify(profileData.TypedDisplayName ?? string.Empty);
     }
 
     private void HandleMultiplayerBackClicked()

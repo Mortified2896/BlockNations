@@ -43,6 +43,11 @@ public static class LocalPlayerProfileStore
 
         string typedDisplayName = NormalizeTypedDisplayName(PlayerPrefs.GetString(TypedDisplayNameKey, string.Empty));
         string storedTypedDisplayName = PlayerPrefs.GetString(TypedDisplayNameKey, string.Empty);
+        if (!IsValidTypedDisplayName(typedDisplayName))
+        {
+            typedDisplayName = GenerateValidTypedDisplayNameFallback();
+        }
+
         if (!string.Equals(storedTypedDisplayName, typedDisplayName, StringComparison.Ordinal))
         {
             PlayerPrefs.SetString(TypedDisplayNameKey, typedDisplayName);
@@ -77,6 +82,11 @@ public static class LocalPlayerProfileStore
     public static string SetTypedDisplayName(string typedDisplayName)
     {
         string normalized = NormalizeTypedDisplayName(typedDisplayName);
+        if (!IsValidTypedDisplayName(normalized))
+        {
+            return string.Empty;
+        }
+
         PlayerPrefs.SetString(TypedDisplayNameKey, normalized);
         return normalized;
     }
@@ -91,6 +101,26 @@ public static class LocalPlayerProfileStore
         string trimmed = typedDisplayName.Trim();
         int maxLength = ProfileUsernameGenerator.MaxUsernameLength;
         return trimmed.Length <= maxLength ? trimmed : trimmed.Substring(0, maxLength);
+    }
+
+    public static bool IsValidTypedDisplayName(string typedDisplayName)
+    {
+        string normalized = NormalizeTypedDisplayName(typedDisplayName);
+        return normalized.Length >= 2 && normalized.Length <= ProfileUsernameGenerator.MaxUsernameLength;
+    }
+
+    public static string GenerateValidTypedDisplayNameFallback()
+    {
+        for (int attempt = 0; attempt < 8; attempt++)
+        {
+            string generated = NormalizeTypedDisplayName(ProfileUsernameGenerator.Generate());
+            if (IsValidTypedDisplayName(generated))
+            {
+                return generated;
+            }
+        }
+
+        return "PlayerTwo";
     }
 
     private static bool IsValidUsername(string username)
