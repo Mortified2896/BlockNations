@@ -12,17 +12,23 @@ public class Unit : MonoBehaviour
     public int maxMovesPerTurn = 1;
     [HideInInspector] public int movesUsedThisTurn = 0;
     public bool hasMovedThisTurn => movesUsedThisTurn >= maxMovesPerTurn;
-    [HideInInspector] public bool hasAttackedThisTurn = false;
+    public int maxAttacksPerTurn = 1;
+    [HideInInspector] public int attacksUsedThisTurn = 0;
 
     public bool CanMoveThisTurn()
     {
         return movesUsedThisTurn < maxMovesPerTurn;
     }
 
+    public bool CanAttackThisTurn()
+    {
+        return attacksUsedThisTurn < maxAttacksPerTurn;
+    }
+
     public void ResetMovementForTurn()
     {
         movesUsedThisTurn = 0;
-        hasAttackedThisTurn = false;
+        attacksUsedThisTurn = 0;
     }
 
     public void RegisterMove()
@@ -80,6 +86,7 @@ public class Unit : MonoBehaviour
         resolvedDefinition = definition;
         unitTypeId = definition.TypeId;
         maxMovesPerTurn = definition.MaxMovesPerTurn;
+        maxAttacksPerTurn = definition.MaxAttacksPerTurn;
         maxHealth = definition.MaxHealth;
         attack = definition.Attack;
         defense = definition.Defense;
@@ -94,7 +101,16 @@ public class Unit : MonoBehaviour
         }
 
         movesUsedThisTurn = Mathf.Clamp(movesUsedThisTurn, 0, maxMovesPerTurn);
+        attacksUsedThisTurn = Mathf.Clamp(attacksUsedThisTurn, 0, maxAttacksPerTurn);
         return true;
+    }
+
+    public void RegisterAttack()
+    {
+        if (attacksUsedThisTurn < maxAttacksPerTurn)
+        {
+            attacksUsedThisTurn++;
+        }
     }
 
     public bool Attack(Unit target)

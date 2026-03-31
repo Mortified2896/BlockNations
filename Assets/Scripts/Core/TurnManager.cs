@@ -200,6 +200,7 @@ public class TurnManager : MonoBehaviour
         public float z;
         public int currentHealth;
         public int movesUsedThisTurn;
+        public int attacksUsedThisTurn;
         public bool hasAttackedThisTurn;
     }
 
@@ -2293,7 +2294,7 @@ public class TurnManager : MonoBehaviour
             return false;
 
         bool canMove = unit.CanMoveThisTurn();
-        bool canAttack = !unit.hasAttackedThisTurn;
+        bool canAttack = unit.CanAttackThisTurn();
 
         if (!canMove && !canAttack)
             return false;
@@ -2915,7 +2916,7 @@ public class TurnManager : MonoBehaviour
             }
 
             // Enemy: attack
-            unit.hasAttackedThisTurn = true;
+            unit.RegisterAttack();
             unit.RegisterMove();
             bool killed = unit.Attack(targetUnit);
 
@@ -2943,7 +2944,7 @@ public class TurnManager : MonoBehaviour
 
         // After moving, if the AI unit has not attacked yet,
         // look for an adjacent enemy to attack (move-then-attack).
-        if (!unit.hasAttackedThisTurn)
+        if (unit.CanAttackThisTurn())
         {
             float maxDist = 1.5f * tileSize;
             float minDist = 0.1f * tileSize;
@@ -2966,7 +2967,7 @@ public class TurnManager : MonoBehaviour
 
             if (bestEnemy != null)
             {
-                unit.hasAttackedThisTurn = true;
+                unit.RegisterAttack();
                 bool killed = unit.Attack(bestEnemy);
 
                 if (killed)
@@ -3531,7 +3532,8 @@ public class TurnManager : MonoBehaviour
                 z = pos.z,
                 currentHealth = unit.currentHealth,
                 movesUsedThisTurn = unit.movesUsedThisTurn,
-                hasAttackedThisTurn = unit.hasAttackedThisTurn
+                attacksUsedThisTurn = unit.attacksUsedThisTurn,
+                hasAttackedThisTurn = unit.attacksUsedThisTurn > 0
             });
         }
 
@@ -3974,7 +3976,10 @@ private void PBpDebugSyncNow_Context()
                     unit.ApplyDefinition(resolvedUnitTypeId, preserveCurrentHealth: false);
                     unit.currentHealth = Mathf.Clamp(u.currentHealth, 1, unit.maxHealth);
                     unit.movesUsedThisTurn = Mathf.Clamp(u.movesUsedThisTurn, 0, unit.maxMovesPerTurn);
-                    unit.hasAttackedThisTurn = u.hasAttackedThisTurn;
+                    int loadedAttacksUsedThisTurn = u.attacksUsedThisTurn > 0
+                        ? u.attacksUsedThisTurn
+                        : (u.hasAttackedThisTurn ? 1 : 0);
+                    unit.attacksUsedThisTurn = Mathf.Clamp(loadedAttacksUsedThisTurn, 0, unit.maxAttacksPerTurn);
                     bool isCurrentSideUnit = true;
                     if (currentMode == GameMode.PlayByPost)
                     {
@@ -4312,6 +4317,7 @@ private void PBpDebugSyncNow_Context()
             if (unit.isPlayerOwned == nextIsPlayer)
             {
                 unit.movesUsedThisTurn = 0;
+                unit.attacksUsedThisTurn = 0;
                 unit.hasAttackedThisTurn = false;
             }
         }

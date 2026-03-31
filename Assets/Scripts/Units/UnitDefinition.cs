@@ -11,7 +11,8 @@ public sealed class UnitDefinition
         int maxHealth,
         int attack,
         int defense,
-        int maxMovesPerTurn)
+        int maxMovesPerTurn,
+        int maxAttacksPerTurn)
     {
         if (string.IsNullOrWhiteSpace(typeId))
         {
@@ -27,6 +28,7 @@ public sealed class UnitDefinition
         Attack = Math.Max(0, attack);
         Defense = Math.Max(0, defense);
         MaxMovesPerTurn = Math.Max(1, maxMovesPerTurn);
+        MaxAttacksPerTurn = Math.Max(0, maxAttacksPerTurn);
     }
 
     public string TypeId { get; }
@@ -38,4 +40,5 @@ public sealed class UnitDefinition
     public int Attack { get; }
     public int Defense { get; }
     public int MaxMovesPerTurn { get; }
+    public int MaxAttacksPerTurn { get; }
 }

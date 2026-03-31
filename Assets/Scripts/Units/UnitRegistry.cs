@@ -17,7 +17,8 @@ public static class UnitRegistry
                 maxHealth: 1,
                 attack: 1,
                 defense: 0,
-                maxMovesPerTurn: 1),
+                maxMovesPerTurn: 1,
+                maxAttacksPerTurn: 1),
             [ScoutTypeId] = new UnitDefinition(
                 typeId: ScoutTypeId,
                 displayName: "Scout",
@@ -25,9 +26,10 @@ public static class UnitRegistry
                 visionRange: 2,
                 prefabTypeId: WarriorTypeId,
                 maxHealth: 1,
-                attack: 1,
+                attack: 0,
                 defense: 0,
-                maxMovesPerTurn: 1)
+                maxMovesPerTurn: 1,
+                maxAttacksPerTurn: 0)
         };
 
     public static UnitDefinition Warrior => Definitions[WarriorTypeId];
