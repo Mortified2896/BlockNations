@@ -877,6 +877,8 @@ public class MainMenuController : MonoBehaviour
         public bool isPlayerTurn;
         public int turnNumber;
         public bool gameOver;
+        public string playerOneTypedDisplayName = string.Empty;
+        public string playerTwoTypedDisplayName = string.Empty;
     }
 
     public void ImportFromPastedJson()
@@ -1252,6 +1254,17 @@ public class MainMenuController : MonoBehaviour
         return overlayText;
     }
 
+    public string BuildPlayByPostDetailsSubtitleForMenu(SaveManifestService.ManifestGameSummary summary)
+    {
+        string subtitle = BuildPlayByPostTurnSubtitleForMenu(summary);
+        if (!TryGetOpponentTypedDisplayNameForMenu(summary.gameId, out string opponentTypedDisplayName))
+        {
+            return subtitle;
+        }
+
+        return $"{subtitle}\nOpponent: {opponentTypedDisplayName}";
+    }
+
     private static bool TryGetLocalPbpSnapshotGameOver(string gameId, out bool gameOver)
     {
         gameOver = false;
@@ -1262,6 +1275,25 @@ public class MainMenuController : MonoBehaviour
 
         gameOver = header.gameOver;
         return true;
+    }
+
+    private static bool TryGetOpponentTypedDisplayNameForMenu(string gameId, out string opponentTypedDisplayName)
+    {
+        opponentTypedDisplayName = null;
+        if (!TryReadLocalPbpSnapshotHeader(gameId, out MinimalSaveHeader header))
+        {
+            return false;
+        }
+
+        if (!LocalPlayerSeatStore.TryGetSeat(gameId, out int localSeat) || (localSeat != 0 && localSeat != 1))
+        {
+            return false;
+        }
+
+        string playerOneTypedDisplayName = LocalPlayerProfileStore.NormalizeTypedDisplayName(header.playerOneTypedDisplayName);
+        string playerTwoTypedDisplayName = LocalPlayerProfileStore.NormalizeTypedDisplayName(header.playerTwoTypedDisplayName);
+        opponentTypedDisplayName = localSeat == 0 ? playerTwoTypedDisplayName : playerOneTypedDisplayName;
+        return !string.IsNullOrWhiteSpace(opponentTypedDisplayName);
     }
 
     private static bool TryReadLocalPbpSnapshotHeader(string gameId, out MinimalSaveHeader header)

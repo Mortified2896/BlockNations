@@ -68,6 +68,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Button profileRegenerateButton;
     private Button profileCopyPlayerIdButton;
     private Button profileBackButton;
+    private TextField profileTypedDisplayNameInput;
     private VisualElement multiplayerBadge;
 
     private bool subscribedToMenuEvents;
@@ -304,6 +305,7 @@ public class MainMenuUITKView : MonoBehaviour
         profileUsernameValueLabel = root.Q<Label>("ProfileUsernameValueLabel");
         profilePlayerIdValueLabel = root.Q<Label>("ProfilePlayerIdValueLabel");
         profileStatusLabel = root.Q<Label>("ProfileStatusLabel");
+        profileTypedDisplayNameInput = root.Q<TextField>("ProfileTypedDisplayNameInput");
         createSuccessGameCodeLabel = root.Q<Label>("CreateSuccessGameCodeLabel");
 
         continueButton = root.Q<Button>("ContinueButton");
@@ -329,6 +331,12 @@ public class MainMenuUITKView : MonoBehaviour
         profileRegenerateButton = root.Q<Button>("ProfileRegenerateButton");
         profileCopyPlayerIdButton = root.Q<Button>("ProfileCopyPlayerIdButton");
         profileBackButton = root.Q<Button>("ProfileBackButton");
+
+        if (profileTypedDisplayNameInput != null)
+        {
+            profileTypedDisplayNameInput.maxLength = ProfileUsernameGenerator.MaxUsernameLength;
+            profileTypedDisplayNameInput.isDelayed = false;
+        }
     }
 
     private void ConfigureActiveGamesList()
@@ -668,6 +676,11 @@ public class MainMenuUITKView : MonoBehaviour
         {
             profileBackButton.clicked += HandleProfileBackClicked;
         }
+
+        if (profileTypedDisplayNameInput != null)
+        {
+            profileTypedDisplayNameInput.RegisterValueChangedCallback(HandleProfileTypedDisplayNameChanged);
+        }
     }
 
     private void UnbindButtons()
@@ -775,6 +788,11 @@ public class MainMenuUITKView : MonoBehaviour
         if (profileBackButton != null)
         {
             profileBackButton.clicked -= HandleProfileBackClicked;
+        }
+
+        if (profileTypedDisplayNameInput != null)
+        {
+            profileTypedDisplayNameInput.UnregisterValueChangedCallback(HandleProfileTypedDisplayNameChanged);
         }
     }
 
@@ -931,6 +949,24 @@ public class MainMenuUITKView : MonoBehaviour
     private void HandleProfileBackClicked()
     {
         ShowMainPanel();
+    }
+
+    private void HandleProfileTypedDisplayNameChanged(ChangeEvent<string> evt)
+    {
+        string normalized = LocalPlayerProfileStore.NormalizeTypedDisplayName(evt.newValue);
+        if (profileTypedDisplayNameInput != null &&
+            !string.Equals(profileTypedDisplayNameInput.value, normalized, System.StringComparison.Ordinal))
+        {
+            profileTypedDisplayNameInput.SetValueWithoutNotify(normalized);
+        }
+
+        if (string.Equals(profileData.TypedDisplayName, normalized, System.StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        profileData.TypedDisplayName = LocalPlayerProfileStore.SetTypedDisplayName(normalized);
+        ClearProfileStatus();
     }
 
     private void HandleMultiplayerBackClicked()
@@ -1155,7 +1191,7 @@ public class MainMenuUITKView : MonoBehaviour
         if (detailsSubtitleLabel != null)
         {
             detailsSubtitleLabel.text = mainMenuController != null
-                ? mainMenuController.BuildPlayByPostTurnSubtitleForMenu(summary)
+                ? mainMenuController.BuildPlayByPostDetailsSubtitleForMenu(summary)
                 : MainMenuController.BuildPlayByPostTurnSubtitle(summary);
         }
 
@@ -1468,6 +1504,11 @@ public class MainMenuUITKView : MonoBehaviour
         {
             profilePlayerIdValueLabel.text = BuildVisiblePlayerId(profileData.PlayerId);
         }
+
+        if (profileTypedDisplayNameInput != null)
+        {
+            profileTypedDisplayNameInput.SetValueWithoutNotify(profileData.TypedDisplayName ?? string.Empty);
+        }
     }
 
     private void SetProfileStatus(string message)
@@ -1645,6 +1686,7 @@ public class MainMenuUITKView : MonoBehaviour
         profileUsernameValueLabel = null;
         profilePlayerIdValueLabel = null;
         profileStatusLabel = null;
+        profileTypedDisplayNameInput = null;
         createSuccessGameCodeLabel = null;
         continueButton = null;
         playVsAiButton = null;

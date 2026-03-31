@@ -5,16 +5,19 @@ public static class LocalPlayerProfileStore
 {
     private const string PlayerIdKey = "profile_player_id";
     private const string UsernameKey = "profile_username";
+    private const string TypedDisplayNameKey = "profile_typed_display_name";
 
     public struct ProfileData
     {
         public string PlayerId;
         public string Username;
+        public string TypedDisplayName;
 
-        public ProfileData(string playerId, string username)
+        public ProfileData(string playerId, string username, string typedDisplayName)
         {
             PlayerId = playerId;
             Username = username;
+            TypedDisplayName = typedDisplayName;
         }
     }
 
@@ -38,12 +41,20 @@ public static class LocalPlayerProfileStore
             didChange = true;
         }
 
+        string typedDisplayName = NormalizeTypedDisplayName(PlayerPrefs.GetString(TypedDisplayNameKey, string.Empty));
+        string storedTypedDisplayName = PlayerPrefs.GetString(TypedDisplayNameKey, string.Empty);
+        if (!string.Equals(storedTypedDisplayName, typedDisplayName, StringComparison.Ordinal))
+        {
+            PlayerPrefs.SetString(TypedDisplayNameKey, typedDisplayName);
+            didChange = true;
+        }
+
         if (didChange)
         {
             PlayerPrefs.Save();
         }
 
-        return new ProfileData(playerId, username);
+        return new ProfileData(playerId, username, typedDisplayName);
     }
 
     public static ProfileData RegenerateUsername()
@@ -61,6 +72,26 @@ public static class LocalPlayerProfileStore
 
         profile.Username = regenerated;
         return profile;
+    }
+
+    public static string SetTypedDisplayName(string typedDisplayName)
+    {
+        string normalized = NormalizeTypedDisplayName(typedDisplayName);
+        PlayerPrefs.SetString(TypedDisplayNameKey, normalized);
+        PlayerPrefs.Save();
+        return normalized;
+    }
+
+    public static string NormalizeTypedDisplayName(string typedDisplayName)
+    {
+        if (string.IsNullOrWhiteSpace(typedDisplayName))
+        {
+            return string.Empty;
+        }
+
+        string trimmed = typedDisplayName.Trim();
+        int maxLength = ProfileUsernameGenerator.MaxUsernameLength;
+        return trimmed.Length <= maxLength ? trimmed : trimmed.Substring(0, maxLength);
     }
 
     private static bool IsValidUsername(string username)

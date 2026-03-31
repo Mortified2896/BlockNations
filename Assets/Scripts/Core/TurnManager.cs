@@ -227,6 +227,8 @@ public class TurnManager : MonoBehaviour
         public int aiGold;
         public bool gameOver;
         public int visibilityRadius;
+        public string playerOneTypedDisplayName;
+        public string playerTwoTypedDisplayName;
         public List<SavedCity> cities = new List<SavedCity>();
         public List<SavedUnit> units = new List<SavedUnit>();
         public List<SavedTile> tiles = new List<SavedTile>();
@@ -234,6 +236,9 @@ public class TurnManager : MonoBehaviour
 
     // Stable id for the current campaign/save chain so exports can be shared
     private string currentGameId;
+    private string typedDisplayMetadataGameId;
+    private string knownPlayerOneTypedDisplayName;
+    private string knownPlayerTwoTypedDisplayName;
     private string cachedGameIdRaw;
     private string cachedGameIdHash;
     public event System.Action<bool, string> PlayByPostSubmitResult;
@@ -312,6 +317,66 @@ public class TurnManager : MonoBehaviour
         }
 
         return false;
+    }
+
+    private void ApplyTypedDisplayNameMetadata(GameSave save)
+    {
+        if (save == null || currentMode != GameMode.PlayByPost)
+        {
+            return;
+        }
+
+        if (!string.Equals(typedDisplayMetadataGameId, currentGameId, System.StringComparison.Ordinal))
+        {
+            typedDisplayMetadataGameId = currentGameId;
+            knownPlayerOneTypedDisplayName = null;
+            knownPlayerTwoTypedDisplayName = null;
+        }
+
+        save.playerOneTypedDisplayName = knownPlayerOneTypedDisplayName;
+        save.playerTwoTypedDisplayName = knownPlayerTwoTypedDisplayName;
+
+        if (!TryGetLocalSeatIndexForPbp(currentGameId, out int localSeat))
+        {
+            return;
+        }
+
+        string localTypedDisplayName = LocalPlayerProfileStore.NormalizeTypedDisplayName(
+            LocalPlayerProfileStore.GetOrCreateProfile().TypedDisplayName);
+        localTypedDisplayName = string.IsNullOrEmpty(localTypedDisplayName) ? null : localTypedDisplayName;
+
+        if (localSeat == 0)
+        {
+            save.playerOneTypedDisplayName = localTypedDisplayName;
+            knownPlayerOneTypedDisplayName = localTypedDisplayName;
+            return;
+        }
+
+        save.playerTwoTypedDisplayName = localTypedDisplayName;
+        knownPlayerTwoTypedDisplayName = localTypedDisplayName;
+    }
+
+    private void UpdateKnownTypedDisplayNames(GameSave save)
+    {
+        if (save == null ||
+            currentMode != GameMode.PlayByPost ||
+            string.IsNullOrWhiteSpace(currentGameId))
+        {
+            typedDisplayMetadataGameId = currentGameId;
+            knownPlayerOneTypedDisplayName = null;
+            knownPlayerTwoTypedDisplayName = null;
+            return;
+        }
+
+        typedDisplayMetadataGameId = currentGameId;
+        knownPlayerOneTypedDisplayName = NormalizeTypedDisplayNameMetadataValue(save.playerOneTypedDisplayName);
+        knownPlayerTwoTypedDisplayName = NormalizeTypedDisplayNameMetadataValue(save.playerTwoTypedDisplayName);
+    }
+
+    private static string NormalizeTypedDisplayNameMetadataValue(string value)
+    {
+        string normalized = LocalPlayerProfileStore.NormalizeTypedDisplayName(value);
+        return string.IsNullOrEmpty(normalized) ? null : normalized;
     }
 
     private bool EnsurePlayByPostControlReadiness()
@@ -3304,6 +3369,8 @@ public class TurnManager : MonoBehaviour
             visibilityRadius = visibilityRadius
         };
 
+        ApplyTypedDisplayNameMetadata(save);
+
         // Cities
         City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
         foreach (City city in cities)
@@ -3665,6 +3732,7 @@ private void PBpDebugSyncNow_Context()
             {
                 PersistCurrentPbpGameIdIfNeeded();
             }
+            UpdateKnownTypedDisplayNames(save);
             isPlayerTurn = save.isPlayerTurn;
             turnNumber = save.turnNumber;
             playerGold = save.playerGold;

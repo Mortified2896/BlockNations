@@ -80,6 +80,11 @@
 
                 <ui:VisualElement class="profile-divider" />
 
+                <ui:VisualElement class="profile-field">
+                    <ui:Label text="Typed Display Name" class="profile-field-label" />
+                    <ui:TextField name="ProfileTypedDisplayNameInput" value="" />
+                </ui:VisualElement>
+
                 <ui:VisualElement class="profile-field profile-player-id-section">
                     <ui:Label text="Player ID" class="profile-field-label" />
                     <ui:VisualElement class="profile-id-row">
