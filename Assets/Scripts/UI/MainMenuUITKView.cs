@@ -680,6 +680,7 @@ public class MainMenuUITKView : MonoBehaviour
         if (profileTypedDisplayNameInput != null)
         {
             profileTypedDisplayNameInput.RegisterValueChangedCallback(HandleProfileTypedDisplayNameChanged);
+            profileTypedDisplayNameInput.RegisterCallback<FocusOutEvent>(HandleProfileTypedDisplayNameFocusOut);
         }
     }
 
@@ -793,6 +794,7 @@ public class MainMenuUITKView : MonoBehaviour
         if (profileTypedDisplayNameInput != null)
         {
             profileTypedDisplayNameInput.UnregisterValueChangedCallback(HandleProfileTypedDisplayNameChanged);
+            profileTypedDisplayNameInput.UnregisterCallback<FocusOutEvent>(HandleProfileTypedDisplayNameFocusOut);
         }
     }
 
@@ -968,6 +970,11 @@ public class MainMenuUITKView : MonoBehaviour
 
         profileData.TypedDisplayName = LocalPlayerProfileStore.SetTypedDisplayName(normalized);
         ClearProfileStatus();
+    }
+
+    private void HandleProfileTypedDisplayNameFocusOut(FocusOutEvent evt)
+    {
+        PlayerPrefs.Save();
     }
 
     private void HandleMultiplayerBackClicked()
