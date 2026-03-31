@@ -48,22 +48,24 @@ public class TileHighlighter : MonoBehaviour
 
     private void UpdateColor()
     {
-        if (isSelected)
-        {
-            // Selected has highest priority
-            spriteRenderer.color = selectedColor;
-        }
-        else if (isHovered)
-        {
-            spriteRenderer.color = hoverColor;
-        }
-        else if (isAttackable)
+        if (isAttackable)
         {
             spriteRenderer.color = attackableColor;
         }
         else if (isReachable)
         {
             spriteRenderer.color = reachableColor;
+        }
+        else if (isSelected)
+        {
+            // Preserve selected-tile state while resolving it directly to the
+            // normal cleared/base appearance instead of flashing green first.
+            // Reachable/attackable states are allowed to override this.
+            spriteRenderer.color = baseColor;
+        }
+        else if (isHovered)
+        {
+            spriteRenderer.color = hoverColor;
         }
         else
         {
