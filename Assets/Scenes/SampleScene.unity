@@ -372,6 +372,7 @@ MonoBehaviour:
   autoSaveFileName: save.json
   playByPostExportPretty: 1
   disableAI: 0
+  enableAIVsAIDebugMode: 1
   autoEndTurnWhenNoActions: 1
   autoEndTurnDelaySeconds: 0.6
   autoEndTurnInputCooldownSeconds: 0.8

@@ -1525,7 +1525,7 @@ public class MainMenuController : MonoBehaviour
         }
 
         int supportedVersion = TurnManager.PbpProtocolVersion;
-        if (gameProtocolVersion == supportedVersion)
+        if (gameProtocolVersion == 2 || gameProtocolVersion == supportedVersion)
         {
             return false;
         }
