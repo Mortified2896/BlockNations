@@ -1029,10 +1029,15 @@
 .ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-join-card,
 .ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-create-success-card {
     max-width: 920px;
-    padding-left: 32px;
-    padding-right: 32px;
+    padding-left: 24px;
+    padding-right: 24px;
     padding-top: 32px;
     padding-bottom: 28px;
+}
+
+.ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-details-overlay {
+    padding-left: 6px;
+    padding-right: 6px;
 }
 
 .ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-details-title,
@@ -1063,8 +1068,10 @@
 }
 
 .ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-details-button-danger-corner {
-    width: 210px;
-    min-width: 210px;
+    width: 176px;
+    min-width: 176px;
+    padding-left: 18px;
+    padding-right: 18px;
 }
 
 .ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-status {
