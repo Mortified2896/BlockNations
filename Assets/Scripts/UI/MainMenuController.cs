@@ -1403,10 +1403,18 @@ public class MainMenuController : MonoBehaviour
         string subtitle = BuildPlayByPostTurnStateForMenu(summary);
         if (!TryGetOpponentTypedDisplayNameForMenu(summary.gameId, out string opponentTypedDisplayName))
         {
-            return subtitle;
+            return TryGetLocalPbpSnapshotProtocolVersion(summary.gameId, out _)
+                ? $"{subtitle}\n{BuildPbpVersionText(summary.gameId)}"
+                : subtitle;
         }
 
-        return $"{subtitle}\nOpponent: {opponentTypedDisplayName}";
+        string details = $"{subtitle}\nOpponent: {opponentTypedDisplayName}";
+        if (TryGetLocalPbpSnapshotProtocolVersion(summary.gameId, out _))
+        {
+            details = $"{details}\n{BuildPbpVersionText(summary.gameId)}";
+        }
+
+        return details;
     }
 
     private static bool TryGetLocalPbpSnapshotGameOver(string gameId, out bool gameOver)
