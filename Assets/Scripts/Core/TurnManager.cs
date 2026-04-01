@@ -325,7 +325,7 @@ public class TurnManager : MonoBehaviour
                 return unitPrefab;
             }
 
-            City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+            City[] cities = Object.FindObjectsByType<City>();
             foreach (City city in cities)
             {
                 if (city != null && city.warriorPrefab != null)
@@ -818,7 +818,7 @@ public class TurnManager : MonoBehaviour
         string gameIdForLog = string.IsNullOrWhiteSpace(currentGameId) ? "<none>" : currentGameId;
         string reasonForLog = string.IsNullOrWhiteSpace(reason) ? "<none>" : reason;
         string unitNameForLog = unit != null ? unit.name : "<none>";
-        string unitIdForLog = unit != null ? unit.GetInstanceID().ToString() : "<none>";
+        string unitIdForLog = unit != null ? unit.GetEntityId().ToString() : "<none>";
         string unitOwnerForLog = unit != null ? unit.isPlayerOwned.ToString() : "<none>";
         Debug.Log(
             $"[PBpSelectionGate] gate={gate} reason={reasonForLog} currentGameId={gameIdForLog} isPlayByPostFetchInProgress={isPlayByPostFetchInProgress} isPlayByPostWaitingForExport={isPlayByPostWaitingForExport} pbpControlReadinessReady={pbpControlReadinessReady} pointerOverUi={pointerOverUi} unitName={unitNameForLog} unitId={unitIdForLog} unitIsPlayerOwned={unitOwnerForLog}");
@@ -1100,7 +1100,7 @@ public class TurnManager : MonoBehaviour
     private bool TryComputePbpWinnerSeatFromBoard(out int winnerSeatIndex)
     {
         winnerSeatIndex = 0;
-        City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        City[] cities = Object.FindObjectsByType<City>();
         if (cities == null || cities.Length == 0)
             return false;
 
@@ -2303,7 +2303,7 @@ public class TurnManager : MonoBehaviour
             return false;
 
         // 1) Recruitment options
-        City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        City[] cities = Object.FindObjectsByType<City>();
         foreach (UnitDefinition unitDefinition in UnitRegistry.AllDefinitions)
         {
             if (unitDefinition == null || playerGold < unitDefinition.RecruitCost)
@@ -2329,7 +2329,7 @@ public class TurnManager : MonoBehaviour
         // 2) Unit movement / attacks (adjacent).
         float tileSize = gridManager != null ? Mathf.Max(0.01f, gridManager.tileSize) : 1f;
 
-        Unit[] units = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
+        Unit[] units = Object.FindObjectsByType<Unit>();
         foreach (Unit unit in units)
         {
             if (unit == null || !unit.isPlayerOwned)
@@ -2390,7 +2390,7 @@ public class TurnManager : MonoBehaviour
 
     void ResetRecruitmentForPlayerCities()
     {
-        City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        City[] cities = Object.FindObjectsByType<City>();
         foreach (City city in cities)
         {
             if (city.isPlayerOwned)
@@ -2402,7 +2402,7 @@ public class TurnManager : MonoBehaviour
 
     void ResetRecruitmentForAICities()
     {
-        City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        City[] cities = Object.FindObjectsByType<City>();
         foreach (City city in cities)
         {
             if (!city.isPlayerOwned)
@@ -2415,7 +2415,7 @@ public class TurnManager : MonoBehaviour
     void RunAI()
     {
         // 1) Recruit from each AI city (one unit per city per AI turn, if the city is empty)
-        City[] allCities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        City[] allCities = Object.FindObjectsByType<City>();
         City primaryAICity = null;
         foreach (City city in allCities)
         {
@@ -2432,7 +2432,7 @@ public class TurnManager : MonoBehaviour
 
         // 2) Move AI units toward the nearest player unit or city.
         bool aiHasPerfectInfo = aiDifficulty == AIDifficulty.Unfair;
-        Unit[] allUnits = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
+        Unit[] allUnits = Object.FindObjectsByType<Unit>();
 
         HashSet<TileVisibility> aiVisibleTiles = aiHasPerfectInfo ? null : ComputeVisibilityForSide(false);
 
@@ -2927,7 +2927,7 @@ public class TurnManager : MonoBehaviour
 
     private void ResetRecruitmentForSide(bool sideIsPlayerOwned)
     {
-        City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        City[] cities = Object.FindObjectsByType<City>();
         foreach (City city in cities)
         {
             if (city != null && city.isPlayerOwned == sideIsPlayerOwned)
@@ -2943,7 +2943,7 @@ public class TurnManager : MonoBehaviour
             return;
 
         int income = 0;
-        City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        City[] cities = Object.FindObjectsByType<City>();
         foreach (City city in cities)
         {
             if (city != null && city.isPlayerOwned == sideIsPlayerOwned)
@@ -3068,7 +3068,7 @@ public class TurnManager : MonoBehaviour
         bool enemyIsPlayerOwned = !actingSideIsPlayerOwned;
 
         // 1) Recruit from each controlled city (one unit per city per turn, if the city is empty)
-        City[] allCities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        City[] allCities = Object.FindObjectsByType<City>();
         City primaryControlledCity = null;
         foreach (City city in allCities)
         {
@@ -3088,7 +3088,7 @@ public class TurnManager : MonoBehaviour
 
         // 2) Move controlled units toward the nearest enemy unit or city.
         bool aiHasPerfectInfo = aiDifficulty == AIDifficulty.Unfair;
-        Unit[] allUnits = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
+        Unit[] allUnits = Object.FindObjectsByType<Unit>();
 
         HashSet<TileVisibility> aiVisibleTiles = aiHasPerfectInfo ? null : ComputeVisibilityForSide(actingSideIsPlayerOwned);
 
@@ -3609,7 +3609,7 @@ public class TurnManager : MonoBehaviour
         {
             float maxDist = 1.5f * tileSize;
             float minDist = 0.1f * tileSize;
-            Unit[] allUnits = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
+            Unit[] allUnits = Object.FindObjectsByType<Unit>();
             Unit bestEnemy = null;
             float bestDistSq = float.MaxValue;
 
@@ -3706,7 +3706,7 @@ public class TurnManager : MonoBehaviour
         if (gameOver) return;
 
         int income = 0;
-        City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        City[] cities = Object.FindObjectsByType<City>();
         foreach (City city in cities)
         {
             if (city.isPlayerOwned)
@@ -3726,7 +3726,7 @@ public class TurnManager : MonoBehaviour
         if (gameOver) return;
 
         int income = 0;
-        City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        City[] cities = Object.FindObjectsByType<City>();
         foreach (City city in cities)
         {
             if (!city.isPlayerOwned)
@@ -3755,7 +3755,7 @@ public class TurnManager : MonoBehaviour
             return visibleTiles;
 
         // Reveal around cities owned by this side
-        City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        City[] cities = Object.FindObjectsByType<City>();
         foreach (City city in cities)
         {
             if (city.isPlayerOwned != sideIsPlayerOwned)
@@ -3776,7 +3776,7 @@ public class TurnManager : MonoBehaviour
         }
 
         // Reveal around units owned by this side
-        Unit[] units = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
+        Unit[] units = Object.FindObjectsByType<Unit>();
         foreach (Unit unit in units)
         {
             if (unit.isPlayerOwned != sideIsPlayerOwned)
@@ -3824,7 +3824,7 @@ public class TurnManager : MonoBehaviour
         }
 
         // Hide enemy units that are not in visible tiles
-        Unit[] units = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
+        Unit[] units = Object.FindObjectsByType<Unit>();
         foreach (Unit unit in units)
         {
             bool isCurrentSideUnit = unit.isPlayerOwned == currentSideIsPlayerOwned;
@@ -4167,7 +4167,7 @@ public class TurnManager : MonoBehaviour
         ApplyTypedDisplayNameMetadata(save);
 
         // Cities
-        City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+        City[] cities = Object.FindObjectsByType<City>();
         foreach (City city in cities)
         {
             save.cities.Add(new SavedCity
@@ -4180,7 +4180,7 @@ public class TurnManager : MonoBehaviour
         }
 
         // Units
-        Unit[] units = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
+        Unit[] units = Object.FindObjectsByType<Unit>();
         foreach (Unit unit in units)
         {
             Vector3 pos = unit.transform.position;
@@ -4568,7 +4568,7 @@ private void PBpDebugSyncNow_Context()
             string pbpSeatTextForLog = "<none>";
 
             // Clear units
-            Unit[] existingUnits = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
+            Unit[] existingUnits = Object.FindObjectsByType<Unit>();
             foreach (Unit u in existingUnits)
             {
                 if (u != null)
@@ -4586,7 +4586,7 @@ private void PBpDebugSyncNow_Context()
             }
 
             // Restore cities
-            City[] cities = Object.FindObjectsByType<City>(FindObjectsSortMode.None);
+            City[] cities = Object.FindObjectsByType<City>();
             foreach (City city in cities)
             {
                 city.stationedUnit = null;
@@ -4666,7 +4666,7 @@ private void PBpDebugSyncNow_Context()
                 }
             }
 
-            Unit[] unitsAfterSpawn = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
+            Unit[] unitsAfterSpawn = Object.FindObjectsByType<Unit>();
             unitCountAfterSpawn = unitsAfterSpawn != null ? unitsAfterSpawn.Length : 0;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             duplicateOwnerTileSlots = CountDuplicateOwnerTileSlots(unitsAfterSpawn);
