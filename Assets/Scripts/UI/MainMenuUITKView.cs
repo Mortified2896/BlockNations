@@ -139,6 +139,22 @@ public class MainMenuUITKView : MonoBehaviour
         ClearCachedElements();
     }
 
+    private void OnApplicationPause(bool paused)
+    {
+        if (!paused)
+        {
+            HandleVisiblePaneResume();
+        }
+    }
+
+    private void OnApplicationFocus(bool hasFocus)
+    {
+        if (hasFocus)
+        {
+            HandleVisiblePaneResume();
+        }
+    }
+
     private void Update()
     {
         if (!enableUITK || !uiReady)
@@ -1481,6 +1497,7 @@ public class MainMenuUITKView : MonoBehaviour
         SetVisible(mainPanel, true);
         SetVisible(multiplayerPanel, false);
         SetVisible(profilePanel, false);
+        NotifyControllerVisiblePaneChanged(multiplayerVisible: false);
 
         if (versionLabel != null)
         {
@@ -1503,6 +1520,7 @@ public class MainMenuUITKView : MonoBehaviour
         SetVisible(mainPanel, false);
         SetVisible(multiplayerPanel, true);
         SetVisible(profilePanel, false);
+        NotifyControllerVisiblePaneChanged(multiplayerVisible: true);
 
         if (versionLabel != null)
         {
@@ -1537,6 +1555,7 @@ public class MainMenuUITKView : MonoBehaviour
         SetVisible(mainPanel, false);
         SetVisible(multiplayerPanel, false);
         SetVisible(profilePanel, true);
+        NotifyControllerVisiblePaneChanged(multiplayerVisible: false);
 
         if (versionLabel != null)
         {
@@ -1744,6 +1763,42 @@ public class MainMenuUITKView : MonoBehaviour
 
         refreshCountdownItem.Pause();
         refreshCountdownItem = null;
+    }
+
+    private void NotifyControllerVisiblePaneChanged(bool multiplayerVisible)
+    {
+        if (mainMenuController == null)
+        {
+            return;
+        }
+
+        mainMenuController.NotifyVisibleMenuPaneChanged(multiplayerVisible);
+    }
+
+    private void HandleVisiblePaneResume()
+    {
+        if (!enableUITK || !uiReady)
+        {
+            return;
+        }
+
+        if (IsVisible(multiplayerPanel))
+        {
+            NotifyControllerVisiblePaneChanged(multiplayerVisible: true);
+            StartRefreshCountdownTimer();
+        }
+        else
+        {
+            NotifyControllerVisiblePaneChanged(multiplayerVisible: false);
+            StopRefreshCountdownTimer();
+        }
+
+        RefreshMultiplayerRefreshCountdown();
+    }
+
+    private static bool IsVisible(VisualElement element)
+    {
+        return element != null && element.style.display != DisplayStyle.None;
     }
 
     private void RefreshProfileLabels()

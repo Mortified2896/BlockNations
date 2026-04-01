@@ -141,7 +141,15 @@ public class MainMenuController : MonoBehaviour
             TryAutoFitActiveMenuButtonContainer();
         }
 
-        UpdateMenuRefreshMode(returnToMultiplayerPane ? MenuRefreshMode.OpenPane : MenuRefreshMode.ClosedPane);
+        if (returnToMultiplayerPane)
+        {
+            ApplyVisibleMenuPaneState(multiplayerVisible: true, resetRefreshWindow: true);
+        }
+        else
+        {
+            ApplyVisibleMenuPaneState(multiplayerVisible: false, resetRefreshWindow: true);
+        }
+
         RefreshMultiplayerList();
         SyncAppIconBadge(force: true);
 
@@ -490,8 +498,7 @@ public class MainMenuController : MonoBehaviour
 
     public void OpenMultiplayerScreen()
     {
-        IsMultiplayerScreenRequested = true;
-        UpdateMenuRefreshMode(MenuRefreshMode.OpenPane);
+        ApplyVisibleMenuPaneState(multiplayerVisible: true, resetRefreshWindow: true);
         MultiplayerScreenRequested?.Invoke();
         TryEmitPendingCreateSuccess();
 
@@ -509,9 +516,13 @@ public class MainMenuController : MonoBehaviour
 
     public void CloseMultiplayerScreen()
     {
-        IsMultiplayerScreenRequested = false;
-        UpdateMenuRefreshMode(MenuRefreshMode.ClosedPane);
+        ApplyVisibleMenuPaneState(multiplayerVisible: false, resetRefreshWindow: true);
         // UITK handles panel visibility locally.
+    }
+
+    public void NotifyVisibleMenuPaneChanged(bool multiplayerVisible)
+    {
+        ApplyVisibleMenuPaneState(multiplayerVisible, resetRefreshWindow: true);
     }
 
     public void OpenJoinPopup()
@@ -1996,18 +2007,37 @@ public class MainMenuController : MonoBehaviour
         }
     }
 
-    private void UpdateMenuRefreshMode(MenuRefreshMode mode)
+    private void ApplyVisibleMenuPaneState(bool multiplayerVisible, bool resetRefreshWindow)
     {
+        IsMultiplayerScreenRequested = multiplayerVisible;
+        UpdateMenuRefreshMode(
+            multiplayerVisible ? MenuRefreshMode.OpenPane : MenuRefreshMode.ClosedPane,
+            resetRefreshWindow);
+    }
+
+    private void UpdateMenuRefreshMode(MenuRefreshMode mode, bool resetRefreshWindow)
+    {
+        MenuRefreshMode previousMode = SharedMenuRefreshState.Mode;
         SharedMenuRefreshState.Mode = mode;
-        if (mode == MenuRefreshMode.OpenPane)
+
+        if (mode != MenuRefreshMode.Inactive &&
+            !SharedMenuRefreshState.IsFetchInFlight &&
+            SharedMenuRefreshState.ConsecutiveFailureCount <= 0 &&
+            (resetRefreshWindow || previousMode != mode))
         {
             float now = Time.realtimeSinceStartup;
-            if (SharedMenuRefreshState.LastSuccessRealtime < 0f ||
-                (now - SharedMenuRefreshState.LastSuccessRealtime) >= MenuOpenRefreshIntervalSeconds)
-            {
-                SharedMenuRefreshState.NextAllowedPullRealtime = now;
-            }
+            float intervalSeconds = mode == MenuRefreshMode.OpenPane
+                ? MenuOpenRefreshIntervalSeconds
+                : MenuClosedRefreshIntervalSeconds;
+            float secondsSinceSuccess = SharedMenuRefreshState.LastSuccessRealtime < 0f
+                ? float.PositiveInfinity
+                : now - SharedMenuRefreshState.LastSuccessRealtime;
+
+            SharedMenuRefreshState.NextAllowedPullRealtime = secondsSinceSuccess >= intervalSeconds
+                ? now
+                : now + intervalSeconds;
         }
+
         UpdateMenuRefreshLoopState();
     }
 
