@@ -45,6 +45,8 @@ public class MainMenuUITKView : MonoBehaviour
     private VisualElement multiplayerPanel;
     private VisualElement profilePanel;
     private VisualElement detailsPanel;
+    private VisualElement detailsContent;
+    private VisualElement detailsResignConfirmContent;
     private VisualElement joinPanel;
     private VisualElement createSuccessPanel;
     private ScrollView activeGamesList;
@@ -76,6 +78,8 @@ public class MainMenuUITKView : MonoBehaviour
     private Button detailsSendReminderButton;
     private Button detailsResignButton;
     private Button detailsCloseButton;
+    private Button resignConfirmCancelButton;
+    private Button resignConfirmAcceptButton;
     private TextField joinGameIdInput;
     private Button joinConfirmButton;
     private Button joinCancelButton;
@@ -324,6 +328,8 @@ public class MainMenuUITKView : MonoBehaviour
         multiplayerPanel = root.Q<VisualElement>("MultiplayerPanel");
         profilePanel = root.Q<VisualElement>("ProfilePanel");
         detailsPanel = root.Q<VisualElement>("DetailsPanel");
+        detailsContent = root.Q<VisualElement>("DetailsContent");
+        detailsResignConfirmContent = root.Q<VisualElement>("DetailsResignConfirmContent");
         joinPanel = root.Q<VisualElement>("JoinPanel");
         createSuccessPanel = root.Q<VisualElement>("CreateSuccessPanel");
         activeGamesList = root.Q<ScrollView>("ActiveGamesList");
@@ -364,6 +370,8 @@ public class MainMenuUITKView : MonoBehaviour
         detailsSendReminderButton = root.Q<Button>("DetailsSendReminderButton");
         detailsResignButton = root.Q<Button>("DetailsResignButton");
         detailsCloseButton = root.Q<Button>("DetailsCloseButton");
+        resignConfirmCancelButton = root.Q<Button>("ResignConfirmCancelButton");
+        resignConfirmAcceptButton = root.Q<Button>("ResignConfirmAcceptButton");
         joinGameIdInput = root.Q<TextField>("JoinGameIdInput");
         joinConfirmButton = root.Q<Button>("JoinConfirmButton");
         joinCancelButton = root.Q<Button>("JoinCancelButton");
@@ -792,6 +800,16 @@ public class MainMenuUITKView : MonoBehaviour
             detailsCloseButton.clicked += HandleDetailsCloseClicked;
         }
 
+        if (resignConfirmCancelButton != null)
+        {
+            resignConfirmCancelButton.clicked += HandleResignConfirmCancelClicked;
+        }
+
+        if (resignConfirmAcceptButton != null)
+        {
+            resignConfirmAcceptButton.clicked += HandleResignConfirmAcceptClicked;
+        }
+
         if (detailsGameIdLabel != null)
         {
             detailsGameIdLabel.RegisterCallback<ClickEvent>(HandleDetailsGameIdClicked);
@@ -904,6 +922,16 @@ public class MainMenuUITKView : MonoBehaviour
         if (detailsCloseButton != null)
         {
             detailsCloseButton.clicked -= HandleDetailsCloseClicked;
+        }
+
+        if (resignConfirmCancelButton != null)
+        {
+            resignConfirmCancelButton.clicked -= HandleResignConfirmCancelClicked;
+        }
+
+        if (resignConfirmAcceptButton != null)
+        {
+            resignConfirmAcceptButton.clicked -= HandleResignConfirmAcceptClicked;
         }
 
         if (detailsGameIdLabel != null)
@@ -1233,22 +1261,38 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HandleDetailsResignClicked()
     {
-        if (mainMenuController != null && hasSelectedGame)
+        if (hasSelectedGame)
         {
-            mainMenuController.GameDetails_ResignLocal();
-            HideDetailsPanel();
-            RefreshGamesList();
+            ShowResignConfirmPanel();
         }
     }
 
     private void HandleDetailsCloseClicked()
     {
+        SetDetailsConfirmState(false);
+
         if (mainMenuController != null)
         {
             mainMenuController.CloseGameDetailsPopup();
         }
 
         HideDetailsPanel();
+    }
+
+    private void HandleResignConfirmCancelClicked()
+    {
+        SetDetailsConfirmState(false);
+    }
+
+    private void HandleResignConfirmAcceptClicked()
+    {
+        if (mainMenuController != null && hasSelectedGame)
+        {
+            mainMenuController.GameDetails_ResignLocal();
+            SetDetailsConfirmState(false);
+            HideDetailsPanel();
+            RefreshGamesList();
+        }
     }
 
     private void HandleDetailsGameIdClicked(ClickEvent evt)
@@ -1492,6 +1536,7 @@ public class MainMenuUITKView : MonoBehaviour
         StopRefreshCountdownTimer();
         HideCreateSuccessPanel();
         HideJoinPanel();
+        SetDetailsConfirmState(false);
         HideDetailsPanel();
         ClearProfileStatus();
         SetVisible(mainPanel, true);
@@ -1515,6 +1560,7 @@ public class MainMenuUITKView : MonoBehaviour
     private void ShowMultiplayerPanel()
     {
         ResetActiveGamesElasticOffset();
+        SetDetailsConfirmState(false);
         HideJoinPanel();
         ClearProfileStatus();
         SetVisible(mainPanel, false);
@@ -1539,6 +1585,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HideDetailsPanel()
     {
+        SetDetailsConfirmState(false);
         hasSelectedGame = false;
         selectedDetailsGameId = string.Empty;
         SetVisible(detailsPanel, false);
@@ -1624,11 +1671,23 @@ public class MainMenuUITKView : MonoBehaviour
     private void ShowJoinPanel()
     {
         HideCreateSuccessPanel();
+        SetDetailsConfirmState(false);
         SetVisible(joinPanel, true);
         if (joinGameIdInput != null)
         {
             joinGameIdInput.Focus();
         }
+    }
+
+    private void ShowResignConfirmPanel()
+    {
+        SetDetailsConfirmState(true);
+    }
+
+    private void SetDetailsConfirmState(bool confirmVisible)
+    {
+        SetVisible(detailsContent, !confirmVisible);
+        SetVisible(detailsResignConfirmContent, confirmVisible);
     }
 
     private void HideJoinPanel()
@@ -2066,6 +2125,8 @@ public class MainMenuUITKView : MonoBehaviour
         multiplayerPanel = null;
         profilePanel = null;
         detailsPanel = null;
+        detailsContent = null;
+        detailsResignConfirmContent = null;
         joinPanel = null;
         createSuccessPanel = null;
         activeGamesList = null;
@@ -2097,6 +2158,8 @@ public class MainMenuUITKView : MonoBehaviour
         detailsSendReminderButton = null;
         detailsResignButton = null;
         detailsCloseButton = null;
+        resignConfirmCancelButton = null;
+        resignConfirmAcceptButton = null;
         joinGameIdInput = null;
         joinConfirmButton = null;
         joinCancelButton = null;
