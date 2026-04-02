@@ -867,6 +867,9 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             return;
         }
 
+        string title = turnManager.GameOverUiTitle;
+        gameOverTitleLabel.text = string.IsNullOrWhiteSpace(title) ? GameOverOverlayDefaultTitleText : title;
+
         string message = turnManager.GameOverUiMessage;
         gameOverMessageLabel.text = string.IsNullOrWhiteSpace(message) ? GameOverOverlayDefaultTitleText : message;
 

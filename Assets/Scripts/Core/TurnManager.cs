@@ -149,7 +149,12 @@ public class TurnManager : MonoBehaviour
     private const string ReturnToMultiplayerPaneKey = "ui_returnToMultiplayerPane";
     private const string MainMenuSceneName = "MainMenu";
     private const string DefaultGameOverMessage = "Game Over";
+    private const string DefaultGameOverTitle = "Game Over";
     private const string DefaultGameOverPrimaryButtonLabel = "Play Again";
+    private const string PbpVersionMismatchTitle = "Update Required";
+    private const string PbpVersionMismatchInGameMessage =
+        "This PBp game was created or updated with a newer version of BlockNations and cannot continue on this build. Please update the app to continue.";
+    private const string PbpVersionMismatchExitButtonLabel = "Back to Multiplayer";
     private const int SupportedPbpMigrationProtocolVersion = 2;
     private const int SupportedPbpProtocolVersion = 3;
     public static int PbpProtocolVersion => SupportedPbpProtocolVersion;
@@ -172,6 +177,7 @@ public class TurnManager : MonoBehaviour
         None,
         Submitting,
         RetrySubmit,
+        BackToMultiplayer,
         BackAndDelete
     }
 
@@ -185,6 +191,7 @@ public class TurnManager : MonoBehaviour
     private int pbpEndgameCachedExportTurnNumber;
     private bool pbpEndgameCachedExportIsPlayerTurn;
     private string pbpEndgameCachedExportGameId;
+    private string gameOverUiTitle = string.Empty;
     private string gameOverUiMessage = string.Empty;
     private string gameOverUiPrimaryButtonLabel = DefaultGameOverPrimaryButtonLabel;
     private bool gameOverUiPrimaryButtonInteractable = true;
@@ -251,6 +258,8 @@ public class TurnManager : MonoBehaviour
     public event System.Action<bool, string> PlayByPostSubmitResult;
     public event System.Action<bool, string> PlayByPostFetchResult;
     public bool IsGameOverUiVisible => gameOver;
+    public string GameOverUiTitle =>
+        string.IsNullOrWhiteSpace(gameOverUiTitle) ? DefaultGameOverTitle : gameOverUiTitle;
     public string GameOverUiMessage =>
         string.IsNullOrWhiteSpace(gameOverUiMessage) ? DefaultGameOverMessage : gameOverUiMessage;
     public string GameOverUiPrimaryButtonLabel =>
@@ -924,9 +933,15 @@ public class TurnManager : MonoBehaviour
 
     private void ResetGameOverUiState()
     {
+        gameOverUiTitle = string.Empty;
         gameOverUiMessage = string.Empty;
         gameOverUiPrimaryButtonLabel = DefaultGameOverPrimaryButtonLabel;
         gameOverUiPrimaryButtonInteractable = true;
+    }
+
+    private void SetGameOverUiTitle(string title)
+    {
+        gameOverUiTitle = string.IsNullOrWhiteSpace(title) ? DefaultGameOverTitle : title.Trim();
     }
 
     private void SetGameOverUiMessage(string message)
@@ -1035,6 +1050,12 @@ public class TurnManager : MonoBehaviour
                 return;
             }
 
+            if (pbpEndgamePrimaryAction == PbpEndgamePrimaryAction.BackToMultiplayer)
+            {
+                ReturnToMultiplayer();
+                return;
+            }
+
             if (pbpEndgamePrimaryAction == PbpEndgamePrimaryAction.BackAndDelete)
             {
                 ReturnToMultiplayerAndDeleteLocalPbpCopy();
@@ -1080,6 +1101,43 @@ public class TurnManager : MonoBehaviour
             Debug.Log("Game Over: " + message);
 #endif
         }
+    }
+
+    private bool TryShowPbpVersionMismatchInGamePopup(int loadedProtocolVersion, string gameId, string debugSource)
+    {
+        if (loadedProtocolVersion <= SupportedPbpProtocolVersion)
+        {
+            return false;
+        }
+
+        string loadedGameId = string.IsNullOrWhiteSpace(gameId) ? "<none>" : gameId;
+
+        isPlayByPostWaitingForExport = false;
+        isPlayByPostFetchInProgress = false;
+        playByPostLastFetchWasNoTurn = false;
+
+        if (playByPostPollRoutine != null)
+        {
+            StopCoroutine(playByPostPollRoutine);
+            playByPostPollRoutine = null;
+        }
+
+        gameOver = true;
+        ResetPbpEndgameRuntimeState();
+        SetGameOverUiTitle(PbpVersionMismatchTitle);
+        ShowGameOverPopup(PbpVersionMismatchInGameMessage, writeLog: false);
+        SetGameOverPrimaryButtonState(
+            PbpVersionMismatchExitButtonLabel,
+            true,
+            PbpEndgamePrimaryAction.BackToMultiplayer);
+        RefreshEndTurnButtonInteractable(force: true);
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        Debug.LogWarning(
+            $"PBp in-game version mismatch popup shown (source={debugSource}, gameId={loadedGameId}, loadedProtocol={loadedProtocolVersion}, supported={SupportedPbpProtocolVersion}).");
+#endif
+
+        return true;
     }
 
     private bool TryComputePbpLocalResult(int winnerSeatIndex, out bool didLocalWin, out int localSeatIndex)
@@ -1305,6 +1363,11 @@ public class TurnManager : MonoBehaviour
         string gameId = GetPbpGameIdFromPrefsOrCurrent();
         DeleteLocalPbpGameCopy(gameId);
 
+        ReturnToMultiplayer();
+    }
+
+    private void ReturnToMultiplayer()
+    {
         PlayerPrefs.SetInt(ReturnToMultiplayerPaneKey, 1);
         PlayerPrefs.Save();
 
@@ -4473,6 +4536,7 @@ private void PBpDebugSyncNow_Context()
                         out string protocolError))
                 {
                     Debug.LogError($"{protocolError} (gameId={loadedGameId}).");
+                    TryShowPbpVersionMismatchInGamePopup(loadedProtocolVersion, save.gameId, debugSource);
                     return false;
                 }
 
