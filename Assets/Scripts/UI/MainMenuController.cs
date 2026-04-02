@@ -32,6 +32,7 @@ public class MainMenuController : MonoBehaviour
     private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
     private const string LegacySharedSaveFileName = "save.json";
     private const string PbpVersionVerificationFailedMessage = "Unable to verify this game's PBp version. For safety, this match cannot be opened on this build.";
+    private const string PbpActiveGameUpdateRequiredCardText = "Requires newer version";
     private const float RemoteTurnStatusFetchCooldownSeconds = 10f;
     private const float MenuClosedRefreshIntervalSeconds = 60f;
     private const float MenuOpenRefreshIntervalSeconds = 10f;
@@ -1324,6 +1325,12 @@ public class MainMenuController : MonoBehaviour
 
     public string BuildPlayByPostTurnSubtitleForMenu(SaveManifestService.ManifestGameSummary summary)
     {
+        if (TryGetLocalPbpSnapshotProtocolVersion(summary.gameId, out int localProtocolVersion) &&
+            TryGetPbpVersionMismatchWarning(localProtocolVersion, out _))
+        {
+            return PbpActiveGameUpdateRequiredCardText;
+        }
+
         string turnState = BuildPlayByPostTurnStateForMenu(summary);
         if (string.Equals(turnState, "Game Over", StringComparison.Ordinal))
         {
