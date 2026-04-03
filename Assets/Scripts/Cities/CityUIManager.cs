@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 /// <summary>
 /// Manages the city UI panel and recruitment actions.
@@ -114,22 +115,6 @@ public class CityUIManager : MonoBehaviour
         }
     }
 
-    public string RecruitWarriorLabel
-    {
-        get
-        {
-            return BuildRecruitLabel(UnitRegistry.WarriorTypeId);
-        }
-    }
-
-    public string RecruitScoutLabel
-    {
-        get
-        {
-            return BuildRecruitLabel(UnitRegistry.ScoutTypeId);
-        }
-    }
-
     private TurnManager ResolveTurnManager()
     {
         if (turnManager == null)
@@ -150,6 +135,17 @@ public class CityUIManager : MonoBehaviour
         OnRecruitUnitButton(UnitRegistry.ScoutTypeId);
     }
 
+    public List<UnitDefinition> GetRecruitableUnitDefinitions()
+    {
+        TurnManager tm = ResolveTurnManager();
+        return tm != null ? tm.GetRecruitableOfficialUnitDefinitions() : new List<UnitDefinition>();
+    }
+
+    public string GetRecruitLabel(string unitTypeId)
+    {
+        return BuildRecruitLabel(unitTypeId);
+    }
+
     private string BuildRecruitLabel(string unitTypeId)
     {
         UnitDefinition unitDefinition = UnitRegistry.GetDefinitionOrDefault(unitTypeId);
@@ -162,7 +158,7 @@ public class CityUIManager : MonoBehaviour
         return unitDefinition.DisplayName;
     }
 
-    private void OnRecruitUnitButton(string unitTypeId)
+    public void OnRecruitUnitButton(string unitTypeId)
     {
         lastRecruitAttemptFrame = Time.frameCount;
         lastRecruitAttemptSucceeded = false;

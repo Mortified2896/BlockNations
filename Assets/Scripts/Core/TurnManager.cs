@@ -12,6 +12,15 @@ using UnityEngine.SceneManagement;
 
 public class TurnManager : MonoBehaviour
 {
+    [System.Serializable]
+    public sealed class OfficialUnitRegistration
+    {
+        public string unitTypeId;
+        public GameObject prefab;
+        public bool recruitable = true;
+        public int recruitDisplayOrder;
+    }
+
     public enum GameMode
     {
         None,
@@ -84,6 +93,9 @@ public class TurnManager : MonoBehaviour
     [Header("Prefabs")]
     public GameObject unitPrefab; // used to respawn units on load
     public GameObject scoutPrefab;
+
+    [Header("Official Units")]
+    public List<OfficialUnitRegistration> officialUnitRegistrations = new List<OfficialUnitRegistration>();
 
     [Header("Audio")]
     public bool playMusicOnStart = true;
@@ -319,6 +331,48 @@ public class TurnManager : MonoBehaviour
         return UnitRegistry.GetDefinitionOrDefault(unitTypeId).RecruitCost;
     }
 
+    public List<UnitDefinition> GetRecruitableOfficialUnitDefinitions()
+    {
+        List<UnitDefinition> recruitableDefinitions = new List<UnitDefinition>();
+        if (officialUnitRegistrations == null)
+        {
+            return recruitableDefinitions;
+        }
+
+        for (int i = 0; i < officialUnitRegistrations.Count; i++)
+        {
+            OfficialUnitRegistration registration = officialUnitRegistrations[i];
+            if (registration == null || !registration.recruitable)
+            {
+                continue;
+            }
+
+            string normalizedTypeId = UnitRegistry.NormalizeTypeId(registration.unitTypeId);
+            if (!UnitRegistry.TryGetDefinition(normalizedTypeId, out UnitDefinition definition))
+            {
+                continue;
+            }
+
+            bool alreadyIncluded = false;
+            for (int existingIndex = 0; existingIndex < recruitableDefinitions.Count; existingIndex++)
+            {
+                if (string.Equals(recruitableDefinitions[existingIndex].TypeId, definition.TypeId, System.StringComparison.Ordinal))
+                {
+                    alreadyIncluded = true;
+                    break;
+                }
+            }
+
+            if (!alreadyIncluded)
+            {
+                recruitableDefinitions.Add(definition);
+            }
+        }
+
+        recruitableDefinitions.Sort(CompareRecruitableDefinitions);
+        return recruitableDefinitions;
+    }
+
     public GameObject GetUnitPrefabForType(string unitTypeId)
     {
         if (!UnitRegistry.TryGetDefinition(unitTypeId, out UnitDefinition definition))
@@ -327,31 +381,69 @@ public class TurnManager : MonoBehaviour
         }
 
         string resolvedPrefabTypeId = UnitRegistry.NormalizeTypeId(definition.PrefabTypeId);
-        if (resolvedPrefabTypeId == UnitRegistry.WarriorTypeId)
+        OfficialUnitRegistration registration = GetOfficialUnitRegistration(resolvedPrefabTypeId);
+        return registration != null ? registration.prefab : null;
+    }
+
+    private OfficialUnitRegistration GetOfficialUnitRegistration(string unitTypeId)
+    {
+        if (officialUnitRegistrations == null)
         {
-            if (unitPrefab != null)
+            return null;
+        }
+
+        string normalizedTypeId = UnitRegistry.NormalizeTypeId(unitTypeId);
+        for (int i = 0; i < officialUnitRegistrations.Count; i++)
+        {
+            OfficialUnitRegistration registration = officialUnitRegistrations[i];
+            if (registration == null)
             {
-                return unitPrefab;
+                continue;
             }
 
-            City[] cities = Object.FindObjectsByType<City>();
-            foreach (City city in cities)
+            if (string.Equals(UnitRegistry.NormalizeTypeId(registration.unitTypeId), normalizedTypeId, System.StringComparison.Ordinal))
             {
-                if (city != null && city.warriorPrefab != null)
-                {
-                    return city.warriorPrefab;
-                }
-            }
-        }
-        else if (resolvedPrefabTypeId == UnitRegistry.ScoutTypeId)
-        {
-            if (scoutPrefab != null)
-            {
-                return scoutPrefab;
+                return registration;
             }
         }
 
         return null;
+    }
+
+    private int CompareRecruitableDefinitions(UnitDefinition left, UnitDefinition right)
+    {
+        if (left == right)
+        {
+            return 0;
+        }
+
+        if (left == null)
+        {
+            return 1;
+        }
+
+        if (right == null)
+        {
+            return -1;
+        }
+
+        OfficialUnitRegistration leftRegistration = GetOfficialUnitRegistration(left.TypeId);
+        OfficialUnitRegistration rightRegistration = GetOfficialUnitRegistration(right.TypeId);
+        int leftOrder = leftRegistration != null ? leftRegistration.recruitDisplayOrder : int.MaxValue;
+        int rightOrder = rightRegistration != null ? rightRegistration.recruitDisplayOrder : int.MaxValue;
+        int orderComparison = leftOrder.CompareTo(rightOrder);
+        if (orderComparison != 0)
+        {
+            return orderComparison;
+        }
+
+        int displayNameComparison = string.Compare(left.DisplayName, right.DisplayName, System.StringComparison.Ordinal);
+        if (displayNameComparison != 0)
+        {
+            return displayNameComparison;
+        }
+
+        return string.Compare(left.TypeId, right.TypeId, System.StringComparison.Ordinal);
     }
 
     public GameObject InstantiateConfiguredUnit(
@@ -2367,8 +2459,10 @@ public class TurnManager : MonoBehaviour
 
         // 1) Recruitment options
         City[] cities = Object.FindObjectsByType<City>();
-        foreach (UnitDefinition unitDefinition in UnitRegistry.AllDefinitions)
+        List<UnitDefinition> recruitableUnits = GetRecruitableOfficialUnitDefinitions();
+        for (int unitIndex = 0; unitIndex < recruitableUnits.Count; unitIndex++)
         {
+            UnitDefinition unitDefinition = recruitableUnits[unitIndex];
             if (unitDefinition == null || playerGold < unitDefinition.RecruitCost)
                 continue;
 

@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UIElements;
+using System.Collections.Generic;
 
 [DisallowMultipleComponent]
 [RequireComponent(typeof(UIDocument))]
@@ -23,11 +24,11 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
     private VisualElement root;
     private VisualElement hudRoot;
     private VisualElement cityPanelContainer;
-    private Button recruitWarriorButton;
-    private Button recruitScoutButton;
+    private VisualElement cityRecruitRow;
+    private readonly List<Button> recruitButtons = new List<Button>();
+    private readonly List<string> recruitButtonUnitTypeIds = new List<string>();
 
     private bool uiReady;
-    private bool callbacksBound;
     private bool warnedMissingPanelSettings;
     private bool warnedMissingLayout;
     private bool warnedMissingControls;
@@ -196,20 +197,17 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
             return true;
         }
 
-        UnbindButtons();
-
         root = currentRoot;
         hudRoot = root.Q<VisualElement>("CityPanelHudRoot") ?? root;
         cityPanelContainer = root.Q<VisualElement>("CityPanelContainer");
-        recruitWarriorButton = root.Q<Button>("RecruitWarriorButton");
-        recruitScoutButton = root.Q<Button>("RecruitScoutButton");
+        cityRecruitRow = root.Q<VisualElement>("CityRecruitRow");
 
-        if (cityPanelContainer == null || recruitWarriorButton == null || recruitScoutButton == null)
+        if (cityPanelContainer == null || cityRecruitRow == null)
         {
             if (!warnedMissingControls)
             {
                 warnedMissingControls = true;
-                Debug.LogWarning("GameplayCityPanelUITKView: CityPanelContainer/RecruitWarriorButton/RecruitScoutButton not found in UIDocument source asset.", this);
+                Debug.LogWarning("GameplayCityPanelUITKView: CityPanelContainer/CityRecruitRow not found in UIDocument source asset.", this);
             }
 
             uiReady = false;
@@ -218,7 +216,7 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
 
         warnedMissingControls = false;
         ConfigurePickingModes();
-        BindButtons();
+        RebuildRecruitButtonsIfNeeded(force: true);
         ApplySafeArea(force: true);
         responsiveSizeTierController.Apply(root);
         cityPanelContainer.style.display = DisplayStyle.None;
@@ -243,72 +241,79 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
             cityPanelContainer.pickingMode = PickingMode.Ignore;
         }
 
-        if (recruitWarriorButton != null)
+        if (cityRecruitRow != null)
         {
-            recruitWarriorButton.pickingMode = PickingMode.Position;
+            cityRecruitRow.pickingMode = PickingMode.Ignore;
         }
 
-        if (recruitScoutButton != null)
+        for (int i = 0; i < recruitButtons.Count; i++)
         {
-            recruitScoutButton.pickingMode = PickingMode.Position;
+            if (recruitButtons[i] != null)
+            {
+                recruitButtons[i].pickingMode = PickingMode.Position;
+            }
         }
     }
 
-    private void BindButtons()
+    private void RebuildRecruitButtonsIfNeeded(bool force)
     {
-        if (callbacksBound)
+        if (cityRecruitRow == null)
         {
             return;
         }
 
-        if (recruitWarriorButton != null)
+        List<UnitDefinition> recruitableUnits = cityUIManager != null
+            ? cityUIManager.GetRecruitableUnitDefinitions()
+            : (turnManager != null ? turnManager.GetRecruitableOfficialUnitDefinitions() : new List<UnitDefinition>());
+        bool needsRebuild = force || recruitButtonUnitTypeIds.Count != recruitableUnits.Count;
+        if (!needsRebuild)
         {
-            recruitWarriorButton.clicked += HandleRecruitWarriorClicked;
+            for (int i = 0; i < recruitableUnits.Count; i++)
+            {
+                UnitDefinition unitDefinition = recruitableUnits[i];
+                string expectedTypeId = unitDefinition != null ? unitDefinition.TypeId : string.Empty;
+                if (!string.Equals(recruitButtonUnitTypeIds[i], expectedTypeId, System.StringComparison.Ordinal))
+                {
+                    needsRebuild = true;
+                    break;
+                }
+            }
         }
 
-        if (recruitScoutButton != null)
-        {
-            recruitScoutButton.clicked += HandleRecruitScoutClicked;
-        }
-
-        callbacksBound = true;
-    }
-
-    private void UnbindButtons()
-    {
-        if (!callbacksBound)
+        if (!needsRebuild)
         {
             return;
         }
 
-        if (recruitWarriorButton != null)
-        {
-            recruitWarriorButton.clicked -= HandleRecruitWarriorClicked;
-        }
+        cityRecruitRow.Clear();
+        recruitButtons.Clear();
+        recruitButtonUnitTypeIds.Clear();
 
-        if (recruitScoutButton != null)
+        for (int i = 0; i < recruitableUnits.Count; i++)
         {
-            recruitScoutButton.clicked -= HandleRecruitScoutClicked;
-        }
+            UnitDefinition unitDefinition = recruitableUnits[i];
+            if (unitDefinition == null)
+            {
+                continue;
+            }
 
-        callbacksBound = false;
+            string unitTypeId = unitDefinition.TypeId;
+            Button recruitButton = new Button(() => HandleRecruitUnitClicked(unitTypeId));
+            recruitButton.name = $"Recruit{unitDefinition.TypeId}Button";
+            recruitButton.AddToClassList("gameplay-city-recruit-button");
+            recruitButton.pickingMode = PickingMode.Position;
+            cityRecruitRow.Add(recruitButton);
+
+            recruitButtons.Add(recruitButton);
+            recruitButtonUnitTypeIds.Add(unitTypeId);
+        }
     }
 
-    private void HandleRecruitWarriorClicked()
+    private void HandleRecruitUnitClicked(string unitTypeId)
     {
-        if (cityUIManager != null)
+        if (cityUIManager != null && !string.IsNullOrWhiteSpace(unitTypeId))
         {
-            cityUIManager.OnRecruitWarriorButton();
-        }
-
-        RefreshUiState();
-    }
-
-    private void HandleRecruitScoutClicked()
-    {
-        if (cityUIManager != null)
-        {
-            cityUIManager.OnRecruitScoutButton();
+            cityUIManager.OnRecruitUnitButton(unitTypeId);
         }
 
         RefreshUiState();
@@ -329,37 +334,25 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
             return;
         }
 
-        if (recruitWarriorButton != null)
+        RebuildRecruitButtonsIfNeeded(force: false);
+        for (int i = 0; i < recruitButtons.Count; i++)
         {
-            recruitWarriorButton.text = GetRecruitWarriorLabel();
-        }
-
-        if (recruitScoutButton != null)
-        {
-            recruitScoutButton.text = GetRecruitScoutLabel();
+            if (recruitButtons[i] != null)
+            {
+                recruitButtons[i].text = GetRecruitLabel(recruitButtonUnitTypeIds[i]);
+            }
         }
     }
 
-    private string GetRecruitWarriorLabel()
+    private string GetRecruitLabel(string unitTypeId)
     {
         if (cityUIManager != null &&
-            !string.IsNullOrWhiteSpace(cityUIManager.RecruitWarriorLabel))
+            !string.IsNullOrWhiteSpace(cityUIManager.GetRecruitLabel(unitTypeId)))
         {
-            return cityUIManager.RecruitWarriorLabel;
+            return cityUIManager.GetRecruitLabel(unitTypeId);
         }
 
-        return BuildRecruitLabel(UnitRegistry.WarriorTypeId);
-    }
-
-    private string GetRecruitScoutLabel()
-    {
-        if (cityUIManager != null &&
-            !string.IsNullOrWhiteSpace(cityUIManager.RecruitScoutLabel))
-        {
-            return cityUIManager.RecruitScoutLabel;
-        }
-
-        return BuildRecruitLabel(UnitRegistry.ScoutTypeId);
+        return BuildRecruitLabel(unitTypeId);
     }
 
     private string BuildRecruitLabel(string unitTypeId)
@@ -418,13 +411,13 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
 
     private void ClearUiCache()
     {
-        UnbindButtons();
         responsiveSizeTierController.Reset(root);
         root = null;
         hudRoot = null;
         cityPanelContainer = null;
-        recruitWarriorButton = null;
-        recruitScoutButton = null;
+        cityRecruitRow = null;
+        recruitButtons.Clear();
+        recruitButtonUnitTypeIds.Clear();
         uiReady = false;
         lastSafeArea = Rect.zero;
         lastScreenSize = Vector2Int.zero;

@@ -187,13 +187,9 @@ public class City : MonoBehaviour
 
     private GameObject ResolveRecruitPrefab(string unitTypeId)
     {
-        if (unitTypeId == UnitRegistry.WarriorTypeId && warriorPrefab != null)
-        {
-            return warriorPrefab;
-        }
-
-        return TurnManager.Instance != null
-            ? TurnManager.Instance.GetUnitPrefabForType(unitTypeId)
+        TurnManager turnManager = TurnManager.Instance;
+        return turnManager != null
+            ? turnManager.GetUnitPrefabForType(unitTypeId)
             : null;
     }
 }
