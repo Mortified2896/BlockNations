@@ -4701,7 +4701,7 @@ private void PBpDebugSyncNow_Context()
                 if (unit != null)
                 {
                     unit.ApplyDefinition(resolvedUnitTypeId, preserveCurrentHealth: false);
-                    unit.currentHealth = Mathf.Clamp(u.currentHealth, 1, unit.maxHealth);
+                    unit.SetCurrentHealth(u.currentHealth);
                     unit.movesUsedThisTurn = Mathf.Clamp(u.movesUsedThisTurn, 0, unit.maxMovesPerTurn);
                     int loadedAttacksUsedThisTurn = u.attacksUsedThisTurn > 0
                         ? u.attacksUsedThisTurn

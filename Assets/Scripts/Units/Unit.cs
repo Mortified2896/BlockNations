@@ -61,19 +61,29 @@ public class Unit : MonoBehaviour
 
     private SpriteRenderer spriteRenderer;
     private UnitDefinition resolvedDefinition;
+    private UnitHealthLabel healthLabel;
 
     public string UnitTypeId => UnitRegistry.NormalizeTypeId(unitTypeId);
     public string DisplayName => resolvedDefinition != null ? resolvedDefinition.DisplayName : UnitRegistry.GetDefinitionOrDefault(UnitTypeId).DisplayName;
     public int VisionRange => resolvedDefinition != null ? resolvedDefinition.VisionRange : UnitRegistry.GetDefinitionOrDefault(UnitTypeId).VisionRange;
+    public SpriteRenderer PrimarySpriteRenderer => spriteRenderer;
+    public bool IsPresentationVisible => spriteRenderer == null || spriteRenderer.enabled;
 
     void Awake()
     {
-        ApplyDefinition(UnitTypeId, preserveCurrentHealth: currentHealth > 0);
         spriteRenderer = GetComponent<SpriteRenderer>();
         if (spriteRenderer == null)
         {
             spriteRenderer = GetComponentInChildren<SpriteRenderer>();
         }
+
+        healthLabel = GetComponent<UnitHealthLabel>();
+        if (healthLabel == null)
+        {
+            healthLabel = gameObject.AddComponent<UnitHealthLabel>();
+        }
+        ApplyDefinition(UnitTypeId, preserveCurrentHealth: currentHealth > 0);
+        RefreshHealthPresentation();
     }
 
     public bool ApplyDefinition(string requestedUnitTypeId, bool preserveCurrentHealth)
@@ -102,7 +112,31 @@ public class Unit : MonoBehaviour
 
         movesUsedThisTurn = Mathf.Clamp(movesUsedThisTurn, 0, maxMovesPerTurn);
         attacksUsedThisTurn = Mathf.Clamp(attacksUsedThisTurn, 0, maxAttacksPerTurn);
+        RefreshHealthPresentation();
         return true;
+    }
+
+    public void SetCurrentHealth(int value)
+    {
+        currentHealth = Mathf.Clamp(value, 0, maxHealth);
+        RefreshHealthPresentation();
+    }
+
+    public void RefreshHealthPresentation()
+    {
+        if (healthLabel == null)
+        {
+            healthLabel = GetComponent<UnitHealthLabel>();
+            if (healthLabel == null)
+            {
+                healthLabel = gameObject.AddComponent<UnitHealthLabel>();
+            }
+        }
+
+        if (healthLabel != null)
+        {
+            healthLabel.Refresh();
+        }
     }
 
     public void RegisterAttack()
@@ -131,7 +165,7 @@ public class Unit : MonoBehaviour
             SoundManager.Instance.PlayAttack();
         }
 
-        target.currentHealth -= mitigatedDamage;
+        target.SetCurrentHealth(target.currentHealth - mitigatedDamage);
         Debug.Log(name + " attacked " + target.name + " for " + mitigatedDamage +
                   " damage. Target HP: " + target.currentHealth + "/" + target.maxHealth);
 
@@ -157,6 +191,16 @@ public class Unit : MonoBehaviour
 
         Debug.Log(name + " has died.");
 
+        if (healthLabel == null)
+        {
+            healthLabel = GetComponent<UnitHealthLabel>();
+        }
+
+        if (healthLabel != null)
+        {
+            healthLabel.Hide();
+        }
+
         if (SoundManager.Instance != null)
         {
             SoundManager.Instance.PlayUnitDown();
@@ -181,9 +225,11 @@ public class Unit : MonoBehaviour
         if (isCurrentSideUnit)
         {
             spriteRenderer.enabled = true;
+            RefreshHealthPresentation();
             return;
         }
 
         spriteRenderer.enabled = isVisible;
+        RefreshHealthPresentation();
     }
 }

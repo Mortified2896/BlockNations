@@ -14,7 +14,7 @@ public static class UnitRegistry
                 recruitCost: 2,
                 visionRange: 1,
                 prefabTypeId: WarriorTypeId,
-                maxHealth: 1,
+                maxHealth: 2,
                 attack: 1,
                 defense: 0,
                 maxMovesPerTurn: 1,
