@@ -15,7 +15,7 @@ public static class UnitRegistry
                 recruitCost: 2,
                 visionRange: 1,
                 prefabTypeId: WarriorTypeId,
-                maxHealth: 2,
+                maxHealth: 1,
                 attack: 1,
                 defense: 0,
                 maxMovesPerTurn: 1,
@@ -23,7 +23,7 @@ public static class UnitRegistry
             [ScoutTypeId] = new UnitDefinition(
                 typeId: ScoutTypeId,
                 displayName: "Scout",
-                recruitCost: 3,
+                recruitCost: 2,
                 visionRange: 2,
                 prefabTypeId: ScoutTypeId,
                 maxHealth: 1,
