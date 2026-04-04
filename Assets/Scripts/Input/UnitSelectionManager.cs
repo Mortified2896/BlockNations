@@ -1,8 +1,9 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
+using System.Collections.Generic;
 
 /// <summary>
-/// Manages which unit is selected and handles simple one-tile movement per turn.
+/// Manages which unit is selected and handles tile movement and adjacent attacks.
 /// </summary>
 public class UnitSelectionManager : MonoBehaviour
 {
@@ -12,6 +13,21 @@ public class UnitSelectionManager : MonoBehaviour
     public TurnManager turnManager;
 
     private Unit selectedUnit;
+
+    private enum PlannedMoveStatus
+    {
+        Invalid,
+        ReachedTarget,
+        HiddenBlockerStop
+    }
+
+    private struct PlannedMoveResult
+    {
+        public PlannedMoveStatus status;
+        public Vector3 finalWorldPosition;
+        public int attemptedSteps;
+        public int actualStepsMoved;
+    }
 
     void Awake()
     {
@@ -57,30 +73,49 @@ public class UnitSelectionManager : MonoBehaviour
             return;
 
         TileHighlighter[] tiles = Object.FindObjectsByType<TileHighlighter>(FindObjectsSortMode.None);
-        Vector3 from = unit.transform.position;
+        if (!TryGetUnitOriginTile(unit, out TileVisibility originTile))
+        {
+            return;
+        }
+
         bool canMove = unit.CanMoveThisTurn();
         bool canAttack = unit.CanAttackThisTurn();
-        float tileSize = GetGridTileSize();
+        int remainingMoves = GetRemainingMoveCount(unit);
 
         foreach (TileHighlighter tile in tiles)
         {
             if (tile == null) continue;
 
-            Vector3 to = tile.transform.position;
-            Vector3 delta = to - from;
-            delta.z = 0f;
-
-            float dist = delta.magnitude;
-            // Adjacent tiles (including diagonals)
-            if (dist >= 0.5f * tileSize && dist <= 1.5f * tileSize)
+            TileVisibility targetTile = tile.GetComponent<TileVisibility>();
+            if (targetTile == null)
             {
-                // Enemy unit on this tile that we can attack?
-                Unit occupant = GridUtils.GetUnitAtPosition(to, unit);
-                if (occupant != null && occupant.isPlayerOwned != unit.isPlayerOwned && canAttack)
+                continue;
+            }
+
+            int stepDistance = GetChebyshevDistance(originTile, targetTile);
+            if (stepDistance != 1)
+            {
+                if (canMove && stepDistance >= 1 && stepDistance <= remainingMoves)
                 {
-                    tile.SetAttackable(true);
+                    PlannedMoveResult plannedMove = PlanMove(unit, targetTile.transform.position);
+                    if (plannedMove.status != PlannedMoveStatus.Invalid)
+                    {
+                        tile.SetReachable(true);
+                    }
                 }
-                else if (occupant == null && canMove)
+
+                continue;
+            }
+
+            Unit occupant = GridUtils.GetUnitAtPosition(targetTile.transform.position, unit);
+            if (occupant != null && occupant.isPlayerOwned != unit.isPlayerOwned && canAttack)
+            {
+                tile.SetAttackable(true);
+            }
+            else if (canMove)
+            {
+                PlannedMoveResult plannedMove = PlanMove(unit, targetTile.transform.position);
+                if (plannedMove.status != PlannedMoveStatus.Invalid)
                 {
                     tile.SetReachable(true);
                 }
@@ -111,25 +146,30 @@ public class UnitSelectionManager : MonoBehaviour
         }
 
         TileHighlighter[] tiles = Object.FindObjectsByType<TileHighlighter>(FindObjectsSortMode.None);
-        Vector3 from = unit.transform.position;
-        float tileSize = GetGridTileSize();
+        if (!TryGetUnitOriginTile(unit, out TileVisibility originTile))
+        {
+            return false;
+        }
 
         foreach (TileHighlighter tile in tiles)
         {
             if (tile == null) continue;
 
-            Vector3 to = tile.transform.position;
-            Vector3 delta = to - from;
-            delta.z = 0f;
-
-            float dist = delta.magnitude;
-            if (dist >= 0.5f * tileSize && dist <= 1.5f * tileSize)
+            TileVisibility targetTile = tile.GetComponent<TileVisibility>();
+            if (targetTile == null)
             {
-                Unit occupant = GridUtils.GetUnitAtPosition(to, unit);
-                if (occupant != null && occupant.isPlayerOwned != unit.isPlayerOwned)
-                {
-                    return true;
-                }
+                continue;
+            }
+
+            if (GetChebyshevDistance(originTile, targetTile) != 1)
+            {
+                continue;
+            }
+
+            Unit occupant = GridUtils.GetUnitAtPosition(targetTile.transform.position, unit);
+            if (occupant != null && occupant.isPlayerOwned != unit.isPlayerOwned)
+            {
+                return true;
             }
         }
 
@@ -195,35 +235,146 @@ public class UnitSelectionManager : MonoBehaviour
             return;
 
         TileHighlighter[] tiles = Object.FindObjectsByType<TileHighlighter>(FindObjectsSortMode.None);
-        Vector3 from = unit.transform.position;
+        if (!TryGetUnitOriginTile(unit, out TileVisibility originTile))
+            return;
+
         bool canMove = unit.CanMoveThisTurn();
         bool canAttack = unit.CanAttackThisTurn();
-        float tileSize = GetGridTileSize();
+        int remainingMoves = GetRemainingMoveCount(unit);
 
         foreach (TileHighlighter tile in tiles)
         {
             if (tile == null) continue;
 
-            Vector3 to = tile.transform.position;
-            Vector3 delta = to - from;
-            delta.z = 0f;
-
-            float dist = delta.magnitude;
-            if (dist < 0.5f * tileSize || dist > 1.5f * tileSize)
+            TileVisibility targetTile = tile.GetComponent<TileVisibility>();
+            if (targetTile == null)
                 continue;
 
-            Unit occupant = GridUtils.GetUnitAtPosition(to, unit);
+            int stepDistance = GetChebyshevDistance(originTile, targetTile);
+            if (stepDistance > remainingMoves || stepDistance <= 0)
+                continue;
+
+            Unit occupant = GridUtils.GetUnitAtPosition(targetTile.transform.position, unit);
             if (occupant != null && occupant.isPlayerOwned != unit.isPlayerOwned && canAttack)
             {
-                attackableCount++;
+                if (stepDistance == 1)
+                {
+                    attackableCount++;
+                }
             }
-            else if (occupant == null && canMove)
+            else if (canMove)
             {
-                reachableCount++;
+                PlannedMoveResult plannedMove = PlanMove(unit, targetTile.transform.position);
+                if (plannedMove.status != PlannedMoveStatus.Invalid)
+                {
+                    reachableCount++;
+                }
             }
         }
     }
 #endif
+
+    private bool TryGetUnitOriginTile(Unit unit, out TileVisibility originTile)
+    {
+        originTile = null;
+        GridManager grid = turnManager != null ? turnManager.gridManager : null;
+        return grid != null && unit != null && grid.TryGetTileAtWorldPosition(unit.transform.position, out originTile);
+    }
+
+    private int GetRemainingMoveCount(Unit unit)
+    {
+        return unit != null ? Mathf.Max(0, unit.maxMovesPerTurn - unit.movesUsedThisTurn) : 0;
+    }
+
+    private static int GetChebyshevDistance(TileVisibility from, TileVisibility to)
+    {
+        if (from == null || to == null)
+        {
+            return int.MaxValue;
+        }
+
+        return Mathf.Max(Mathf.Abs(to.gridX - from.gridX), Mathf.Abs(to.gridY - from.gridY));
+    }
+
+    private PlannedMoveResult PlanMove(Unit unit, Vector3 targetWorldPosition)
+    {
+        PlannedMoveResult invalidResult = new PlannedMoveResult
+        {
+            status = PlannedMoveStatus.Invalid,
+            finalWorldPosition = unit != null ? unit.transform.position : targetWorldPosition,
+            attemptedSteps = 0,
+            actualStepsMoved = 0
+        };
+
+        if (unit == null || !unit.CanMoveThisTurn())
+        {
+            return invalidResult;
+        }
+
+        GridManager grid = turnManager != null ? turnManager.gridManager : null;
+        if (grid == null ||
+            !grid.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility originTile) ||
+            !grid.TryGetTileAtWorldPosition(targetWorldPosition, out TileVisibility targetTile))
+        {
+            return invalidResult;
+        }
+
+        int dx = targetTile.gridX - originTile.gridX;
+        int dy = targetTile.gridY - originTile.gridY;
+        int attemptedSteps = Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy));
+        int remainingMoves = GetRemainingMoveCount(unit);
+        if (attemptedSteps <= 0 || attemptedSteps > remainingMoves)
+        {
+            return invalidResult;
+        }
+
+        int currentX = originTile.gridX;
+        int currentY = originTile.gridY;
+        Vector3 currentWorldPosition = unit.transform.position;
+        currentWorldPosition.z = unit.transform.position.z;
+        int actualStepsMoved = 0;
+
+        for (int stepIndex = 0; stepIndex < attemptedSteps; stepIndex++)
+        {
+            currentX += dx == 0 ? 0 : (dx > 0 ? 1 : -1);
+            currentY += dy == 0 ? 0 : (dy > 0 ? 1 : -1);
+
+            if (!grid.TryGetTile(currentX, currentY, out TileVisibility pathTile) || pathTile == null)
+            {
+                return invalidResult;
+            }
+
+            Vector3 stepWorldPosition = pathTile.transform.position;
+            stepWorldPosition.z = unit.transform.position.z;
+            Unit occupant = GridUtils.GetUnitAtPosition(stepWorldPosition, unit);
+            if (occupant != null)
+            {
+                if (pathTile.isVisibleNow)
+                {
+                    return invalidResult;
+                }
+
+                return new PlannedMoveResult
+                {
+                    status = PlannedMoveStatus.HiddenBlockerStop,
+                    finalWorldPosition = currentWorldPosition,
+                    attemptedSteps = attemptedSteps,
+                    actualStepsMoved = actualStepsMoved
+                };
+            }
+
+            currentWorldPosition = stepWorldPosition;
+            actualStepsMoved++;
+        }
+
+        return new PlannedMoveResult
+        {
+            status = PlannedMoveStatus.ReachedTarget,
+            finalWorldPosition = currentWorldPosition,
+            attemptedSteps = attemptedSteps,
+            actualStepsMoved = actualStepsMoved
+        };
+    }
 
     public void SelectUnit(Unit unit)
     {
@@ -294,26 +445,23 @@ public class UnitSelectionManager : MonoBehaviour
         bool isActiveTurnForUnit = turnManager == null || turnManager.IsCurrentSideOwner(selectedUnit.isPlayerOwned);
 
         Vector3 from = selectedUnit.transform.position;
-        Vector3 to = targetWorldPosition;
-        Vector3 delta = to - from;
-        delta.z = 0f;
-        float tileSize = GetGridTileSize();
+        GridManager grid = turnManager != null ? turnManager.gridManager : null;
+        if (grid == null ||
+            !grid.TryGetTileAtWorldPosition(from, out TileVisibility originTile) ||
+            !grid.TryGetTileAtWorldPosition(targetWorldPosition, out TileVisibility targetTile))
+        {
+            ClearSelection();
+            return;
+        }
 
-        // Allow any adjacent tile (including diagonals) as "one move"
-        float dist = delta.magnitude;
-        if (dist < 0.5f * tileSize || dist > 1.5f * tileSize)
+        int stepDistance = GetChebyshevDistance(originTile, targetTile);
+        if (stepDistance <= 0)
         {
             ClearSelection();
             return;
         }
 
         // If the unit was stationed in a city, clear that link when it moves away
-        if (selectedUnit.currentCity != null)
-        {
-            selectedUnit.currentCity.stationedUnit = null;
-            selectedUnit.currentCity = null;
-        }
-
         Vector3 newPos = targetWorldPosition;
         newPos.z = selectedUnit.transform.position.z;
 
@@ -323,6 +471,7 @@ public class UnitSelectionManager : MonoBehaviour
 
         bool canAttackTarget = targetUnit != null &&
                                targetUnit.isPlayerOwned != selectedUnit.isPlayerOwned &&
+                               stepDistance == 1 &&
                                selectedUnit.CanAttackThisTurn();
         bool canMoveToEmpty = targetUnit == null && selectedUnit.CanMoveThisTurn();
 
@@ -371,16 +520,36 @@ public class UnitSelectionManager : MonoBehaviour
         }
         else if (canMoveToEmpty)
         {
-            // Tile is empty: move normally
-            selectedUnit.transform.position = newPos;
-            selectedUnit.RegisterMove();
-            selectedUnit.UpdateMoveOutline(isActiveTurnForUnit);
-            if (SoundManager.Instance != null)
+            PlannedMoveResult plannedMove = PlanMove(selectedUnit, newPos);
+            if (plannedMove.status == PlannedMoveStatus.Invalid)
             {
-                SoundManager.Instance.PlayMove();
+                ClearSelection();
+                return;
             }
 
-            actionPerformed = true;
+            if (selectedUnit.currentCity != null)
+            {
+                selectedUnit.currentCity.stationedUnit = null;
+                selectedUnit.currentCity = null;
+            }
+
+            if (plannedMove.actualStepsMoved > 0)
+            {
+                selectedUnit.transform.position = plannedMove.finalWorldPosition;
+                if (SoundManager.Instance != null)
+                {
+                    SoundManager.Instance.PlayMove();
+                }
+            }
+
+            selectedUnit.RegisterMove(plannedMove.attemptedSteps);
+            if (plannedMove.status == PlannedMoveStatus.HiddenBlockerStop)
+            {
+                selectedUnit.ConsumeRemainingAttacksForTurn();
+            }
+
+            selectedUnit.UpdateMoveOutline(isActiveTurnForUnit);
+            actionPerformed = plannedMove.actualStepsMoved > 0 || plannedMove.status == PlannedMoveStatus.HiddenBlockerStop;
         }
 
         // Update fog visibility after movement/attack

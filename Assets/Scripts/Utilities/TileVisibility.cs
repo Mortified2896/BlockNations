@@ -9,6 +9,8 @@ public class TileVisibility : MonoBehaviour
     public SpriteRenderer fogRenderer;       // fully hides the tile when never seen
     public SpriteRenderer exploredRenderer; // grey overlay when explored but not currently visible
     [Range(0f, 1f)]
+    public float unexploredFogAlpha = 0.99f;
+    [Range(0f, 1f)]
     public float exploredAlpha = 0.5f;
 
     [HideInInspector] public int gridX;
@@ -104,7 +106,7 @@ public class TileVisibility : MonoBehaviour
         {
             bool showFog = !seenForThisSide;
             Color c = fogBaseColor;
-            c.a = showFog ? 1f : 0f;
+            c.a = showFog ? unexploredFogAlpha : 0f;
             fogRenderer.color = c;
             fogRenderer.enabled = showFog;
         }

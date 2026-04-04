@@ -15,7 +15,7 @@ GameObject:
   - component: {fileID: -8324753970977812477}
   - component: {fileID: -1158699919067656540}
   m_Layer: 0
-  m_Name: Scout
+  m_Name: Rider
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -169,7 +169,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8aa89e99e1b8fbf47bd4d428363ac2f2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Unit
-  unitTypeId: scout
+  unitTypeId: rider
   isPlayerOwned: 1
   maxMovesPerTurn: 1
   movesUsedThisTurn: 0
@@ -272,10 +272,9 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 14
-  m_MaskInteraction: 0
-  m_Sprite: {fileID: 10913, guid: 0000000000000000f000000000000000, type: 0}
-  m_Color: {r: 0.86415094, g: 0.7444677, b: 0.11576363, a: 1}
+  m_SortingOrder: 10
+  m_Sprite: {fileID: 21300000, guid: 72542f4f5b8b7d7499d0ce151f47d86c, type: 3}
+  m_Color: {r: 1, g: 1, b: 1, a: 0.55}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0

@@ -39,6 +39,14 @@ public class Unit : MonoBehaviour
         }
     }
 
+    public void RegisterMove(int moveCount)
+    {
+        for (int i = 0; i < moveCount; i++)
+        {
+            RegisterMove();
+        }
+    }
+
     [Header("Visuals")]
     public SpriteRenderer moveOutline;
 
@@ -145,6 +153,11 @@ public class Unit : MonoBehaviour
         {
             attacksUsedThisTurn++;
         }
+    }
+
+    public void ConsumeRemainingAttacksForTurn()
+    {
+        attacksUsedThisTurn = maxAttacksPerTurn;
     }
 
     public bool Attack(Unit target)

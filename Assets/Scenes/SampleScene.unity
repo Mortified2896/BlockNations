@@ -375,6 +375,10 @@ MonoBehaviour:
     prefab: {fileID: 8613717610168908074, guid: 4cc5a9ecabaed43ab9f5dc0a0b5df2ce, type: 3}
     recruitable: 1
     recruitDisplayOrder: 1
+  - unitTypeId: rider
+    prefab: {fileID: 8613717610168908074, guid: e2d444af66fb4d598d8cbdca09d2c4c1, type: 3}
+    recruitable: 1
+    recruitDisplayOrder: 2
   playMusicOnStart: 1
   gameplayMusic: {fileID: 0}
   autoSaveEnabled: 1

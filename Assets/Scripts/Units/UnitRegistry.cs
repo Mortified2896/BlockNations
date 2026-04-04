@@ -4,6 +4,7 @@ public static class UnitRegistry
 {
     public const string WarriorTypeId = "warrior";
     public const string ScoutTypeId = "scout";
+    public const string RiderTypeId = "rider";
 
     private static readonly Dictionary<string, UnitDefinition> Definitions =
         new Dictionary<string, UnitDefinition>(System.StringComparer.Ordinal)
@@ -14,7 +15,7 @@ public static class UnitRegistry
                 recruitCost: 2,
                 visionRange: 1,
                 prefabTypeId: WarriorTypeId,
-                maxHealth: 1,
+                maxHealth: 2,
                 attack: 1,
                 defense: 0,
                 maxMovesPerTurn: 1,
@@ -29,11 +30,23 @@ public static class UnitRegistry
                 attack: 0,
                 defense: 0,
                 maxMovesPerTurn: 1,
-                maxAttacksPerTurn: 0)
+                maxAttacksPerTurn: 0),
+            [RiderTypeId] = new UnitDefinition(
+                typeId: RiderTypeId,
+                displayName: "Rider",
+                recruitCost: 2,
+                visionRange: 1,
+                prefabTypeId: RiderTypeId,
+                maxHealth: 1,
+                attack: 1,
+                defense: 0,
+                maxMovesPerTurn: 2,
+                maxAttacksPerTurn: 1)
         };
 
     public static UnitDefinition Warrior => Definitions[WarriorTypeId];
     public static UnitDefinition Scout => Definitions[ScoutTypeId];
+    public static UnitDefinition Rider => Definitions[RiderTypeId];
 
     public static System.Collections.Generic.IEnumerable<UnitDefinition> AllDefinitions => Definitions.Values;
 
