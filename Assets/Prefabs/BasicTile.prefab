@@ -105,8 +105,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TileVisibility
   fogRenderer: {fileID: 1909774103905214099}
   exploredRenderer: {fileID: 7356076545920445496}
-  unexploredFogAlpha: 0.99
-  exploredAlpha: 0.5
   gridX: 0
   gridY: 0
 --- !u!1 &2891236643250678726
@@ -218,8 +216,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TileVisibility
   fogRenderer: {fileID: 1909774103905214099}
   exploredRenderer: {fileID: 7356076545920445496}
-  unexploredFogAlpha: 0.99
-  exploredAlpha: 0.5
   gridX: 0
   gridY: 0
 --- !u!61 &2765161794262043018
@@ -389,7 +385,5 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TileVisibility
   fogRenderer: {fileID: 1909774103905214099}
   exploredRenderer: {fileID: 7356076545920445496}
-  unexploredFogAlpha: 0.99
-  exploredAlpha: 0.5
   gridX: 0
   gridY: 0

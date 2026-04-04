@@ -5,13 +5,12 @@ using UnityEngine;
 /// </summary>
 public class TileVisibility : MonoBehaviour
 {
+    private const float UnexploredFogAlpha = 0.99f;
+    private const float ExploredFogAlpha = 0.5f;
+
     [Header("Renderers")]
     public SpriteRenderer fogRenderer;       // fully hides the tile when never seen
     public SpriteRenderer exploredRenderer; // grey overlay when explored but not currently visible
-    [Range(0f, 1f)]
-    public float unexploredFogAlpha = 0.99f;
-    [Range(0f, 1f)]
-    public float exploredAlpha = 0.5f;
 
     [HideInInspector] public int gridX;
     [HideInInspector] public int gridY;
@@ -106,7 +105,7 @@ public class TileVisibility : MonoBehaviour
         {
             bool showFog = !seenForThisSide;
             Color c = fogBaseColor;
-            c.a = showFog ? unexploredFogAlpha : 0f;
+            c.a = showFog ? UnexploredFogAlpha : 0f;
             fogRenderer.color = c;
             fogRenderer.enabled = showFog;
         }
@@ -115,7 +114,7 @@ public class TileVisibility : MonoBehaviour
         {
             bool showExplored = seenForThisSide && !isVisibleNow;
             Color c = exploredBaseColor;
-            c.a = showExplored ? exploredAlpha : 0f;
+            c.a = showExplored ? ExploredFogAlpha : 0f;
             exploredRenderer.color = c;
             exploredRenderer.enabled = showExplored;
         }
