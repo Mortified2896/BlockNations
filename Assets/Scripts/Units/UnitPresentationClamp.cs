@@ -8,8 +8,8 @@ public class UnitPresentationClamp : MonoBehaviour
     [SerializeField] private SpriteRenderer presentationRenderer;
 
     [Header("Clamp")]
-    [SerializeField] private float maxPresentationWidth = 0.75f;
-    [SerializeField] private float maxPresentationHeight = 0.75f;
+    [SerializeField] private float maxPresentationWidth = 0.9f;
+    [SerializeField] private float maxPresentationHeight = 0.9f;
     [SerializeField] private Vector3 baseLocalScale = Vector3.one;
 
     private void Awake()

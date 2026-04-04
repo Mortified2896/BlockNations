@@ -11,13 +11,23 @@ public class Unit : MonoBehaviour
     [Header("Turn State")]
     public int maxMovesPerTurn = 1;
     [HideInInspector] public int movesUsedThisTurn = 0;
-    public bool hasMovedThisTurn => movesUsedThisTurn >= maxMovesPerTurn;
+    public bool hasMovedThisTurn => UsesCommittedMoveActionThisTurn() ? movesUsedThisTurn > 0 : movesUsedThisTurn >= maxMovesPerTurn;
     public int maxAttacksPerTurn = 1;
     [HideInInspector] public int attacksUsedThisTurn = 0;
 
     public bool CanMoveThisTurn()
     {
-        return movesUsedThisTurn < maxMovesPerTurn;
+        return GetRemainingMoveRangeThisTurn() > 0;
+    }
+
+    public int GetRemainingMoveRangeThisTurn()
+    {
+        if (UsesCommittedMoveActionThisTurn())
+        {
+            return movesUsedThisTurn > 0 ? 0 : maxMovesPerTurn;
+        }
+
+        return Mathf.Max(0, maxMovesPerTurn - movesUsedThisTurn);
     }
 
     public bool CanAttackThisTurn()
@@ -266,5 +276,10 @@ public class Unit : MonoBehaviour
         }
 
         return null;
+    }
+
+    private bool UsesCommittedMoveActionThisTurn()
+    {
+        return UnitTypeId == UnitRegistry.RiderTypeId;
     }
 }

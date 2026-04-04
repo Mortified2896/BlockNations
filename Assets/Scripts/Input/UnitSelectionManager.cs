@@ -261,7 +261,7 @@ public class UnitSelectionManager : MonoBehaviour
 
     private int GetRemainingMoveCount(Unit unit)
     {
-        return unit != null ? Mathf.Max(0, unit.maxMovesPerTurn - unit.movesUsedThisTurn) : 0;
+        return unit != null ? unit.GetRemainingMoveRangeThisTurn() : 0;
     }
 
     private static int GetChebyshevDistance(TileVisibility from, TileVisibility to)
@@ -552,6 +552,7 @@ public class UnitSelectionManager : MonoBehaviour
 
         Unit targetUnit = GridUtils.GetUnitAtPosition(newPos, selectedUnit);
         bool targetTileHasVisibleOccupant = targetUnit != null && targetTile.isVisibleNow;
+        bool targetTileHasHiddenOccupant = targetUnit != null && !targetTile.isVisibleNow;
 
         bool actionPerformed = false;
         bool hasPlannedPath = reachablePaths.TryGetValue(targetTile, out List<TileVisibility> plannedPath);
@@ -572,7 +573,7 @@ public class UnitSelectionManager : MonoBehaviour
         }
 
         // Determine what is on the target tile (ally/enemy/empty)
-        if (targetUnit != null)
+        if (targetUnit != null && !targetTileHasHiddenOccupant)
         {
             // Friendly unit: cannot move onto the same tile
             if (targetUnit.isPlayerOwned == selectedUnit.isPlayerOwned)

@@ -52,8 +52,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::UnitPresentationClamp
   presentationRoot: {fileID: 2222222222222222222}
   presentationRenderer: {fileID: 4738797993818610448}
-  maxPresentationWidth: 0.75
-  maxPresentationHeight: 0.75
+  maxPresentationWidth: 0.9
+  maxPresentationHeight: 0.9
   baseLocalScale: {x: 1, y: 1, z: 1}
 --- !u!1 &1111111111111111111
 GameObject:
