@@ -204,10 +204,11 @@ public class TileHoverManager : MonoBehaviour
                 return;
             }
 
-            // 2d) Player city clicked (and no unit was prioritized): open city UI
+            // 2d) Player city clicked (and no unit is currently selected): open city UI
             if (hasCity && clickedCity != null &&
                 TurnManager.Instance != null &&
                 TurnManager.Instance.CanControlCity(clickedCity) &&
+                (UnitSelectionManager.Instance == null || UnitSelectionManager.Instance.SelectedUnit == null) &&
                 CityUIManager.Instance != null)
             {
                 if (UnitSelectionManager.Instance != null)

@@ -371,6 +371,30 @@ public class UnitSelectionManager : MonoBehaviour
         return reversedPath;
     }
 
+    private static void SyncUnitCityOccupancy(Unit unit)
+    {
+        if (unit == null)
+        {
+            return;
+        }
+
+        if (unit.currentCity != null && unit.currentCity.stationedUnit == unit.gameObject)
+        {
+            unit.currentCity.stationedUnit = null;
+        }
+
+        unit.currentCity = null;
+
+        City city = GridUtils.GetCityAtPosition(unit.transform.position);
+        if (city == null)
+        {
+            return;
+        }
+
+        city.stationedUnit = unit.gameObject;
+        unit.currentCity = city;
+    }
+
     private PlannedMoveResult ExecutePlannedPath(Unit unit, List<TileVisibility> path)
     {
         PlannedMoveResult invalidResult = new PlannedMoveResult
@@ -576,6 +600,7 @@ public class UnitSelectionManager : MonoBehaviour
             if (killed)
             {
                 selectedUnit.transform.position = newPos;
+                SyncUnitCityOccupancy(selectedUnit);
                 if (SoundManager.Instance != null)
                 {
                     SoundManager.Instance.PlayMove();
@@ -592,15 +617,10 @@ public class UnitSelectionManager : MonoBehaviour
                 return;
             }
 
-            if (selectedUnit.currentCity != null && plannedMove.actualStepsMoved > 0)
-            {
-                selectedUnit.currentCity.stationedUnit = null;
-                selectedUnit.currentCity = null;
-            }
-
             if (plannedMove.actualStepsMoved > 0)
             {
                 selectedUnit.transform.position = plannedMove.finalWorldPosition;
+                SyncUnitCityOccupancy(selectedUnit);
                 if (SoundManager.Instance != null)
                 {
                     SoundManager.Instance.PlayMove();
