@@ -335,17 +335,17 @@ public sealed class GameplayUnitPanelUITKView : MonoBehaviour
 
         if (unitHealthLabel != null)
         {
-            unitHealthLabel.text = $"HP: {currentUnit.currentHealth}/{currentUnit.maxHealth}";
+            unitHealthLabel.text = $"HP: {CombatValues.FormatRatio(currentUnit.currentHealthUnits, currentUnit.maxHealthUnits)}";
         }
 
         if (unitAttackLabel != null)
         {
-            unitAttackLabel.text = $"ATK: {currentUnit.attack}";
+            unitAttackLabel.text = $"ATK: {CombatValues.FormatUnits(currentUnit.attackUnits)}";
         }
 
         if (unitDefenseLabel != null)
         {
-            unitDefenseLabel.text = $"DEF: {currentUnit.defense}";
+            unitDefenseLabel.text = $"DEF: {CombatValues.FormatUnits(currentUnit.defenseUnits)}";
         }
     }
 

@@ -15,9 +15,9 @@ public static class UnitRegistry
                 recruitCost: 2,
                 visionRange: 1,
                 prefabTypeId: WarriorTypeId,
-                maxHealth: 1,
-                attack: 1,
-                defense: 0,
+                maxHealthUnits: CombatValues.FromDisplay(1),
+                attackUnits: CombatValues.FromDisplay(1),
+                defenseUnits: CombatValues.FromDisplay(0),
                 maxMovesPerTurn: 1,
                 maxAttacksPerTurn: 1),
             [ScoutTypeId] = new UnitDefinition(
@@ -26,9 +26,9 @@ public static class UnitRegistry
                 recruitCost: 2,
                 visionRange: 2,
                 prefabTypeId: ScoutTypeId,
-                maxHealth: 1,
-                attack: 0,
-                defense: 0,
+                maxHealthUnits: CombatValues.FromDisplay(1),
+                attackUnits: CombatValues.FromDisplay(0),
+                defenseUnits: CombatValues.FromDisplay(0),
                 maxMovesPerTurn: 1,
                 maxAttacksPerTurn: 0),
             [RiderTypeId] = new UnitDefinition(
@@ -37,9 +37,9 @@ public static class UnitRegistry
                 recruitCost: 2,
                 visionRange: 1,
                 prefabTypeId: RiderTypeId,
-                maxHealth: 1,
-                attack: 1,
-                defense: 0,
+                maxHealthUnits: CombatValues.FromDisplay(1),
+                attackUnits: CombatValues.FromDisplay(0, 5),
+                defenseUnits: CombatValues.FromDisplay(0),
                 maxMovesPerTurn: 2,
                 maxAttacksPerTurn: 1)
         };

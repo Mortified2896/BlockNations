@@ -167,9 +167,15 @@ public class TurnManager : MonoBehaviour
     private const string PbpVersionMismatchInGameMessage =
         "This PBp game was created or updated with a newer version of BlockNations and cannot continue on this build. Please update the app to continue.";
     private const string PbpVersionMismatchExitButtonLabel = "Back to Multiplayer";
-    private const int SupportedPbpMigrationProtocolVersion = 2;
-    private const int SupportedPbpProtocolVersion = 3;
+    private const int SupportedPbpMigrationProtocolVersion = 3;
+    private const int SupportedPbpProtocolVersion = 4;
     public static int PbpProtocolVersion => SupportedPbpProtocolVersion;
+
+    public static bool IsSupportedPbpLoadProtocolVersion(int protocolVersion)
+    {
+        return protocolVersion == SupportedPbpProtocolVersion ||
+               protocolVersion == SupportedPbpMigrationProtocolVersion;
+    }
 
     // Controlled via Unity Scripting Define Symbols:
     // ENABLE_AUTO_END_TURN_ON_NO_ACTIONS
@@ -224,6 +230,9 @@ public class TurnManager : MonoBehaviour
         public float x;
         public float y;
         public float z;
+        // Protocol 4+ uses scale-10 combat units for persisted health.
+        public int currentHealthUnits;
+        // Legacy protocol/local saves used whole-number health.
         public int currentHealth;
         public int movesUsedThisTurn;
         public int attacksUsedThisTurn;
@@ -242,7 +251,7 @@ public class TurnManager : MonoBehaviour
     [System.Serializable]
     private class GameSave
     {
-        public string version = "2";
+        public string version = "3";
         public int protocolVersion;
         public string gameId;
         public string mode;
@@ -528,11 +537,11 @@ public class TurnManager : MonoBehaviour
     private bool TryValidatePbpLoadProtocol(
         GameSave save,
         out int loadedProtocolVersion,
-        out bool shouldMigrateFromLegacyProtocol,
+        out int migrationSourceProtocolVersion,
         out string error)
     {
         loadedProtocolVersion = save != null ? save.protocolVersion : 0;
-        shouldMigrateFromLegacyProtocol = false;
+        migrationSourceProtocolVersion = 0;
         error = null;
 
         if (save == null)
@@ -555,7 +564,7 @@ public class TurnManager : MonoBehaviour
 
         if (loadedProtocolVersion == SupportedPbpMigrationProtocolVersion)
         {
-            shouldMigrateFromLegacyProtocol = true;
+            migrationSourceProtocolVersion = loadedProtocolVersion;
             return true;
         }
 
@@ -564,32 +573,25 @@ public class TurnManager : MonoBehaviour
         return false;
     }
 
-    private bool TryValidatePbp2MigrationData(GameSave save, out string error)
+    private static int ResolveLoadedCurrentHealthUnits(SavedUnit savedUnit)
     {
-        error = null;
-        if (save == null)
+        if (savedUnit == null)
         {
-            error = "PBp2 migration blocked: save was null.";
-            return false;
+            return 0;
         }
 
-        save.units ??= new List<SavedUnit>();
-        for (int i = 0; i < save.units.Count; i++)
+        // Prefer explicit scaled units, otherwise migrate whole-number health from older saves.
+        if (savedUnit.currentHealthUnits > 0)
         {
-            SavedUnit unit = save.units[i];
-            if (unit == null)
-            {
-                continue;
-            }
-
-            if (!string.IsNullOrWhiteSpace(unit.unitTypeId))
-            {
-                error = $"PBp2 migration blocked: unit {i} contains typed unitTypeId '{unit.unitTypeId}'.";
-                return false;
-            }
+            return savedUnit.currentHealthUnits;
         }
 
-        return true;
+        if (savedUnit.currentHealth > 0)
+        {
+            return CombatValues.FromLegacyWhole(savedUnit.currentHealth);
+        }
+
+        return 0;
     }
 
     private bool LocalIsPlayerOwned()
@@ -4348,7 +4350,7 @@ public class TurnManager : MonoBehaviour
                 x = pos.x,
                 y = pos.y,
                 z = pos.z,
-                currentHealth = unit.currentHealth,
+                currentHealthUnits = unit.currentHealthUnits,
                 movesUsedThisTurn = unit.movesUsedThisTurn,
                 attacksUsedThisTurn = unit.attacksUsedThisTurn,
                 hasAttackedThisTurn = unit.attacksUsedThisTurn > 0
@@ -4619,14 +4621,14 @@ private void PBpDebugSyncNow_Context()
                 save.mode,
                 GameMode.PlayByPost.ToString(),
                 System.StringComparison.Ordinal);
-            bool shouldMigrateFromLegacyPbp2 = false;
+            int migrationSourceProtocolVersion = 0;
             if (loadedModeIsPbp)
             {
                 string loadedGameId = string.IsNullOrWhiteSpace(save.gameId) ? "<none>" : save.gameId;
                 if (!TryValidatePbpLoadProtocol(
                         save,
                         out int loadedProtocolVersion,
-                        out shouldMigrateFromLegacyPbp2,
+                        out migrationSourceProtocolVersion,
                         out string protocolError))
                 {
                     Debug.LogError($"{protocolError} (gameId={loadedGameId}).");
@@ -4634,12 +4636,6 @@ private void PBpDebugSyncNow_Context()
                     return false;
                 }
 
-                if (shouldMigrateFromLegacyPbp2 &&
-                    !TryValidatePbp2MigrationData(save, out string migrationValidationError))
-                {
-                    Debug.LogError($"{migrationValidationError} (gameId={loadedGameId}).");
-                    return false;
-                }
             }
 
             if (string.Equals(save.mode, GameMode.PlayByPost.ToString(), System.StringComparison.Ordinal) ||
@@ -4795,7 +4791,7 @@ private void PBpDebugSyncNow_Context()
                 if (unit != null)
                 {
                     unit.ApplyDefinition(resolvedUnitTypeId, preserveCurrentHealth: false);
-                    unit.SetCurrentHealth(u.currentHealth);
+                    unit.SetCurrentHealthUnits(ResolveLoadedCurrentHealthUnits(u));
                     unit.movesUsedThisTurn = Mathf.Clamp(u.movesUsedThisTurn, 0, unit.maxMovesPerTurn);
                     int loadedAttacksUsedThisTurn = u.attacksUsedThisTurn > 0
                         ? u.attacksUsedThisTurn
@@ -4906,7 +4902,7 @@ private void PBpDebugSyncNow_Context()
             {
                 if (!string.IsNullOrWhiteSpace(rawLoadedJson))
                 {
-                    if (shouldMigrateFromLegacyPbp2)
+                    if (migrationSourceProtocolVersion == SupportedPbpMigrationProtocolVersion)
                     {
                         SavePlayByPostPerGameSnapshot();
                         snapshotWriteMode = "migratedRebuild";

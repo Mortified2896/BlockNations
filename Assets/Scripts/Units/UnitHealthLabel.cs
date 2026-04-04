@@ -61,8 +61,8 @@ public class UnitHealthLabel : MonoBehaviour
 
         EnsureLabel();
 
-        bool isAlive = unit.currentHealth > 0;
-        bool isDamaged = unit.currentHealth < unit.maxHealth;
+        bool isAlive = unit.currentHealthUnits > 0;
+        bool isDamaged = unit.currentHealthUnits < unit.maxHealthUnits;
         bool shouldShow = isAlive
             && (showWhenUndamaged || isDamaged)
             && displayMode != DisplayMode.Hidden
@@ -78,7 +78,7 @@ public class UnitHealthLabel : MonoBehaviour
             return;
         }
 
-        labelText.text = FormatHealthText(unit.currentHealth, unit.maxHealth);
+        labelText.text = FormatHealthText(unit.currentHealthUnits, unit.maxHealthUnits);
         FaceCamera();
     }
 
@@ -218,14 +218,14 @@ public class UnitHealthLabel : MonoBehaviour
         return cachedWhiteSprite;
     }
 
-    private string FormatHealthText(int currentHealth, int maxHealth)
+    private string FormatHealthText(int currentHealthUnits, int maxHealthUnits)
     {
         switch (displayMode)
         {
             case DisplayMode.CurrentOnly:
-                return currentHealth.ToString();
+                return CombatValues.FormatUnits(currentHealthUnits);
             case DisplayMode.CurrentOverMax:
-                return currentHealth + "/" + maxHealth;
+                return CombatValues.FormatRatio(currentHealthUnits, maxHealthUnits);
             default:
                 return string.Empty;
         }

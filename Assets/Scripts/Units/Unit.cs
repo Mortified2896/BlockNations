@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public class Unit : MonoBehaviour
 {
@@ -73,10 +74,13 @@ public class Unit : MonoBehaviour
     public City currentCity;
 
     [Header("Stats")]
-    public int maxHealth = 1;
-    public int currentHealth = 1;
-    public int attack = 1;
-    public int defense = 0;
+    [FormerlySerializedAs("maxHealth")]
+    public int maxHealthUnits = CombatValues.FromDisplay(1);
+    public int currentHealthUnits = CombatValues.FromDisplay(1);
+    [FormerlySerializedAs("attack")]
+    public int attackUnits = CombatValues.FromDisplay(1);
+    [FormerlySerializedAs("defense")]
+    public int defenseUnits = CombatValues.FromDisplay(0);
 
     private UnitDefinition resolvedDefinition;
     private UnitHealthLabel healthLabel;
@@ -99,7 +103,7 @@ public class Unit : MonoBehaviour
         {
             healthLabel = gameObject.AddComponent<UnitHealthLabel>();
         }
-        ApplyDefinition(UnitTypeId, preserveCurrentHealth: currentHealth > 0);
+        ApplyDefinition(UnitTypeId, preserveCurrentHealth: currentHealthUnits > 0);
         RefreshHealthPresentation();
     }
 
@@ -114,17 +118,17 @@ public class Unit : MonoBehaviour
         unitTypeId = definition.TypeId;
         maxMovesPerTurn = definition.MaxMovesPerTurn;
         maxAttacksPerTurn = definition.MaxAttacksPerTurn;
-        maxHealth = definition.MaxHealth;
-        attack = definition.Attack;
-        defense = definition.Defense;
+        maxHealthUnits = definition.MaxHealthUnits;
+        attackUnits = definition.AttackUnits;
+        defenseUnits = definition.DefenseUnits;
 
-        if (!preserveCurrentHealth || currentHealth <= 0)
+        if (!preserveCurrentHealth || currentHealthUnits <= 0)
         {
-            currentHealth = maxHealth;
+            currentHealthUnits = maxHealthUnits;
         }
         else
         {
-            currentHealth = Mathf.Clamp(currentHealth, 1, maxHealth);
+            currentHealthUnits = Mathf.Clamp(currentHealthUnits, 1, maxHealthUnits);
         }
 
         movesUsedThisTurn = Mathf.Clamp(movesUsedThisTurn, 0, maxMovesPerTurn);
@@ -133,9 +137,9 @@ public class Unit : MonoBehaviour
         return true;
     }
 
-    public void SetCurrentHealth(int value)
+    public void SetCurrentHealthUnits(int value)
     {
-        currentHealth = Mathf.Clamp(value, 0, maxHealth);
+        currentHealthUnits = Mathf.Clamp(value, 0, maxHealthUnits);
         RefreshHealthPresentation();
     }
 
@@ -173,10 +177,10 @@ public class Unit : MonoBehaviour
     {
         if (target == null) return false;
 
-        int rawDamage = attack;
-        int mitigatedDamage = Mathf.Max(0, rawDamage - target.defense);
+        int rawDamageUnits = attackUnits;
+        int mitigatedDamageUnits = Mathf.Max(0, rawDamageUnits - target.defenseUnits);
 
-        if (mitigatedDamage <= 0)
+        if (mitigatedDamageUnits <= 0)
         {
             Debug.Log(name + " attacked " + target.name + " but did no damage.");
             return false;
@@ -187,11 +191,12 @@ public class Unit : MonoBehaviour
             SoundManager.Instance.PlayAttack();
         }
 
-        target.SetCurrentHealth(target.currentHealth - mitigatedDamage);
-        Debug.Log(name + " attacked " + target.name + " for " + mitigatedDamage +
-                  " damage. Target HP: " + target.currentHealth + "/" + target.maxHealth);
+        target.SetCurrentHealthUnits(target.currentHealthUnits - mitigatedDamageUnits);
+        Debug.Log(
+            name + " attacked " + target.name + " for " + CombatValues.FormatUnits(mitigatedDamageUnits) +
+            " damage. Target HP: " + CombatValues.FormatRatio(target.currentHealthUnits, target.maxHealthUnits));
 
-        if (target.currentHealth <= 0)
+        if (target.currentHealthUnits <= 0)
         {
             target.Die();
             return true;

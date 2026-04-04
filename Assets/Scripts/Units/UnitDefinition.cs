@@ -8,9 +8,9 @@ public sealed class UnitDefinition
         int recruitCost,
         int visionRange,
         string prefabTypeId,
-        int maxHealth,
-        int attack,
-        int defense,
+        int maxHealthUnits,
+        int attackUnits,
+        int defenseUnits,
         int maxMovesPerTurn,
         int maxAttacksPerTurn)
     {
@@ -24,9 +24,9 @@ public sealed class UnitDefinition
         RecruitCost = Math.Max(0, recruitCost);
         VisionRange = Math.Max(1, visionRange);
         PrefabTypeId = string.IsNullOrWhiteSpace(prefabTypeId) ? TypeId : prefabTypeId.Trim();
-        MaxHealth = Math.Max(1, maxHealth);
-        Attack = Math.Max(0, attack);
-        Defense = Math.Max(0, defense);
+        MaxHealthUnits = Math.Max(1, maxHealthUnits);
+        AttackUnits = Math.Max(0, attackUnits);
+        DefenseUnits = Math.Max(0, defenseUnits);
         MaxMovesPerTurn = Math.Max(1, maxMovesPerTurn);
         MaxAttacksPerTurn = Math.Max(0, maxAttacksPerTurn);
     }
@@ -36,9 +36,9 @@ public sealed class UnitDefinition
     public int RecruitCost { get; }
     public int VisionRange { get; }
     public string PrefabTypeId { get; }
-    public int MaxHealth { get; }
-    public int Attack { get; }
-    public int Defense { get; }
+    public int MaxHealthUnits { get; }
+    public int AttackUnits { get; }
+    public int DefenseUnits { get; }
     public int MaxMovesPerTurn { get; }
     public int MaxAttacksPerTurn { get; }
 }
