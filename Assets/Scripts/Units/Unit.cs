@@ -49,6 +49,7 @@ public class Unit : MonoBehaviour
 
     [Header("Visuals")]
     public SpriteRenderer moveOutline;
+    [SerializeField] private SpriteRenderer presentationRenderer;
 
     public void UpdateMoveOutline(bool isTurnForThisUnit)
     {
@@ -67,22 +68,20 @@ public class Unit : MonoBehaviour
     public int attack = 1;
     public int defense = 0;
 
-    private SpriteRenderer spriteRenderer;
     private UnitDefinition resolvedDefinition;
     private UnitHealthLabel healthLabel;
 
     public string UnitTypeId => UnitRegistry.NormalizeTypeId(unitTypeId);
     public string DisplayName => resolvedDefinition != null ? resolvedDefinition.DisplayName : UnitRegistry.GetDefinitionOrDefault(UnitTypeId).DisplayName;
     public int VisionRange => resolvedDefinition != null ? resolvedDefinition.VisionRange : UnitRegistry.GetDefinitionOrDefault(UnitTypeId).VisionRange;
-    public SpriteRenderer PrimarySpriteRenderer => spriteRenderer;
-    public bool IsPresentationVisible => spriteRenderer == null || spriteRenderer.enabled;
+    public SpriteRenderer PrimarySpriteRenderer => presentationRenderer;
+    public bool IsPresentationVisible => presentationRenderer == null || presentationRenderer.enabled;
 
     void Awake()
     {
-        spriteRenderer = GetComponent<SpriteRenderer>();
-        if (spriteRenderer == null)
+        if (presentationRenderer == null)
         {
-            spriteRenderer = GetComponentInChildren<SpriteRenderer>();
+            presentationRenderer = ResolvePresentationRenderer();
         }
 
         healthLabel = GetComponent<UnitHealthLabel>();
@@ -232,17 +231,40 @@ public class Unit : MonoBehaviour
     /// </summary>
     public void SetFogVisibility(bool isVisible, bool isCurrentSideUnit)
     {
-        if (spriteRenderer == null)
+        if (presentationRenderer == null)
             return;
 
         if (isCurrentSideUnit)
         {
-            spriteRenderer.enabled = true;
+            presentationRenderer.enabled = true;
             RefreshHealthPresentation();
             return;
         }
 
-        spriteRenderer.enabled = isVisible;
+        presentationRenderer.enabled = isVisible;
         RefreshHealthPresentation();
+    }
+
+    private SpriteRenderer ResolvePresentationRenderer()
+    {
+        SpriteRenderer rootRenderer = GetComponent<SpriteRenderer>();
+        if (rootRenderer != null)
+        {
+            return rootRenderer;
+        }
+
+        SpriteRenderer[] renderers = GetComponentsInChildren<SpriteRenderer>(includeInactive: true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            SpriteRenderer renderer = renderers[i];
+            if (renderer == null || renderer == moveOutline)
+            {
+                continue;
+            }
+
+            return renderer;
+        }
+
+        return null;
     }
 }

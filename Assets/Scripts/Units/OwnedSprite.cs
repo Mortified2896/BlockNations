@@ -9,11 +9,16 @@ public class OwnedSprite : MonoBehaviour
     public Color playerColor = Color.blue;
     public Color aiColor = Color.red;
 
-    private SpriteRenderer spriteRenderer;
+    [Header("References")]
+    [SerializeField] private SpriteRenderer targetRenderer;
 
     void Awake()
     {
-        spriteRenderer = GetComponent<SpriteRenderer>();
+        if (targetRenderer == null)
+        {
+            targetRenderer = ResolveTargetRenderer();
+        }
+
         UpdateColor();
     }
 
@@ -25,8 +30,42 @@ public class OwnedSprite : MonoBehaviour
 
     private void UpdateColor()
     {
-        if (spriteRenderer == null) return;
+        if (targetRenderer == null)
+        {
+            targetRenderer = ResolveTargetRenderer();
+        }
 
-        spriteRenderer.color = isPlayerOwned ? playerColor : aiColor;
+        if (targetRenderer == null) return;
+
+        targetRenderer.color = isPlayerOwned ? playerColor : aiColor;
+    }
+
+    private SpriteRenderer ResolveTargetRenderer()
+    {
+        SpriteRenderer rootRenderer = GetComponent<SpriteRenderer>();
+        if (rootRenderer != null)
+        {
+            return rootRenderer;
+        }
+
+        Unit unit = GetComponent<Unit>();
+        SpriteRenderer[] renderers = GetComponentsInChildren<SpriteRenderer>(includeInactive: true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            SpriteRenderer renderer = renderers[i];
+            if (renderer == null)
+            {
+                continue;
+            }
+
+            if (unit != null && renderer == unit.moveOutline)
+            {
+                continue;
+            }
+
+            return renderer;
+        }
+
+        return null;
     }
 }
