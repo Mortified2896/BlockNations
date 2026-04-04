@@ -17,6 +17,12 @@ The HTTP transport contract doc describes request/response shape only.
 - `2`: temporary migration source retained for legacy save compatibility.
 - Any future PBp game/snapshot upgrade must be called out in code, commit messages, and changelog notes.
 
+## Combat Scale Note
+
+- Combat values are now represented internally as scaled integers with `CombatScale = 10`.
+- Player-facing rule values remain decimal values such as `1.0`, `0.5`, and `0.1`; the wire/save representation may store the scaled integer equivalents `10`, `5`, and `1`.
+- Treat this as PBp protocol-relevant data representation. Any future change to combat scaling or serialized combat number semantics should be treated as a compatibility/versioning change.
+
 ## Migration Policy
 
 - Prefer forward-only migration for supported PBp content and snapshot formats.

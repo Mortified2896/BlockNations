@@ -37,6 +37,26 @@ Current snapshot of the repo after the gameplay UITK migration. This is a factua
 - Do not assume older menu-only polling notes are current.
 - File-based PBp support still exists in code, but the MVP multiplayer direction is HTTP PBp.
 
+## Visibility / Fog Rules
+
+- Tactical visibility used for gameplay decisions is live only.
+- Visibility is recomputed immediately after movement and other relevant actions.
+- Visibility can shrink during the acting player's own turn if a spotting unit moves away.
+- There is no separate "seen this turn" or sticky tactical visibility layer in the current MVP rule set.
+- Explored state is visual memory only; it is not current tactical visibility.
+- Movement order therefore matters for what can still be seen and targeted later in the same turn.
+- Rider surprise after losing sight is expected under the current MVP rule, not a bug.
+
+## Combat Number Representation
+
+- Combat uses scaled integers for deterministic internal storage.
+- `CombatScale = 10`.
+- Player-facing combat values remain the real rules reference; scaled ints are the internal representation.
+- Displayed `1.0` = internal `10`.
+- Displayed `0.5` = internal `5`.
+- Displayed `0.1` = internal `1`.
+- UI formatting should stay consistent with the displayed decimal values rather than exposing the scaled storage.
+
 ## PBp Display Name Notes
 
 - There are two separate local name concepts:
