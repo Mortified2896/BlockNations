@@ -530,6 +530,7 @@ public class UnitSelectionManager : MonoBehaviour
         bool targetTileHasVisibleOccupant = targetUnit != null && targetTile.isVisibleNow;
 
         bool actionPerformed = false;
+        bool hasPlannedPath = reachablePaths.TryGetValue(targetTile, out List<TileVisibility> plannedPath);
 
         bool canAttackTarget = targetTileHasVisibleOccupant &&
                                targetUnit.isPlayerOwned != selectedUnit.isPlayerOwned &&
@@ -537,7 +538,7 @@ public class UnitSelectionManager : MonoBehaviour
                                selectedUnit.CanAttackThisTurn();
         bool canMoveToEmpty = !targetTileHasVisibleOccupant &&
                               selectedUnit.CanMoveThisTurn() &&
-                              reachablePaths.TryGetValue(targetTile, out List<TileVisibility> plannedPath);
+                              hasPlannedPath;
 
         // If we can neither attack nor move, end selection.
         if (!canAttackTarget && !canMoveToEmpty)
