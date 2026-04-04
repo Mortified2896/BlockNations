@@ -3,7 +3,7 @@ using UnityEngine.EventSystems;
 using System.Collections.Generic;
 
 /// <summary>
-/// Manages which unit is selected and handles tile movement and adjacent attacks.
+/// Manages which unit is selected and handles tile movement and attacks.
 /// </summary>
 public class UnitSelectionManager : MonoBehaviour
 {
@@ -93,7 +93,10 @@ public class UnitSelectionManager : MonoBehaviour
             Unit occupant = GridUtils.GetUnitAtPosition(targetTile.transform.position, unit);
             int stepDistance = GetChebyshevDistance(originTile, targetTile);
             bool hasVisibleOccupant = occupant != null && targetTile.isVisibleNow;
-            if (hasVisibleOccupant && occupant.isPlayerOwned != unit.isPlayerOwned && canAttack && stepDistance == 1)
+            if (hasVisibleOccupant &&
+                occupant.isPlayerOwned != unit.isPlayerOwned &&
+                canAttack &&
+                unit.IsTargetInAttackRange(stepDistance))
             {
                 tile.SetAttackable(true);
             }
@@ -119,7 +122,7 @@ public class UnitSelectionManager : MonoBehaviour
         }
     }
 
-    private bool HasAttackableAdjacentTiles(Unit unit)
+    private bool HasAttackableTilesInRange(Unit unit)
     {
         if (unit == null || !unit.CanAttackThisTurn())
         {
@@ -142,13 +145,14 @@ public class UnitSelectionManager : MonoBehaviour
                 continue;
             }
 
-            if (GetChebyshevDistance(originTile, targetTile) != 1)
+            int tileDistance = GetChebyshevDistance(originTile, targetTile);
+            if (!unit.IsTargetInAttackRange(tileDistance))
             {
                 continue;
             }
 
             Unit occupant = GridUtils.GetUnitAtPosition(targetTile.transform.position, unit);
-            if (occupant != null && occupant.isPlayerOwned != unit.isPlayerOwned)
+            if (occupant != null && targetTile.isVisibleNow && occupant.isPlayerOwned != unit.isPlayerOwned)
             {
                 return true;
             }
@@ -201,7 +205,7 @@ public class UnitSelectionManager : MonoBehaviour
         }
         else
         {
-            reason = "no_adjacent_targets";
+            reason = "no_targets_in_range";
         }
 
         turnManager.LogPbpSelectionGateIfNeeded("selected_no_radius", IsPointerOverUiForDebug(), unit, reason);
@@ -239,7 +243,7 @@ public class UnitSelectionManager : MonoBehaviour
             bool hasVisibleOccupant = occupant != null && targetTile.isVisibleNow;
             if (hasVisibleOccupant && occupant.isPlayerOwned != unit.isPlayerOwned && canAttack)
             {
-                if (stepDistance == 1)
+                if (unit.IsTargetInAttackRange(stepDistance))
                 {
                     attackableCount++;
                 }
@@ -559,7 +563,7 @@ public class UnitSelectionManager : MonoBehaviour
 
         bool canAttackTarget = targetTileHasVisibleOccupant &&
                                targetUnit.isPlayerOwned != selectedUnit.isPlayerOwned &&
-                               stepDistance == 1 &&
+                               selectedUnit.IsTargetInAttackRange(stepDistance) &&
                                selectedUnit.CanAttackThisTurn();
         bool canMoveToEmpty = !targetTileHasVisibleOccupant &&
                               selectedUnit.CanMoveThisTurn() &&
@@ -598,7 +602,7 @@ public class UnitSelectionManager : MonoBehaviour
             actionPerformed = true;
 
             // If the defender died, move into their tile
-            if (killed)
+            if (killed && selectedUnit.AdvancesIntoDefenderTileOnKill)
             {
                 selectedUnit.transform.position = newPos;
                 SyncUnitCityOccupancy(selectedUnit);
@@ -658,9 +662,9 @@ public class UnitSelectionManager : MonoBehaviour
         if (!selectedUnit.CanMoveThisTurn())
         {
             // Special case: if the unit cannot move anymore but still
-            // has not attacked and has an enemy adjacent, keep it
+            // has not attacked and has an enemy in range, keep it
             // selected and show red attack tiles as a reminder.
-            if (selectedUnit.CanAttackThisTurn() && HasAttackableAdjacentTiles(selectedUnit))
+            if (selectedUnit.CanAttackThisTurn() && HasAttackableTilesInRange(selectedUnit))
             {
                 HighlightReachableTiles(selectedUnit);
             }

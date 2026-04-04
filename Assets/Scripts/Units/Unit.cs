@@ -33,7 +33,17 @@ public class Unit : MonoBehaviour
 
     public bool CanAttackThisTurn()
     {
-        return attacksUsedThisTurn < maxAttacksPerTurn;
+        if (attacksUsedThisTurn >= maxAttacksPerTurn)
+        {
+            return false;
+        }
+
+        if (!CanAttackAfterMoving && movesUsedThisTurn > 0)
+        {
+            return false;
+        }
+
+        return true;
     }
 
     public void ResetMovementForTurn()
@@ -79,6 +89,8 @@ public class Unit : MonoBehaviour
     public int currentHealthUnits = CombatValues.FromDisplay(1);
     [FormerlySerializedAs("attack")]
     public int attackUnits = CombatValues.FromDisplay(1);
+    public int attackRange = 1;
+    public bool canAttackAfterMoving = true;
     [FormerlySerializedAs("defense")]
     public int defenseUnits = CombatValues.FromDisplay(0);
 
@@ -88,6 +100,9 @@ public class Unit : MonoBehaviour
     public string UnitTypeId => UnitRegistry.NormalizeTypeId(unitTypeId);
     public string DisplayName => resolvedDefinition != null ? resolvedDefinition.DisplayName : UnitRegistry.GetDefinitionOrDefault(UnitTypeId).DisplayName;
     public int VisionRange => resolvedDefinition != null ? resolvedDefinition.VisionRange : UnitRegistry.GetDefinitionOrDefault(UnitTypeId).VisionRange;
+    public int AttackRange => resolvedDefinition != null ? resolvedDefinition.AttackRange : UnitRegistry.GetDefinitionOrDefault(UnitTypeId).AttackRange;
+    public bool CanAttackAfterMoving => resolvedDefinition != null ? resolvedDefinition.CanAttackAfterMoving : UnitRegistry.GetDefinitionOrDefault(UnitTypeId).CanAttackAfterMoving;
+    public bool AdvancesIntoDefenderTileOnKill => AttackRange <= 1;
     public SpriteRenderer PrimarySpriteRenderer => presentationRenderer;
     public bool IsPresentationVisible => presentationRenderer == null || presentationRenderer.enabled;
 
@@ -120,6 +135,8 @@ public class Unit : MonoBehaviour
         maxAttacksPerTurn = definition.MaxAttacksPerTurn;
         maxHealthUnits = definition.MaxHealthUnits;
         attackUnits = definition.AttackUnits;
+        attackRange = definition.AttackRange;
+        canAttackAfterMoving = definition.CanAttackAfterMoving;
         defenseUnits = definition.DefenseUnits;
 
         if (!preserveCurrentHealth || currentHealthUnits <= 0)
@@ -203,6 +220,11 @@ public class Unit : MonoBehaviour
         }
 
         return false;
+    }
+
+    public bool IsTargetInAttackRange(int tileDistance)
+    {
+        return tileDistance > 0 && tileDistance <= AttackRange;
     }
 
     public void Die()

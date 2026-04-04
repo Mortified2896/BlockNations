@@ -5,6 +5,7 @@ public static class UnitRegistry
     public const string WarriorTypeId = "warrior";
     public const string ScoutTypeId = "scout";
     public const string RiderTypeId = "rider";
+    public const string ArcherTypeId = "archer";
 
     private static readonly Dictionary<string, UnitDefinition> Definitions =
         new Dictionary<string, UnitDefinition>(System.StringComparer.Ordinal)
@@ -17,6 +18,8 @@ public static class UnitRegistry
                 prefabTypeId: WarriorTypeId,
                 maxHealthUnits: CombatValues.FromDisplay(1),
                 attackUnits: CombatValues.FromDisplay(1),
+                attackRange: 1,
+                canAttackAfterMoving: true,
                 defenseUnits: CombatValues.FromDisplay(0),
                 maxMovesPerTurn: 1,
                 maxAttacksPerTurn: 1),
@@ -28,6 +31,8 @@ public static class UnitRegistry
                 prefabTypeId: ScoutTypeId,
                 maxHealthUnits: CombatValues.FromDisplay(1),
                 attackUnits: CombatValues.FromDisplay(0),
+                attackRange: 1,
+                canAttackAfterMoving: false,
                 defenseUnits: CombatValues.FromDisplay(0),
                 maxMovesPerTurn: 1,
                 maxAttacksPerTurn: 0),
@@ -39,14 +44,30 @@ public static class UnitRegistry
                 prefabTypeId: RiderTypeId,
                 maxHealthUnits: CombatValues.FromDisplay(1),
                 attackUnits: CombatValues.FromDisplay(0, 5),
+                attackRange: 1,
+                canAttackAfterMoving: true,
                 defenseUnits: CombatValues.FromDisplay(0),
                 maxMovesPerTurn: 2,
+                maxAttacksPerTurn: 1),
+            [ArcherTypeId] = new UnitDefinition(
+                typeId: ArcherTypeId,
+                displayName: "Archer",
+                recruitCost: 2,
+                visionRange: 1,
+                prefabTypeId: ArcherTypeId,
+                maxHealthUnits: CombatValues.FromDisplay(1),
+                attackUnits: CombatValues.FromDisplay(0, 5),
+                attackRange: 2,
+                canAttackAfterMoving: false,
+                defenseUnits: CombatValues.FromDisplay(0),
+                maxMovesPerTurn: 1,
                 maxAttacksPerTurn: 1)
         };
 
     public static UnitDefinition Warrior => Definitions[WarriorTypeId];
     public static UnitDefinition Scout => Definitions[ScoutTypeId];
     public static UnitDefinition Rider => Definitions[RiderTypeId];
+    public static UnitDefinition Archer => Definitions[ArcherTypeId];
 
     public static System.Collections.Generic.IEnumerable<UnitDefinition> AllDefinitions => Definitions.Values;
 

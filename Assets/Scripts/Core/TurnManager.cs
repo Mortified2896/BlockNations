@@ -2485,7 +2485,7 @@ public class TurnManager : MonoBehaviour
             }
         }
 
-        // 2) Unit movement / attacks (adjacent).
+        // 2) Unit movement / attacks.
         float tileSize = gridManager != null ? Mathf.Max(0.01f, gridManager.tileSize) : 1f;
 
         Unit[] units = Object.FindObjectsByType<Unit>();
@@ -2494,14 +2494,14 @@ public class TurnManager : MonoBehaviour
             if (unit == null || !unit.isPlayerOwned)
                 continue;
 
-            if (HasAnyLegalAdjacentAction(unit, tileSize))
+            if (HasAnyLegalAction(unit, tileSize))
                 return true;
         }
 
         return false;
     }
 
-    private bool HasAnyLegalAdjacentAction(Unit unit, float tileSize)
+    private bool HasAnyLegalAction(Unit unit, float tileSize)
     {
         if (unit == null)
             return false;
@@ -2514,6 +2514,35 @@ public class TurnManager : MonoBehaviour
 
         Vector3 from = unit.transform.position;
         from.z = 0f;
+
+        if (canAttack)
+        {
+            int attackRange = Mathf.Max(1, unit.AttackRange);
+            for (int dx = -attackRange; dx <= attackRange; dx++)
+            {
+                for (int dy = -attackRange; dy <= attackRange; dy++)
+                {
+                    if (dx == 0 && dy == 0) continue;
+
+                    Vector3 to = new Vector3(from.x + dx * tileSize, from.y + dy * tileSize, 0f);
+                    TileVisibility targetTile = null;
+
+                    if (gridManager != null && !gridManager.TryGetTileAtWorldPosition(to, out targetTile))
+                        continue;
+
+                    Unit occupant = GridUtils.GetUnitAtPosition(to, unit);
+                    if (occupant != null &&
+                        occupant.isPlayerOwned != unit.isPlayerOwned &&
+                        (targetTile == null || targetTile.isVisibleNow))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        if (!canMove)
+            return false;
 
         for (int dx = -1; dx <= 1; dx++)
         {
@@ -2528,15 +2557,7 @@ public class TurnManager : MonoBehaviour
                     continue;
 
                 Unit occupant = GridUtils.GetUnitAtPosition(to, unit);
-                if (occupant != null)
-                {
-                    if (canAttack && occupant.isPlayerOwned != unit.isPlayerOwned)
-                        return true;
-
-                    continue;
-                }
-
-                if (canMove)
+                if (occupant == null)
                 {
                     // Empty tile: can always move there (city capture is just moving onto the tile).
                     return true;
@@ -3740,7 +3761,7 @@ public class TurnManager : MonoBehaviour
             unit.RegisterMove();
             bool killed = unit.Attack(targetUnit);
 
-            if (killed)
+            if (killed && unit.AdvancesIntoDefenderTileOnKill)
             {
                 unit.transform.position = newPos;
 
@@ -3763,10 +3784,10 @@ public class TurnManager : MonoBehaviour
         }
 
         // After moving, if the AI unit has not attacked yet,
-        // look for an adjacent enemy to attack (move-then-attack).
+        // look for an enemy within attack range (move-then-attack).
         if (unit.CanAttackThisTurn())
         {
-            float maxDist = 1.5f * tileSize;
+            float maxDist = (Mathf.Max(1, unit.AttackRange) + 0.5f) * tileSize;
             float minDist = 0.1f * tileSize;
             Unit[] allUnits = Object.FindObjectsByType<Unit>();
             Unit bestEnemy = null;
@@ -3788,9 +3809,10 @@ public class TurnManager : MonoBehaviour
             if (bestEnemy != null)
             {
                 unit.RegisterAttack();
+                unit.RegisterMove();
                 bool killed = unit.Attack(bestEnemy);
 
-                if (killed)
+                if (killed && unit.AdvancesIntoDefenderTileOnKill)
                 {
                     unit.transform.position = bestEnemy.transform.position;
                 }

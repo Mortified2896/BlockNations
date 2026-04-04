@@ -379,6 +379,10 @@ MonoBehaviour:
     prefab: {fileID: 8613717610168908074, guid: e2d444af66fb4d598d8cbdca09d2c4c1, type: 3}
     recruitable: 1
     recruitDisplayOrder: 2
+  - unitTypeId: archer
+    prefab: {fileID: 8613717610168908074, guid: f68044eed528474aae224e620943798c, type: 3}
+    recruitable: 1
+    recruitDisplayOrder: 3
   playMusicOnStart: 1
   gameplayMusic: {fileID: 0}
   autoSaveEnabled: 1

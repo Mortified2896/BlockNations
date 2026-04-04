@@ -10,6 +10,8 @@ public sealed class UnitDefinition
         string prefabTypeId,
         int maxHealthUnits,
         int attackUnits,
+        int attackRange,
+        bool canAttackAfterMoving,
         int defenseUnits,
         int maxMovesPerTurn,
         int maxAttacksPerTurn)
@@ -26,6 +28,8 @@ public sealed class UnitDefinition
         PrefabTypeId = string.IsNullOrWhiteSpace(prefabTypeId) ? TypeId : prefabTypeId.Trim();
         MaxHealthUnits = Math.Max(1, maxHealthUnits);
         AttackUnits = Math.Max(0, attackUnits);
+        AttackRange = Math.Max(1, attackRange);
+        CanAttackAfterMoving = canAttackAfterMoving;
         DefenseUnits = Math.Max(0, defenseUnits);
         MaxMovesPerTurn = Math.Max(1, maxMovesPerTurn);
         MaxAttacksPerTurn = Math.Max(0, maxAttacksPerTurn);
@@ -38,6 +42,8 @@ public sealed class UnitDefinition
     public string PrefabTypeId { get; }
     public int MaxHealthUnits { get; }
     public int AttackUnits { get; }
+    public int AttackRange { get; }
+    public bool CanAttackAfterMoving { get; }
     public int DefenseUnits { get; }
     public int MaxMovesPerTurn { get; }
     public int MaxAttacksPerTurn { get; }
