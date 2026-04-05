@@ -64,6 +64,9 @@ public static class SaveManifestService
     {
         public string gameId;
         public string mode;
+        public string mapSizePreset;
+        public int boardWidth;
+        public int boardHeight;
         public bool isPlayerTurn;
         public int turnNumber;
         public bool gameOver;

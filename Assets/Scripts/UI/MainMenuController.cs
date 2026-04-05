@@ -31,8 +31,8 @@ public class MainMenuController : MonoBehaviour
     private const string ReturnToMultiplayerPaneKey = "ui_returnToMultiplayerPane";
     private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
     private const string LegacySharedSaveFileName = "save.json";
-    private const string PbpVersionVerificationFailedMessage = "Unable to verify this game's PBp version. For safety, this match cannot be opened on this build.";
-    private const string PbpActiveGameUpdateRequiredCardText = "Requires newer version";
+    private const string PbpVersionVerificationFailedMessage = "Unable to verify this game's PbP version. For safety, this match cannot be opened on this build.";
+    private const string PbpActiveGameUpdateRequiredCardText = "Requires matching version";
     private const float RemoteTurnStatusFetchCooldownSeconds = 10f;
     private const float MenuClosedRefreshIntervalSeconds = 60f;
     private const float MenuOpenRefreshIntervalSeconds = 10f;
@@ -210,35 +210,41 @@ public class MainMenuController : MonoBehaviour
         else
         {
             // Fallback if no difficulty panel is wired.
-            StartVsAIGame(TurnManager.AIDifficulty.Level1);
+            StartVsAIGame(TurnManager.AIDifficulty.Level1, TurnManager.GetDefaultMapSizePreset());
         }
     }
 
     // Optional: hook dedicated buttons to these for different difficulties.
     public void PlayVsAI_Level1()
     {
-        StartVsAIGame(TurnManager.AIDifficulty.Level1);
+        StartVsAIGame(TurnManager.AIDifficulty.Level1, TurnManager.GetDefaultMapSizePreset());
     }
 
     public void PlayVsAI_Level2()
     {
-        StartVsAIGame(TurnManager.AIDifficulty.Level2);
+        StartVsAIGame(TurnManager.AIDifficulty.Level2, TurnManager.GetDefaultMapSizePreset());
     }
 
     public void PlayVsAI_Level3()
     {
-        StartVsAIGame(TurnManager.AIDifficulty.Level3);
+        StartVsAIGame(TurnManager.AIDifficulty.Level3, TurnManager.GetDefaultMapSizePreset());
     }
 
     public void PlayVsAI_Unfair()
     {
-        StartVsAIGame(TurnManager.AIDifficulty.Unfair);
+        StartVsAIGame(TurnManager.AIDifficulty.Unfair, TurnManager.GetDefaultMapSizePreset());
     }
 
-    void StartVsAIGame(TurnManager.AIDifficulty difficulty)
+    public void StartVsAIGameWithSettings(TurnManager.AIDifficulty difficulty, TurnManager.MapSizePreset mapSizePreset)
+    {
+        StartVsAIGame(difficulty, mapSizePreset);
+    }
+
+    private void StartVsAIGame(TurnManager.AIDifficulty difficulty, TurnManager.MapSizePreset mapSizePreset)
     {
         GameModeSelection.SetPendingMode(TurnManager.GameMode.VsAI);
         AIDifficultySelection.SetPending(difficulty);
+        MapSizeSelection.SetPending(mapSizePreset);
         SceneManager.LoadScene(gameplaySceneName);
 
         if (modeSelectionPanel != null)
@@ -444,6 +450,17 @@ public class MainMenuController : MonoBehaviour
 
     public void PlayByPost()
     {
+        StartPlayByPostGameWithSettings(TurnManager.GetDefaultMapSizePreset());
+    }
+
+    public bool StartPlayByPostGameWithSettings(TurnManager.MapSizePreset mapSizePreset)
+    {
+        if (!isServerOnline)
+        {
+            SetImportStatus(BuildConnectivityWarningStatus());
+            return false;
+        }
+
         string gameId = System.Guid.NewGuid().ToString();
         LocalPlayerSeatStore.SetSeat(gameId, 0);
         PlayerPrefs.SetInt(PlayByPostForceNewKey, 1);
@@ -451,12 +468,15 @@ public class MainMenuController : MonoBehaviour
         PlayerPrefs.Save();
 
         GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
+        MapSizeSelection.SetPending(mapSizePreset);
         SceneManager.LoadScene(gameplaySceneName);
 
         if (modeSelectionPanel != null)
         {
             modeSelectionPanel.SetActive(false);
         }
+
+        return true;
     }
 
     public bool TryJoinPlayByPost(string rawGameId)
@@ -748,12 +768,6 @@ public class MainMenuController : MonoBehaviour
 
     public void Multiplayer_CreateGame()
     {
-        if (!isServerOnline)
-        {
-            SetImportStatus(BuildConnectivityWarningStatus());
-            return;
-        }
-
         PlayByPost();
     }
 
@@ -905,6 +919,10 @@ public class MainMenuController : MonoBehaviour
         public string gameId;
         public string mode;
         public int protocolVersion = 0;
+        public string appVersion = string.Empty;
+        public string mapSizePreset = string.Empty;
+        public int boardWidth;
+        public int boardHeight;
         public bool isPlayerTurn;
         public int turnNumber;
         public bool gameOver;
@@ -1325,8 +1343,8 @@ public class MainMenuController : MonoBehaviour
 
     public string BuildPlayByPostTurnSubtitleForMenu(SaveManifestService.ManifestGameSummary summary)
     {
-        if (TryGetLocalPbpSnapshotProtocolVersion(summary.gameId, out int localProtocolVersion) &&
-            TryGetPbpVersionMismatchWarning(localProtocolVersion, out _))
+        if (TryReadLocalPbpSnapshotHeader(summary.gameId, out MinimalSaveHeader localHeader) &&
+            TryGetPbpPreflightBlockWarningFromHeader(localHeader, out _))
         {
             return PbpActiveGameUpdateRequiredCardText;
         }
@@ -1532,14 +1550,38 @@ public class MainMenuController : MonoBehaviour
         return true;
     }
 
+    // Temporary migration bridge: legacy PbP headers created before appVersion existed
+    // are allowed while their protocolVersion remains supported.
+    private static bool TryGetLegacyBridgedPbpAppVersion(MinimalSaveHeader header, out string appVersion)
+    {
+        appVersion = null;
+        if (header == null)
+        {
+            return false;
+        }
+
+        if (!string.Equals(header.mode, TurnManager.GameMode.PlayByPost.ToString(), StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(header.appVersion))
+        {
+            return true;
+        }
+
+        appVersion = header.appVersion.Trim();
+        return true;
+    }
+
     private static string BuildPbpVersionText(string gameId)
     {
         if (TryGetLocalPbpSnapshotProtocolVersion(gameId, out int protocolVersion))
         {
-            return $"PBp Version: {protocolVersion}";
+            return $"PbP Version: {protocolVersion}";
         }
 
-        return "PBp Version: Unverified";
+        return "PbP Version: Unverified";
     }
 
     private static bool TryGetPbpVersionMismatchWarning(int gameProtocolVersion, out string warning)
@@ -1556,7 +1598,26 @@ public class MainMenuController : MonoBehaviour
             return false;
         }
 
-        warning = $"This game uses PBp {gameProtocolVersion}. Your app supports PBp {supportedVersion}. This match cannot be opened on this build.";
+        warning = $"This game uses PbP {gameProtocolVersion}. Your app supports PbP {supportedVersion}. This match cannot be opened on this build.";
+        return true;
+    }
+
+    private static bool TryGetPbpAppVersionMismatchWarning(string gameAppVersion, out string warning)
+    {
+        warning = null;
+        if (string.IsNullOrWhiteSpace(gameAppVersion))
+        {
+            return false;
+        }
+
+        string normalizedGameAppVersion = gameAppVersion.Trim();
+        if (TurnManager.IsSupportedPbpAppVersion(normalizedGameAppVersion))
+        {
+            return false;
+        }
+
+        warning =
+            $"This game uses Block Nations v{normalizedGameAppVersion}. Your app is v{TurnManager.CurrentAppVersion}. This match cannot be opened on this build.";
         return true;
     }
 
@@ -1569,7 +1630,17 @@ public class MainMenuController : MonoBehaviour
             return true;
         }
 
-        return TryGetPbpVersionMismatchWarning(gameProtocolVersion, out warning);
+        if (TryGetPbpVersionMismatchWarning(gameProtocolVersion, out warning))
+        {
+            return true;
+        }
+
+        if (!TryGetLegacyBridgedPbpAppVersion(header, out string gameAppVersion))
+        {
+            return true;
+        }
+
+        return TryGetPbpAppVersionMismatchWarning(gameAppVersion, out warning);
     }
 
     private static bool TryGetPbpPreflightBlockWarningFromJson(string json, out string warning)

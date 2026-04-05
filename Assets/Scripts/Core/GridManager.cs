@@ -3,9 +3,11 @@ using UnityEngine;
 
 public class GridManager : MonoBehaviour
 {
+    public const int MinSupportedBoardSize = 2;
+
     [Header("Grid Settings")]
-    public int width = 10;      // Number of tiles in X direction
-    public int height = 10;     // Number of tiles in Y direction
+    public int width = 15;      // Number of tiles in X direction
+    public int height = 15;     // Number of tiles in Y direction
     public float tileSize = 1f; // Distance between tile centers
 
     [Header("References")]
@@ -22,10 +24,49 @@ public class GridManager : MonoBehaviour
 
     void Start()
     {
+        RebuildGrid(width, height, recalculateVisibility: true);
+    }
+
+    public bool HasDimensions(int targetWidth, int targetHeight)
+    {
+        return width == targetWidth && height == targetHeight;
+    }
+
+    public void RebuildGrid(int targetWidth, int targetHeight, bool recalculateVisibility = false)
+    {
+        width = Mathf.Max(MinSupportedBoardSize, targetWidth);
+        height = Mathf.Max(MinSupportedBoardSize, targetHeight);
+
+        ClearGeneratedBoard();
+
         tileGrid = new TileVisibility[width, height];
         GenerateGrid();
+        SpawnStartingCities();
 
-        // Spawn starting cities if a city prefab is assigned
+        if (recalculateVisibility && TurnManager.Instance != null)
+        {
+            TurnManager.Instance.RecalculatePlayerVisibility();
+        }
+    }
+
+    private void ClearGeneratedBoard()
+    {
+        for (int index = transform.childCount - 1; index >= 0; index--)
+        {
+            Transform child = transform.GetChild(index);
+            if (child == null)
+            {
+                continue;
+            }
+
+            child.gameObject.SetActive(false);
+            child.SetParent(null);
+            Destroy(child.gameObject);
+        }
+    }
+
+    private void SpawnStartingCities()
+    {
         if (cityPrefab != null)
         {
             // Player city near bottom-left
@@ -37,11 +78,6 @@ public class GridManager : MonoBehaviour
         else
         {
             Debug.LogWarning("City prefab not assigned on GridManager, no cities spawned.");
-        }
-
-        if (TurnManager.Instance != null)
-        {
-            TurnManager.Instance.RecalculatePlayerVisibility();
         }
     }
 

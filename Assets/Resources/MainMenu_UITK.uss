@@ -1662,3 +1662,159 @@
 .ui-responsive-root.menu-phone-wide #ProfilePanel .profile-back-button {
     height: 104px;
 }
+
+.general-settings-overlay {
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    top: 18px;
+    bottom: 18px;
+    justify-content: center;
+    align-items: center;
+    padding-left: 10px;
+    padding-right: 10px;
+    background-color: rgb(49, 77, 121);
+}
+
+.general-settings-card {
+    width: 100%;
+    max-width: 820px;
+    min-height: 520px;
+    padding-left: 32px;
+    padding-right: 32px;
+    padding-top: 32px;
+    padding-bottom: 28px;
+    background-color: rgba(82, 105, 161, 0.92);
+    border-top-width: 1px;
+    border-right-width: 1px;
+    border-bottom-width: 1px;
+    border-left-width: 1px;
+    border-top-color: rgba(255, 255, 255, 0.12);
+    border-right-color: rgba(255, 255, 255, 0.12);
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+    border-left-color: rgba(255, 255, 255, 0.12);
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
+}
+
+.general-settings-title {
+    font-size: 46px;
+    -unity-font-style: bold;
+    color: rgb(245, 249, 255);
+}
+
+.general-settings-subtitle {
+    margin-top: 10px;
+    margin-bottom: 24px;
+    font-size: 24px;
+    color: rgba(245, 249, 255, 0.88);
+    white-space: normal;
+}
+
+.general-settings-section {
+    margin-top: 18px;
+}
+
+.general-settings-section-label {
+    margin-bottom: 14px;
+    font-size: 24px;
+    -unity-font-style: bold;
+    color: rgba(245, 249, 255, 0.92);
+}
+
+.general-settings-option-row {
+    flex-direction: row;
+}
+
+.general-settings-option-grid {
+    flex-direction: column;
+}
+
+.general-settings-option-button {
+    flex-grow: 1;
+    min-width: 0;
+    min-height: 86px;
+    margin-right: 12px;
+    margin-bottom: 12px;
+    font-size: 24px;
+    color: rgb(238, 244, 251);
+    background-color: rgba(126, 146, 196, 0.52);
+    border-top-color: rgba(255, 255, 255, 0.08);
+    border-right-color: rgba(255, 255, 255, 0.08);
+    border-bottom-color: rgba(255, 255, 255, 0.06);
+    border-left-color: rgba(255, 255, 255, 0.08);
+}
+
+.general-settings-option-button.general-settings-option--selected {
+    color: rgb(15, 17, 21);
+    background-color: rgb(247, 248, 250);
+    border-top-color: rgba(25, 29, 36, 0.18);
+    border-right-color: rgba(25, 29, 36, 0.18);
+    border-bottom-color: rgba(25, 29, 36, 0.3);
+    border-left-color: rgba(25, 29, 36, 0.18);
+}
+
+.general-settings-option-row > .general-settings-option-button {
+    flex-basis: 0;
+}
+
+.general-settings-option-row > .general-settings-option-button:last-child {
+    margin-right: 0;
+}
+
+.general-settings-option-row--grid {
+    width: 100%;
+}
+
+.general-settings-actions {
+    flex-direction: row;
+    justify-content: stretch;
+    align-items: center;
+    margin-top: 28px;
+    padding-top: 18px;
+    border-top-width: 0;
+}
+
+.general-settings-action-button {
+    flex-grow: 1;
+    flex-basis: 0;
+    min-width: 0;
+    height: 88px;
+    margin-left: 12px;
+    font-size: 26px;
+}
+
+.general-settings-actions > .general-settings-action-button:first-child {
+    margin-left: 0;
+}
+
+.general-settings-action-button-primary {
+    background-color: rgb(247, 248, 250);
+    color: rgb(15, 17, 21);
+}
+
+.ui-responsive-root.menu-phone-wide .general-settings-card {
+    max-width: none;
+    min-height: 0;
+    padding-left: 24px;
+    padding-right: 24px;
+    padding-top: 28px;
+    padding-bottom: 24px;
+}
+
+.ui-responsive-root.menu-phone-wide .general-settings-title {
+    font-size: 58px;
+}
+
+.ui-responsive-root.menu-phone-wide .general-settings-subtitle,
+.ui-responsive-root.menu-phone-wide .general-settings-section-label {
+    font-size: 32px;
+}
+
+.ui-responsive-root.menu-phone-wide .general-settings-option-button,
+.ui-responsive-root.menu-phone-wide .general-settings-action-button {
+    min-height: 96px;
+    font-size: 34px;
+}

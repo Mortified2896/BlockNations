@@ -37,6 +37,13 @@ public class TurnManager : MonoBehaviour
         Unfair
     }
 
+    public enum MapSizePreset
+    {
+        Unspecified,
+        Small,
+        Large
+    }
+
     //Dev only - Local seat selection for Play-by-Post testing only
 
     public enum LocalSeat
@@ -165,16 +172,86 @@ public class TurnManager : MonoBehaviour
     private const string DefaultGameOverPrimaryButtonLabel = "Play Again";
     private const string PbpVersionMismatchTitle = "Update Required";
     private const string PbpVersionMismatchInGameMessage =
-        "This PBp game was created or updated with a newer version of BlockNations and cannot continue on this build. Please update the app to continue.";
+        "This PbP game was created or updated with a newer version of BlockNations and cannot continue on this build. Please update the app to continue.";
+    private const string PbpAppVersionMismatchInGameMessage =
+        "This PbP game was created or updated with a different version of BlockNations and cannot continue on this build. Both players must use the same app version.";
     private const string PbpVersionMismatchExitButtonLabel = "Back to Multiplayer";
+    // PbP compatibility policy:
+    // - Bump appVersion when the build identity changes and mixed-build PbP play should be blocked.
+    // - Bump protocolVersion only when serialized PbP payload meaning changes and older payloads
+    //   cannot be read safely as-is.
+    // - Keep at most one explicit migration source at a time: the immediately previous protocol.
     private const int SupportedPbpMigrationProtocolVersion = 3;
     private const int SupportedPbpProtocolVersion = 4;
+    public const int SmallBoardWidth = 10;
+    public const int SmallBoardHeight = 10;
+    public const int LargeBoardWidth = 15;
+    public const int LargeBoardHeight = 15;
     public static int PbpProtocolVersion => SupportedPbpProtocolVersion;
+    public static string CurrentAppVersion => string.IsNullOrWhiteSpace(Application.version)
+        ? "unknown"
+        : Application.version.Trim();
 
     public static bool IsSupportedPbpLoadProtocolVersion(int protocolVersion)
     {
         return protocolVersion == SupportedPbpProtocolVersion ||
                protocolVersion == SupportedPbpMigrationProtocolVersion;
+    }
+
+    public static bool IsSupportedPbpAppVersion(string appVersion)
+    {
+        return !string.IsNullOrWhiteSpace(appVersion) &&
+               string.Equals(appVersion.Trim(), CurrentAppVersion, System.StringComparison.Ordinal);
+    }
+
+    public static MapSizePreset GetDefaultMapSizePreset()
+    {
+        return MapSizePreset.Large;
+    }
+
+    public static void GetBoardDimensionsForPreset(MapSizePreset preset, out int boardWidth, out int boardHeight)
+    {
+        switch (preset)
+        {
+            case MapSizePreset.Small:
+                boardWidth = SmallBoardWidth;
+                boardHeight = SmallBoardHeight;
+                return;
+
+            case MapSizePreset.Large:
+            case MapSizePreset.Unspecified:
+            default:
+                boardWidth = LargeBoardWidth;
+                boardHeight = LargeBoardHeight;
+                return;
+        }
+    }
+
+    public static MapSizePreset ResolveMapSizePreset(int boardWidth, int boardHeight)
+    {
+        if (boardWidth == SmallBoardWidth && boardHeight == SmallBoardHeight)
+        {
+            return MapSizePreset.Small;
+        }
+
+        if (boardWidth == LargeBoardWidth && boardHeight == LargeBoardHeight)
+        {
+            return MapSizePreset.Large;
+        }
+
+        return GetDefaultMapSizePreset();
+    }
+
+    public static MapSizePreset ParseMapSizePresetOrDefault(string rawPreset)
+    {
+        if (!string.IsNullOrWhiteSpace(rawPreset) &&
+            System.Enum.TryParse(rawPreset, out MapSizePreset parsedPreset) &&
+            parsedPreset != MapSizePreset.Unspecified)
+        {
+            return parsedPreset;
+        }
+
+        return GetDefaultMapSizePreset();
     }
 
     // Controlled via Unity Scripting Define Symbols:
@@ -253,9 +330,13 @@ public class TurnManager : MonoBehaviour
     {
         public string version = "3";
         public int protocolVersion;
+        public string appVersion;
         public string gameId;
         public string mode;
         public string aiDifficulty;
+        public string mapSizePreset;
+        public int boardWidth;
+        public int boardHeight;
         public bool isPlayerTurn;
         public int turnNumber;
         public int playerGold;
@@ -570,6 +651,40 @@ public class TurnManager : MonoBehaviour
 
         error =
             $"PBp load blocked: protocolVersion={loadedProtocolVersion} does not match supported={SupportedPbpProtocolVersion} and is not a supported migration source.";
+        return false;
+    }
+
+    private static bool TryValidatePbpLoadAppVersion(
+        GameSave save,
+        out string loadedAppVersion,
+        out string error)
+    {
+        loadedAppVersion = save != null ? save.appVersion : null;
+        error = null;
+
+        if (save == null)
+        {
+            error = "PBp load blocked: save was null.";
+            return false;
+        }
+
+        // Temporary migration bridge: legacy PbP saves created before appVersion existed
+        // are allowed while their protocolVersion remains supported.
+        // TODO: Remove this bridge when protocol 3 support is dropped.
+        if (string.IsNullOrWhiteSpace(loadedAppVersion))
+        {
+            loadedAppVersion = null;
+            return true;
+        }
+
+        loadedAppVersion = loadedAppVersion.Trim();
+        if (IsSupportedPbpAppVersion(loadedAppVersion))
+        {
+            return true;
+        }
+
+        error =
+            $"PBp load blocked: appVersion={loadedAppVersion} does not match currentAppVersion={CurrentAppVersion}.";
         return false;
     }
 
@@ -1161,6 +1276,7 @@ public class TurnManager : MonoBehaviour
 
         // Preserve the mode (VsAI / PlayByPost) for the next game.
         GameModeSelection.SetPendingMode(currentMode);
+        MapSizeSelection.SetPending(GetCurrentMapSizePreset());
 
         Time.timeScale = 1f;
         var currentScene = SceneManager.GetActiveScene();
@@ -1229,6 +1345,39 @@ public class TurnManager : MonoBehaviour
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         Debug.LogWarning(
             $"PBp in-game version mismatch popup shown (source={debugSource}, gameId={loadedGameId}, loadedProtocol={loadedProtocolVersion}, supported={SupportedPbpProtocolVersion}).");
+#endif
+
+        return true;
+    }
+
+    private bool TryShowPbpAppVersionMismatchInGamePopup(string loadedAppVersion, string gameId, string debugSource)
+    {
+        string loadedGameId = string.IsNullOrWhiteSpace(gameId) ? "<none>" : gameId;
+        string loadedVersion = string.IsNullOrWhiteSpace(loadedAppVersion) ? "<missing>" : loadedAppVersion;
+
+        isPlayByPostWaitingForExport = false;
+        isPlayByPostFetchInProgress = false;
+        playByPostLastFetchWasNoTurn = false;
+
+        if (playByPostPollRoutine != null)
+        {
+            StopCoroutine(playByPostPollRoutine);
+            playByPostPollRoutine = null;
+        }
+
+        gameOver = true;
+        ResetPbpEndgameRuntimeState();
+        SetGameOverUiTitle(PbpVersionMismatchTitle);
+        ShowGameOverPopup(PbpAppVersionMismatchInGameMessage, writeLog: false);
+        SetGameOverPrimaryButtonState(
+            PbpVersionMismatchExitButtonLabel,
+            true,
+            PbpEndgamePrimaryAction.BackToMultiplayer);
+        RefreshEndTurnButtonInteractable(force: true);
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        Debug.LogWarning(
+            $"PBp in-game app version mismatch popup shown (source={debugSource}, gameId={loadedGameId}, loadedAppVersion={loadedVersion}, currentAppVersion={CurrentAppVersion}).");
 #endif
 
         return true;
@@ -2251,6 +2400,15 @@ public class TurnManager : MonoBehaviour
         {
             SetGameMode(GameMode.VsAI);
         }
+
+        MapSizePreset selectedMapSize = GetDefaultMapSizePreset();
+        if (MapSizeSelection.TryConsume(out MapSizePreset pendingMapSize))
+        {
+            selectedMapSize = pendingMapSize;
+        }
+
+        GetBoardDimensionsForPreset(selectedMapSize, out int boardWidth, out int boardHeight);
+        EnsureBoardDimensions(boardWidth, boardHeight);
 
         if (currentMode == GameMode.PlayByPost)
         {
@@ -4781,8 +4939,12 @@ public class TurnManager : MonoBehaviour
         {
             gameId = currentGameId,
             protocolVersion = SupportedPbpProtocolVersion,
+            appVersion = CurrentAppVersion,
             mode = currentMode.ToString(),
             aiDifficulty = aiDifficulty.ToString(),
+            mapSizePreset = GetCurrentMapSizePreset().ToString(),
+            boardWidth = gridManager.width,
+            boardHeight = gridManager.height,
             isPlayerTurn = isPlayerTurn,
             turnNumber = turnNumber,
             playerGold = playerGold,
@@ -4925,6 +5087,48 @@ public class TurnManager : MonoBehaviour
     {
         int clampedRoundTurn = System.Math.Max(0, roundTurn);
         return clampedRoundTurn * 2 + (turnIsPlayer ? 0 : 1);
+    }
+
+    private MapSizePreset GetCurrentMapSizePreset()
+    {
+        if (gridManager == null)
+        {
+            return GetDefaultMapSizePreset();
+        }
+
+        return ResolveMapSizePreset(gridManager.width, gridManager.height);
+    }
+
+    private static void ResolveBoardSizeFromSave(GameSave save, out MapSizePreset preset, out int boardWidth, out int boardHeight)
+    {
+        preset = save != null ? ParseMapSizePresetOrDefault(save.mapSizePreset) : GetDefaultMapSizePreset();
+
+        GetBoardDimensionsForPreset(preset, out int presetWidth, out int presetHeight);
+        boardWidth = save != null && save.boardWidth > 0 ? save.boardWidth : presetWidth;
+        boardHeight = save != null && save.boardHeight > 0 ? save.boardHeight : presetHeight;
+
+        if (boardWidth <= 0 || boardHeight <= 0)
+        {
+            boardWidth = presetWidth;
+            boardHeight = presetHeight;
+        }
+    }
+
+    private void EnsureBoardDimensions(int boardWidth, int boardHeight)
+    {
+        if (gridManager == null)
+        {
+            return;
+        }
+
+        if (gridManager.HasDimensions(boardWidth, boardHeight) &&
+            gridManager.tileGrid != null &&
+            gridManager.tileGrid.Length > 0)
+        {
+            return;
+        }
+
+        gridManager.RebuildGrid(boardWidth, boardHeight);
     }
 
     private bool TryBuildPlayByPostExportSave(out GameSave saveForExport, out string json)
@@ -5104,6 +5308,15 @@ private void PBpDebugSyncNow_Context()
                     return false;
                 }
 
+                if (!TryValidatePbpLoadAppVersion(
+                        save,
+                        out string loadedAppVersion,
+                        out string appVersionError))
+                {
+                    Debug.LogError($"{appVersionError} (gameId={loadedGameId}).");
+                    TryShowPbpAppVersionMismatchInGamePopup(loadedAppVersion, save.gameId, debugSource);
+                    return false;
+                }
             }
 
             if (string.Equals(save.mode, GameMode.PlayByPost.ToString(), System.StringComparison.Ordinal) ||
@@ -5117,6 +5330,9 @@ private void PBpDebugSyncNow_Context()
             save.tiles ??= new List<SavedTile>();
             save.units ??= new List<SavedUnit>();
             save.cities ??= new List<SavedCity>();
+
+            ResolveBoardSizeFromSave(save, out _, out int savedBoardWidth, out int savedBoardHeight);
+            EnsureBoardDimensions(savedBoardWidth, savedBoardHeight);
 
             // Basic grid validation: ensure saved tiles fit current grid.
             int maxTileX = -1;

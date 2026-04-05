@@ -111,6 +111,40 @@
             </ui:VisualElement>
         </ui:VisualElement>
 
+        <ui:VisualElement name="GeneralSettingsPanel" class="general-settings-overlay" style="display: none;">
+            <ui:VisualElement name="GeneralSettingsCard" class="general-settings-card">
+                <ui:Label name="GeneralSettingsTitleLabel" text="General Settings" class="general-settings-title" />
+                <ui:Label name="GeneralSettingsSubtitleLabel" text="" class="general-settings-subtitle" />
+
+                <ui:VisualElement class="general-settings-section">
+                    <ui:Label text="Map Size" class="general-settings-section-label" />
+                    <ui:VisualElement class="general-settings-option-row">
+                        <ui:Button name="GeneralSettingsMapSmallButton" text="Small 10x10" class="menu-button general-settings-option-button" />
+                        <ui:Button name="GeneralSettingsMapLargeButton" text="Large 15x15" class="menu-button general-settings-option-button" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+
+                <ui:VisualElement name="GeneralSettingsAiSection" class="general-settings-section">
+                    <ui:Label text="AI Level" class="general-settings-section-label" />
+                    <ui:VisualElement class="general-settings-option-grid">
+                        <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
+                            <ui:Button name="GeneralSettingsAiLevel1Button" text="Level 1" class="menu-button general-settings-option-button" />
+                            <ui:Button name="GeneralSettingsAiLevel2Button" text="Level 2" class="menu-button general-settings-option-button" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
+                            <ui:Button name="GeneralSettingsAiLevel3Button" text="Level 3" class="menu-button general-settings-option-button" />
+                            <ui:Button name="GeneralSettingsAiUnfairButton" text="Unfair" class="menu-button general-settings-option-button" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+                </ui:VisualElement>
+
+                <ui:VisualElement class="general-settings-actions">
+                    <ui:Button name="GeneralSettingsConfirmButton" text="Start Game" class="menu-button general-settings-action-button general-settings-action-button-primary" />
+                    <ui:Button name="GeneralSettingsBackButton" text="Back" class="menu-button general-settings-action-button" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
         <ui:Label name="VersionLabel" text="" class="version-label" />
     </ui:VisualElement>
 </ui:UXML>

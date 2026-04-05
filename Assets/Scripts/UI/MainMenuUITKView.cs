@@ -49,6 +49,9 @@ public class MainMenuUITKView : MonoBehaviour
     private VisualElement detailsResignConfirmContent;
     private VisualElement joinPanel;
     private VisualElement createSuccessPanel;
+    private VisualElement generalSettingsPanel;
+    private VisualElement generalSettingsCard;
+    private VisualElement generalSettingsAiSection;
     private ScrollView activeGamesList;
     private Label detailsTitleLabel;
     private Label detailsSubtitleLabel;
@@ -62,6 +65,8 @@ public class MainMenuUITKView : MonoBehaviour
     private Label profilePlayerIdValueLabel;
     private Label profileStatusLabel;
     private Label createSuccessGameCodeLabel;
+    private Label generalSettingsTitleLabel;
+    private Label generalSettingsSubtitleLabel;
 
     private Button continueButton;
     private Button playVsAiButton;
@@ -74,6 +79,14 @@ public class MainMenuUITKView : MonoBehaviour
     private Button debugNotificationButton;
     private Button createSuccessCopyButton;
     private Button createSuccessCloseButton;
+    private Button generalSettingsMapSmallButton;
+    private Button generalSettingsMapLargeButton;
+    private Button generalSettingsAiLevel1Button;
+    private Button generalSettingsAiLevel2Button;
+    private Button generalSettingsAiLevel3Button;
+    private Button generalSettingsAiUnfairButton;
+    private Button generalSettingsConfirmButton;
+    private Button generalSettingsBackButton;
     private Button detailsOpenButton;
     private Button detailsSendReminderButton;
     private Button detailsResignButton;
@@ -108,6 +121,24 @@ public class MainMenuUITKView : MonoBehaviour
     private LocalPlayerProfileStore.ProfileData profileData;
     private string pendingCreateSuccessGameId;
     private string selectedDetailsGameId = string.Empty;
+    private PendingGeneralSettingsMode pendingGeneralSettingsMode = PendingGeneralSettingsMode.None;
+    private GeneralSettingsBackgroundPane generalSettingsBackgroundPane = GeneralSettingsBackgroundPane.None;
+    private TurnManager.MapSizePreset selectedMapSizePreset = TurnManager.GetDefaultMapSizePreset();
+    private TurnManager.AIDifficulty selectedAIDifficulty = TurnManager.AIDifficulty.Level1;
+
+    private enum PendingGeneralSettingsMode
+    {
+        None,
+        VsAI,
+        PlayByPost
+    }
+
+    private enum GeneralSettingsBackgroundPane
+    {
+        None,
+        Main,
+        Multiplayer
+    }
 
     private void Awake()
     {
@@ -296,6 +327,7 @@ public class MainMenuUITKView : MonoBehaviour
         SetVisible(profilePanel, false);
         SetVisible(detailsPanel, false);
         SetVisible(createSuccessPanel, false);
+        SetVisible(generalSettingsPanel, false);
         SetStatus(mainMenuController != null ? mainMenuController.CurrentImportStatus : string.Empty);
 
         ApplySafeArea(force: true);
@@ -332,6 +364,9 @@ public class MainMenuUITKView : MonoBehaviour
         detailsResignConfirmContent = root.Q<VisualElement>("DetailsResignConfirmContent");
         joinPanel = root.Q<VisualElement>("JoinPanel");
         createSuccessPanel = root.Q<VisualElement>("CreateSuccessPanel");
+        generalSettingsPanel = root.Q<VisualElement>("GeneralSettingsPanel");
+        generalSettingsCard = root.Q<VisualElement>("GeneralSettingsCard");
+        generalSettingsAiSection = root.Q<VisualElement>("GeneralSettingsAiSection");
         activeGamesList = root.Q<ScrollView>("ActiveGamesList");
         detailsTitleLabel = root.Q<Label>("DetailsTitleLabel");
         detailsSubtitleLabel = root.Q<Label>("DetailsSubtitleLabel");
@@ -352,6 +387,8 @@ public class MainMenuUITKView : MonoBehaviour
         profileStatusLabel = root.Q<Label>("ProfileStatusLabel");
         profileTypedDisplayNameInput = root.Q<TextField>("ProfileTypedDisplayNameInput");
         createSuccessGameCodeLabel = root.Q<Label>("CreateSuccessGameCodeLabel");
+        generalSettingsTitleLabel = root.Q<Label>("GeneralSettingsTitleLabel");
+        generalSettingsSubtitleLabel = root.Q<Label>("GeneralSettingsSubtitleLabel");
 
         continueButton = root.Q<Button>("ContinueButton");
         playVsAiButton = root.Q<Button>("PlayVsAIButton");
@@ -366,6 +403,14 @@ public class MainMenuUITKView : MonoBehaviour
         debugNotificationButton = root.Q<Button>("DebugNotificationButton");
         createSuccessCopyButton = root.Q<Button>("CreateSuccessCopyButton");
         createSuccessCloseButton = root.Q<Button>("CreateSuccessCloseButton");
+        generalSettingsMapSmallButton = root.Q<Button>("GeneralSettingsMapSmallButton");
+        generalSettingsMapLargeButton = root.Q<Button>("GeneralSettingsMapLargeButton");
+        generalSettingsAiLevel1Button = root.Q<Button>("GeneralSettingsAiLevel1Button");
+        generalSettingsAiLevel2Button = root.Q<Button>("GeneralSettingsAiLevel2Button");
+        generalSettingsAiLevel3Button = root.Q<Button>("GeneralSettingsAiLevel3Button");
+        generalSettingsAiUnfairButton = root.Q<Button>("GeneralSettingsAiUnfairButton");
+        generalSettingsConfirmButton = root.Q<Button>("GeneralSettingsConfirmButton");
+        generalSettingsBackButton = root.Q<Button>("GeneralSettingsBackButton");
         detailsOpenButton = root.Q<Button>("DetailsOpenButton");
         detailsSendReminderButton = root.Q<Button>("DetailsSendReminderButton");
         detailsResignButton = root.Q<Button>("DetailsResignButton");
@@ -780,6 +825,46 @@ public class MainMenuUITKView : MonoBehaviour
             createSuccessCloseButton.clicked += HandleCreateSuccessCloseClicked;
         }
 
+        if (generalSettingsMapSmallButton != null)
+        {
+            generalSettingsMapSmallButton.clicked += HandleGeneralSettingsMapSmallClicked;
+        }
+
+        if (generalSettingsMapLargeButton != null)
+        {
+            generalSettingsMapLargeButton.clicked += HandleGeneralSettingsMapLargeClicked;
+        }
+
+        if (generalSettingsAiLevel1Button != null)
+        {
+            generalSettingsAiLevel1Button.clicked += HandleGeneralSettingsAiLevel1Clicked;
+        }
+
+        if (generalSettingsAiLevel2Button != null)
+        {
+            generalSettingsAiLevel2Button.clicked += HandleGeneralSettingsAiLevel2Clicked;
+        }
+
+        if (generalSettingsAiLevel3Button != null)
+        {
+            generalSettingsAiLevel3Button.clicked += HandleGeneralSettingsAiLevel3Clicked;
+        }
+
+        if (generalSettingsAiUnfairButton != null)
+        {
+            generalSettingsAiUnfairButton.clicked += HandleGeneralSettingsAiUnfairClicked;
+        }
+
+        if (generalSettingsConfirmButton != null)
+        {
+            generalSettingsConfirmButton.clicked += HandleGeneralSettingsConfirmClicked;
+        }
+
+        if (generalSettingsBackButton != null)
+        {
+            generalSettingsBackButton.clicked += HandleGeneralSettingsBackClicked;
+        }
+
         if (detailsOpenButton != null)
         {
             detailsOpenButton.clicked += HandleDetailsOpenClicked;
@@ -902,6 +987,46 @@ public class MainMenuUITKView : MonoBehaviour
         if (createSuccessCloseButton != null)
         {
             createSuccessCloseButton.clicked -= HandleCreateSuccessCloseClicked;
+        }
+
+        if (generalSettingsMapSmallButton != null)
+        {
+            generalSettingsMapSmallButton.clicked -= HandleGeneralSettingsMapSmallClicked;
+        }
+
+        if (generalSettingsMapLargeButton != null)
+        {
+            generalSettingsMapLargeButton.clicked -= HandleGeneralSettingsMapLargeClicked;
+        }
+
+        if (generalSettingsAiLevel1Button != null)
+        {
+            generalSettingsAiLevel1Button.clicked -= HandleGeneralSettingsAiLevel1Clicked;
+        }
+
+        if (generalSettingsAiLevel2Button != null)
+        {
+            generalSettingsAiLevel2Button.clicked -= HandleGeneralSettingsAiLevel2Clicked;
+        }
+
+        if (generalSettingsAiLevel3Button != null)
+        {
+            generalSettingsAiLevel3Button.clicked -= HandleGeneralSettingsAiLevel3Clicked;
+        }
+
+        if (generalSettingsAiUnfairButton != null)
+        {
+            generalSettingsAiUnfairButton.clicked -= HandleGeneralSettingsAiUnfairClicked;
+        }
+
+        if (generalSettingsConfirmButton != null)
+        {
+            generalSettingsConfirmButton.clicked -= HandleGeneralSettingsConfirmClicked;
+        }
+
+        if (generalSettingsBackButton != null)
+        {
+            generalSettingsBackButton.clicked -= HandleGeneralSettingsBackClicked;
         }
 
         if (detailsOpenButton != null)
@@ -1028,10 +1153,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HandlePlayVsAiClicked()
     {
-        if (mainMenuController != null)
-        {
-            mainMenuController.PlayVsAI();
-        }
+        ShowGeneralSettingsPanel(PendingGeneralSettingsMode.VsAI);
     }
 
     private void HandleMultiplayerClicked()
@@ -1062,10 +1184,76 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HandleCreateClicked()
     {
-        if (mainMenuController != null)
+        ShowGeneralSettingsPanel(PendingGeneralSettingsMode.PlayByPost);
+    }
+
+    private void HandleGeneralSettingsMapSmallClicked()
+    {
+        selectedMapSizePreset = TurnManager.MapSizePreset.Small;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsMapLargeClicked()
+    {
+        selectedMapSizePreset = TurnManager.MapSizePreset.Large;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAiLevel1Clicked()
+    {
+        selectedAIDifficulty = TurnManager.AIDifficulty.Level1;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAiLevel2Clicked()
+    {
+        selectedAIDifficulty = TurnManager.AIDifficulty.Level2;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAiLevel3Clicked()
+    {
+        selectedAIDifficulty = TurnManager.AIDifficulty.Level3;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAiUnfairClicked()
+    {
+        selectedAIDifficulty = TurnManager.AIDifficulty.Unfair;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsConfirmClicked()
+    {
+        if (mainMenuController == null)
         {
-            mainMenuController.Multiplayer_CreateGame();
+            return;
         }
+
+        bool started = false;
+        if (pendingGeneralSettingsMode == PendingGeneralSettingsMode.VsAI)
+        {
+            mainMenuController.StartVsAIGameWithSettings(selectedAIDifficulty, selectedMapSizePreset);
+            started = true;
+        }
+        else if (pendingGeneralSettingsMode == PendingGeneralSettingsMode.PlayByPost)
+        {
+            started = mainMenuController.StartPlayByPostGameWithSettings(selectedMapSizePreset);
+            if (!started)
+            {
+                SetStatus(mainMenuController.CurrentImportStatus);
+            }
+        }
+
+        if (started)
+        {
+            HideGeneralSettingsPanel();
+        }
+    }
+
+    private void HandleGeneralSettingsBackClicked()
+    {
+        HideGeneralSettingsPanel();
     }
 
     private void HandleJoinClicked()
@@ -1534,6 +1722,7 @@ public class MainMenuUITKView : MonoBehaviour
     {
         ResetActiveGamesElasticOffset();
         StopRefreshCountdownTimer();
+        HideGeneralSettingsPanel();
         HideCreateSuccessPanel();
         HideJoinPanel();
         SetDetailsConfirmState(false);
@@ -1560,6 +1749,7 @@ public class MainMenuUITKView : MonoBehaviour
     private void ShowMultiplayerPanel()
     {
         ResetActiveGamesElasticOffset();
+        HideGeneralSettingsPanel();
         SetDetailsConfirmState(false);
         HideJoinPanel();
         ClearProfileStatus();
@@ -1597,6 +1787,7 @@ public class MainMenuUITKView : MonoBehaviour
         profileData = LocalPlayerProfileStore.GetOrCreateProfile();
         RefreshProfileLabels();
         ClearProfileStatus();
+        HideGeneralSettingsPanel();
         HideJoinPanel();
         HideDetailsPanel();
         SetVisible(mainPanel, false);
@@ -1670,6 +1861,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void ShowJoinPanel()
     {
+        HideGeneralSettingsPanel();
         HideCreateSuccessPanel();
         SetDetailsConfirmState(false);
         SetVisible(joinPanel, true);
@@ -1696,6 +1888,139 @@ public class MainMenuUITKView : MonoBehaviour
         if (joinGameIdInput != null)
         {
             joinGameIdInput.value = string.Empty;
+        }
+    }
+
+    private void ShowGeneralSettingsPanel(PendingGeneralSettingsMode mode)
+    {
+        pendingGeneralSettingsMode = mode;
+        generalSettingsBackgroundPane = IsVisible(multiplayerPanel)
+            ? GeneralSettingsBackgroundPane.Multiplayer
+            : GeneralSettingsBackgroundPane.Main;
+        selectedMapSizePreset = TurnManager.GetDefaultMapSizePreset();
+        selectedAIDifficulty = TurnManager.AIDifficulty.Level1;
+        HideCreateSuccessPanel();
+        HideJoinPanel();
+        SetDetailsConfirmState(false);
+        HideDetailsPanel();
+        SetVisible(mainPanel, false);
+        SetVisible(multiplayerPanel, false);
+
+        if (versionLabel != null)
+        {
+            versionLabel.style.display = DisplayStyle.None;
+        }
+
+        if (multiplayerVersionLabel != null)
+        {
+            multiplayerVersionLabel.style.display = DisplayStyle.None;
+        }
+
+        bool isVsAi = mode == PendingGeneralSettingsMode.VsAI;
+
+        if (generalSettingsTitleLabel != null)
+        {
+            generalSettingsTitleLabel.text = "General Settings";
+        }
+
+        if (generalSettingsSubtitleLabel != null)
+        {
+            generalSettingsSubtitleLabel.text = isVsAi
+                ? "Choose your map size and AI level."
+                : "Choose your map size for this new play-by-post match.";
+        }
+
+        if (generalSettingsAiSection != null)
+        {
+            generalSettingsAiSection.style.display = isVsAi ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        if (generalSettingsConfirmButton != null)
+        {
+            generalSettingsConfirmButton.text = isVsAi ? "Start Game" : "Create Match";
+        }
+
+        RefreshGeneralSettingsSelectionState();
+        SetVisible(generalSettingsPanel, true);
+    }
+
+    private void HideGeneralSettingsPanel()
+    {
+        pendingGeneralSettingsMode = PendingGeneralSettingsMode.None;
+        SetVisible(generalSettingsPanel, false);
+
+        switch (generalSettingsBackgroundPane)
+        {
+            case GeneralSettingsBackgroundPane.Multiplayer:
+                SetVisible(mainPanel, false);
+                SetVisible(multiplayerPanel, true);
+                if (versionLabel != null)
+                {
+                    versionLabel.style.display = DisplayStyle.None;
+                }
+                if (multiplayerVersionLabel != null)
+                {
+                    multiplayerVersionLabel.style.display = DisplayStyle.None;
+                }
+                RefreshMultiplayerRefreshCountdown();
+                break;
+
+            case GeneralSettingsBackgroundPane.Main:
+            default:
+                SetVisible(mainPanel, true);
+                SetVisible(multiplayerPanel, false);
+                if (versionLabel != null)
+                {
+                    versionLabel.style.display = DisplayStyle.Flex;
+                }
+                if (multiplayerVersionLabel != null)
+                {
+                    multiplayerVersionLabel.style.display = DisplayStyle.None;
+                }
+                FitMainMenuTitleToWidth();
+                break;
+        }
+
+        generalSettingsBackgroundPane = GeneralSettingsBackgroundPane.None;
+    }
+
+    private void RefreshGeneralSettingsSelectionState()
+    {
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsMapSmallButton,
+            selectedMapSizePreset == TurnManager.MapSizePreset.Small);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsMapLargeButton,
+            selectedMapSizePreset == TurnManager.MapSizePreset.Large);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsAiLevel1Button,
+            selectedAIDifficulty == TurnManager.AIDifficulty.Level1);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsAiLevel2Button,
+            selectedAIDifficulty == TurnManager.AIDifficulty.Level2);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsAiLevel3Button,
+            selectedAIDifficulty == TurnManager.AIDifficulty.Level3);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsAiUnfairButton,
+            selectedAIDifficulty == TurnManager.AIDifficulty.Unfair);
+    }
+
+    private static void UpdateGeneralSettingsSelectionButton(Button button, bool selected)
+    {
+        if (button == null)
+        {
+            return;
+        }
+
+        const string SelectedClass = "general-settings-option--selected";
+        if (selected)
+        {
+            button.AddToClassList(SelectedClass);
+        }
+        else
+        {
+            button.RemoveFromClassList(SelectedClass);
         }
     }
 
@@ -2120,6 +2445,7 @@ public class MainMenuUITKView : MonoBehaviour
     private void ClearCachedElements()
     {
         responsiveSizeTierController.Reset(root);
+        generalSettingsBackgroundPane = GeneralSettingsBackgroundPane.None;
         root = null;
         mainPanel = null;
         multiplayerPanel = null;
@@ -2129,6 +2455,9 @@ public class MainMenuUITKView : MonoBehaviour
         detailsResignConfirmContent = null;
         joinPanel = null;
         createSuccessPanel = null;
+        generalSettingsPanel = null;
+        generalSettingsCard = null;
+        generalSettingsAiSection = null;
         activeGamesList = null;
         detailsTitleLabel = null;
         detailsSubtitleLabel = null;
@@ -2143,6 +2472,8 @@ public class MainMenuUITKView : MonoBehaviour
         profileStatusLabel = null;
         profileTypedDisplayNameInput = null;
         createSuccessGameCodeLabel = null;
+        generalSettingsTitleLabel = null;
+        generalSettingsSubtitleLabel = null;
         continueButton = null;
         playVsAiButton = null;
         multiplayerButton = null;
@@ -2154,6 +2485,14 @@ public class MainMenuUITKView : MonoBehaviour
         multiplayerBackButton = null;
         createSuccessCopyButton = null;
         createSuccessCloseButton = null;
+        generalSettingsMapSmallButton = null;
+        generalSettingsMapLargeButton = null;
+        generalSettingsAiLevel1Button = null;
+        generalSettingsAiLevel2Button = null;
+        generalSettingsAiLevel3Button = null;
+        generalSettingsAiUnfairButton = null;
+        generalSettingsConfirmButton = null;
+        generalSettingsBackButton = null;
         detailsOpenButton = null;
         detailsSendReminderButton = null;
         detailsResignButton = null;
