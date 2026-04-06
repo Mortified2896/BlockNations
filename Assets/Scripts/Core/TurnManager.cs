@@ -1229,6 +1229,17 @@ public class TurnManager : MonoBehaviour
     {
         if (gameOver)
             return;
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (IsAIVsAIDebugModeActive() &&
+            currentMode == GameMode.VsAI &&
+            aiVsAiDebugRoutine == null &&
+            !aiVsAiDebugRestartPending)
+        {
+            StartAIVsAIDebugLoopIfNeeded();
+        }
+#endif
+
         RecordHumanInputIfAny();
     }
 
@@ -3469,7 +3480,11 @@ public class TurnManager : MonoBehaviour
                 }
 
                 bool actingSideIsPlayerOwned = isPlayerTurn;
-                yield return new WaitForSeconds(aiTurnDelay);
+                float delaySeconds = Mathf.Max(0f, aiTurnDelay);
+                if (delaySeconds > 0f)
+                {
+                    yield return new WaitForSecondsRealtime(delaySeconds);
+                }
 
                 while (aiVsAiDebugPaused && currentMode == GameMode.VsAI && IsAIVsAIDebugModeActive() && !gameOver)
                 {
@@ -3479,8 +3494,19 @@ public class TurnManager : MonoBehaviour
                 if (currentMode != GameMode.VsAI || !IsAIVsAIDebugModeActive() || gameOver)
                     yield break;
 
-                TryCaptureAIDecisionSnapshot(actingSideIsPlayerOwned);
-                RunAITurnForSide(actingSideIsPlayerOwned);
+                try
+                {
+                    TryCaptureAIDecisionSnapshot(actingSideIsPlayerOwned);
+                    RunAITurnForSide(actingSideIsPlayerOwned);
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogError(
+                        $"[AIVsAI] Turn execution failed. actingSideIsPlayerOwned={actingSideIsPlayerOwned} " +
+                        $"turnNumber={turnNumber} aiDifficulty={aiDifficulty} " +
+                        $"sideARecruitVariant={aiVsAiSideARecruitVariant} sideBRecruitVariant={aiVsAiSideBRecruitVariant}");
+                    Debug.LogException(ex);
+                }
 
                 if (gameOver)
                     yield break;
@@ -4896,7 +4922,7 @@ public class TurnManager : MonoBehaviour
 
     private IEnumerator RestartAIVsAIDebugMatchAfterDelay()
     {
-        yield return new WaitForSeconds(1.25f);
+        yield return new WaitForSecondsRealtime(1.25f);
 
         if (currentMode != GameMode.VsAI || !enableAIVsAIDebugMode)
         {
