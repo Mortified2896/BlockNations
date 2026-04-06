@@ -43,6 +43,13 @@ public class TurnManager : MonoBehaviour
         RiderFocus
     }
 
+    public enum AIVsAIBatchSpeedPreset
+    {
+        Normal,
+        Fast,
+        VeryFast
+    }
+
     public enum MapSizePreset
     {
         Unspecified,
@@ -154,8 +161,16 @@ public class TurnManager : MonoBehaviour
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
     private AIRecruitVariant aiVsAiSideARecruitVariant = AIRecruitVariant.Default;
     private AIRecruitVariant aiVsAiSideBRecruitVariant = AIRecruitVariant.Default;
+    private AIVsAIBatchSpeedPreset aiVsAiBatchSpeedPreset = AIVsAIBatchSpeedPreset.Normal;
     private bool aiVsAiDebugPaused = false;
     private bool aiVsAiDebugRestartPending = false;
+    private const string AIVsAIBatchCompleteTitle = "AI Batch Complete";
+    private const string AIVsAIDebugAbortWinner = "Abort";
+    private const int AIVsAIBatchTurnLimit = 200;
+    private const float AIVsAIFastTurnDelaySeconds = 0.2f;
+    private const float AIVsAIFastRestartDelaySeconds = 0.15f;
+    private const float AIVsAIVeryFastTurnDelaySeconds = 0.05f;
+    private const float AIVsAIVeryFastRestartDelaySeconds = 0.03f;
 #endif
 #if DEVELOPMENT_BUILD
     private int lastSubmittedTransportSeqForTelemetry = -1;
@@ -291,6 +306,12 @@ public class TurnManager : MonoBehaviour
         BackAndDelete
     }
 
+    private enum GameOverSecondaryAction
+    {
+        None,
+        MainMenu
+    }
+
     private PbpEndgamePrimaryAction pbpEndgamePrimaryAction = PbpEndgamePrimaryAction.None;
     private bool pbpEndgameLocalWinner = false;
     private bool pbpEndgameSubmitPending = false;
@@ -305,6 +326,10 @@ public class TurnManager : MonoBehaviour
     private string gameOverUiMessage = string.Empty;
     private string gameOverUiPrimaryButtonLabel = DefaultGameOverPrimaryButtonLabel;
     private bool gameOverUiPrimaryButtonInteractable = true;
+    private string gameOverUiSecondaryButtonLabel = string.Empty;
+    private bool gameOverUiSecondaryButtonVisible = false;
+    private bool gameOverUiSecondaryButtonInteractable = false;
+    private GameOverSecondaryAction gameOverUiSecondaryAction = GameOverSecondaryAction.None;
     [System.Serializable]
     private class SavedCity
     {
@@ -389,6 +414,9 @@ public class TurnManager : MonoBehaviour
     public string GameOverUiPrimaryButtonLabel =>
         string.IsNullOrWhiteSpace(gameOverUiPrimaryButtonLabel) ? DefaultGameOverPrimaryButtonLabel : gameOverUiPrimaryButtonLabel;
     public bool GameOverUiPrimaryButtonInteractable => gameOverUiPrimaryButtonInteractable;
+    public bool GameOverUiSecondaryButtonVisible => gameOverUiSecondaryButtonVisible;
+    public string GameOverUiSecondaryButtonLabel => gameOverUiSecondaryButtonLabel;
+    public bool GameOverUiSecondaryButtonInteractable => gameOverUiSecondaryButtonInteractable;
     public bool IsPbpEndgameMenuExitBlocked =>
         currentMode == GameMode.PlayByPost &&
         gameOver &&
@@ -1178,6 +1206,10 @@ public class TurnManager : MonoBehaviour
         gameOverUiMessage = string.Empty;
         gameOverUiPrimaryButtonLabel = DefaultGameOverPrimaryButtonLabel;
         gameOverUiPrimaryButtonInteractable = true;
+        gameOverUiSecondaryButtonLabel = string.Empty;
+        gameOverUiSecondaryButtonVisible = false;
+        gameOverUiSecondaryButtonInteractable = false;
+        gameOverUiSecondaryAction = GameOverSecondaryAction.None;
     }
 
     private void SetGameOverUiTitle(string title)
@@ -1326,12 +1358,36 @@ public class TurnManager : MonoBehaviour
         SceneManager.LoadScene(currentScene.name);
     }
 
+    public void OnGameOverSecondaryButtonPressed()
+    {
+        if (!gameOverUiSecondaryButtonVisible || !gameOverUiSecondaryButtonInteractable)
+        {
+            return;
+        }
+
+        if (gameOverUiSecondaryAction != GameOverSecondaryAction.MainMenu)
+        {
+            return;
+        }
+
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(MainMenuSceneName);
+    }
+
     private void SetGameOverPrimaryButtonState(string label, bool interactable, PbpEndgamePrimaryAction action)
     {
         pbpEndgamePrimaryAction = action;
         string resolvedLabel = string.IsNullOrWhiteSpace(label) ? DefaultGameOverPrimaryButtonLabel : label;
         gameOverUiPrimaryButtonLabel = resolvedLabel;
         gameOverUiPrimaryButtonInteractable = interactable;
+    }
+
+    private void SetGameOverSecondaryButtonState(string label, bool visible, bool interactable, GameOverSecondaryAction action)
+    {
+        gameOverUiSecondaryButtonLabel = visible && !string.IsNullOrWhiteSpace(label) ? label.Trim() : string.Empty;
+        gameOverUiSecondaryButtonVisible = visible;
+        gameOverUiSecondaryButtonInteractable = visible && interactable;
+        gameOverUiSecondaryAction = visible ? action : GameOverSecondaryAction.None;
     }
 
     private void ShowGameOverPopup(string message, bool writeLog = true)
@@ -2487,6 +2543,7 @@ public class TurnManager : MonoBehaviour
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         ResolveAIVsAIDebugRuntimeSettings(consumePendingSelection: true);
+        ResolveAIVsAIBatchRuntimeSettings(consumePendingSelection: true);
 #endif
 
         if (SnapshotHistorySelection.TryConsume(out bool pendingStoreSnapshotHistory))
@@ -3445,6 +3502,66 @@ public class TurnManager : MonoBehaviour
     public void ToggleAIVsAIDebugPause() { }
 #endif
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private float GetAIVsAIDebugTurnDelaySeconds()
+    {
+        float defaultDelaySeconds = Mathf.Max(0f, aiTurnDelay);
+        switch (aiVsAiBatchSpeedPreset)
+        {
+            case AIVsAIBatchSpeedPreset.Fast:
+                return Mathf.Min(defaultDelaySeconds, AIVsAIFastTurnDelaySeconds);
+
+            case AIVsAIBatchSpeedPreset.VeryFast:
+                return Mathf.Min(defaultDelaySeconds, AIVsAIVeryFastTurnDelaySeconds);
+
+            case AIVsAIBatchSpeedPreset.Normal:
+            default:
+                return defaultDelaySeconds;
+        }
+    }
+
+    private float GetAIVsAIDebugRestartDelaySeconds()
+    {
+        switch (aiVsAiBatchSpeedPreset)
+        {
+            case AIVsAIBatchSpeedPreset.Fast:
+                return AIVsAIFastRestartDelaySeconds;
+
+            case AIVsAIBatchSpeedPreset.VeryFast:
+                return AIVsAIVeryFastRestartDelaySeconds;
+
+            case AIVsAIBatchSpeedPreset.Normal:
+            default:
+                return 1.25f;
+        }
+    }
+
+    private bool TryHandleAIVsAIBatchTurnLimitReached()
+    {
+        if (!IsAIVsAIBatchModeActive() || turnNumber <= AIVsAIBatchTurnLimit)
+        {
+            return false;
+        }
+
+        return TryHandleAbortedAIVsAIDebugMatch($"TurnLimit:{AIVsAIBatchTurnLimit}");
+    }
+#else
+    private float GetAIVsAIDebugTurnDelaySeconds()
+    {
+        return Mathf.Max(0f, aiTurnDelay);
+    }
+
+    private float GetAIVsAIDebugRestartDelaySeconds()
+    {
+        return 1.25f;
+    }
+
+    private bool TryHandleAIVsAIBatchTurnLimitReached()
+    {
+        return false;
+    }
+#endif
+
     private void AdvanceVsAITurnAfterSide(bool completedSideWasPlayerOwned)
     {
         if (completedSideWasPlayerOwned)
@@ -3479,8 +3596,13 @@ public class TurnManager : MonoBehaviour
                     yield return null;
                 }
 
+                if (TryHandleAIVsAIBatchTurnLimitReached())
+                {
+                    yield break;
+                }
+
                 bool actingSideIsPlayerOwned = isPlayerTurn;
-                float delaySeconds = Mathf.Max(0f, aiTurnDelay);
+                float delaySeconds = GetAIVsAIDebugTurnDelaySeconds();
                 if (delaySeconds > 0f)
                 {
                     yield return new WaitForSecondsRealtime(delaySeconds);
@@ -3506,6 +3628,10 @@ public class TurnManager : MonoBehaviour
                         $"turnNumber={turnNumber} aiDifficulty={aiDifficulty} " +
                         $"sideARecruitVariant={aiVsAiSideARecruitVariant} sideBRecruitVariant={aiVsAiSideBRecruitVariant}");
                     Debug.LogException(ex);
+                    if (TryHandleAbortedAIVsAIDebugMatch($"Exception: {ex.GetType().Name}"))
+                    {
+                        yield break;
+                    }
                 }
 
                 if (gameOver)
@@ -3538,6 +3664,7 @@ public class TurnManager : MonoBehaviour
     {
         aiVsAiSideARecruitVariant = aiRecruitVariant;
         aiVsAiSideBRecruitVariant = aiRecruitVariant;
+        aiVsAiBatchSpeedPreset = AIVsAIBatchSpeedPreset.Normal;
 
         if (currentMode != GameMode.VsAI || string.IsNullOrWhiteSpace(currentGameId))
         {
@@ -3560,7 +3687,8 @@ public class TurnManager : MonoBehaviour
                 {
                     enabled = true,
                     sideARecruitVariant = aiVsAiSideARecruitVariant,
-                    sideBRecruitVariant = aiVsAiSideBRecruitVariant
+                    sideBRecruitVariant = aiVsAiSideBRecruitVariant,
+                    batchSpeedPreset = aiVsAiBatchSpeedPreset
                 });
             }
 
@@ -3574,11 +3702,33 @@ public class TurnManager : MonoBehaviour
         }
     }
 
+    private void ResolveAIVsAIBatchRuntimeSettings(bool consumePendingSelection)
+    {
+        if (!consumePendingSelection)
+        {
+            return;
+        }
+
+        if (!AIVsAIBatchRunController.TryConsumePendingRequestedMatchCount(out int requestedMatchCount))
+        {
+            return;
+        }
+
+        if (currentMode == GameMode.VsAI && enableAIVsAIDebugMode)
+        {
+            AIVsAIBatchRunController.BeginNewRun(requestedMatchCount);
+            return;
+        }
+
+        AIVsAIBatchRunController.ClearAll();
+    }
+
     private void ApplyAIVsAIDebugRuntimeSettings(AIVsAIDebugSelection.Settings settings)
     {
         enableAIVsAIDebugMode = settings.enabled;
         aiVsAiSideARecruitVariant = settings.sideARecruitVariant;
         aiVsAiSideBRecruitVariant = settings.sideBRecruitVariant;
+        aiVsAiBatchSpeedPreset = settings.batchSpeedPreset;
         aiVsAiDebugPaused = false;
         aiVsAiDebugRestartPending = false;
     }
@@ -4451,6 +4601,10 @@ public class TurnManager : MonoBehaviour
                     {
                         MoveAIUnitOneStep(unit, targetPosition, tileSize);
                     }
+                    else if (occupant.isPlayerOwned == unit.isPlayerOwned)
+                    {
+                        MoveAIUnitTowardEmptyTile(unit, targetPosition, tileSize);
+                    }
                 }
                 else
                 {
@@ -4837,12 +4991,9 @@ public class TurnManager : MonoBehaviour
             SoundManager.Instance.PlayGameOver(playWinCue);
         }
 
-        TryAppendAIVsAIDebugResult(winnerIsSideA: capturedByPlayer);
-
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-        if (IsAIVsAIDebugModeActive())
+        if (TryHandleCompletedAIVsAIDebugMatch(capturedByPlayer ? "SideA" : "SideB"))
         {
-            QueueAIVsAIDebugMatchRestart();
             return;
         }
 #endif
@@ -4850,18 +5001,18 @@ public class TurnManager : MonoBehaviour
         ShowGameOverPopup(message);
     }
 
-    private void TryAppendAIVsAIDebugResult(bool winnerIsSideA)
+    private AIVsAIMatchCsvLogger.MatchResult BuildAIVsAIDebugMatchResult(string winner)
     {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (!IsAIVsAIDebugModeActive() || currentMode != GameMode.VsAI || gridManager == null)
         {
-            return;
+            return null;
         }
 
         CountBoardStateForSide(true, out int sideACityCount, out int sideAUnitCount);
         CountBoardStateForSide(false, out int sideBCityCount, out int sideBUnitCount);
 
-        AIVsAIMatchCsvLogger.TryAppendResult(new AIVsAIMatchCsvLogger.MatchResult
+        return new AIVsAIMatchCsvLogger.MatchResult
         {
             timestampUtc = System.DateTime.UtcNow.ToString("o"),
             appVersion = CurrentAppVersion,
@@ -4871,15 +5022,116 @@ public class TurnManager : MonoBehaviour
             gameMode = "VsAI_Dev_AIVsAI",
             sideAAIConfig = BuildAIConfigLabelForSide(true),
             sideBAIConfig = BuildAIConfigLabelForSide(false),
-            winner = winnerIsSideA ? "SideA" : "SideB",
+            winner = winner,
             totalTurnCount = turnNumber,
             sideAFinalCityCount = sideACityCount,
             sideBFinalCityCount = sideBCityCount,
             sideAFinalUnitCount = sideAUnitCount,
             sideBFinalUnitCount = sideBUnitCount
-        });
+        };
+#else
+        return null;
 #endif
     }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private bool IsAIVsAIBatchModeActive()
+    {
+        return IsAIVsAIDebugModeActive() && AIVsAIBatchRunController.HasActiveRun;
+    }
+
+    private bool TryHandleCompletedAIVsAIDebugMatch(string winner)
+    {
+        if (!IsAIVsAIDebugModeActive())
+        {
+            return false;
+        }
+
+        AIVsAIMatchCsvLogger.MatchResult matchResult = BuildAIVsAIDebugMatchResult(winner);
+        if (matchResult == null)
+        {
+            QueueAIVsAIDebugMatchRestart();
+            return true;
+        }
+
+        bool isRunComplete = false;
+        AIVsAIMatchCsvLogger.RunSummary runSummary = null;
+        if (IsAIVsAIBatchModeActive())
+        {
+            AIVsAIBatchRunController.TryRecordMatch(matchResult, out isRunComplete, out runSummary);
+        }
+
+        AIVsAIMatchCsvLogger.TryAppendResult(matchResult);
+
+        if (!isRunComplete)
+        {
+            QueueAIVsAIDebugMatchRestart();
+            return true;
+        }
+
+        if (runSummary != null)
+        {
+            AIVsAIMatchCsvLogger.TryAppendRunSummary(runSummary);
+            SetGameOverUiTitle(AIVsAIBatchCompleteTitle);
+            SetGameOverSecondaryButtonState(
+                "Menu",
+                visible: true,
+                interactable: true,
+                action: GameOverSecondaryAction.MainMenu);
+            ShowGameOverPopup(BuildAIVsAIBatchCompletionMessage(runSummary));
+            Debug.Log(
+                $"[AIVsAIBatch] Completed runId={runSummary.runId} matches={runSummary.matchCount} " +
+                $"sideAWins={runSummary.sideAWins} sideBWins={runSummary.sideBWins} drawsOrAborts={runSummary.drawsOrAborts} " +
+                $"sideAWinRate={runSummary.sideAWinRate:P1} avgTurns={runSummary.averageTotalTurnCount:0.00} " +
+                $"matchCsv={AIVsAIMatchCsvLogger.GetResultsFilePath()} summaryCsv={AIVsAIMatchCsvLogger.GetRunSummaryFilePath()}");
+            return true;
+        }
+
+        QueueAIVsAIDebugMatchRestart();
+        return true;
+    }
+
+    private bool TryHandleAbortedAIVsAIDebugMatch(string abortReason)
+    {
+        if (!IsAIVsAIBatchModeActive())
+        {
+            return false;
+        }
+
+        gameOver = true;
+        Debug.LogWarning($"[AIVsAIBatch] Match aborted ({abortReason}).");
+        return TryHandleCompletedAIVsAIDebugMatch(AIVsAIDebugAbortWinner);
+    }
+
+    private static string BuildAIVsAIBatchCompletionMessage(AIVsAIMatchCsvLogger.RunSummary summary)
+    {
+        if (summary == null)
+        {
+            return "AI batch complete.";
+        }
+
+        string message =
+            $"Matches: {summary.matchCount}\n" +
+            $"Side A wins: {summary.sideAWins}\n" +
+            $"Side B wins: {summary.sideBWins}\n" +
+            $"Side A win rate: {summary.sideAWinRate:P1}\n" +
+            $"Average turns: {summary.averageTotalTurnCount:0.00}";
+
+        if (summary.drawsOrAborts > 0)
+        {
+            message = $"{message}\nDraws/aborts: {summary.drawsOrAborts}";
+        }
+
+        return message;
+    }
+#endif
+
+#if !UNITY_EDITOR && !DEVELOPMENT_BUILD
+    private bool TryHandleAbortedAIVsAIDebugMatch(string abortReason)
+    {
+        return false;
+    }
+#endif
 
     private void CountBoardStateForSide(bool sideIsPlayerOwned, out int cityCount, out int unitCount)
     {
@@ -4922,7 +5174,7 @@ public class TurnManager : MonoBehaviour
 
     private IEnumerator RestartAIVsAIDebugMatchAfterDelay()
     {
-        yield return new WaitForSecondsRealtime(1.25f);
+        yield return new WaitForSecondsRealtime(GetAIVsAIDebugRestartDelaySeconds());
 
         if (currentMode != GameMode.VsAI || !enableAIVsAIDebugMode)
         {
@@ -4938,7 +5190,8 @@ public class TurnManager : MonoBehaviour
         AIVsAIDebugSelection.SetPending(
             enabled: true,
             sideARecruitVariant: aiVsAiSideARecruitVariant,
-            sideBRecruitVariant: aiVsAiSideBRecruitVariant);
+            sideBRecruitVariant: aiVsAiSideBRecruitVariant,
+            batchSpeedPreset: aiVsAiBatchSpeedPreset);
 
         Time.timeScale = 1f;
         Scene currentScene = SceneManager.GetActiveScene();

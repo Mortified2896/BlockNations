@@ -158,6 +158,27 @@
                                 <ui:Button name="GeneralSettingsSideBAiStyleDefaultButton" text="Default" class="menu-button general-settings-option-button" />
                                 <ui:Button name="GeneralSettingsSideBAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                             </ui:VisualElement>
+                            <ui:Label text="Match Count" class="general-settings-section-label" />
+                            <ui:VisualElement class="general-settings-option-grid">
+                                <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
+                                    <ui:Button name="GeneralSettingsAIVsAiMatchCount1Button" text="1" class="menu-button general-settings-option-button" />
+                                    <ui:Button name="GeneralSettingsAIVsAiMatchCount10Button" text="10" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                                </ui:VisualElement>
+                                <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
+                                    <ui:Button name="GeneralSettingsAIVsAiMatchCount50Button" text="50" class="menu-button general-settings-option-button" />
+                                    <ui:Button name="GeneralSettingsAIVsAiMatchCount100Button" text="100" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                                </ui:VisualElement>
+                            </ui:VisualElement>
+                            <ui:Label text="Batch Speed" class="general-settings-section-label" />
+                            <ui:VisualElement class="general-settings-option-grid">
+                                <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
+                                    <ui:Button name="GeneralSettingsAIVsAiBatchSpeedNormalButton" text="Normal" class="menu-button general-settings-option-button" />
+                                    <ui:Button name="GeneralSettingsAIVsAiBatchSpeedFastButton" text="Fast" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                                </ui:VisualElement>
+                                <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
+                                    <ui:Button name="GeneralSettingsAIVsAiBatchSpeedVeryFastButton" text="Very Fast" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                                </ui:VisualElement>
+                            </ui:VisualElement>
                         </ui:VisualElement>
                     </ui:VisualElement>
 

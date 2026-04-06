@@ -94,6 +94,13 @@ public class MainMenuUITKView : MonoBehaviour
     private Button generalSettingsSideAAiStyleRiderFocusButton;
     private Button generalSettingsSideBAiStyleDefaultButton;
     private Button generalSettingsSideBAiStyleRiderFocusButton;
+    private Button generalSettingsAIVsAiMatchCount1Button;
+    private Button generalSettingsAIVsAiMatchCount10Button;
+    private Button generalSettingsAIVsAiMatchCount50Button;
+    private Button generalSettingsAIVsAiMatchCount100Button;
+    private Button generalSettingsAIVsAiBatchSpeedNormalButton;
+    private Button generalSettingsAIVsAiBatchSpeedFastButton;
+    private Button generalSettingsAIVsAiBatchSpeedVeryFastButton;
     private Button generalSettingsConfirmButton;
     private Button generalSettingsBackButton;
     private Button detailsOpenButton;
@@ -139,6 +146,8 @@ public class MainMenuUITKView : MonoBehaviour
     private bool selectedEnableAIVsAIDebugMode;
     private TurnManager.AIRecruitVariant selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
     private TurnManager.AIRecruitVariant selectedSideBAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
+    private int selectedAIVsAIMatchCount = 1;
+    private TurnManager.AIVsAIBatchSpeedPreset selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.Normal;
 
     private enum PendingGeneralSettingsMode
     {
@@ -432,6 +441,13 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsSideAAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsSideAAiStyleRiderFocusButton");
         generalSettingsSideBAiStyleDefaultButton = root.Q<Button>("GeneralSettingsSideBAiStyleDefaultButton");
         generalSettingsSideBAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsSideBAiStyleRiderFocusButton");
+        generalSettingsAIVsAiMatchCount1Button = root.Q<Button>("GeneralSettingsAIVsAiMatchCount1Button");
+        generalSettingsAIVsAiMatchCount10Button = root.Q<Button>("GeneralSettingsAIVsAiMatchCount10Button");
+        generalSettingsAIVsAiMatchCount50Button = root.Q<Button>("GeneralSettingsAIVsAiMatchCount50Button");
+        generalSettingsAIVsAiMatchCount100Button = root.Q<Button>("GeneralSettingsAIVsAiMatchCount100Button");
+        generalSettingsAIVsAiBatchSpeedNormalButton = root.Q<Button>("GeneralSettingsAIVsAiBatchSpeedNormalButton");
+        generalSettingsAIVsAiBatchSpeedFastButton = root.Q<Button>("GeneralSettingsAIVsAiBatchSpeedFastButton");
+        generalSettingsAIVsAiBatchSpeedVeryFastButton = root.Q<Button>("GeneralSettingsAIVsAiBatchSpeedVeryFastButton");
         generalSettingsConfirmButton = root.Q<Button>("GeneralSettingsConfirmButton");
         generalSettingsBackButton = root.Q<Button>("GeneralSettingsBackButton");
         detailsOpenButton = root.Q<Button>("DetailsOpenButton");
@@ -903,6 +919,41 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsSideBAiStyleRiderFocusButton.clicked += HandleGeneralSettingsSideBAiStyleRiderFocusClicked;
         }
 
+        if (generalSettingsAIVsAiMatchCount1Button != null)
+        {
+            generalSettingsAIVsAiMatchCount1Button.clicked += HandleGeneralSettingsAIVsAiMatchCount1Clicked;
+        }
+
+        if (generalSettingsAIVsAiMatchCount10Button != null)
+        {
+            generalSettingsAIVsAiMatchCount10Button.clicked += HandleGeneralSettingsAIVsAiMatchCount10Clicked;
+        }
+
+        if (generalSettingsAIVsAiMatchCount50Button != null)
+        {
+            generalSettingsAIVsAiMatchCount50Button.clicked += HandleGeneralSettingsAIVsAiMatchCount50Clicked;
+        }
+
+        if (generalSettingsAIVsAiMatchCount100Button != null)
+        {
+            generalSettingsAIVsAiMatchCount100Button.clicked += HandleGeneralSettingsAIVsAiMatchCount100Clicked;
+        }
+
+        if (generalSettingsAIVsAiBatchSpeedNormalButton != null)
+        {
+            generalSettingsAIVsAiBatchSpeedNormalButton.clicked += HandleGeneralSettingsAIVsAiBatchSpeedNormalClicked;
+        }
+
+        if (generalSettingsAIVsAiBatchSpeedFastButton != null)
+        {
+            generalSettingsAIVsAiBatchSpeedFastButton.clicked += HandleGeneralSettingsAIVsAiBatchSpeedFastClicked;
+        }
+
+        if (generalSettingsAIVsAiBatchSpeedVeryFastButton != null)
+        {
+            generalSettingsAIVsAiBatchSpeedVeryFastButton.clicked += HandleGeneralSettingsAIVsAiBatchSpeedVeryFastClicked;
+        }
+
         if (generalSettingsWatchAIVsAIToggle != null)
         {
             generalSettingsWatchAIVsAIToggle.RegisterValueChangedCallback(HandleGeneralSettingsWatchAIVsAIChanged);
@@ -1095,6 +1146,41 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsSideBAiStyleRiderFocusButton != null)
         {
             generalSettingsSideBAiStyleRiderFocusButton.clicked -= HandleGeneralSettingsSideBAiStyleRiderFocusClicked;
+        }
+
+        if (generalSettingsAIVsAiMatchCount1Button != null)
+        {
+            generalSettingsAIVsAiMatchCount1Button.clicked -= HandleGeneralSettingsAIVsAiMatchCount1Clicked;
+        }
+
+        if (generalSettingsAIVsAiMatchCount10Button != null)
+        {
+            generalSettingsAIVsAiMatchCount10Button.clicked -= HandleGeneralSettingsAIVsAiMatchCount10Clicked;
+        }
+
+        if (generalSettingsAIVsAiMatchCount50Button != null)
+        {
+            generalSettingsAIVsAiMatchCount50Button.clicked -= HandleGeneralSettingsAIVsAiMatchCount50Clicked;
+        }
+
+        if (generalSettingsAIVsAiMatchCount100Button != null)
+        {
+            generalSettingsAIVsAiMatchCount100Button.clicked -= HandleGeneralSettingsAIVsAiMatchCount100Clicked;
+        }
+
+        if (generalSettingsAIVsAiBatchSpeedNormalButton != null)
+        {
+            generalSettingsAIVsAiBatchSpeedNormalButton.clicked -= HandleGeneralSettingsAIVsAiBatchSpeedNormalClicked;
+        }
+
+        if (generalSettingsAIVsAiBatchSpeedFastButton != null)
+        {
+            generalSettingsAIVsAiBatchSpeedFastButton.clicked -= HandleGeneralSettingsAIVsAiBatchSpeedFastClicked;
+        }
+
+        if (generalSettingsAIVsAiBatchSpeedVeryFastButton != null)
+        {
+            generalSettingsAIVsAiBatchSpeedVeryFastButton.clicked -= HandleGeneralSettingsAIVsAiBatchSpeedVeryFastClicked;
         }
 
         if (generalSettingsWatchAIVsAIToggle != null)
@@ -1336,6 +1422,48 @@ public class MainMenuUITKView : MonoBehaviour
         RefreshGeneralSettingsSelectionState();
     }
 
+    private void HandleGeneralSettingsAIVsAiMatchCount1Clicked()
+    {
+        selectedAIVsAIMatchCount = 1;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAIVsAiMatchCount10Clicked()
+    {
+        selectedAIVsAIMatchCount = 10;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAIVsAiMatchCount50Clicked()
+    {
+        selectedAIVsAIMatchCount = 50;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAIVsAiMatchCount100Clicked()
+    {
+        selectedAIVsAIMatchCount = 100;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAIVsAiBatchSpeedNormalClicked()
+    {
+        selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.Normal;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAIVsAiBatchSpeedFastClicked()
+    {
+        selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.Fast;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAIVsAiBatchSpeedVeryFastClicked()
+    {
+        selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.VeryFast;
+        RefreshGeneralSettingsSelectionState();
+    }
+
     private void HandleGeneralSettingsWatchAIVsAIChanged(ChangeEvent<bool> evt)
     {
         selectedEnableAIVsAIDebugMode = evt != null && evt.newValue;
@@ -1368,6 +1496,8 @@ public class MainMenuUITKView : MonoBehaviour
                 selectedAIRecruitVariant,
                 selectedStoreSnapshotHistory,
                 selectedEnableAIVsAIDebugMode,
+                selectedAIVsAIMatchCount,
+                selectedAIVsAIBatchSpeedPreset,
                 selectedSideAAIRecruitVariant,
                 selectedSideBAIRecruitVariant);
             started = true;
@@ -2042,6 +2172,8 @@ public class MainMenuUITKView : MonoBehaviour
         selectedEnableAIVsAIDebugMode = false;
         selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
         selectedSideBAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
+        selectedAIVsAIMatchCount = 1;
+        selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.Normal;
         HideCreateSuccessPanel();
         HideJoinPanel();
         SetDetailsConfirmState(false);
@@ -2199,6 +2331,27 @@ public class MainMenuUITKView : MonoBehaviour
         UpdateGeneralSettingsSelectionButton(
             generalSettingsSideBAiStyleRiderFocusButton,
             selectedSideBAIRecruitVariant == TurnManager.AIRecruitVariant.RiderFocus);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsAIVsAiMatchCount1Button,
+            selectedAIVsAIMatchCount == 1);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsAIVsAiMatchCount10Button,
+            selectedAIVsAIMatchCount == 10);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsAIVsAiMatchCount50Button,
+            selectedAIVsAIMatchCount == 50);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsAIVsAiMatchCount100Button,
+            selectedAIVsAIMatchCount == 100);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsAIVsAiBatchSpeedNormalButton,
+            selectedAIVsAIBatchSpeedPreset == TurnManager.AIVsAIBatchSpeedPreset.Normal);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsAIVsAiBatchSpeedFastButton,
+            selectedAIVsAIBatchSpeedPreset == TurnManager.AIVsAIBatchSpeedPreset.Fast);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsAIVsAiBatchSpeedVeryFastButton,
+            selectedAIVsAIBatchSpeedPreset == TurnManager.AIVsAIBatchSpeedPreset.VeryFast);
     }
 
     private static void UpdateGeneralSettingsSelectionButton(Button button, bool selected)
@@ -2704,6 +2857,13 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsSideAAiStyleRiderFocusButton = null;
         generalSettingsSideBAiStyleDefaultButton = null;
         generalSettingsSideBAiStyleRiderFocusButton = null;
+        generalSettingsAIVsAiMatchCount1Button = null;
+        generalSettingsAIVsAiMatchCount10Button = null;
+        generalSettingsAIVsAiMatchCount50Button = null;
+        generalSettingsAIVsAiMatchCount100Button = null;
+        generalSettingsAIVsAiBatchSpeedNormalButton = null;
+        generalSettingsAIVsAiBatchSpeedFastButton = null;
+        generalSettingsAIVsAiBatchSpeedVeryFastButton = null;
         generalSettingsConfirmButton = null;
         generalSettingsBackButton = null;
         detailsOpenButton = null;

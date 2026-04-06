@@ -241,6 +241,8 @@ public class MainMenuController : MonoBehaviour
         TurnManager.AIRecruitVariant recruitVariant = TurnManager.AIRecruitVariant.Default,
         bool storeSnapshotHistory = false,
         bool enableAIVsAIDebugMode = false,
+        int aiVsAiMatchCount = 1,
+        TurnManager.AIVsAIBatchSpeedPreset aiVsAiBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.Normal,
         TurnManager.AIRecruitVariant sideARecruitVariant = TurnManager.AIRecruitVariant.Default,
         TurnManager.AIRecruitVariant sideBRecruitVariant = TurnManager.AIRecruitVariant.Default)
     {
@@ -250,6 +252,8 @@ public class MainMenuController : MonoBehaviour
             recruitVariant,
             storeSnapshotHistory,
             enableAIVsAIDebugMode,
+            aiVsAiMatchCount,
+            aiVsAiBatchSpeedPreset,
             sideARecruitVariant,
             sideBRecruitVariant);
     }
@@ -260,6 +264,8 @@ public class MainMenuController : MonoBehaviour
         TurnManager.AIRecruitVariant recruitVariant = TurnManager.AIRecruitVariant.Default,
         bool storeSnapshotHistory = false,
         bool enableAIVsAIDebugMode = false,
+        int aiVsAiMatchCount = 1,
+        TurnManager.AIVsAIBatchSpeedPreset aiVsAiBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.Normal,
         TurnManager.AIRecruitVariant sideARecruitVariant = TurnManager.AIRecruitVariant.Default,
         TurnManager.AIRecruitVariant sideBRecruitVariant = TurnManager.AIRecruitVariant.Default)
     {
@@ -269,7 +275,16 @@ public class MainMenuController : MonoBehaviour
         AIVsAIDebugSelection.SetPending(
             enableAIVsAIDebugMode,
             sideARecruitVariant,
-            sideBRecruitVariant);
+            sideBRecruitVariant,
+            aiVsAiBatchSpeedPreset);
+        if (enableAIVsAIDebugMode)
+        {
+            AIVsAIBatchRunController.SetPendingRequestedMatchCount(aiVsAiMatchCount);
+        }
+        else
+        {
+            AIVsAIBatchRunController.ClearAll();
+        }
         MapSizeSelection.SetPending(mapSizePreset);
         SnapshotHistorySelection.SetPending(storeSnapshotHistory);
         SceneManager.LoadScene(gameplaySceneName);
@@ -482,6 +497,8 @@ public class MainMenuController : MonoBehaviour
 
     public bool StartPlayByPostGameWithSettings(TurnManager.MapSizePreset mapSizePreset, bool storeSnapshotHistory = false)
     {
+        AIVsAIBatchRunController.ClearAll();
+
         if (!isServerOnline)
         {
             SetImportStatus(BuildConnectivityWarningStatus());

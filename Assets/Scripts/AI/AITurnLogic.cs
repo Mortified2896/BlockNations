@@ -4,6 +4,7 @@ using UnityEngine;
 public static class AITurnLogic
 {
     private const int FastStealRadiusTiles = 2;
+    private const int OccupiedDefenseTilePenalty = 100;
 
     public sealed class CityDefensePlan
     {
@@ -389,6 +390,11 @@ public static class AITurnLogic
                     score += currentlyVisible ? 1 : 3;
                 }
 
+                if (occupant != null)
+                {
+                    score -= OccupiedDefenseTilePenalty;
+                }
+
                 float tieBreak = GetApproachTieBreak(candidate, city, enemyCityCoords, gridManager);
                 if (score > bestScore || (score == bestScore && tieBreak < bestTieBreak))
                 {
@@ -540,6 +546,11 @@ public static class AITurnLogic
 
                     bool currentlyVisible = aiHasPerfectInfo || (visibleTiles != null && visibleTiles.Contains(threatTile));
                     score += currentlyVisible ? 1 : 2;
+                }
+
+                if (occupant != null)
+                {
+                    score -= OccupiedDefenseTilePenalty;
                 }
 
                 if (score <= 0)

@@ -13,12 +13,14 @@ public static class AIVsAIDebugSelection
         public bool enabled;
         public TurnManager.AIRecruitVariant sideARecruitVariant;
         public TurnManager.AIRecruitVariant sideBRecruitVariant;
+        public TurnManager.AIVsAIBatchSpeedPreset batchSpeedPreset;
 
         public static Settings Default => new Settings
         {
             enabled = false,
             sideARecruitVariant = TurnManager.AIRecruitVariant.Default,
-            sideBRecruitVariant = TurnManager.AIRecruitVariant.Default
+            sideBRecruitVariant = TurnManager.AIRecruitVariant.Default,
+            batchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.Normal
         };
     }
 
@@ -28,6 +30,7 @@ public static class AIVsAIDebugSelection
         public bool enabled;
         public string sideARecruitVariant;
         public string sideBRecruitVariant;
+        public string batchSpeedPreset;
     }
 
     private static Settings pendingSettings = Settings.Default;
@@ -36,13 +39,15 @@ public static class AIVsAIDebugSelection
     public static void SetPending(
         bool enabled,
         TurnManager.AIRecruitVariant sideARecruitVariant,
-        TurnManager.AIRecruitVariant sideBRecruitVariant)
+        TurnManager.AIRecruitVariant sideBRecruitVariant,
+        TurnManager.AIVsAIBatchSpeedPreset batchSpeedPreset)
     {
         pendingSettings = new Settings
         {
             enabled = enabled,
             sideARecruitVariant = sideARecruitVariant,
-            sideBRecruitVariant = sideBRecruitVariant
+            sideBRecruitVariant = sideBRecruitVariant,
+            batchSpeedPreset = batchSpeedPreset
         };
         hasPendingSettings = true;
     }
@@ -75,7 +80,8 @@ public static class AIVsAIDebugSelection
         {
             enabled = true,
             sideARecruitVariant = settings.sideARecruitVariant.ToString(),
-            sideBRecruitVariant = settings.sideBRecruitVariant.ToString()
+            sideBRecruitVariant = settings.sideBRecruitVariant.ToString(),
+            batchSpeedPreset = settings.batchSpeedPreset.ToString()
         };
 
         PlayerPrefs.SetString(key, JsonUtility.ToJson(persisted));
@@ -108,7 +114,8 @@ public static class AIVsAIDebugSelection
             {
                 enabled = true,
                 sideARecruitVariant = ParseVariantOrDefault(persisted.sideARecruitVariant),
-                sideBRecruitVariant = ParseVariantOrDefault(persisted.sideBRecruitVariant)
+                sideBRecruitVariant = ParseVariantOrDefault(persisted.sideBRecruitVariant),
+                batchSpeedPreset = ParseBatchSpeedPresetOrDefault(persisted.batchSpeedPreset)
             };
             return true;
         }
@@ -127,6 +134,17 @@ public static class AIVsAIDebugSelection
         }
 
         return TurnManager.AIRecruitVariant.Default;
+    }
+
+    private static TurnManager.AIVsAIBatchSpeedPreset ParseBatchSpeedPresetOrDefault(string rawPreset)
+    {
+        if (!string.IsNullOrWhiteSpace(rawPreset) &&
+            System.Enum.TryParse(rawPreset, out TurnManager.AIVsAIBatchSpeedPreset parsedPreset))
+        {
+            return parsedPreset;
+        }
+
+        return TurnManager.AIVsAIBatchSpeedPreset.Normal;
     }
 
     private static string BuildPlayerPrefsKey(string gameId)

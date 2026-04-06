@@ -52,6 +52,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private Label gameOverTitleLabel;
     private Label gameOverMessageLabel;
     private UnityEngine.UIElements.Button gameOverPrimaryButton;
+    private UnityEngine.UIElements.Button gameOverSecondaryButton;
 
     private bool uiReady;
     private bool callbacksBound;
@@ -392,6 +393,11 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             gameOverPrimaryButton.clicked += HandleGameOverPrimaryClicked;
         }
 
+        if (gameOverSecondaryButton != null)
+        {
+            gameOverSecondaryButton.clicked += HandleGameOverSecondaryClicked;
+        }
+
         callbacksBound = true;
     }
 
@@ -425,6 +431,11 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         if (gameOverPrimaryButton != null)
         {
             gameOverPrimaryButton.clicked -= HandleGameOverPrimaryClicked;
+        }
+
+        if (gameOverSecondaryButton != null)
+        {
+            gameOverSecondaryButton.clicked -= HandleGameOverSecondaryClicked;
         }
 
         callbacksBound = false;
@@ -476,6 +487,14 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         if (turnManager != null)
         {
             turnManager.OnPlayAgainButtonPressed();
+        }
+    }
+
+    private void HandleGameOverSecondaryClicked()
+    {
+        if (turnManager != null)
+        {
+            turnManager.OnGameOverSecondaryButtonPressed();
         }
     }
 
@@ -716,7 +735,12 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         gameOverTitleLabel = root.Q<Label>("GameOverTitleLabel");
         gameOverMessageLabel = root.Q<Label>("GameOverMessageLabel");
         gameOverPrimaryButton = root.Q<UnityEngine.UIElements.Button>("GameOverPrimaryButton");
-        if (gameOverOverlay != null && gameOverTitleLabel != null && gameOverMessageLabel != null && gameOverPrimaryButton != null)
+        gameOverSecondaryButton = root.Q<UnityEngine.UIElements.Button>("GameOverSecondaryButton");
+        if (gameOverOverlay != null &&
+            gameOverTitleLabel != null &&
+            gameOverMessageLabel != null &&
+            gameOverPrimaryButton != null &&
+            gameOverSecondaryButton != null)
         {
             return;
         }
@@ -797,9 +821,23 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         gameOverPrimaryButton.style.color = Color.white;
         gameOverPrimaryButton.style.backgroundColor = new Color(0.18f, 0.52f, 0.82f, 0.95f);
 
+        gameOverSecondaryButton = new UnityEngine.UIElements.Button
+        {
+            name = "GameOverSecondaryButton",
+            text = "Menu",
+            pickingMode = PickingMode.Position
+        };
+        gameOverSecondaryButton.style.height = 84f;
+        gameOverSecondaryButton.style.fontSize = 30f;
+        gameOverSecondaryButton.style.marginTop = 12f;
+        gameOverSecondaryButton.style.color = Color.white;
+        gameOverSecondaryButton.style.backgroundColor = new Color(0.28f, 0.32f, 0.40f, 0.95f);
+        gameOverSecondaryButton.style.display = DisplayStyle.None;
+
         card.Add(gameOverTitleLabel);
         card.Add(gameOverMessageLabel);
         card.Add(gameOverPrimaryButton);
+        card.Add(gameOverSecondaryButton);
         gameOverOverlay.Add(card);
         SetGameOverOverlayInteractionEnabled(false);
     }
@@ -866,7 +904,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
 
     private void RefreshGameOverOverlayState()
     {
-        if (gameOverOverlay == null || gameOverMessageLabel == null || gameOverPrimaryButton == null)
+        if (gameOverOverlay == null || gameOverMessageLabel == null || gameOverPrimaryButton == null || gameOverSecondaryButton == null)
         {
             return;
         }
@@ -891,6 +929,13 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         gameOverPrimaryButton.text = string.IsNullOrWhiteSpace(primaryLabel) ? "Play Again" : primaryLabel;
         gameOverPrimaryButton.SetEnabled(turnManager.GameOverUiPrimaryButtonInteractable);
 
+        bool showSecondary = turnManager.GameOverUiSecondaryButtonVisible;
+        gameOverSecondaryButton.style.display = showSecondary ? DisplayStyle.Flex : DisplayStyle.None;
+        gameOverSecondaryButton.text = string.IsNullOrWhiteSpace(turnManager.GameOverUiSecondaryButtonLabel)
+            ? "Menu"
+            : turnManager.GameOverUiSecondaryButtonLabel;
+        gameOverSecondaryButton.SetEnabled(showSecondary && turnManager.GameOverUiSecondaryButtonInteractable);
+
         SetGameOverOverlayInteractionEnabled(true);
     }
 
@@ -905,6 +950,12 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         if (gameOverPrimaryButton != null)
         {
             gameOverPrimaryButton.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
+        }
+
+        if (gameOverSecondaryButton != null)
+        {
+            bool secondaryEnabled = enabled && gameOverSecondaryButton.resolvedStyle.display != DisplayStyle.None;
+            gameOverSecondaryButton.pickingMode = secondaryEnabled ? PickingMode.Position : PickingMode.Ignore;
         }
     }
 
@@ -1088,6 +1139,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         gameOverTitleLabel = null;
         gameOverMessageLabel = null;
         gameOverPrimaryButton = null;
+        gameOverSecondaryButton = null;
         visibleSharePromptGameId = string.Empty;
         uiReady = false;
         lastSafeArea = Rect.zero;
