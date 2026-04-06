@@ -135,6 +135,11 @@
                             <ui:Button name="GeneralSettingsAiLevel3Button" text="Hard" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                         </ui:VisualElement>
                     </ui:VisualElement>
+                    <ui:Label text="AI Style" class="general-settings-section-label" />
+                    <ui:VisualElement class="general-settings-option-row">
+                        <ui:Button name="GeneralSettingsAiStyleDefaultButton" text="Default" class="menu-button general-settings-option-button" />
+                        <ui:Button name="GeneralSettingsAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                    </ui:VisualElement>
                 </ui:VisualElement>
 
                 <ui:VisualElement name="GeneralSettingsDevSection" class="general-settings-section" style="display: none;">

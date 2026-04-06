@@ -86,6 +86,8 @@ public class MainMenuUITKView : MonoBehaviour
     private Button generalSettingsAiLevel1Button;
     private Button generalSettingsAiLevel2Button;
     private Button generalSettingsAiLevel3Button;
+    private Button generalSettingsAiStyleDefaultButton;
+    private Button generalSettingsAiStyleRiderFocusButton;
     private Button generalSettingsConfirmButton;
     private Button generalSettingsBackButton;
     private Button detailsOpenButton;
@@ -126,6 +128,7 @@ public class MainMenuUITKView : MonoBehaviour
     private GeneralSettingsBackgroundPane generalSettingsBackgroundPane = GeneralSettingsBackgroundPane.None;
     private TurnManager.MapSizePreset selectedMapSizePreset = TurnManager.GetDefaultMapSizePreset();
     private TurnManager.AIDifficulty selectedAIDifficulty = TurnManager.AIDifficulty.Level1;
+    private TurnManager.AIRecruitVariant selectedAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
     private bool selectedStoreSnapshotHistory;
 
     private enum PendingGeneralSettingsMode
@@ -412,6 +415,8 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAiLevel1Button = root.Q<Button>("GeneralSettingsAiLevel1Button");
         generalSettingsAiLevel2Button = root.Q<Button>("GeneralSettingsAiLevel2Button");
         generalSettingsAiLevel3Button = root.Q<Button>("GeneralSettingsAiLevel3Button");
+        generalSettingsAiStyleDefaultButton = root.Q<Button>("GeneralSettingsAiStyleDefaultButton");
+        generalSettingsAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsAiStyleRiderFocusButton");
         generalSettingsConfirmButton = root.Q<Button>("GeneralSettingsConfirmButton");
         generalSettingsBackButton = root.Q<Button>("GeneralSettingsBackButton");
         detailsOpenButton = root.Q<Button>("DetailsOpenButton");
@@ -853,6 +858,16 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsAiLevel3Button.clicked += HandleGeneralSettingsAiLevel3Clicked;
         }
 
+        if (generalSettingsAiStyleDefaultButton != null)
+        {
+            generalSettingsAiStyleDefaultButton.clicked += HandleGeneralSettingsAiStyleDefaultClicked;
+        }
+
+        if (generalSettingsAiStyleRiderFocusButton != null)
+        {
+            generalSettingsAiStyleRiderFocusButton.clicked += HandleGeneralSettingsAiStyleRiderFocusClicked;
+        }
+
         if (generalSettingsConfirmButton != null)
         {
             generalSettingsConfirmButton.clicked += HandleGeneralSettingsConfirmClicked;
@@ -1010,6 +1025,16 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsAiLevel3Button != null)
         {
             generalSettingsAiLevel3Button.clicked -= HandleGeneralSettingsAiLevel3Clicked;
+        }
+
+        if (generalSettingsAiStyleDefaultButton != null)
+        {
+            generalSettingsAiStyleDefaultButton.clicked -= HandleGeneralSettingsAiStyleDefaultClicked;
+        }
+
+        if (generalSettingsAiStyleRiderFocusButton != null)
+        {
+            generalSettingsAiStyleRiderFocusButton.clicked -= HandleGeneralSettingsAiStyleRiderFocusClicked;
         }
 
         if (generalSettingsConfirmButton != null)
@@ -1210,6 +1235,18 @@ public class MainMenuUITKView : MonoBehaviour
         RefreshGeneralSettingsSelectionState();
     }
 
+    private void HandleGeneralSettingsAiStyleDefaultClicked()
+    {
+        selectedAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAiStyleRiderFocusClicked()
+    {
+        selectedAIRecruitVariant = TurnManager.AIRecruitVariant.RiderFocus;
+        RefreshGeneralSettingsSelectionState();
+    }
+
     private void HandleGeneralSettingsConfirmClicked()
     {
         if (mainMenuController == null)
@@ -1228,6 +1265,7 @@ public class MainMenuUITKView : MonoBehaviour
             mainMenuController.StartVsAIGameWithSettings(
                 selectedAIDifficulty,
                 selectedMapSizePreset,
+                selectedAIRecruitVariant,
                 selectedStoreSnapshotHistory);
             started = true;
         }
@@ -1896,6 +1934,7 @@ public class MainMenuUITKView : MonoBehaviour
             : GeneralSettingsBackgroundPane.Main;
         selectedMapSizePreset = TurnManager.GetDefaultMapSizePreset();
         selectedAIDifficulty = TurnManager.AIDifficulty.Level1;
+        selectedAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
         selectedStoreSnapshotHistory = false;
         HideCreateSuccessPanel();
         HideJoinPanel();
@@ -2009,6 +2048,12 @@ public class MainMenuUITKView : MonoBehaviour
         UpdateGeneralSettingsSelectionButton(
             generalSettingsAiLevel3Button,
             selectedAIDifficulty == TurnManager.AIDifficulty.Level3);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsAiStyleDefaultButton,
+            selectedAIRecruitVariant == TurnManager.AIRecruitVariant.Default);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsAiStyleRiderFocusButton,
+            selectedAIRecruitVariant == TurnManager.AIRecruitVariant.RiderFocus);
     }
 
     private static void UpdateGeneralSettingsSelectionButton(Button button, bool selected)
@@ -2506,6 +2551,8 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAiLevel1Button = null;
         generalSettingsAiLevel2Button = null;
         generalSettingsAiLevel3Button = null;
+        generalSettingsAiStyleDefaultButton = null;
+        generalSettingsAiStyleRiderFocusButton = null;
         generalSettingsConfirmButton = null;
         generalSettingsBackButton = null;
         detailsOpenButton = null;

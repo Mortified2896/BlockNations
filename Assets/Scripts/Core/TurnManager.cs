@@ -37,6 +37,12 @@ public class TurnManager : MonoBehaviour
         Unfair
     }
 
+    public enum AIRecruitVariant
+    {
+        Default,
+        RiderFocus
+    }
+
     public enum MapSizePreset
     {
         Unspecified,
@@ -76,6 +82,8 @@ public class TurnManager : MonoBehaviour
     [Header("AI Settings")]
     public float aiTurnDelay = 1f; // seconds the AI "thinks" before ending its turn
     public AIDifficulty aiDifficulty = AIDifficulty.Level1;
+    [Tooltip("Experimental/dev-only AI recruit override. Default preserves current behavior.")]
+    public AIRecruitVariant aiRecruitVariant = AIRecruitVariant.Default;
 
     [Header("UI")]
     [Tooltip("Optional: assign End Turn / Next Turn button to keep interactable state synced with CanAdvanceTurn().")]
@@ -335,6 +343,7 @@ public class TurnManager : MonoBehaviour
         public string gameId;
         public string mode;
         public string aiDifficulty;
+        public string aiRecruitVariant;
         public string mapSizePreset;
         public int boardWidth;
         public int boardHeight;
@@ -2397,6 +2406,7 @@ public class TurnManager : MonoBehaviour
         playerGold = startingGold;
         aiGold = startingGold;
         aiDifficulty = AIDifficulty.Level1;
+        aiRecruitVariant = AIRecruitVariant.Default;
 
         if (GameModeSelection.TryConsume(out GameMode pendingMode))
         {
@@ -2435,6 +2445,11 @@ public class TurnManager : MonoBehaviour
         if (AIDifficultySelection.TryConsume(out AIDifficulty pendingDifficulty))
         {
             aiDifficulty = pendingDifficulty;
+        }
+
+        if (AIRecruitVariantSelection.TryConsume(out AIRecruitVariant pendingRecruitVariant))
+        {
+            aiRecruitVariant = pendingRecruitVariant;
         }
 
         if (SnapshotHistorySelection.TryConsume(out bool pendingStoreSnapshotHistory))
@@ -3441,7 +3456,10 @@ public class TurnManager : MonoBehaviour
 
             if (city.isPlayerOwned == actingSideIsPlayerOwned && city.CanRecruit())
             {
-                if (useImprovedLevel1Behavior)
+                if (TryRecruitVariantOverride(city))
+                {
+                }
+                else if (useImprovedLevel1Behavior)
                 {
                     TryRecruitLevel1Unit(city, actingSideIsPlayerOwned, allCities, unitsBeforeRecruitment, aiVisibleTiles, aiHasPerfectInfo);
                 }
@@ -3532,6 +3550,7 @@ public class TurnManager : MonoBehaviour
             gridManager,
             allCities,
             allUnits,
+            primaryControlledCity,
             actingSideIsPlayerOwned,
             aiVisibleTiles,
             aiHasPerfectInfo);
@@ -3548,6 +3567,11 @@ public class TurnManager : MonoBehaviour
             if (plan.AssignedCombatUnit != null && !combatDefenseAssignments.ContainsKey(plan.AssignedCombatUnit))
             {
                 combatDefenseAssignments.Add(plan.AssignedCombatUnit, plan);
+            }
+
+            if (plan.AssignedSupportCombatUnit != null && !combatDefenseAssignments.ContainsKey(plan.AssignedSupportCombatUnit))
+            {
+                combatDefenseAssignments.Add(plan.AssignedSupportCombatUnit, plan);
             }
 
             if (plan.AssignedScoutUnit != null && !scoutDefenseAssignments.ContainsKey(plan.AssignedScoutUnit))
@@ -4113,6 +4137,16 @@ public class TurnManager : MonoBehaviour
         }
     }
 
+    private bool TryRecruitVariantOverride(City city)
+    {
+        if (city == null || aiRecruitVariant != AIRecruitVariant.RiderFocus)
+        {
+            return false;
+        }
+
+        return city.TrySpawnUnit(UnitRegistry.RiderTypeId);
+    }
+
     private void ExecuteLevel1UnitTurn(
         Unit unit,
         List<Unit> visibleEnemyUnits,
@@ -4196,36 +4230,14 @@ public class TurnManager : MonoBehaviour
         City currentCity = GridUtils.GetCityAtPosition(unit.transform.position);
         bool isOnProtectedCity = currentCity == plan.City;
 
-        if (unit == plan.AssignedCombatUnit)
+        if (TryExecuteAssignedCombatDefense(unit, plan.AssignedCombatUnit, plan.PreferredCombatPosition, plan, isOnProtectedCity, tileSize))
         {
-            if (isOnProtectedCity && !plan.CanVacateCityTile)
-            {
-                return true;
-            }
+            return true;
+        }
 
-            if (plan.PreferredCombatPosition.HasValue)
-            {
-                Vector3 targetPosition = plan.PreferredCombatPosition.Value;
-                if ((unit.transform.position - targetPosition).sqrMagnitude > 0.0001f)
-                {
-                    if (isOnProtectedCity)
-                    {
-                        Unit occupant = GridUtils.GetUnitAtPosition(targetPosition, unit);
-                        if (occupant == null)
-                        {
-                            MoveAIUnitOneStep(unit, targetPosition, tileSize);
-                        }
-                    }
-                    else
-                    {
-                        MoveAIUnitTowardEmptyTile(unit, targetPosition, tileSize);
-                    }
-                }
-
-                return true;
-            }
-
-            return isOnProtectedCity;
+        if (TryExecuteAssignedCombatDefense(unit, plan.AssignedSupportCombatUnit, plan.PreferredSupportCombatPosition, plan, isOnProtectedCity, tileSize))
+        {
+            return true;
         }
 
         if (unit == plan.AssignedScoutUnit)
@@ -4245,6 +4257,49 @@ public class TurnManager : MonoBehaviour
         }
 
         return false;
+    }
+
+    private bool TryExecuteAssignedCombatDefense(
+        Unit unit,
+        Unit assignedCombatUnit,
+        Vector3? preferredCombatPosition,
+        AITurnLogic.CityDefensePlan plan,
+        bool isOnProtectedCity,
+        float tileSize)
+    {
+        if (unit != assignedCombatUnit)
+        {
+            return false;
+        }
+
+        if (isOnProtectedCity && !plan.CanVacateCityTile)
+        {
+            return true;
+        }
+
+        if (preferredCombatPosition.HasValue)
+        {
+            Vector3 targetPosition = preferredCombatPosition.Value;
+            if ((unit.transform.position - targetPosition).sqrMagnitude > 0.0001f)
+            {
+                if (isOnProtectedCity)
+                {
+                    Unit occupant = GridUtils.GetUnitAtPosition(targetPosition, unit);
+                    if (occupant == null)
+                    {
+                        MoveAIUnitOneStep(unit, targetPosition, tileSize);
+                    }
+                }
+                else
+                {
+                    MoveAIUnitTowardEmptyTile(unit, targetPosition, tileSize);
+                }
+            }
+
+            return true;
+        }
+
+        return isOnProtectedCity;
     }
 
     private bool TryAttackVisibleEnemyFromCurrentPosition(Unit unit, List<Unit> visibleEnemyUnits)
@@ -5345,6 +5400,7 @@ public class TurnManager : MonoBehaviour
             appVersion = CurrentAppVersion,
             mode = currentMode.ToString(),
             aiDifficulty = aiDifficulty.ToString(),
+            aiRecruitVariant = aiRecruitVariant.ToString(),
             mapSizePreset = GetCurrentMapSizePreset().ToString(),
             boardWidth = gridManager.width,
             boardHeight = gridManager.height,
@@ -5798,6 +5854,13 @@ private void PBpDebugSyncNow_Context()
                 System.Enum.TryParse(save.aiDifficulty, out AIDifficulty loadedDifficulty))
             {
                 aiDifficulty = loadedDifficulty;
+            }
+
+            aiRecruitVariant = AIRecruitVariant.Default;
+            if (!string.IsNullOrEmpty(save.aiRecruitVariant) &&
+                System.Enum.TryParse(save.aiRecruitVariant, out AIRecruitVariant loadedRecruitVariant))
+            {
+                aiRecruitVariant = loadedRecruitVariant;
             }
             SetCurrentGameId(string.IsNullOrEmpty(save.gameId) ? System.Guid.NewGuid().ToString() : save.gameId);
             if (currentMode == GameMode.PlayByPost)

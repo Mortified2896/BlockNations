@@ -235,15 +235,24 @@ public class MainMenuController : MonoBehaviour
         StartVsAIGame(TurnManager.AIDifficulty.Level3, TurnManager.GetDefaultMapSizePreset());
     }
 
-    public void StartVsAIGameWithSettings(TurnManager.AIDifficulty difficulty, TurnManager.MapSizePreset mapSizePreset, bool storeSnapshotHistory = false)
+    public void StartVsAIGameWithSettings(
+        TurnManager.AIDifficulty difficulty,
+        TurnManager.MapSizePreset mapSizePreset,
+        TurnManager.AIRecruitVariant recruitVariant = TurnManager.AIRecruitVariant.Default,
+        bool storeSnapshotHistory = false)
     {
-        StartVsAIGame(difficulty, mapSizePreset, storeSnapshotHistory);
+        StartVsAIGame(difficulty, mapSizePreset, recruitVariant, storeSnapshotHistory);
     }
 
-    private void StartVsAIGame(TurnManager.AIDifficulty difficulty, TurnManager.MapSizePreset mapSizePreset, bool storeSnapshotHistory = false)
+    private void StartVsAIGame(
+        TurnManager.AIDifficulty difficulty,
+        TurnManager.MapSizePreset mapSizePreset,
+        TurnManager.AIRecruitVariant recruitVariant = TurnManager.AIRecruitVariant.Default,
+        bool storeSnapshotHistory = false)
     {
         GameModeSelection.SetPendingMode(TurnManager.GameMode.VsAI);
         AIDifficultySelection.SetPending(difficulty);
+        AIRecruitVariantSelection.SetPending(recruitVariant);
         MapSizeSelection.SetPending(mapSizePreset);
         SnapshotHistorySelection.SetPending(storeSnapshotHistory);
         SceneManager.LoadScene(gameplaySceneName);
