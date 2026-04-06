@@ -53,6 +53,7 @@ public class MainMenuUITKView : MonoBehaviour
     private VisualElement generalSettingsCard;
     private VisualElement generalSettingsAiSection;
     private VisualElement generalSettingsDevSection;
+    private VisualElement generalSettingsAIVsAIOptionsSection;
     private ScrollView activeGamesList;
     private Label detailsTitleLabel;
     private Label detailsSubtitleLabel;
@@ -69,6 +70,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Label generalSettingsTitleLabel;
     private Label generalSettingsSubtitleLabel;
     private Toggle generalSettingsStoreSnapshotHistoryToggle;
+    private Toggle generalSettingsWatchAIVsAIToggle;
 
     private Button continueButton;
     private Button playVsAiButton;
@@ -88,6 +90,10 @@ public class MainMenuUITKView : MonoBehaviour
     private Button generalSettingsAiLevel3Button;
     private Button generalSettingsAiStyleDefaultButton;
     private Button generalSettingsAiStyleRiderFocusButton;
+    private Button generalSettingsSideAAiStyleDefaultButton;
+    private Button generalSettingsSideAAiStyleRiderFocusButton;
+    private Button generalSettingsSideBAiStyleDefaultButton;
+    private Button generalSettingsSideBAiStyleRiderFocusButton;
     private Button generalSettingsConfirmButton;
     private Button generalSettingsBackButton;
     private Button detailsOpenButton;
@@ -130,6 +136,9 @@ public class MainMenuUITKView : MonoBehaviour
     private TurnManager.AIDifficulty selectedAIDifficulty = TurnManager.AIDifficulty.Level1;
     private TurnManager.AIRecruitVariant selectedAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
     private bool selectedStoreSnapshotHistory;
+    private bool selectedEnableAIVsAIDebugMode;
+    private TurnManager.AIRecruitVariant selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
+    private TurnManager.AIRecruitVariant selectedSideBAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
 
     private enum PendingGeneralSettingsMode
     {
@@ -373,6 +382,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsCard = root.Q<VisualElement>("GeneralSettingsCard");
         generalSettingsAiSection = root.Q<VisualElement>("GeneralSettingsAiSection");
         generalSettingsDevSection = root.Q<VisualElement>("GeneralSettingsDevSection");
+        generalSettingsAIVsAIOptionsSection = root.Q<VisualElement>("GeneralSettingsAIVsAIOptionsSection");
         activeGamesList = root.Q<ScrollView>("ActiveGamesList");
         detailsTitleLabel = root.Q<Label>("DetailsTitleLabel");
         detailsSubtitleLabel = root.Q<Label>("DetailsSubtitleLabel");
@@ -396,6 +406,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsTitleLabel = root.Q<Label>("GeneralSettingsTitleLabel");
         generalSettingsSubtitleLabel = root.Q<Label>("GeneralSettingsSubtitleLabel");
         generalSettingsStoreSnapshotHistoryToggle = root.Q<Toggle>("GeneralSettingsStoreSnapshotHistoryToggle");
+        generalSettingsWatchAIVsAIToggle = root.Q<Toggle>("GeneralSettingsWatchAIVsAIToggle");
 
         continueButton = root.Q<Button>("ContinueButton");
         playVsAiButton = root.Q<Button>("PlayVsAIButton");
@@ -417,6 +428,10 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAiLevel3Button = root.Q<Button>("GeneralSettingsAiLevel3Button");
         generalSettingsAiStyleDefaultButton = root.Q<Button>("GeneralSettingsAiStyleDefaultButton");
         generalSettingsAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsAiStyleRiderFocusButton");
+        generalSettingsSideAAiStyleDefaultButton = root.Q<Button>("GeneralSettingsSideAAiStyleDefaultButton");
+        generalSettingsSideAAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsSideAAiStyleRiderFocusButton");
+        generalSettingsSideBAiStyleDefaultButton = root.Q<Button>("GeneralSettingsSideBAiStyleDefaultButton");
+        generalSettingsSideBAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsSideBAiStyleRiderFocusButton");
         generalSettingsConfirmButton = root.Q<Button>("GeneralSettingsConfirmButton");
         generalSettingsBackButton = root.Q<Button>("GeneralSettingsBackButton");
         detailsOpenButton = root.Q<Button>("DetailsOpenButton");
@@ -868,6 +883,31 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsAiStyleRiderFocusButton.clicked += HandleGeneralSettingsAiStyleRiderFocusClicked;
         }
 
+        if (generalSettingsSideAAiStyleDefaultButton != null)
+        {
+            generalSettingsSideAAiStyleDefaultButton.clicked += HandleGeneralSettingsSideAAiStyleDefaultClicked;
+        }
+
+        if (generalSettingsSideAAiStyleRiderFocusButton != null)
+        {
+            generalSettingsSideAAiStyleRiderFocusButton.clicked += HandleGeneralSettingsSideAAiStyleRiderFocusClicked;
+        }
+
+        if (generalSettingsSideBAiStyleDefaultButton != null)
+        {
+            generalSettingsSideBAiStyleDefaultButton.clicked += HandleGeneralSettingsSideBAiStyleDefaultClicked;
+        }
+
+        if (generalSettingsSideBAiStyleRiderFocusButton != null)
+        {
+            generalSettingsSideBAiStyleRiderFocusButton.clicked += HandleGeneralSettingsSideBAiStyleRiderFocusClicked;
+        }
+
+        if (generalSettingsWatchAIVsAIToggle != null)
+        {
+            generalSettingsWatchAIVsAIToggle.RegisterValueChangedCallback(HandleGeneralSettingsWatchAIVsAIChanged);
+        }
+
         if (generalSettingsConfirmButton != null)
         {
             generalSettingsConfirmButton.clicked += HandleGeneralSettingsConfirmClicked;
@@ -1035,6 +1075,31 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsAiStyleRiderFocusButton != null)
         {
             generalSettingsAiStyleRiderFocusButton.clicked -= HandleGeneralSettingsAiStyleRiderFocusClicked;
+        }
+
+        if (generalSettingsSideAAiStyleDefaultButton != null)
+        {
+            generalSettingsSideAAiStyleDefaultButton.clicked -= HandleGeneralSettingsSideAAiStyleDefaultClicked;
+        }
+
+        if (generalSettingsSideAAiStyleRiderFocusButton != null)
+        {
+            generalSettingsSideAAiStyleRiderFocusButton.clicked -= HandleGeneralSettingsSideAAiStyleRiderFocusClicked;
+        }
+
+        if (generalSettingsSideBAiStyleDefaultButton != null)
+        {
+            generalSettingsSideBAiStyleDefaultButton.clicked -= HandleGeneralSettingsSideBAiStyleDefaultClicked;
+        }
+
+        if (generalSettingsSideBAiStyleRiderFocusButton != null)
+        {
+            generalSettingsSideBAiStyleRiderFocusButton.clicked -= HandleGeneralSettingsSideBAiStyleRiderFocusClicked;
+        }
+
+        if (generalSettingsWatchAIVsAIToggle != null)
+        {
+            generalSettingsWatchAIVsAIToggle.UnregisterValueChangedCallback(HandleGeneralSettingsWatchAIVsAIChanged);
         }
 
         if (generalSettingsConfirmButton != null)
@@ -1247,6 +1312,36 @@ public class MainMenuUITKView : MonoBehaviour
         RefreshGeneralSettingsSelectionState();
     }
 
+    private void HandleGeneralSettingsSideAAiStyleDefaultClicked()
+    {
+        selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsSideAAiStyleRiderFocusClicked()
+    {
+        selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.RiderFocus;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsSideBAiStyleDefaultClicked()
+    {
+        selectedSideBAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsSideBAiStyleRiderFocusClicked()
+    {
+        selectedSideBAIRecruitVariant = TurnManager.AIRecruitVariant.RiderFocus;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsWatchAIVsAIChanged(ChangeEvent<bool> evt)
+    {
+        selectedEnableAIVsAIDebugMode = evt != null && evt.newValue;
+        RefreshGeneralSettingsSelectionState();
+    }
+
     private void HandleGeneralSettingsConfirmClicked()
     {
         if (mainMenuController == null)
@@ -1259,6 +1354,11 @@ public class MainMenuUITKView : MonoBehaviour
             selectedStoreSnapshotHistory = generalSettingsStoreSnapshotHistoryToggle.value;
         }
 
+        if (generalSettingsWatchAIVsAIToggle != null)
+        {
+            selectedEnableAIVsAIDebugMode = generalSettingsWatchAIVsAIToggle.value;
+        }
+
         bool started = false;
         if (pendingGeneralSettingsMode == PendingGeneralSettingsMode.VsAI)
         {
@@ -1266,7 +1366,10 @@ public class MainMenuUITKView : MonoBehaviour
                 selectedAIDifficulty,
                 selectedMapSizePreset,
                 selectedAIRecruitVariant,
-                selectedStoreSnapshotHistory);
+                selectedStoreSnapshotHistory,
+                selectedEnableAIVsAIDebugMode,
+                selectedSideAAIRecruitVariant,
+                selectedSideBAIRecruitVariant);
             started = true;
         }
         else if (pendingGeneralSettingsMode == PendingGeneralSettingsMode.PlayByPost)
@@ -1936,6 +2039,9 @@ public class MainMenuUITKView : MonoBehaviour
         selectedAIDifficulty = TurnManager.AIDifficulty.Level1;
         selectedAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
         selectedStoreSnapshotHistory = false;
+        selectedEnableAIVsAIDebugMode = false;
+        selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
+        selectedSideBAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
         HideCreateSuccessPanel();
         HideJoinPanel();
         SetDetailsConfirmState(false);
@@ -1980,6 +2086,11 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsStoreSnapshotHistoryToggle != null)
         {
             generalSettingsStoreSnapshotHistoryToggle.value = selectedStoreSnapshotHistory;
+        }
+
+        if (generalSettingsWatchAIVsAIToggle != null)
+        {
+            generalSettingsWatchAIVsAIToggle.value = selectedEnableAIVsAIDebugMode;
         }
 
         if (generalSettingsConfirmButton != null)
@@ -2033,6 +2144,28 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void RefreshGeneralSettingsSelectionState()
     {
+        bool isVsAi = pendingGeneralSettingsMode == PendingGeneralSettingsMode.VsAI;
+
+        if (generalSettingsWatchAIVsAIToggle != null &&
+            generalSettingsWatchAIVsAIToggle.value != selectedEnableAIVsAIDebugMode)
+        {
+            generalSettingsWatchAIVsAIToggle.SetValueWithoutNotify(selectedEnableAIVsAIDebugMode);
+        }
+
+        if (generalSettingsWatchAIVsAIToggle != null)
+        {
+            generalSettingsWatchAIVsAIToggle.style.display =
+                IsDevBuild() && isVsAi ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        if (generalSettingsAIVsAIOptionsSection != null)
+        {
+            generalSettingsAIVsAIOptionsSection.style.display =
+                IsDevBuild() && isVsAi && selectedEnableAIVsAIDebugMode
+                    ? DisplayStyle.Flex
+                    : DisplayStyle.None;
+        }
+
         UpdateGeneralSettingsSelectionButton(
             generalSettingsMapSmallButton,
             selectedMapSizePreset == TurnManager.MapSizePreset.Small);
@@ -2054,6 +2187,18 @@ public class MainMenuUITKView : MonoBehaviour
         UpdateGeneralSettingsSelectionButton(
             generalSettingsAiStyleRiderFocusButton,
             selectedAIRecruitVariant == TurnManager.AIRecruitVariant.RiderFocus);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsSideAAiStyleDefaultButton,
+            selectedSideAAIRecruitVariant == TurnManager.AIRecruitVariant.Default);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsSideAAiStyleRiderFocusButton,
+            selectedSideAAIRecruitVariant == TurnManager.AIRecruitVariant.RiderFocus);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsSideBAiStyleDefaultButton,
+            selectedSideBAIRecruitVariant == TurnManager.AIRecruitVariant.Default);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsSideBAiStyleRiderFocusButton,
+            selectedSideBAIRecruitVariant == TurnManager.AIRecruitVariant.RiderFocus);
     }
 
     private static void UpdateGeneralSettingsSelectionButton(Button button, bool selected)
@@ -2518,6 +2663,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsCard = null;
         generalSettingsAiSection = null;
         generalSettingsDevSection = null;
+        generalSettingsAIVsAIOptionsSection = null;
         activeGamesList = null;
         detailsTitleLabel = null;
         detailsSubtitleLabel = null;
@@ -2535,6 +2681,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsTitleLabel = null;
         generalSettingsSubtitleLabel = null;
         generalSettingsStoreSnapshotHistoryToggle = null;
+        generalSettingsWatchAIVsAIToggle = null;
         continueButton = null;
         playVsAiButton = null;
         multiplayerButton = null;
@@ -2553,6 +2700,10 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAiLevel3Button = null;
         generalSettingsAiStyleDefaultButton = null;
         generalSettingsAiStyleRiderFocusButton = null;
+        generalSettingsSideAAiStyleDefaultButton = null;
+        generalSettingsSideAAiStyleRiderFocusButton = null;
+        generalSettingsSideBAiStyleDefaultButton = null;
+        generalSettingsSideBAiStyleRiderFocusButton = null;
         generalSettingsConfirmButton = null;
         generalSettingsBackButton = null;
         detailsOpenButton = null;

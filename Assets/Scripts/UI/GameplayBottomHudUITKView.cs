@@ -17,6 +17,9 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private const string PlayByPostFetchOkResult = "OK";
     private const string PlayByPostEndgameShareText = "Well played! Want to play again?";
     private const string GameOverOverlayDefaultTitleText = "Game Over";
+    private const string NextButtonDefaultText = "Next";
+    private const string AIVsAIPauseButtonText = "Pause";
+    private const string AIVsAIResumeButtonText = "Resume";
 
     [Header("Spike Toggle")]
     [SerializeField] private bool enableGameplayBottomHudUITK = true;
@@ -439,6 +442,12 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     {
         if (turnManager != null)
         {
+            if (turnManager.IsAIVsAIDebugModeEnabledForUi())
+            {
+                turnManager.ToggleAIVsAIDebugPause();
+                return;
+            }
+
             turnManager.OnEndTurnButtonPressed();
         }
     }
@@ -542,8 +551,13 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
 
         if (nextButton != null)
         {
+            bool isAIVsAi = turnManager != null && turnManager.IsAIVsAIDebugModeEnabledForUi();
+            bool canUseAIVsAiToggle = turnManager != null && turnManager.CanToggleAIVsAIDebugPauseForUi();
             bool canAdvance = turnManager != null && turnManager.CanAdvanceTurn();
-            nextButton.SetEnabled(showDefaultBottom && canAdvance);
+            nextButton.text = isAIVsAi
+                ? (turnManager.IsAIVsAIDebugPausedForUi() ? AIVsAIResumeButtonText : AIVsAIPauseButtonText)
+                : NextButtonDefaultText;
+            nextButton.SetEnabled(showDefaultBottom && (isAIVsAi ? canUseAIVsAiToggle : canAdvance));
         }
 
         RefreshGameOverOverlayState();

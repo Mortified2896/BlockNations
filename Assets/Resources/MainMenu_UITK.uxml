@@ -112,46 +112,61 @@
         </ui:VisualElement>
 
         <ui:VisualElement name="GeneralSettingsPanel" class="general-settings-overlay" style="display: none;">
-            <ui:VisualElement name="GeneralSettingsCard" class="general-settings-card">
-                <ui:Label name="GeneralSettingsTitleLabel" text="General Settings" class="general-settings-title" />
-                <ui:Label name="GeneralSettingsSubtitleLabel" text="" class="general-settings-subtitle" />
+            <ui:ScrollView name="GeneralSettingsScrollView" class="general-settings-scroll" mode="Vertical">
+                <ui:VisualElement name="GeneralSettingsCard" class="general-settings-card">
+                    <ui:Label name="GeneralSettingsTitleLabel" text="General Settings" class="general-settings-title" />
+                    <ui:Label name="GeneralSettingsSubtitleLabel" text="" class="general-settings-subtitle" />
 
-                <ui:VisualElement class="general-settings-section">
-                    <ui:Label text="Map Size" class="general-settings-section-label" />
-                    <ui:VisualElement class="general-settings-option-row">
-                        <ui:Button name="GeneralSettingsMapSmallButton" text="Small 10x10" class="menu-button general-settings-option-button" />
-                        <ui:Button name="GeneralSettingsMapLargeButton" text="Large 15x15" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
-                    </ui:VisualElement>
-                </ui:VisualElement>
-
-                <ui:VisualElement name="GeneralSettingsAiSection" class="general-settings-section">
-                    <ui:Label text="AI Level" class="general-settings-section-label" />
-                    <ui:VisualElement class="general-settings-option-grid">
-                        <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
-                            <ui:Button name="GeneralSettingsAiLevel1Button" text="Easy" class="menu-button general-settings-option-button" />
-                            <ui:Button name="GeneralSettingsAiLevel2Button" text="Standard" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
-                        </ui:VisualElement>
-                        <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
-                            <ui:Button name="GeneralSettingsAiLevel3Button" text="Hard" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                    <ui:VisualElement class="general-settings-section">
+                        <ui:Label text="Map Size" class="general-settings-section-label" />
+                        <ui:VisualElement class="general-settings-option-row">
+                            <ui:Button name="GeneralSettingsMapSmallButton" text="Small 10x10" class="menu-button general-settings-option-button" />
+                            <ui:Button name="GeneralSettingsMapLargeButton" text="Large 15x15" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                         </ui:VisualElement>
                     </ui:VisualElement>
-                    <ui:Label text="AI Style" class="general-settings-section-label" />
-                    <ui:VisualElement class="general-settings-option-row">
-                        <ui:Button name="GeneralSettingsAiStyleDefaultButton" text="Default" class="menu-button general-settings-option-button" />
-                        <ui:Button name="GeneralSettingsAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+
+                    <ui:VisualElement name="GeneralSettingsAiSection" class="general-settings-section">
+                        <ui:Label text="AI Level" class="general-settings-section-label" />
+                        <ui:VisualElement class="general-settings-option-grid">
+                            <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
+                                <ui:Button name="GeneralSettingsAiLevel1Button" text="Easy" class="menu-button general-settings-option-button" />
+                                <ui:Button name="GeneralSettingsAiLevel2Button" text="Standard" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                            </ui:VisualElement>
+                            <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
+                                <ui:Button name="GeneralSettingsAiLevel3Button" text="Hard" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                            </ui:VisualElement>
+                        </ui:VisualElement>
+                        <ui:Label text="AI Style" class="general-settings-section-label" />
+                        <ui:VisualElement class="general-settings-option-row">
+                            <ui:Button name="GeneralSettingsAiStyleDefaultButton" text="Default" class="menu-button general-settings-option-button" />
+                            <ui:Button name="GeneralSettingsAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+
+                    <ui:VisualElement name="GeneralSettingsDevSection" class="general-settings-section" style="display: none;">
+                        <ui:Label text="Dev Options" class="general-settings-section-label" />
+                        <ui:Toggle name="GeneralSettingsStoreSnapshotHistoryToggle" label="Store Snapshot History" class="general-settings-dev-toggle" />
+                        <ui:Toggle name="GeneralSettingsWatchAIVsAIToggle" label="Watch AI vs AI" class="general-settings-dev-toggle" />
+                        <ui:VisualElement name="GeneralSettingsAIVsAIOptionsSection" style="display: none;">
+                            <ui:Label text="Side A AI Style" class="general-settings-section-label" />
+                            <ui:VisualElement class="general-settings-option-row">
+                                <ui:Button name="GeneralSettingsSideAAiStyleDefaultButton" text="Default" class="menu-button general-settings-option-button" />
+                                <ui:Button name="GeneralSettingsSideAAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                            </ui:VisualElement>
+                            <ui:Label text="Side B AI Style" class="general-settings-section-label" />
+                            <ui:VisualElement class="general-settings-option-row">
+                                <ui:Button name="GeneralSettingsSideBAiStyleDefaultButton" text="Default" class="menu-button general-settings-option-button" />
+                                <ui:Button name="GeneralSettingsSideBAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                            </ui:VisualElement>
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+
+                    <ui:VisualElement class="general-settings-actions">
+                        <ui:Button name="GeneralSettingsConfirmButton" text="Start Game" class="menu-button general-settings-action-button general-settings-action-button--first general-settings-action-button-primary" />
+                        <ui:Button name="GeneralSettingsBackButton" text="Back" class="menu-button general-settings-action-button" />
                     </ui:VisualElement>
                 </ui:VisualElement>
-
-                <ui:VisualElement name="GeneralSettingsDevSection" class="general-settings-section" style="display: none;">
-                    <ui:Label text="Dev Options" class="general-settings-section-label" />
-                    <ui:Toggle name="GeneralSettingsStoreSnapshotHistoryToggle" label="Store Snapshot History" class="general-settings-dev-toggle" />
-                </ui:VisualElement>
-
-                <ui:VisualElement class="general-settings-actions">
-                    <ui:Button name="GeneralSettingsConfirmButton" text="Start Game" class="menu-button general-settings-action-button general-settings-action-button--first general-settings-action-button-primary" />
-                    <ui:Button name="GeneralSettingsBackButton" text="Back" class="menu-button general-settings-action-button" />
-                </ui:VisualElement>
-            </ui:VisualElement>
+            </ui:ScrollView>
         </ui:VisualElement>
 
         <ui:Label name="VersionLabel" text="" class="version-label" />

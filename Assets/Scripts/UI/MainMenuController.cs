@@ -239,20 +239,37 @@ public class MainMenuController : MonoBehaviour
         TurnManager.AIDifficulty difficulty,
         TurnManager.MapSizePreset mapSizePreset,
         TurnManager.AIRecruitVariant recruitVariant = TurnManager.AIRecruitVariant.Default,
-        bool storeSnapshotHistory = false)
+        bool storeSnapshotHistory = false,
+        bool enableAIVsAIDebugMode = false,
+        TurnManager.AIRecruitVariant sideARecruitVariant = TurnManager.AIRecruitVariant.Default,
+        TurnManager.AIRecruitVariant sideBRecruitVariant = TurnManager.AIRecruitVariant.Default)
     {
-        StartVsAIGame(difficulty, mapSizePreset, recruitVariant, storeSnapshotHistory);
+        StartVsAIGame(
+            difficulty,
+            mapSizePreset,
+            recruitVariant,
+            storeSnapshotHistory,
+            enableAIVsAIDebugMode,
+            sideARecruitVariant,
+            sideBRecruitVariant);
     }
 
     private void StartVsAIGame(
         TurnManager.AIDifficulty difficulty,
         TurnManager.MapSizePreset mapSizePreset,
         TurnManager.AIRecruitVariant recruitVariant = TurnManager.AIRecruitVariant.Default,
-        bool storeSnapshotHistory = false)
+        bool storeSnapshotHistory = false,
+        bool enableAIVsAIDebugMode = false,
+        TurnManager.AIRecruitVariant sideARecruitVariant = TurnManager.AIRecruitVariant.Default,
+        TurnManager.AIRecruitVariant sideBRecruitVariant = TurnManager.AIRecruitVariant.Default)
     {
         GameModeSelection.SetPendingMode(TurnManager.GameMode.VsAI);
         AIDifficultySelection.SetPending(difficulty);
         AIRecruitVariantSelection.SetPending(recruitVariant);
+        AIVsAIDebugSelection.SetPending(
+            enableAIVsAIDebugMode,
+            sideARecruitVariant,
+            sideBRecruitVariant);
         MapSizeSelection.SetPending(mapSizePreset);
         SnapshotHistorySelection.SetPending(storeSnapshotHistory);
         SceneManager.LoadScene(gameplaySceneName);

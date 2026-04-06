@@ -151,6 +151,12 @@ public class TurnManager : MonoBehaviour
     private bool playByPostLastFetchWasNoTurn = false;
     private float playByPostLastNoTurnLogTime = -999f;
     private Coroutine aiVsAiDebugRoutine;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private AIRecruitVariant aiVsAiSideARecruitVariant = AIRecruitVariant.Default;
+    private AIRecruitVariant aiVsAiSideBRecruitVariant = AIRecruitVariant.Default;
+    private bool aiVsAiDebugPaused = false;
+    private bool aiVsAiDebugRestartPending = false;
+#endif
 #if DEVELOPMENT_BUILD
     private int lastSubmittedTransportSeqForTelemetry = -1;
     private string lastSubmittedGameIdForTelemetry;
@@ -215,7 +221,7 @@ public class TurnManager : MonoBehaviour
 
     public static MapSizePreset GetDefaultMapSizePreset()
     {
-        return MapSizePreset.Large;
+        return MapSizePreset.Small;
     }
 
     public static void GetBoardDimensionsForPreset(MapSizePreset preset, out int boardWidth, out int boardHeight)
@@ -369,7 +375,13 @@ public class TurnManager : MonoBehaviour
     private string cachedGameIdHash;
     public event System.Action<bool, string> PlayByPostSubmitResult;
     public event System.Action<bool, string> PlayByPostFetchResult;
-    public bool IsGameOverUiVisible => gameOver;
+    public bool IsGameOverUiVisible =>
+        gameOver &&
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        !aiVsAiDebugRestartPending;
+#else
+        true;
+#endif
     public string GameOverUiTitle =>
         string.IsNullOrWhiteSpace(gameOverUiTitle) ? DefaultGameOverTitle : gameOverUiTitle;
     public string GameOverUiMessage =>
@@ -1058,10 +1070,15 @@ public class TurnManager : MonoBehaviour
         if (unit == null || gameOver)
             return false;
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (IsAIVsAIDebugModeActive())
+            return false;
+#endif
+
         if (currentMode == GameMode.PlayByPost && !CanLocalPlayerIssueCommands())
             return false;
 
-        return IsCurrentSideOwner(unit.isPlayerOwned);
+        return IsHumanTurn() && IsCurrentSideOwner(unit.isPlayerOwned);
     }
 
     public bool CanControlCity(City city)
@@ -1069,10 +1086,15 @@ public class TurnManager : MonoBehaviour
         if (city == null || gameOver)
             return false;
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (IsAIVsAIDebugModeActive())
+            return false;
+#endif
+
         if (currentMode == GameMode.PlayByPost && !CanLocalPlayerIssueCommands())
             return false;
 
-        return IsCurrentSideOwner(city.isPlayerOwned);
+        return IsHumanTurn() && IsCurrentSideOwner(city.isPlayerOwned);
     }
 
     public string GetCurrentSideName()
@@ -2452,6 +2474,10 @@ public class TurnManager : MonoBehaviour
             aiRecruitVariant = pendingRecruitVariant;
         }
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        ResolveAIVsAIDebugRuntimeSettings(consumePendingSelection: true);
+#endif
+
         if (SnapshotHistorySelection.TryConsume(out bool pendingStoreSnapshotHistory))
         {
             MatchSnapshotHistorySettings.SetEnabled(currentGameId, pendingStoreSnapshotHistory);
@@ -3375,6 +3401,39 @@ public class TurnManager : MonoBehaviour
         }
     }
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    public bool IsAIVsAIDebugModeEnabledForUi()
+    {
+        return IsAIVsAIDebugModeActive();
+    }
+
+    public bool IsAIVsAIDebugPausedForUi()
+    {
+        return IsAIVsAIDebugModeActive() && aiVsAiDebugPaused;
+    }
+
+    public bool CanToggleAIVsAIDebugPauseForUi()
+    {
+        return IsAIVsAIDebugModeActive() && !aiVsAiDebugRestartPending;
+    }
+
+    public void ToggleAIVsAIDebugPause()
+    {
+        if (!IsAIVsAIDebugModeActive() || aiVsAiDebugRestartPending)
+        {
+            return;
+        }
+
+        aiVsAiDebugPaused = !aiVsAiDebugPaused;
+        RefreshEndTurnButtonInteractable(force: true);
+    }
+#else
+    public bool IsAIVsAIDebugModeEnabledForUi() => false;
+    public bool IsAIVsAIDebugPausedForUi() => false;
+    public bool CanToggleAIVsAIDebugPauseForUi() => false;
+    public void ToggleAIVsAIDebugPause() { }
+#endif
+
     private void AdvanceVsAITurnAfterSide(bool completedSideWasPlayerOwned)
     {
         if (completedSideWasPlayerOwned)
@@ -3404,8 +3463,18 @@ public class TurnManager : MonoBehaviour
         {
             while (currentMode == GameMode.VsAI && IsAIVsAIDebugModeActive() && !gameOver)
             {
+                while (aiVsAiDebugPaused && currentMode == GameMode.VsAI && IsAIVsAIDebugModeActive() && !gameOver)
+                {
+                    yield return null;
+                }
+
                 bool actingSideIsPlayerOwned = isPlayerTurn;
                 yield return new WaitForSeconds(aiTurnDelay);
+
+                while (aiVsAiDebugPaused && currentMode == GameMode.VsAI && IsAIVsAIDebugModeActive() && !gameOver)
+                {
+                    yield return null;
+                }
 
                 if (currentMode != GameMode.VsAI || !IsAIVsAIDebugModeActive() || gameOver)
                     yield break;
@@ -3436,6 +3505,73 @@ public class TurnManager : MonoBehaviour
 #else
         return false;
 #endif
+    }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private void ResolveAIVsAIDebugRuntimeSettings(bool consumePendingSelection)
+    {
+        aiVsAiSideARecruitVariant = aiRecruitVariant;
+        aiVsAiSideBRecruitVariant = aiRecruitVariant;
+
+        if (currentMode != GameMode.VsAI || string.IsNullOrWhiteSpace(currentGameId))
+        {
+            enableAIVsAIDebugMode = false;
+            return;
+        }
+
+        if (consumePendingSelection)
+        {
+            if (AIVsAIDebugSelection.TryConsume(out AIVsAIDebugSelection.Settings pendingSettings))
+            {
+                ApplyAIVsAIDebugRuntimeSettings(pendingSettings);
+                AIVsAIDebugSelection.SaveForGame(currentGameId, pendingSettings);
+                return;
+            }
+
+            if (enableAIVsAIDebugMode)
+            {
+                AIVsAIDebugSelection.SaveForGame(currentGameId, new AIVsAIDebugSelection.Settings
+                {
+                    enabled = true,
+                    sideARecruitVariant = aiVsAiSideARecruitVariant,
+                    sideBRecruitVariant = aiVsAiSideBRecruitVariant
+                });
+            }
+
+            return;
+        }
+
+        enableAIVsAIDebugMode = false;
+        if (AIVsAIDebugSelection.TryLoadForGame(currentGameId, out AIVsAIDebugSelection.Settings persistedSettings))
+        {
+            ApplyAIVsAIDebugRuntimeSettings(persistedSettings);
+        }
+    }
+
+    private void ApplyAIVsAIDebugRuntimeSettings(AIVsAIDebugSelection.Settings settings)
+    {
+        enableAIVsAIDebugMode = settings.enabled;
+        aiVsAiSideARecruitVariant = settings.sideARecruitVariant;
+        aiVsAiSideBRecruitVariant = settings.sideBRecruitVariant;
+        aiVsAiDebugPaused = false;
+        aiVsAiDebugRestartPending = false;
+    }
+#endif
+
+    private AIRecruitVariant GetAIRecruitVariantForSide(bool actingSideIsPlayerOwned)
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (IsAIVsAIDebugModeActive())
+        {
+            return actingSideIsPlayerOwned ? aiVsAiSideARecruitVariant : aiVsAiSideBRecruitVariant;
+        }
+#endif
+        return aiRecruitVariant;
+    }
+
+    private string BuildAIConfigLabelForSide(bool actingSideIsPlayerOwned)
+    {
+        return $"difficulty={aiDifficulty};recruitVariant={GetAIRecruitVariantForSide(actingSideIsPlayerOwned)}";
     }
 
     private void RunAIForSide(bool actingSideIsPlayerOwned)
@@ -4139,7 +4275,7 @@ public class TurnManager : MonoBehaviour
 
     private bool TryRecruitVariantOverride(City city)
     {
-        if (city == null || aiRecruitVariant != AIRecruitVariant.RiderFocus)
+        if (city == null || GetAIRecruitVariantForSide(city.isPlayerOwned) != AIRecruitVariant.RiderFocus)
         {
             return false;
         }
@@ -4675,8 +4811,114 @@ public class TurnManager : MonoBehaviour
             SoundManager.Instance.PlayGameOver(playWinCue);
         }
 
+        TryAppendAIVsAIDebugResult(winnerIsSideA: capturedByPlayer);
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (IsAIVsAIDebugModeActive())
+        {
+            QueueAIVsAIDebugMatchRestart();
+            return;
+        }
+#endif
+
         ShowGameOverPopup(message);
     }
+
+    private void TryAppendAIVsAIDebugResult(bool winnerIsSideA)
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (!IsAIVsAIDebugModeActive() || currentMode != GameMode.VsAI || gridManager == null)
+        {
+            return;
+        }
+
+        CountBoardStateForSide(true, out int sideACityCount, out int sideAUnitCount);
+        CountBoardStateForSide(false, out int sideBCityCount, out int sideBUnitCount);
+
+        AIVsAIMatchCsvLogger.TryAppendResult(new AIVsAIMatchCsvLogger.MatchResult
+        {
+            timestampUtc = System.DateTime.UtcNow.ToString("o"),
+            appVersion = CurrentAppVersion,
+            mapSizePreset = GetCurrentMapSizePreset().ToString(),
+            boardWidth = gridManager.width,
+            boardHeight = gridManager.height,
+            gameMode = "VsAI_Dev_AIVsAI",
+            sideAAIConfig = BuildAIConfigLabelForSide(true),
+            sideBAIConfig = BuildAIConfigLabelForSide(false),
+            winner = winnerIsSideA ? "SideA" : "SideB",
+            totalTurnCount = turnNumber,
+            sideAFinalCityCount = sideACityCount,
+            sideBFinalCityCount = sideBCityCount,
+            sideAFinalUnitCount = sideAUnitCount,
+            sideBFinalUnitCount = sideBUnitCount
+        });
+#endif
+    }
+
+    private void CountBoardStateForSide(bool sideIsPlayerOwned, out int cityCount, out int unitCount)
+    {
+        cityCount = 0;
+        unitCount = 0;
+
+        City[] cities = Object.FindObjectsByType<City>();
+        for (int i = 0; i < cities.Length; i++)
+        {
+            City city = cities[i];
+            if (city != null && city.isPlayerOwned == sideIsPlayerOwned)
+            {
+                cityCount++;
+            }
+        }
+
+        Unit[] units = Object.FindObjectsByType<Unit>();
+        for (int i = 0; i < units.Length; i++)
+        {
+            Unit unit = units[i];
+            if (unit != null && unit.isPlayerOwned == sideIsPlayerOwned)
+            {
+                unitCount++;
+            }
+        }
+    }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private void QueueAIVsAIDebugMatchRestart()
+    {
+        if (!IsAIVsAIDebugModeActive() || aiVsAiDebugRestartPending)
+        {
+            return;
+        }
+
+        aiVsAiDebugRestartPending = true;
+        RefreshEndTurnButtonInteractable(force: true);
+        StartCoroutine(RestartAIVsAIDebugMatchAfterDelay());
+    }
+
+    private IEnumerator RestartAIVsAIDebugMatchAfterDelay()
+    {
+        yield return new WaitForSeconds(1.25f);
+
+        if (currentMode != GameMode.VsAI || !enableAIVsAIDebugMode)
+        {
+            aiVsAiDebugRestartPending = false;
+            yield break;
+        }
+
+        GameModeSelection.SetPendingMode(GameMode.VsAI);
+        MapSizeSelection.SetPending(GetCurrentMapSizePreset());
+        AIDifficultySelection.SetPending(aiDifficulty);
+        AIRecruitVariantSelection.SetPending(aiRecruitVariant);
+        SnapshotHistorySelection.SetPending(MatchSnapshotHistorySettings.IsEnabled(currentGameId));
+        AIVsAIDebugSelection.SetPending(
+            enabled: true,
+            sideARecruitVariant: aiVsAiSideARecruitVariant,
+            sideBRecruitVariant: aiVsAiSideBRecruitVariant);
+
+        Time.timeScale = 1f;
+        Scene currentScene = SceneManager.GetActiveScene();
+        SceneManager.LoadScene(currentScene.name);
+    }
+#endif
 
     void CollectPlayerIncome()
     {
@@ -5862,7 +6104,11 @@ private void PBpDebugSyncNow_Context()
             {
                 aiRecruitVariant = loadedRecruitVariant;
             }
+
             SetCurrentGameId(string.IsNullOrEmpty(save.gameId) ? System.Guid.NewGuid().ToString() : save.gameId);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            ResolveAIVsAIDebugRuntimeSettings(consumePendingSelection: false);
+#endif
             if (currentMode == GameMode.PlayByPost)
             {
                 PersistCurrentPbpGameIdIfNeeded();

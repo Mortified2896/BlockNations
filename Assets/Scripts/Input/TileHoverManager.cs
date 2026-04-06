@@ -77,6 +77,17 @@ public class TileHoverManager : MonoBehaviour
 #endif
                 return;
             }
+
+            if (!turnManager.IsHumanTurn())
+            {
+                if (hoveredTile != null)
+                {
+                    hoveredTile.SetHighlighted(false);
+                    hoveredTile = null;
+                }
+
+                return;
+            }
         }
 
         // 1) HOVER / CLICK: find what is under the mouse
