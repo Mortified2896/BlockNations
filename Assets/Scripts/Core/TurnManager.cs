@@ -139,6 +139,7 @@ public class TurnManager : MonoBehaviour
     private Coroutine playByPostPollRoutine;
     private int lastAppliedTurnNumberForPolling = 0;
     private bool isPlayByPostFetchInProgress = false;
+    private bool isApplyingFetchedPlayByPostSnapshot = false;
     private bool playByPostLastFetchWasNoTurn = false;
     private float playByPostLastNoTurnLogTime = -999f;
     private Coroutine aiVsAiDebugRoutine;
@@ -1695,7 +1696,8 @@ public class TurnManager : MonoBehaviour
                     snapshotJson: exportJson,
                     snapshotRoundTurn: exportSave.turnNumber,
                     snapshotIsPlayerTurn: exportSave.isPlayerTurn,
-                    snapshotGameId: exportSave.gameId);
+                    snapshotGameId: exportSave.gameId,
+                    historySource: "export_write");
             }
 
             if (playByPostAutoSyncEnabled)
@@ -1976,7 +1978,8 @@ public class TurnManager : MonoBehaviour
                 snapshotJson: exportJson,
                 snapshotRoundTurn: exportTurnNumber,
                 snapshotIsPlayerTurn: exportIsPlayerTurn,
-                snapshotGameId: exportGameId);
+                snapshotGameId: exportGameId,
+                historySource: "submit_write");
             SaveManifestService.RecordPlayByPostExport(
                 currentGameId,
                 turnTransport != null ? turnTransport.TransportName : null,
@@ -2037,7 +2040,7 @@ public class TurnManager : MonoBehaviour
             playByPostPollRoutine = null;
         }
 
-        SavePlayByPostPerGameSnapshot();
+        SavePlayByPostPerGameSnapshot(historySource: "connectivity_rewrite");
         RefreshEndTurnButtonInteractable(force: true);
 
         if (UnitSelectionManager.Instance != null)
@@ -2163,7 +2166,16 @@ public class TurnManager : MonoBehaviour
             Debug.Log($"PBp fetched turn {fetchedTurnNumber} via {turnTransport.TransportName} ({(json != null ? json.Length : 0)} chars).");
         }
 
-        bool loaded = LoadFromJsonString(json);
+        isApplyingFetchedPlayByPostSnapshot = true;
+        bool loaded = false;
+        try
+        {
+            loaded = LoadFromJsonString(json);
+        }
+        finally
+        {
+            isApplyingFetchedPlayByPostSnapshot = false;
+        }
         if (loaded)
         {
             lastAppliedTurnNumberForPolling = fetchedTurnNumber;
@@ -2229,6 +2241,7 @@ public class TurnManager : MonoBehaviour
         ResetRecruitmentForAICities();
         if (!disableAI)
         {
+            TryCaptureAIDecisionSnapshot(false);
             RunAITurnForSide(false);
         }
 
@@ -2422,6 +2435,11 @@ public class TurnManager : MonoBehaviour
         if (AIDifficultySelection.TryConsume(out AIDifficulty pendingDifficulty))
         {
             aiDifficulty = pendingDifficulty;
+        }
+
+        if (SnapshotHistorySelection.TryConsume(out bool pendingStoreSnapshotHistory))
+        {
+            MatchSnapshotHistorySettings.SetEnabled(currentGameId, pendingStoreSnapshotHistory);
         }
 
         ResetRecruitmentForPlayerCities();
@@ -3377,6 +3395,7 @@ public class TurnManager : MonoBehaviour
                 if (currentMode != GameMode.VsAI || !IsAIVsAIDebugModeActive() || gameOver)
                     yield break;
 
+                TryCaptureAIDecisionSnapshot(actingSideIsPlayerOwned);
                 RunAITurnForSide(actingSideIsPlayerOwned);
 
                 if (gameOver)
@@ -3508,6 +3527,39 @@ public class TurnManager : MonoBehaviour
 
         bool applyLevel3DefenderBehavior = (aiDifficulty == AIDifficulty.Level3) &&
                                            (primaryControlledCity != null);
+
+        Dictionary<City, AITurnLogic.CityDefensePlan> cityDefensePlans = AITurnLogic.BuildCityDefensePlans(
+            gridManager,
+            allCities,
+            allUnits,
+            actingSideIsPlayerOwned,
+            aiVisibleTiles,
+            aiHasPerfectInfo);
+        Dictionary<Unit, AITurnLogic.CityDefensePlan> combatDefenseAssignments = new Dictionary<Unit, AITurnLogic.CityDefensePlan>();
+        Dictionary<Unit, AITurnLogic.CityDefensePlan> scoutDefenseAssignments = new Dictionary<Unit, AITurnLogic.CityDefensePlan>();
+        foreach (KeyValuePair<City, AITurnLogic.CityDefensePlan> entry in cityDefensePlans)
+        {
+            AITurnLogic.CityDefensePlan plan = entry.Value;
+            if (plan == null)
+            {
+                continue;
+            }
+
+            if (plan.AssignedCombatUnit != null && !combatDefenseAssignments.ContainsKey(plan.AssignedCombatUnit))
+            {
+                combatDefenseAssignments.Add(plan.AssignedCombatUnit, plan);
+            }
+
+            if (plan.AssignedScoutUnit != null && !scoutDefenseAssignments.ContainsKey(plan.AssignedScoutUnit))
+            {
+                scoutDefenseAssignments.Add(plan.AssignedScoutUnit, plan);
+            }
+        }
+
+        bool primaryCityProtectedByPlan = primaryControlledCity != null &&
+                                          cityDefensePlans.TryGetValue(primaryControlledCity, out AITurnLogic.CityDefensePlan primaryCityDefensePlan) &&
+                                          primaryCityDefensePlan != null &&
+                                          primaryCityDefensePlan.IsAtRisk;
 
         Dictionary<Unit, int> distToEnemyCityTiles = null;
         int nearestEnemyCityDistTiles = int.MaxValue;
@@ -3700,6 +3752,26 @@ public class TurnManager : MonoBehaviour
 
             unit.ResetMovementForTurn();
 
+            if (combatDefenseAssignments.TryGetValue(unit, out AITurnLogic.CityDefensePlan combatPlan))
+            {
+                if (ExecuteAssignedCityDefense(unit, combatPlan, stepSize))
+                {
+                    if (gameOver)
+                        return;
+                    continue;
+                }
+            }
+
+            if (scoutDefenseAssignments.TryGetValue(unit, out AITurnLogic.CityDefensePlan scoutPlan))
+            {
+                if (ExecuteAssignedCityDefense(unit, scoutPlan, stepSize))
+                {
+                    if (gameOver)
+                        return;
+                    continue;
+                }
+            }
+
             if (useImprovedLevel1Behavior)
             {
                 ExecuteLevel1UnitTurn(unit, visibleEnemyUnits, enemyTargets, enemyCityPositions, stepSize);
@@ -3708,7 +3780,7 @@ public class TurnManager : MonoBehaviour
                 continue;
             }
 
-            if (applyLevel3DefenderBehavior && primaryControlledCity != null && gridManager != null)
+            if (applyLevel3DefenderBehavior && !primaryCityProtectedByPlan && primaryControlledCity != null && gridManager != null)
             {
                 if (gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility unitTile) &&
                     unitTile.gridX == primaryControlledCity.x && unitTile.gridY == primaryControlledCity.y)
@@ -3766,6 +3838,7 @@ public class TurnManager : MonoBehaviour
             }
 
             if (applyLevel3DefenderBehavior &&
+                !primaryCityProtectedByPlan &&
                 !enemyNearControlledCity &&
                 primaryControlledCity != null &&
                 unit == defenderCandidate &&
@@ -4111,6 +4184,67 @@ public class TurnManager : MonoBehaviour
                 return;
             }
         }
+    }
+
+    private bool ExecuteAssignedCityDefense(Unit unit, AITurnLogic.CityDefensePlan plan, float tileSize)
+    {
+        if (unit == null || plan == null || plan.City == null)
+        {
+            return false;
+        }
+
+        City currentCity = GridUtils.GetCityAtPosition(unit.transform.position);
+        bool isOnProtectedCity = currentCity == plan.City;
+
+        if (unit == plan.AssignedCombatUnit)
+        {
+            if (isOnProtectedCity && !plan.CanVacateCityTile)
+            {
+                return true;
+            }
+
+            if (plan.PreferredCombatPosition.HasValue)
+            {
+                Vector3 targetPosition = plan.PreferredCombatPosition.Value;
+                if ((unit.transform.position - targetPosition).sqrMagnitude > 0.0001f)
+                {
+                    if (isOnProtectedCity)
+                    {
+                        Unit occupant = GridUtils.GetUnitAtPosition(targetPosition, unit);
+                        if (occupant == null)
+                        {
+                            MoveAIUnitOneStep(unit, targetPosition, tileSize);
+                        }
+                    }
+                    else
+                    {
+                        MoveAIUnitTowardEmptyTile(unit, targetPosition, tileSize);
+                    }
+                }
+
+                return true;
+            }
+
+            return isOnProtectedCity;
+        }
+
+        if (unit == plan.AssignedScoutUnit)
+        {
+            if (plan.PreferredScoutPosition.HasValue)
+            {
+                Vector3 targetPosition = plan.PreferredScoutPosition.Value;
+                if ((unit.transform.position - targetPosition).sqrMagnitude > 0.0001f)
+                {
+                    MoveAIUnitTowardEmptyTile(unit, targetPosition, tileSize);
+                }
+
+                return true;
+            }
+
+            return false;
+        }
+
+        return false;
     }
 
     private bool TryAttackVisibleEnemyFromCurrentPosition(Unit unit, List<Unit> visibleEnemyUnits)
@@ -4704,7 +4838,7 @@ public class TurnManager : MonoBehaviour
         return new string(chars);
     }
 
-    private void SavePlayByPostPerGameSnapshot()
+    private void SavePlayByPostPerGameSnapshot(string historySource = null)
     {
         if (currentMode != GameMode.PlayByPost)
             return;
@@ -4722,10 +4856,15 @@ public class TurnManager : MonoBehaviour
         if (string.IsNullOrWhiteSpace(snapshotPath))
             return;
 
-        WritePlayByPostSnapshotFile(snapshotPath);
+        WritePlayByPostSnapshotFile(snapshotPath, historySource: historySource);
     }
 
-    private void SavePlayByPostPerGameSnapshot(string snapshotJson, int snapshotRoundTurn, bool snapshotIsPlayerTurn, string snapshotGameId)
+    private void SavePlayByPostPerGameSnapshot(
+        string snapshotJson,
+        int snapshotRoundTurn,
+        bool snapshotIsPlayerTurn,
+        string snapshotGameId,
+        string historySource = null)
     {
         if (currentMode != GameMode.PlayByPost)
             return;
@@ -4750,12 +4889,13 @@ public class TurnManager : MonoBehaviour
             snapshotJson,
             gameId,
             snapshotRoundTurn,
-            snapshotIsPlayerTurn);
+            snapshotIsPlayerTurn,
+            historySource);
     }
 
-    private void WritePlayByPostSnapshotFile(string path)
+    private void WritePlayByPostSnapshotFile(string path, string historySource = null)
     {
-        WritePlayByPostSnapshotFile(path, null, currentGameId, turnNumber, isPlayerTurn);
+        WritePlayByPostSnapshotFile(path, null, currentGameId, turnNumber, isPlayerTurn, historySource);
     }
 
     private void WritePlayByPostSnapshotFile(
@@ -4763,7 +4903,8 @@ public class TurnManager : MonoBehaviour
         string snapshotJson,
         string gameIdForLog,
         int snapshotRoundTurn,
-        bool snapshotIsPlayerTurn)
+        bool snapshotIsPlayerTurn,
+        string historySource = null)
     {
         if (string.IsNullOrWhiteSpace(path))
             return;
@@ -4794,6 +4935,13 @@ public class TurnManager : MonoBehaviour
         {
             Directory.CreateDirectory(directory);
             File.WriteAllText(path, json);
+            TryCaptureSnapshotHistoryCopy(
+                gameIdForLog,
+                json,
+                snapshotRoundTurn,
+                snapshotIsPlayerTurn,
+                path,
+                string.IsNullOrWhiteSpace(historySource) ? "snapshot_write" : historySource);
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
             int snapshotTransportSeq = ComputeTransportSeq(snapshotRoundTurn, snapshotIsPlayerTurn);
             if (PbpDebugSettingsLoader.EnableSaveLoadLogs)
@@ -4885,6 +5033,13 @@ public class TurnManager : MonoBehaviour
         {
             Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
             File.WriteAllText(targetPath, json);
+            TryCaptureSnapshotHistoryCopy(
+                currentGameId,
+                json,
+                turnNumber,
+                isPlayerTurn,
+                targetPath,
+                "save_write");
             if (shouldLogPlayByPostSnapshotSave)
             {
                 LogPlayByPostTelemetry(
@@ -4913,6 +5068,250 @@ public class TurnManager : MonoBehaviour
             }
             Debug.LogError("Failed to save game: " + ex.Message);
         }
+    }
+
+    private void TryCaptureSnapshotHistoryCopy(
+        string gameId,
+        string json,
+        int snapshotRoundTurn,
+        bool snapshotIsPlayerTurn,
+        string canonicalPath,
+        string historySource,
+        MatchSnapshotHistoryStore.SnapshotHistoryDecisionContext decisionContext = null)
+    {
+        if (string.IsNullOrWhiteSpace(gameId) || string.IsNullOrWhiteSpace(json))
+        {
+            return;
+        }
+
+        if (currentMode == GameMode.VsAI &&
+            !string.Equals(historySource, "ai_decision_state", System.StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        MatchSnapshotHistoryStore.TryCaptureSnapshot(
+            gameId,
+            currentMode,
+            historySource,
+            json,
+            snapshotRoundTurn,
+            snapshotIsPlayerTurn,
+            canonicalPath,
+            decisionContext);
+    }
+
+    private void TryCaptureAIDecisionSnapshot(bool actingSideIsPlayerOwned)
+    {
+        if (currentMode != GameMode.VsAI || gridManager == null)
+        {
+            return;
+        }
+
+        if (!TryBuildSaveJsonForDisk(out string json) || string.IsNullOrWhiteSpace(currentGameId))
+        {
+            return;
+        }
+
+        HashSet<TileVisibility> visibleTiles = ComputeVisibilityForSide(actingSideIsPlayerOwned);
+        MatchSnapshotHistoryStore.SnapshotHistoryDecisionContext decisionContext =
+            BuildSnapshotHistoryDecisionContext(actingSideIsPlayerOwned, visibleTiles);
+
+        TryCaptureSnapshotHistoryCopy(
+            currentGameId,
+            json,
+            turnNumber,
+            isPlayerTurn,
+            canonicalPath: null,
+            historySource: "ai_decision_state",
+            decisionContext: decisionContext);
+    }
+
+    private MatchSnapshotHistoryStore.SnapshotHistoryDecisionContext BuildSnapshotHistoryDecisionContext(
+        bool actingSideIsPlayerOwned,
+        HashSet<TileVisibility> visibleTiles)
+    {
+        HashSet<TileVisibility> safeVisibleTiles = visibleTiles ?? new HashSet<TileVisibility>();
+        List<MatchSnapshotHistoryStore.SnapshotHistoryGridCoord> visibleTileCoords =
+            BuildSnapshotHistoryVisibleTileCoords(safeVisibleTiles);
+        List<MatchSnapshotHistoryStore.SnapshotHistoryVisibleUnitSummary> visibleEnemyUnits =
+            BuildSnapshotHistoryVisibleEnemyUnits(actingSideIsPlayerOwned, safeVisibleTiles);
+
+        return new MatchSnapshotHistoryStore.SnapshotHistoryDecisionContext
+        {
+            actingSideIsPlayerOwned = actingSideIsPlayerOwned,
+            viewerIsPlayerOwned = GetViewerIsPlayerOwned(),
+            visibleTileCount = safeVisibleTiles.Count,
+            visibleTiles = visibleTileCoords,
+            visibleEnemyUnits = visibleEnemyUnits,
+            threatenedFriendlyCities = BuildSnapshotHistoryCityThreats(actingSideIsPlayerOwned, visibleEnemyUnits)
+        };
+    }
+
+    private List<MatchSnapshotHistoryStore.SnapshotHistoryGridCoord> BuildSnapshotHistoryVisibleTileCoords(
+        HashSet<TileVisibility> visibleTiles)
+    {
+        List<MatchSnapshotHistoryStore.SnapshotHistoryGridCoord> coords =
+            new List<MatchSnapshotHistoryStore.SnapshotHistoryGridCoord>();
+        if (visibleTiles == null || visibleTiles.Count == 0)
+        {
+            return coords;
+        }
+
+        foreach (TileVisibility tile in visibleTiles)
+        {
+            if (tile == null)
+            {
+                continue;
+            }
+
+            coords.Add(new MatchSnapshotHistoryStore.SnapshotHistoryGridCoord
+            {
+                x = tile.gridX,
+                y = tile.gridY
+            });
+        }
+
+        coords.Sort((a, b) =>
+        {
+            int yCompare = a.y.CompareTo(b.y);
+            return yCompare != 0 ? yCompare : a.x.CompareTo(b.x);
+        });
+        return coords;
+    }
+
+    private List<MatchSnapshotHistoryStore.SnapshotHistoryVisibleUnitSummary> BuildSnapshotHistoryVisibleEnemyUnits(
+        bool actingSideIsPlayerOwned,
+        HashSet<TileVisibility> visibleTiles)
+    {
+        List<MatchSnapshotHistoryStore.SnapshotHistoryVisibleUnitSummary> units =
+            new List<MatchSnapshotHistoryStore.SnapshotHistoryVisibleUnitSummary>();
+        if (gridManager == null)
+        {
+            return units;
+        }
+
+        Unit[] allUnits = Object.FindObjectsByType<Unit>();
+        foreach (Unit unit in allUnits)
+        {
+            if (unit == null || unit.isPlayerOwned == actingSideIsPlayerOwned)
+            {
+                continue;
+            }
+
+            if (!gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility tile) ||
+                tile == null ||
+                visibleTiles == null ||
+                !visibleTiles.Contains(tile))
+            {
+                continue;
+            }
+
+            units.Add(new MatchSnapshotHistoryStore.SnapshotHistoryVisibleUnitSummary
+            {
+                unitTypeId = unit.UnitTypeId,
+                isPlayerOwned = unit.isPlayerOwned,
+                x = tile.gridX,
+                y = tile.gridY,
+                currentHealthUnits = unit.currentHealthUnits,
+                movesUsedThisTurn = unit.movesUsedThisTurn,
+                attacksUsedThisTurn = unit.attacksUsedThisTurn
+            });
+        }
+
+        units.Sort((a, b) =>
+        {
+            int yCompare = a.y.CompareTo(b.y);
+            if (yCompare != 0)
+            {
+                return yCompare;
+            }
+
+            int xCompare = a.x.CompareTo(b.x);
+            if (xCompare != 0)
+            {
+                return xCompare;
+            }
+
+            return string.Compare(a.unitTypeId, b.unitTypeId, System.StringComparison.Ordinal);
+        });
+        return units;
+    }
+
+    private List<MatchSnapshotHistoryStore.SnapshotHistoryCityThreatSummary> BuildSnapshotHistoryCityThreats(
+        bool actingSideIsPlayerOwned,
+        List<MatchSnapshotHistoryStore.SnapshotHistoryVisibleUnitSummary> visibleEnemyUnits)
+    {
+        List<MatchSnapshotHistoryStore.SnapshotHistoryCityThreatSummary> threatenedCities =
+            new List<MatchSnapshotHistoryStore.SnapshotHistoryCityThreatSummary>();
+
+        City[] cities = Object.FindObjectsByType<City>();
+        foreach (City city in cities)
+        {
+            if (city == null || city.isPlayerOwned != actingSideIsPlayerOwned)
+            {
+                continue;
+            }
+
+            int visibleEnemyCountWithinThreatRadius = 0;
+            int nearestVisibleEnemyDistance = int.MaxValue;
+            for (int i = 0; i < visibleEnemyUnits.Count; i++)
+            {
+                MatchSnapshotHistoryStore.SnapshotHistoryVisibleUnitSummary enemyUnit = visibleEnemyUnits[i];
+                int dx = Mathf.Abs(enemyUnit.x - city.x);
+                int dy = Mathf.Abs(enemyUnit.y - city.y);
+                int distance = Mathf.Max(dx, dy);
+                if (distance < nearestVisibleEnemyDistance)
+                {
+                    nearestVisibleEnemyDistance = distance;
+                }
+
+                if (distance <= 2)
+                {
+                    visibleEnemyCountWithinThreatRadius++;
+                }
+            }
+
+            if (visibleEnemyCountWithinThreatRadius <= 0)
+            {
+                continue;
+            }
+
+            threatenedCities.Add(new MatchSnapshotHistoryStore.SnapshotHistoryCityThreatSummary
+            {
+                x = city.x,
+                y = city.y,
+                visibleEnemyCountWithinThreatRadius = visibleEnemyCountWithinThreatRadius,
+                nearestVisibleEnemyDistance = nearestVisibleEnemyDistance == int.MaxValue ? -1 : nearestVisibleEnemyDistance
+            });
+        }
+
+        threatenedCities.Sort((a, b) =>
+        {
+            int yCompare = a.y.CompareTo(b.y);
+            return yCompare != 0 ? yCompare : a.x.CompareTo(b.x);
+        });
+        return threatenedCities;
+    }
+
+    private string ResolveSnapshotHistorySourceForLoad(string debugSource)
+    {
+        if (isApplyingFetchedPlayByPostSnapshot)
+        {
+            return "fetch_remote";
+        }
+
+        if (string.IsNullOrWhiteSpace(debugSource))
+        {
+            return "load";
+        }
+
+        if (string.Equals(debugSource, "clipboard/transport", System.StringComparison.Ordinal))
+        {
+            return "load_json";
+        }
+
+        return "load_file";
     }
 
     private bool TryBuildSaveJsonForDisk(out string json)
@@ -5624,22 +6023,24 @@ private void PBpDebugSyncNow_Context()
                 {
                     if (migrationSourceProtocolVersion == SupportedPbpMigrationProtocolVersion)
                     {
-                        SavePlayByPostPerGameSnapshot();
+                        SavePlayByPostPerGameSnapshot(historySource: "migrated_rewrite");
                         snapshotWriteMode = "migratedRebuild";
                     }
                     else
                     {
+                        string historySource = ResolveSnapshotHistorySourceForLoad(debugSource);
                         SavePlayByPostPerGameSnapshot(
                             snapshotJson: rawLoadedJson,
                             snapshotRoundTurn: save.turnNumber,
                             snapshotIsPlayerTurn: save.isPlayerTurn,
-                            snapshotGameId: save.gameId);
+                            snapshotGameId: save.gameId,
+                            historySource: historySource);
                         snapshotWriteMode = "rawJson";
                     }
                 }
                 else
                 {
-                    SavePlayByPostPerGameSnapshot();
+                    SavePlayByPostPerGameSnapshot(historySource: "load_rebuild");
                     snapshotWriteMode = "rebuild";
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                     Debug.LogWarning(
@@ -5660,6 +6061,21 @@ private void PBpDebugSyncNow_Context()
             if (PbpDebugSettingsLoader.EnableSaveLoadLogs)
             {
                 Debug.Log("Game loaded from " + debugSource);
+            }
+
+            if (currentMode != GameMode.PlayByPost)
+            {
+                string historySource = ResolveSnapshotHistorySourceForLoad(debugSource);
+                if (!string.IsNullOrWhiteSpace(rawLoadedJson))
+                {
+                    TryCaptureSnapshotHistoryCopy(
+                        currentGameId,
+                        rawLoadedJson,
+                        turnNumber,
+                        isPlayerTurn,
+                        debugSource,
+                        historySource);
+                }
             }
 
             SaveManifestService.RecordLoadApplied(

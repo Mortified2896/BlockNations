@@ -120,7 +120,7 @@
                     <ui:Label text="Map Size" class="general-settings-section-label" />
                     <ui:VisualElement class="general-settings-option-row">
                         <ui:Button name="GeneralSettingsMapSmallButton" text="Small 10x10" class="menu-button general-settings-option-button" />
-                        <ui:Button name="GeneralSettingsMapLargeButton" text="Large 15x15" class="menu-button general-settings-option-button" />
+                        <ui:Button name="GeneralSettingsMapLargeButton" text="Large 15x15" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                     </ui:VisualElement>
                 </ui:VisualElement>
 
@@ -129,16 +129,21 @@
                     <ui:VisualElement class="general-settings-option-grid">
                         <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
                             <ui:Button name="GeneralSettingsAiLevel1Button" text="Easy" class="menu-button general-settings-option-button" />
-                            <ui:Button name="GeneralSettingsAiLevel2Button" text="Standard" class="menu-button general-settings-option-button" />
+                            <ui:Button name="GeneralSettingsAiLevel2Button" text="Standard" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                         </ui:VisualElement>
                         <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
-                            <ui:Button name="GeneralSettingsAiLevel3Button" text="Hard" class="menu-button general-settings-option-button" />
+                            <ui:Button name="GeneralSettingsAiLevel3Button" text="Hard" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                         </ui:VisualElement>
                     </ui:VisualElement>
                 </ui:VisualElement>
 
+                <ui:VisualElement name="GeneralSettingsDevSection" class="general-settings-section" style="display: none;">
+                    <ui:Label text="Dev Options" class="general-settings-section-label" />
+                    <ui:Toggle name="GeneralSettingsStoreSnapshotHistoryToggle" label="Store Snapshot History" class="general-settings-dev-toggle" />
+                </ui:VisualElement>
+
                 <ui:VisualElement class="general-settings-actions">
-                    <ui:Button name="GeneralSettingsConfirmButton" text="Start Game" class="menu-button general-settings-action-button general-settings-action-button-primary" />
+                    <ui:Button name="GeneralSettingsConfirmButton" text="Start Game" class="menu-button general-settings-action-button general-settings-action-button--first general-settings-action-button-primary" />
                     <ui:Button name="GeneralSettingsBackButton" text="Back" class="menu-button general-settings-action-button" />
                 </ui:VisualElement>
             </ui:VisualElement>

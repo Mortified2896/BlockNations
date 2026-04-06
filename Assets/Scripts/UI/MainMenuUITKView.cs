@@ -52,6 +52,7 @@ public class MainMenuUITKView : MonoBehaviour
     private VisualElement generalSettingsPanel;
     private VisualElement generalSettingsCard;
     private VisualElement generalSettingsAiSection;
+    private VisualElement generalSettingsDevSection;
     private ScrollView activeGamesList;
     private Label detailsTitleLabel;
     private Label detailsSubtitleLabel;
@@ -67,6 +68,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Label createSuccessGameCodeLabel;
     private Label generalSettingsTitleLabel;
     private Label generalSettingsSubtitleLabel;
+    private Toggle generalSettingsStoreSnapshotHistoryToggle;
 
     private Button continueButton;
     private Button playVsAiButton;
@@ -124,6 +126,7 @@ public class MainMenuUITKView : MonoBehaviour
     private GeneralSettingsBackgroundPane generalSettingsBackgroundPane = GeneralSettingsBackgroundPane.None;
     private TurnManager.MapSizePreset selectedMapSizePreset = TurnManager.GetDefaultMapSizePreset();
     private TurnManager.AIDifficulty selectedAIDifficulty = TurnManager.AIDifficulty.Level1;
+    private bool selectedStoreSnapshotHistory;
 
     private enum PendingGeneralSettingsMode
     {
@@ -366,6 +369,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsPanel = root.Q<VisualElement>("GeneralSettingsPanel");
         generalSettingsCard = root.Q<VisualElement>("GeneralSettingsCard");
         generalSettingsAiSection = root.Q<VisualElement>("GeneralSettingsAiSection");
+        generalSettingsDevSection = root.Q<VisualElement>("GeneralSettingsDevSection");
         activeGamesList = root.Q<ScrollView>("ActiveGamesList");
         detailsTitleLabel = root.Q<Label>("DetailsTitleLabel");
         detailsSubtitleLabel = root.Q<Label>("DetailsSubtitleLabel");
@@ -388,6 +392,7 @@ public class MainMenuUITKView : MonoBehaviour
         createSuccessGameCodeLabel = root.Q<Label>("CreateSuccessGameCodeLabel");
         generalSettingsTitleLabel = root.Q<Label>("GeneralSettingsTitleLabel");
         generalSettingsSubtitleLabel = root.Q<Label>("GeneralSettingsSubtitleLabel");
+        generalSettingsStoreSnapshotHistoryToggle = root.Q<Toggle>("GeneralSettingsStoreSnapshotHistoryToggle");
 
         continueButton = root.Q<Button>("ContinueButton");
         playVsAiButton = root.Q<Button>("PlayVsAIButton");
@@ -1212,15 +1217,25 @@ public class MainMenuUITKView : MonoBehaviour
             return;
         }
 
+        if (generalSettingsStoreSnapshotHistoryToggle != null)
+        {
+            selectedStoreSnapshotHistory = generalSettingsStoreSnapshotHistoryToggle.value;
+        }
+
         bool started = false;
         if (pendingGeneralSettingsMode == PendingGeneralSettingsMode.VsAI)
         {
-            mainMenuController.StartVsAIGameWithSettings(selectedAIDifficulty, selectedMapSizePreset);
+            mainMenuController.StartVsAIGameWithSettings(
+                selectedAIDifficulty,
+                selectedMapSizePreset,
+                selectedStoreSnapshotHistory);
             started = true;
         }
         else if (pendingGeneralSettingsMode == PendingGeneralSettingsMode.PlayByPost)
         {
-            started = mainMenuController.StartPlayByPostGameWithSettings(selectedMapSizePreset);
+            started = mainMenuController.StartPlayByPostGameWithSettings(
+                selectedMapSizePreset,
+                selectedStoreSnapshotHistory);
             if (!started)
             {
                 SetStatus(mainMenuController.CurrentImportStatus);
@@ -1881,6 +1896,7 @@ public class MainMenuUITKView : MonoBehaviour
             : GeneralSettingsBackgroundPane.Main;
         selectedMapSizePreset = TurnManager.GetDefaultMapSizePreset();
         selectedAIDifficulty = TurnManager.AIDifficulty.Level1;
+        selectedStoreSnapshotHistory = false;
         HideCreateSuccessPanel();
         HideJoinPanel();
         SetDetailsConfirmState(false);
@@ -1915,6 +1931,16 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsAiSection != null)
         {
             generalSettingsAiSection.style.display = isVsAi ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        if (generalSettingsDevSection != null)
+        {
+            generalSettingsDevSection.style.display = IsDevBuild() ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        if (generalSettingsStoreSnapshotHistoryToggle != null)
+        {
+            generalSettingsStoreSnapshotHistoryToggle.value = selectedStoreSnapshotHistory;
         }
 
         if (generalSettingsConfirmButton != null)
@@ -2011,6 +2037,15 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         element.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
+    }
+
+    private static bool IsDevBuild()
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        return true;
+#else
+        return false;
+#endif
     }
 
     private void SetStatus(string message)
@@ -2437,6 +2472,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsPanel = null;
         generalSettingsCard = null;
         generalSettingsAiSection = null;
+        generalSettingsDevSection = null;
         activeGamesList = null;
         detailsTitleLabel = null;
         detailsSubtitleLabel = null;
@@ -2453,6 +2489,7 @@ public class MainMenuUITKView : MonoBehaviour
         createSuccessGameCodeLabel = null;
         generalSettingsTitleLabel = null;
         generalSettingsSubtitleLabel = null;
+        generalSettingsStoreSnapshotHistoryToggle = null;
         continueButton = null;
         playVsAiButton = null;
         multiplayerButton = null;

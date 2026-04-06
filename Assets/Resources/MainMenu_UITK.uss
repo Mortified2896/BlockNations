@@ -1760,12 +1760,51 @@
     flex-basis: 0;
 }
 
-.general-settings-option-row > .general-settings-option-button:last-child {
+.general-settings-option-row > .general-settings-option-button.general-settings-option-button--row-end {
     margin-right: 0;
 }
 
 .general-settings-option-row--grid {
     width: 100%;
+}
+
+.general-settings-dev-toggle {
+    min-height: 86px;
+    margin-top: 4px;
+    padding-left: 18px;
+    padding-right: 18px;
+    padding-top: 16px;
+    padding-bottom: 16px;
+    align-items: center;
+    justify-content: space-between;
+    background-color: rgba(126, 146, 196, 0.52);
+    border-top-width: 1px;
+    border-right-width: 1px;
+    border-bottom-width: 1px;
+    border-left-width: 1px;
+    border-top-color: rgba(255, 255, 255, 0.08);
+    border-right-color: rgba(255, 255, 255, 0.08);
+    border-bottom-color: rgba(255, 255, 255, 0.06);
+    border-left-color: rgba(255, 255, 255, 0.08);
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    border-bottom-left-radius: 10px;
+    border-bottom-right-radius: 10px;
+}
+
+.general-settings-dev-toggle .unity-base-field__label,
+.general-settings-dev-toggle .unity-toggle__label {
+    flex-grow: 1;
+    margin-right: 16px;
+    font-size: 24px;
+    color: rgb(245, 249, 255);
+    white-space: normal;
+}
+
+.general-settings-dev-toggle .unity-base-field__input,
+.general-settings-dev-toggle .unity-toggle__input {
+    min-width: 34px;
+    min-height: 34px;
 }
 
 .general-settings-actions {
@@ -1786,7 +1825,7 @@
     font-size: 26px;
 }
 
-.general-settings-actions > .general-settings-action-button:first-child {
+.general-settings-actions > .general-settings-action-button.general-settings-action-button--first {
     margin-left: 0;
 }
 
@@ -1817,4 +1856,23 @@
 .ui-responsive-root.menu-phone-wide .general-settings-action-button {
     min-height: 96px;
     font-size: 34px;
+}
+
+.ui-responsive-root.menu-phone-wide .general-settings-dev-toggle {
+    min-height: 104px;
+    padding-left: 22px;
+    padding-right: 22px;
+    padding-top: 18px;
+    padding-bottom: 18px;
+}
+
+.ui-responsive-root.menu-phone-wide .general-settings-dev-toggle .unity-base-field__label,
+.ui-responsive-root.menu-phone-wide .general-settings-dev-toggle .unity-toggle__label {
+    font-size: 34px;
+}
+
+.ui-responsive-root.menu-phone-wide .general-settings-dev-toggle .unity-base-field__input,
+.ui-responsive-root.menu-phone-wide .general-settings-dev-toggle .unity-toggle__input {
+    min-width: 42px;
+    min-height: 42px;
 }

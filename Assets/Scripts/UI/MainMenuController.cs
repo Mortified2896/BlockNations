@@ -235,16 +235,17 @@ public class MainMenuController : MonoBehaviour
         StartVsAIGame(TurnManager.AIDifficulty.Level3, TurnManager.GetDefaultMapSizePreset());
     }
 
-    public void StartVsAIGameWithSettings(TurnManager.AIDifficulty difficulty, TurnManager.MapSizePreset mapSizePreset)
+    public void StartVsAIGameWithSettings(TurnManager.AIDifficulty difficulty, TurnManager.MapSizePreset mapSizePreset, bool storeSnapshotHistory = false)
     {
-        StartVsAIGame(difficulty, mapSizePreset);
+        StartVsAIGame(difficulty, mapSizePreset, storeSnapshotHistory);
     }
 
-    private void StartVsAIGame(TurnManager.AIDifficulty difficulty, TurnManager.MapSizePreset mapSizePreset)
+    private void StartVsAIGame(TurnManager.AIDifficulty difficulty, TurnManager.MapSizePreset mapSizePreset, bool storeSnapshotHistory = false)
     {
         GameModeSelection.SetPendingMode(TurnManager.GameMode.VsAI);
         AIDifficultySelection.SetPending(difficulty);
         MapSizeSelection.SetPending(mapSizePreset);
+        SnapshotHistorySelection.SetPending(storeSnapshotHistory);
         SceneManager.LoadScene(gameplaySceneName);
 
         if (modeSelectionPanel != null)
@@ -453,7 +454,7 @@ public class MainMenuController : MonoBehaviour
         StartPlayByPostGameWithSettings(TurnManager.GetDefaultMapSizePreset());
     }
 
-    public bool StartPlayByPostGameWithSettings(TurnManager.MapSizePreset mapSizePreset)
+    public bool StartPlayByPostGameWithSettings(TurnManager.MapSizePreset mapSizePreset, bool storeSnapshotHistory = false)
     {
         if (!isServerOnline)
         {
@@ -469,6 +470,7 @@ public class MainMenuController : MonoBehaviour
 
         GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
         MapSizeSelection.SetPending(mapSizePreset);
+        SnapshotHistorySelection.SetPending(storeSnapshotHistory);
         SceneManager.LoadScene(gameplaySceneName);
 
         if (modeSelectionPanel != null)
