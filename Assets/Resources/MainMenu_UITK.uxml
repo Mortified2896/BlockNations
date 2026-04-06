@@ -128,12 +128,11 @@
                     <ui:Label text="AI Level" class="general-settings-section-label" />
                     <ui:VisualElement class="general-settings-option-grid">
                         <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
-                            <ui:Button name="GeneralSettingsAiLevel1Button" text="Level 1" class="menu-button general-settings-option-button" />
-                            <ui:Button name="GeneralSettingsAiLevel2Button" text="Level 2" class="menu-button general-settings-option-button" />
+                            <ui:Button name="GeneralSettingsAiLevel1Button" text="Easy" class="menu-button general-settings-option-button" />
+                            <ui:Button name="GeneralSettingsAiLevel2Button" text="Standard" class="menu-button general-settings-option-button" />
                         </ui:VisualElement>
                         <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
-                            <ui:Button name="GeneralSettingsAiLevel3Button" text="Level 3" class="menu-button general-settings-option-button" />
-                            <ui:Button name="GeneralSettingsAiUnfairButton" text="Unfair" class="menu-button general-settings-option-button" />
+                            <ui:Button name="GeneralSettingsAiLevel3Button" text="Hard" class="menu-button general-settings-option-button" />
                         </ui:VisualElement>
                     </ui:VisualElement>
                 </ui:VisualElement>

@@ -3280,16 +3280,19 @@ public class TurnManager : MonoBehaviour
         if (gameOver)
             return;
 
-        int income = 0;
+        int baseIncome = 0;
         City[] cities = Object.FindObjectsByType<City>();
         foreach (City city in cities)
         {
             if (city != null && city.isPlayerOwned == sideIsPlayerOwned)
             {
-                income += goldPerCity;
+                baseIncome += goldPerCity;
             }
         }
 
+        int income = sideIsPlayerOwned
+            ? baseIncome
+            : ResolveAIGoldIncome(baseIncome, turnNumber);
         if (income > 0)
         {
             AddGold(sideIsPlayerOwned, income);
@@ -4510,16 +4513,17 @@ public class TurnManager : MonoBehaviour
     {
         if (gameOver) return;
 
-        int income = 0;
+        int baseIncome = 0;
         City[] cities = Object.FindObjectsByType<City>();
         foreach (City city in cities)
         {
             if (!city.isPlayerOwned)
             {
-                income += goldPerCity;
+                baseIncome += goldPerCity;
             }
         }
 
+        int income = ResolveAIGoldIncome(baseIncome, turnNumber);
         if (income > 0)
         {
             AddGold(false, income);
@@ -5087,6 +5091,38 @@ public class TurnManager : MonoBehaviour
     {
         int clampedRoundTurn = System.Math.Max(0, roundTurn);
         return clampedRoundTurn * 2 + (turnIsPlayer ? 0 : 1);
+    }
+
+    private int ResolveAIGoldIncome(int baseIncome, int roundTurnNumber)
+    {
+        if (baseIncome <= 0)
+        {
+            return 0;
+        }
+
+        switch (aiDifficulty)
+        {
+            case AIDifficulty.Level2:
+            {
+                int bonusIncome = baseIncome / 2;
+                bool shouldRoundUpHalf = (roundTurnNumber & 1) == 1 && (baseIncome & 1) == 1;
+                if (shouldRoundUpHalf)
+                {
+                    bonusIncome += 1;
+                }
+
+                return baseIncome + bonusIncome;
+            }
+
+            case AIDifficulty.Level3:
+            case AIDifficulty.Unfair:
+                return baseIncome * 2;
+
+            case AIDifficulty.Level1:
+            case AIDifficulty.None:
+            default:
+                return baseIncome;
+        }
     }
 
     private MapSizePreset GetCurrentMapSizePreset()
@@ -5823,7 +5859,7 @@ private void PBpDebugSyncNow_Context()
             }
             else
             {
-                save.aiGold += income;
+                save.aiGold += ResolveAIGoldIncome(income, save.turnNumber);
             }
         }
 

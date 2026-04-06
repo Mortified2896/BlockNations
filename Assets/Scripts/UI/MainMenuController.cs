@@ -232,7 +232,7 @@ public class MainMenuController : MonoBehaviour
 
     public void PlayVsAI_Unfair()
     {
-        StartVsAIGame(TurnManager.AIDifficulty.Unfair, TurnManager.GetDefaultMapSizePreset());
+        StartVsAIGame(TurnManager.AIDifficulty.Level3, TurnManager.GetDefaultMapSizePreset());
     }
 
     public void StartVsAIGameWithSettings(TurnManager.AIDifficulty difficulty, TurnManager.MapSizePreset mapSizePreset)

@@ -84,7 +84,6 @@ public class MainMenuUITKView : MonoBehaviour
     private Button generalSettingsAiLevel1Button;
     private Button generalSettingsAiLevel2Button;
     private Button generalSettingsAiLevel3Button;
-    private Button generalSettingsAiUnfairButton;
     private Button generalSettingsConfirmButton;
     private Button generalSettingsBackButton;
     private Button detailsOpenButton;
@@ -408,7 +407,6 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAiLevel1Button = root.Q<Button>("GeneralSettingsAiLevel1Button");
         generalSettingsAiLevel2Button = root.Q<Button>("GeneralSettingsAiLevel2Button");
         generalSettingsAiLevel3Button = root.Q<Button>("GeneralSettingsAiLevel3Button");
-        generalSettingsAiUnfairButton = root.Q<Button>("GeneralSettingsAiUnfairButton");
         generalSettingsConfirmButton = root.Q<Button>("GeneralSettingsConfirmButton");
         generalSettingsBackButton = root.Q<Button>("GeneralSettingsBackButton");
         detailsOpenButton = root.Q<Button>("DetailsOpenButton");
@@ -850,11 +848,6 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsAiLevel3Button.clicked += HandleGeneralSettingsAiLevel3Clicked;
         }
 
-        if (generalSettingsAiUnfairButton != null)
-        {
-            generalSettingsAiUnfairButton.clicked += HandleGeneralSettingsAiUnfairClicked;
-        }
-
         if (generalSettingsConfirmButton != null)
         {
             generalSettingsConfirmButton.clicked += HandleGeneralSettingsConfirmClicked;
@@ -1012,11 +1005,6 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsAiLevel3Button != null)
         {
             generalSettingsAiLevel3Button.clicked -= HandleGeneralSettingsAiLevel3Clicked;
-        }
-
-        if (generalSettingsAiUnfairButton != null)
-        {
-            generalSettingsAiUnfairButton.clicked -= HandleGeneralSettingsAiUnfairClicked;
         }
 
         if (generalSettingsConfirmButton != null)
@@ -1214,12 +1202,6 @@ public class MainMenuUITKView : MonoBehaviour
     private void HandleGeneralSettingsAiLevel3Clicked()
     {
         selectedAIDifficulty = TurnManager.AIDifficulty.Level3;
-        RefreshGeneralSettingsSelectionState();
-    }
-
-    private void HandleGeneralSettingsAiUnfairClicked()
-    {
-        selectedAIDifficulty = TurnManager.AIDifficulty.Unfair;
         RefreshGeneralSettingsSelectionState();
     }
 
@@ -2001,9 +1983,6 @@ public class MainMenuUITKView : MonoBehaviour
         UpdateGeneralSettingsSelectionButton(
             generalSettingsAiLevel3Button,
             selectedAIDifficulty == TurnManager.AIDifficulty.Level3);
-        UpdateGeneralSettingsSelectionButton(
-            generalSettingsAiUnfairButton,
-            selectedAIDifficulty == TurnManager.AIDifficulty.Unfair);
     }
 
     private static void UpdateGeneralSettingsSelectionButton(Button button, bool selected)
@@ -2490,7 +2469,6 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAiLevel1Button = null;
         generalSettingsAiLevel2Button = null;
         generalSettingsAiLevel3Button = null;
-        generalSettingsAiUnfairButton = null;
         generalSettingsConfirmButton = null;
         generalSettingsBackButton = null;
         detailsOpenButton = null;
