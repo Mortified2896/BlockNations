@@ -5334,11 +5334,81 @@ public class TurnManager : MonoBehaviour
         return $"{duration.TotalSeconds:0.0}s";
     }
 
+    private static string BuildPrimaryAIVsAIDisplayLabel(string aiConfig, string fallbackLabel)
+    {
+        string profile = ExtractAIVsAiConfigValue(aiConfig, "profile");
+        string recruitVariant = ExtractAIVsAiConfigValue(aiConfig, "recruitVariant");
+
+        if (!string.IsNullOrWhiteSpace(profile) &&
+            !string.IsNullOrWhiteSpace(recruitVariant) &&
+            !string.Equals(recruitVariant, AIRecruitVariant.Default.ToString(), System.StringComparison.Ordinal))
+        {
+            return $"{profile} ({recruitVariant})";
+        }
+
+        if (!string.IsNullOrWhiteSpace(profile))
+        {
+            return profile;
+        }
+
+        if (!string.IsNullOrWhiteSpace(recruitVariant) &&
+            !string.Equals(recruitVariant, AIRecruitVariant.Default.ToString(), System.StringComparison.Ordinal))
+        {
+            return $"{fallbackLabel} ({recruitVariant})";
+        }
+
+        return fallbackLabel;
+    }
+
+    private static string BuildSecondaryAIVsAISideLabel(string primaryLabel, string sideName)
+    {
+        return $"{primaryLabel} ({sideName})";
+    }
+
+    private static string ExtractAIVsAiConfigValue(string aiConfig, string key)
+    {
+        if (string.IsNullOrWhiteSpace(aiConfig) || string.IsNullOrWhiteSpace(key))
+        {
+            return string.Empty;
+        }
+
+        string[] segments = aiConfig.Split(';');
+        string expectedPrefix = $"{key}=";
+        for (int i = 0; i < segments.Length; i++)
+        {
+            string segment = segments[i];
+            if (segment.StartsWith(expectedPrefix, System.StringComparison.Ordinal))
+            {
+                return segment.Substring(expectedPrefix.Length).Trim();
+            }
+        }
+
+        return string.Empty;
+    }
+
     private static string BuildAIVsAISimulationCompletionMessage(AIVsAIMatchCsvLogger.RunSummary summary)
     {
         if (summary == null)
         {
             return "AI simulation finished.";
+        }
+
+        string primarySideALabel = BuildPrimaryAIVsAIDisplayLabel(summary.sideAAIConfig, "Side A");
+        string primarySideBLabel = BuildPrimaryAIVsAIDisplayLabel(summary.sideBAIConfig, "Side B");
+        string secondarySideALabel = BuildSecondaryAIVsAISideLabel(primarySideALabel, "Side A");
+        string secondarySideBLabel = BuildSecondaryAIVsAISideLabel(primarySideBLabel, "Side B");
+        string conclusion;
+        if (summary.bayesianSideABetterProbability >= summary.certaintyThreshold)
+        {
+            conclusion = $"{primarySideALabel} is likely stronger than {primarySideBLabel}";
+        }
+        else if (summary.bayesianSideABetterProbability <= (1f - summary.certaintyThreshold))
+        {
+            conclusion = $"{primarySideBLabel} is likely stronger than {primarySideALabel}";
+        }
+        else
+        {
+            conclusion = $"No clear winner yet between {primarySideALabel} and {primarySideBLabel}";
         }
 
         string statusText = summary.runEndedNormally
@@ -5350,13 +5420,14 @@ public class TurnManager : MonoBehaviour
             $"Preset: {summary.simulationSettingsLabel}\n" +
             $"Method: {summary.evaluationMethodLabel}\n" +
             $"Completed games: {summary.matchCount}\n" +
-            $"Side A wins: {summary.sideAWins}\n" +
-            $"Side B wins: {summary.sideBWins}\n" +
+            $"{primarySideALabel} wins: {summary.sideAWins}\n" +
+            $"{primarySideBLabel} wins: {summary.sideBWins}\n" +
             $"Draws: {summary.trueDraws}\n" +
             $"Aborts: {summary.aborts}\n" +
-            $"Estimated Side A score rate: {summary.sideAScoreRate:P1}\n" +
+            $"Estimated win rate ({primarySideALabel}): {summary.sideAScoreRate:P1}\n" +
             $"Effect size: {summary.sideAEffectSize:+0.0%;-0.0%;0.0%}\n" +
-            $"Bayesian P(Side A > Side B): {summary.bayesianSideABetterProbability:P1}\n" +
+            $"Bayesian P({primarySideALabel} > {primarySideBLabel}): {summary.bayesianSideABetterProbability:P1}\n" +
+            $"Conclusion: {conclusion}\n" +
             $"Decisive games used for certainty: {summary.bayesianDecisiveGames}\n" +
             $"Certainty threshold: {summary.certaintyThreshold:P0}\n" +
             $"Minimum games: {summary.minimumGames}\n" +
@@ -5365,7 +5436,9 @@ public class TurnManager : MonoBehaviour
             $"Time budget: {FormatDuration(summary.timeBudgetSeconds)}\n" +
             $"Emergency hard max games: {summary.emergencyHardMaxGames}\n" +
             $"Average turns: {summary.averageTotalTurnCount:0.00}\n" +
-            $"Turns/sec: {summary.turnsPerSecond:0.00}";
+            $"Turns/sec: {summary.turnsPerSecond:0.00}\n" +
+            $"{secondarySideALabel}\n" +
+            $"{secondarySideBLabel}";
 
         if (summary.drawsOrAborts > 0)
         {

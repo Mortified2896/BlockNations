@@ -464,7 +464,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     {
         if (turnManager != null)
         {
-            if (turnManager.IsAIVsAIDebugModeEnabledForUi())
+            if (IsAIVsAiBatchSimulationActive())
             {
                 turnManager.ToggleAIVsAIDebugPause();
                 return;
@@ -589,16 +589,23 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
 
         if (nextButton != null)
         {
-            bool isAIVsAi = turnManager != null && turnManager.IsAIVsAIDebugModeEnabledForUi();
+            bool isAIVsAiBatchSimulation = IsAIVsAiBatchSimulationActive();
             bool canUseAIVsAiToggle = turnManager != null && turnManager.CanToggleAIVsAIDebugPauseForUi();
             bool canAdvance = turnManager != null && turnManager.CanAdvanceTurn();
-            nextButton.text = isAIVsAi
+            nextButton.text = isAIVsAiBatchSimulation
                 ? (turnManager.IsAIVsAIDebugPausedForUi() ? AIVsAIResumeButtonText : AIVsAIPauseButtonText)
                 : NextButtonDefaultText;
-            nextButton.SetEnabled(showDefaultBottom && (isAIVsAi ? canUseAIVsAiToggle : canAdvance));
+            nextButton.SetEnabled(showDefaultBottom && (isAIVsAiBatchSimulation ? canUseAIVsAiToggle : canAdvance));
         }
 
         RefreshGameOverOverlayState();
+    }
+
+    private bool IsAIVsAiBatchSimulationActive()
+    {
+        return turnManager != null &&
+               turnManager.IsAIVsAIDebugModeEnabledForUi() &&
+               AIVsAIBatchRunController.HasActiveRun;
     }
 
     private void EnsurePlayByPostShareOverlay()

@@ -26,6 +26,9 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
     private bool uiReady;
     private bool warnedMissingPanelSettings;
     private bool warnedMissingLabels;
+    private StyleLength defaultTurnLabelWidth;
+    private StyleLength defaultGoldLabelWidth;
+    private StyleLength defaultStatusLabelWidth;
 
     private Rect lastSafeArea = Rect.zero;
     private Vector2Int lastScreenSize = Vector2Int.zero;
@@ -184,6 +187,12 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         }
 
         warnedMissingLabels = false;
+        defaultTurnLabelWidth = turnLabel.style.width;
+        defaultGoldLabelWidth = goldLabel.style.width;
+        if (statusLabel != null)
+        {
+            defaultStatusLabelWidth = statusLabel.style.width;
+        }
         SetNonInteractive(root);
         ApplySafeArea(force: true);
         responsiveSizeTierController.Apply(root);
@@ -212,6 +221,13 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             return;
         }
 
+        if (ShouldShowAIVsAiBatchHud(out AIVsAIBatchRunController.ActiveRunSnapshot batchSnapshot))
+        {
+            ApplyAIVsAiBatchHud(batchSnapshot);
+            return;
+        }
+
+        ApplyStandardHudLayout();
         turnLabel.text = BuildTurnLabel();
         goldLabel.text = BuildGoldLabel();
 
@@ -241,6 +257,49 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         statusLabel.style.display = pbpStatus.Visible ? DisplayStyle.Flex : DisplayStyle.None;
     }
 
+    private bool ShouldShowAIVsAiBatchHud(out AIVsAIBatchRunController.ActiveRunSnapshot snapshot)
+    {
+        snapshot = default;
+        if (turnManager == null || !turnManager.IsAIVsAIDebugModeEnabledForUi())
+        {
+            return false;
+        }
+
+        return AIVsAIBatchRunController.TryGetActiveRunSnapshot(out snapshot);
+    }
+
+    private void ApplyAIVsAiBatchHud(AIVsAIBatchRunController.ActiveRunSnapshot snapshot)
+    {
+        turnLabel.style.width = 520f;
+        goldLabel.style.width = 520f;
+
+        turnLabel.text =
+            $"Sim {snapshot.completedGames} | W{snapshot.sideAWins} L{snapshot.sideBWins} D{snapshot.trueDraws} A{snapshot.aborts}";
+        goldLabel.text =
+            $"{FormatDurationCompact(snapshot.elapsedSeconds)} elapsed | {FormatDurationCompact(snapshot.remainingTimeSeconds)} left";
+
+        if (statusLabel == null)
+        {
+            return;
+        }
+
+        statusLabel.style.width = 560f;
+        statusLabel.text =
+            $"Bayes P(A>B) {snapshot.bayesianSideABetterProbability:P1} | {snapshot.gamesPerSecond:0.00} g/s | batch {snapshot.batchSize}";
+        statusLabel.style.display = DisplayStyle.Flex;
+    }
+
+    private void ApplyStandardHudLayout()
+    {
+        turnLabel.style.width = defaultTurnLabelWidth;
+        goldLabel.style.width = defaultGoldLabelWidth;
+
+        if (statusLabel != null)
+        {
+            statusLabel.style.width = defaultStatusLabelWidth;
+        }
+    }
+
     private string BuildTurnLabel()
     {
         if (turnManager == null)
@@ -266,6 +325,19 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         }
 
         return $"Gold {displayGold}";
+    }
+
+    private static string FormatDurationCompact(float totalSeconds)
+    {
+        int roundedSeconds = Mathf.Max(0, Mathf.RoundToInt(totalSeconds));
+        int minutes = roundedSeconds / 60;
+        int seconds = roundedSeconds % 60;
+        if (minutes <= 0)
+        {
+            return $"{seconds}s";
+        }
+
+        return $"{minutes}m {seconds:00}s";
     }
 
     private void ApplySafeArea(bool force)
@@ -369,6 +441,9 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         turnLabel = null;
         goldLabel = null;
         statusLabel = null;
+        defaultTurnLabelWidth = default;
+        defaultGoldLabelWidth = default;
+        defaultStatusLabelWidth = default;
         uiReady = false;
         lastSafeArea = Rect.zero;
         lastScreenSize = Vector2Int.zero;

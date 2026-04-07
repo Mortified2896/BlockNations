@@ -46,6 +46,50 @@ public static class AIVsAIBatchRunController
         public int emergencyHardMaxGames;
     }
 
+    public readonly struct ActiveRunSnapshot
+    {
+        public readonly int completedGames;
+        public readonly int sideAWins;
+        public readonly int sideBWins;
+        public readonly int trueDraws;
+        public readonly int aborts;
+        public readonly int decisiveGames;
+        public readonly int batchSize;
+        public readonly float elapsedSeconds;
+        public readonly float timeBudgetSeconds;
+        public readonly float remainingTimeSeconds;
+        public readonly float gamesPerSecond;
+        public readonly float bayesianSideABetterProbability;
+
+        public ActiveRunSnapshot(
+            int completedGames,
+            int sideAWins,
+            int sideBWins,
+            int trueDraws,
+            int aborts,
+            int decisiveGames,
+            int batchSize,
+            float elapsedSeconds,
+            float timeBudgetSeconds,
+            float remainingTimeSeconds,
+            float gamesPerSecond,
+            float bayesianSideABetterProbability)
+        {
+            this.completedGames = completedGames;
+            this.sideAWins = sideAWins;
+            this.sideBWins = sideBWins;
+            this.trueDraws = trueDraws;
+            this.aborts = aborts;
+            this.decisiveGames = decisiveGames;
+            this.batchSize = batchSize;
+            this.elapsedSeconds = elapsedSeconds;
+            this.timeBudgetSeconds = timeBudgetSeconds;
+            this.remainingTimeSeconds = remainingTimeSeconds;
+            this.gamesPerSecond = gamesPerSecond;
+            this.bayesianSideABetterProbability = bayesianSideABetterProbability;
+        }
+    }
+
     private const float QuickExplorationTimeBudgetSeconds = 120f;
     private const float StandardComparisonTimeBudgetSeconds = 300f;
     private const float StrictComparisonTimeBudgetSeconds = 900f;
@@ -313,6 +357,37 @@ public static class AIVsAIBatchRunController
         activeRun = null;
     }
 
+    public static bool TryGetActiveRunSnapshot(out ActiveRunSnapshot snapshot)
+    {
+        snapshot = default;
+        if (activeRun == null)
+        {
+            return false;
+        }
+
+        int decisiveGames = Math.Max(0, activeRun.sideAWins + activeRun.sideBWins);
+        float elapsedSeconds = Mathf.Max(0f, (float)(DateTime.UtcNow - activeRun.startedAtUtc).TotalSeconds);
+        float safeElapsedSeconds = Mathf.Max(0.001f, elapsedSeconds);
+        float probability = Mathf.Clamp01((float)ComputeSideABetterProbability(
+            activeRun.settings.evaluationMethod,
+            activeRun.sideAWins,
+            activeRun.sideBWins));
+        snapshot = new ActiveRunSnapshot(
+            activeRun.completedMatchCount,
+            activeRun.sideAWins,
+            activeRun.sideBWins,
+            activeRun.trueDraws,
+            activeRun.aborts,
+            decisiveGames,
+            activeRun.settings.batchSize,
+            elapsedSeconds,
+            activeRun.settings.timeBudgetSeconds,
+            Mathf.Max(0f, activeRun.settings.timeBudgetSeconds - elapsedSeconds),
+            activeRun.completedMatchCount / safeElapsedSeconds,
+            probability);
+        return true;
+    }
+
     public static bool TryRecordMatch(
         AIVsAIMatchCsvLogger.MatchResult matchResult,
         out bool isRunComplete,
@@ -333,8 +408,15 @@ public static class AIVsAIBatchRunController
         activeRun.boardWidth = matchResult.boardWidth;
         activeRun.boardHeight = matchResult.boardHeight;
         activeRun.gameMode = matchResult.gameMode;
-        activeRun.sideAAIConfig = matchResult.sideAAIConfig;
-        activeRun.sideBAIConfig = matchResult.sideBAIConfig;
+        if (string.IsNullOrWhiteSpace(activeRun.sideAAIConfig))
+        {
+            activeRun.sideAAIConfig = matchResult.sideAAIConfig;
+        }
+
+        if (string.IsNullOrWhiteSpace(activeRun.sideBAIConfig))
+        {
+            activeRun.sideBAIConfig = matchResult.sideBAIConfig;
+        }
 
         switch (matchResult.winner)
         {
