@@ -8,6 +8,8 @@ public static class SaveLoadRequest
     private static bool pending;
     private static string pendingPath;
 
+    public static bool HasPendingRequest => pending;
+
     public static void RequestLoad(string path = null)
     {
         pending = true;

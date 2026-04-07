@@ -80,6 +80,7 @@ UI work policy
 - If proposing UI flow changes, list player-facing implications clearly
 - For MVP PBp display metadata, prefer latest locally known snapshot/header data over widening lightweight polling or server payloads unless live freshness is explicitly required
 - Preserve requested wording exactly for text/copy changes unless a technical or layout issue makes that impossible
+- Current PBp playtesting rule: keep the random username generator implemented but hidden in the Profile panel, and require a manually entered recognizable typed name before entering Multiplayer
 
 Default behavior when writing a Codex prompt
 - Outside the copy-paste box:

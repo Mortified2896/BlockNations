@@ -24,7 +24,15 @@ public class GridManager : MonoBehaviour
 
     void Start()
     {
-        RebuildGrid(width, height, recalculateVisibility: true);
+        int initialWidth = width;
+        int initialHeight = height;
+        if (!SaveLoadRequest.HasPendingRequest &&
+            MapSizeSelection.TryPeek(out TurnManager.MapSizePreset pendingMapSize))
+        {
+            TurnManager.GetBoardDimensionsForPreset(pendingMapSize, out initialWidth, out initialHeight);
+        }
+
+        RebuildGrid(initialWidth, initialHeight, recalculateVisibility: true);
     }
 
     public bool HasDimensions(int targetWidth, int targetHeight)

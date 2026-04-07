@@ -2129,6 +2129,8 @@ public class MainMenuUITKView : MonoBehaviour
     private void OpenMultiplayerPanelOrRedirect(bool requestControllerOpen)
     {
         profileData = LocalPlayerProfileStore.GetOrCreateProfile();
+        // Current PBp playtest rule: Multiplayer requires a manually entered recognizable
+        // typed name, while the separate generated username feature stays hidden for now.
         if (!LocalPlayerProfileStore.HasRecognizableTypedDisplayName(profileData.TypedDisplayName))
         {
             profileOpenedFromMultiplayerRedirect = true;

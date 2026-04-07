@@ -12,6 +12,12 @@ public static class MapSizeSelection
         pendingPreset = preset;
     }
 
+    public static bool TryPeek(out TurnManager.MapSizePreset preset)
+    {
+        preset = pendingPreset;
+        return preset != TurnManager.MapSizePreset.Unspecified;
+    }
+
     public static bool TryConsume(out TurnManager.MapSizePreset preset)
     {
         preset = pendingPreset;

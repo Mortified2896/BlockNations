@@ -12,6 +12,12 @@ public static class GameModeSelection
         pendingMode = mode;
     }
 
+    public static bool TryPeek(out TurnManager.GameMode mode)
+    {
+        mode = pendingMode;
+        return mode != TurnManager.GameMode.None;
+    }
+
     public static bool TryConsume(out TurnManager.GameMode mode)
     {
         mode = pendingMode;

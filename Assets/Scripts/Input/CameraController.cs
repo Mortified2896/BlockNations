@@ -76,6 +76,14 @@ public class CameraController : MonoBehaviour
         StartCoroutine(ApplyInitialFocusWhenReady());
     }
 
+    private void LateUpdate()
+    {
+        if (!initialFocusApplied)
+        {
+            TryApplyInitialFocus();
+        }
+    }
+
     private void Update()
     {
         if (!GameplayInputOrchestrator.TryGetSnapshot(out GameplayInputOrchestrator.FrameSnapshot input))
@@ -185,7 +193,14 @@ public class CameraController : MonoBehaviour
             return false;
         }
 
-        if (!allowModeNoneFallback && turnManager.currentMode == TurnManager.GameMode.None)
+        bool allowPendingVsAiFocus =
+            !SaveLoadRequest.HasPendingRequest &&
+            GameModeSelection.TryPeek(out TurnManager.GameMode pendingMode) &&
+            pendingMode == TurnManager.GameMode.VsAI;
+
+        if (!allowModeNoneFallback &&
+            turnManager.currentMode == TurnManager.GameMode.None &&
+            !allowPendingVsAiFocus)
         {
             return false;
         }
@@ -193,6 +208,14 @@ public class CameraController : MonoBehaviour
         if (turnManager.IsAIVsAIDebugModeEnabledForUi())
         {
             ClearPendingRestoreState();
+            if (cam.orthographic)
+            {
+                cam.orthographicSize = GetDynamicMaxOrthographicSize();
+            }
+
+            SetCameraWorldPosition(GetBoardCenter(turnManager.gridManager));
+            initialFocusApplied = true;
+            return true;
         }
         else if (TryApplyPendingRestoreState())
         {
