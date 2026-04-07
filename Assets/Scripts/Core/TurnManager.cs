@@ -122,7 +122,6 @@ public class TurnManager : MonoBehaviour
 
     [Header("Prefabs")]
     public GameObject unitPrefab; // used to respawn units on load
-    public GameObject scoutPrefab;
 
     [Header("Official Units")]
     public List<OfficialUnitRegistration> officialUnitRegistrations = new List<OfficialUnitRegistration>();
@@ -174,7 +173,8 @@ public class TurnManager : MonoBehaviour
     private AIVsAIBatchSpeedPreset aiVsAiBatchSpeedPreset = AIVsAIBatchSpeedPreset.Normal;
     private bool aiVsAiDebugPaused = false;
     private bool aiVsAiDebugRestartPending = false;
-    private const string AIVsAIBatchCompleteTitle = "AI Batch Complete";
+    private const string AIVsAISimulationCompleteTitle = "AI Simulation Complete";
+    private const string AIVsAISimulationAbortedTitle = "AI Simulation Aborted";
     private const string AIVsAIDebugAbortWinner = "Abort";
     private const int AIVsAIBatchTurnLimit = 200;
     private const float AIVsAIFastTurnDelaySeconds = 0.2f;
@@ -359,7 +359,10 @@ public class TurnManager : MonoBehaviour
     private bool gameOverUiTertiaryButtonVisible = false;
     private bool gameOverUiTertiaryButtonInteractable = false;
     private GameOverTertiaryAction gameOverUiTertiaryAction = GameOverTertiaryAction.None;
-    private int gameOverUiRepeatAIVsAIMatchCount = 1;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private AIVsAIBatchRunController.SimulationSettings gameOverUiRepeatAIVsAISimulationSettings =
+        AIVsAIBatchRunController.GetDefaultSimulationSettings();
+#endif
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
     private AIRecruitVariant gameOverUiRepeatSideARecruitVariant = AIRecruitVariant.Default;
     private AIRecruitVariant gameOverUiRepeatSideBRecruitVariant = AIRecruitVariant.Default;
@@ -1254,8 +1257,8 @@ public class TurnManager : MonoBehaviour
         gameOverUiTertiaryButtonVisible = false;
         gameOverUiTertiaryButtonInteractable = false;
         gameOverUiTertiaryAction = GameOverTertiaryAction.None;
-        gameOverUiRepeatAIVsAIMatchCount = 1;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
+        gameOverUiRepeatAIVsAISimulationSettings = AIVsAIBatchRunController.GetDefaultSimulationSettings();
         gameOverUiRepeatSideARecruitVariant = AIRecruitVariant.Default;
         gameOverUiRepeatSideBRecruitVariant = AIRecruitVariant.Default;
         gameOverUiRepeatSideAProfile = AIDebugProfile.Baseline;
@@ -1461,7 +1464,7 @@ public class TurnManager : MonoBehaviour
             sideAProfile: gameOverUiRepeatSideAProfile,
             sideBProfile: gameOverUiRepeatSideBProfile,
             batchSpeedPreset: aiVsAiBatchSpeedPreset);
-        AIVsAIBatchRunController.SetPendingRequestedMatchCount(gameOverUiRepeatAIVsAIMatchCount);
+        AIVsAIBatchRunController.SetPendingSimulationSettings(gameOverUiRepeatAIVsAISimulationSettings);
 
         Time.timeScale = 1f;
         CameraController.ClearPendingRestoreState();
@@ -3860,7 +3863,8 @@ public class TurnManager : MonoBehaviour
             return;
         }
 
-        if (!AIVsAIBatchRunController.TryConsumePendingRequestedMatchCount(out int requestedMatchCount))
+        if (!AIVsAIBatchRunController.TryConsumePendingSimulationSettings(
+                out AIVsAIBatchRunController.SimulationSettings simulationSettings))
         {
             return;
         }
@@ -3868,7 +3872,7 @@ public class TurnManager : MonoBehaviour
         if (currentMode == GameMode.VsAI && enableAIVsAIDebugMode)
         {
             AIVsAIBatchRunController.BeginNewRun(
-                requestedMatchCount,
+                simulationSettings,
                 aiVsAiSideARecruitVariant,
                 aiVsAiSideBRecruitVariant,
                 aiVsAiSideAProfile,
@@ -5256,11 +5260,8 @@ public class TurnManager : MonoBehaviour
 
         if (runSummary != null)
         {
-            string pairedPValueText = runSummary.pairedPValue >= 0f
-                ? runSummary.pairedPValue.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture)
-                : "n/a";
             AIVsAIMatchCsvLogger.TryAppendRunSummary(runSummary);
-            SetGameOverUiTitle(AIVsAIBatchCompleteTitle);
+            SetGameOverUiTitle(runSummary.runEndedNormally ? AIVsAISimulationCompleteTitle : AIVsAISimulationAbortedTitle);
             SetGameOverPrimaryCopyTextButtonState("Copy Text", true);
             SetGameOverSecondaryButtonState(
                 "Menu",
@@ -5272,21 +5273,31 @@ public class TurnManager : MonoBehaviour
                 visible: true,
                 interactable: true,
                 action: GameOverTertiaryAction.RestartAIVsAIBatch);
-            gameOverUiRepeatAIVsAIMatchCount = Mathf.Max(1, runSummary.matchCount);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
+            gameOverUiRepeatAIVsAISimulationSettings = AIVsAIBatchRunController.SanitizeSimulationSettings(
+                new AIVsAIBatchRunController.SimulationSettings
+                {
+                    preset = runSummary.simulationPreset,
+                    evaluationMethod = runSummary.evaluationMethod,
+                    certaintyThreshold = runSummary.certaintyThreshold,
+                    minimumGames = runSummary.minimumGames,
+                    timeBudgetSeconds = runSummary.timeBudgetSeconds,
+                    batchSize = runSummary.batchSize,
+                    emergencyHardMaxGames = runSummary.emergencyHardMaxGames
+                });
             gameOverUiRepeatSideARecruitVariant = runSummary.baseSideARecruitVariant;
             gameOverUiRepeatSideBRecruitVariant = runSummary.baseSideBRecruitVariant;
             gameOverUiRepeatSideAProfile = runSummary.baseSideAProfile;
             gameOverUiRepeatSideBProfile = runSummary.baseSideBProfile;
 #endif
-            ShowGameOverPopup(BuildAIVsAIBatchCompletionMessage(runSummary));
+            ShowGameOverPopup(BuildAIVsAISimulationCompletionMessage(runSummary));
             Debug.Log(
-                $"[AIVsAIBatch] Completed runId={runSummary.runId} matches={runSummary.matchCount} " +
-                $"sideAWins={runSummary.sideAWins} sideBWins={runSummary.sideBWins} drawsOrAborts={runSummary.drawsOrAborts} " +
-                $"sideAWinRate={runSummary.sideAWinRate:P1} avgTurns={runSummary.averageTotalTurnCount:0.00} " +
-                $"mode={runSummary.comparisonMode} pairs={runSummary.completePairCount} pairedMean={runSummary.pairedMeanScoreRate:P1} " +
-                $"pairedEffect={runSummary.pairedEffectSize:+0.0%;-0.0%;0.0%} pairedP={pairedPValueText} " +
-                $"pairedThreshold={runSummary.pairedThreshold} seat1={runSummary.seat1ScoreRate:P1} seat2={runSummary.seat2ScoreRate:P1} " +
+                $"[AIVsAIBatch] Finished runId={runSummary.runId} status={(runSummary.runEndedNormally ? "Normal" : "Abnormal")} " +
+                $"stopReason={runSummary.stopReason} matches={runSummary.matchCount} " +
+                $"sideAWins={runSummary.sideAWins} sideBWins={runSummary.sideBWins} draws={runSummary.trueDraws} aborts={runSummary.aborts} " +
+                $"scoreRate={runSummary.sideAScoreRate:P1} effect={runSummary.sideAEffectSize:+0.0%;-0.0%;0.0%} " +
+                $"bayesProb={runSummary.bayesianSideABetterProbability:P1} decisiveGames={runSummary.bayesianDecisiveGames} " +
+                $"elapsed={runSummary.elapsedSeconds:0.00}s batchSize={runSummary.batchSize} " +
                 $"matchCsv={AIVsAIMatchCsvLogger.GetResultsFilePath()} summaryCsv={AIVsAIMatchCsvLogger.GetRunSummaryFilePath()}");
             return true;
         }
@@ -5307,63 +5318,59 @@ public class TurnManager : MonoBehaviour
         return TryHandleCompletedAIVsAIDebugMatch(AIVsAIDebugAbortWinner);
     }
 
-    private static string BuildAIVsAIBatchCompletionMessage(AIVsAIMatchCsvLogger.RunSummary summary)
+    private static string FormatDuration(float totalSeconds)
+    {
+        System.TimeSpan duration = System.TimeSpan.FromSeconds(Mathf.Max(0f, totalSeconds));
+        if (duration.TotalHours >= 1d)
+        {
+            return $"{(int)duration.TotalHours}h {duration.Minutes}m {duration.Seconds}s";
+        }
+
+        if (duration.TotalMinutes >= 1d)
+        {
+            return $"{duration.Minutes}m {duration.Seconds}s";
+        }
+
+        return $"{duration.TotalSeconds:0.0}s";
+    }
+
+    private static string BuildAIVsAISimulationCompletionMessage(AIVsAIMatchCsvLogger.RunSummary summary)
     {
         if (summary == null)
         {
-            return "AI batch complete.";
+            return "AI simulation finished.";
         }
 
+        string statusText = summary.runEndedNormally
+            ? "Normal"
+            : "Abnormal (result may be unreliable)";
         string message =
-            $"Matches: {summary.matchCount}\n" +
+            $"Run status: {statusText}\n" +
+            $"Stop reason: {summary.stopReason}\n" +
+            $"Preset: {summary.simulationSettingsLabel}\n" +
+            $"Method: {summary.evaluationMethodLabel}\n" +
+            $"Completed games: {summary.matchCount}\n" +
             $"Side A wins: {summary.sideAWins}\n" +
             $"Side B wins: {summary.sideBWins}\n" +
-            $"Side A win rate: {summary.sideAWinRate:P1}\n" +
+            $"Draws: {summary.trueDraws}\n" +
+            $"Aborts: {summary.aborts}\n" +
+            $"Estimated Side A score rate: {summary.sideAScoreRate:P1}\n" +
+            $"Effect size: {summary.sideAEffectSize:+0.0%;-0.0%;0.0%}\n" +
+            $"Bayesian P(Side A > Side B): {summary.bayesianSideABetterProbability:P1}\n" +
+            $"Decisive games used for certainty: {summary.bayesianDecisiveGames}\n" +
+            $"Certainty threshold: {summary.certaintyThreshold:P0}\n" +
+            $"Minimum games: {summary.minimumGames}\n" +
+            $"Batch size: {summary.batchSize}\n" +
+            $"Elapsed time: {FormatDuration(summary.elapsedSeconds)}\n" +
+            $"Time budget: {FormatDuration(summary.timeBudgetSeconds)}\n" +
+            $"Emergency hard max games: {summary.emergencyHardMaxGames}\n" +
             $"Average turns: {summary.averageTotalTurnCount:0.00}\n" +
             $"Turns/sec: {summary.turnsPerSecond:0.00}";
 
         if (summary.drawsOrAborts > 0)
         {
-            message = $"{message}\nDraws/aborts: {summary.drawsOrAborts}";
+            message = $"{message}\nBayesian certainty excludes draws and aborts.";
         }
-
-        if (summary.trueDraws > 0 || summary.aborts > 0)
-        {
-            message = $"{message}\nTrue draws: {summary.trueDraws}\nAborts: {summary.aborts}";
-        }
-
-        if (!summary.pairedStatsApplicable || string.Equals(summary.comparisonMode, "not_applicable", System.StringComparison.Ordinal))
-        {
-            return $"{message}\n\nPaired stats: not applicable";
-        }
-
-        string pairedHeader = string.Equals(summary.comparisonMode, "seat_bias_control", System.StringComparison.Ordinal)
-            ? "Seat-bias control: pair-score-rate t-test vs 0.5"
-            : "Profile comparison: pair-score-rate t-test vs 0.5";
-        message =
-            $"{message}\n\n{pairedHeader}\n" +
-            $"Complete pairs: {summary.completePairCount}\n" +
-            $"Ignored unmatched games: {summary.unmatchedIgnoredGameCount}\n" +
-            $"Paired mean score: {summary.pairedMeanScoreRate:P1}\n" +
-            $"Paired effect: {summary.pairedEffectSize:+0.0%;-0.0%;0.0%}";
-
-        if (summary.completePairCount < 2 || string.Equals(summary.pairedThreshold, "insufficient", System.StringComparison.Ordinal))
-        {
-            message = $"{message}\nPaired significance: insufficient sample";
-        }
-        else
-        {
-            message =
-                $"{message}\nPaired p-value: {summary.pairedPValue:0.0000}\n" +
-                $"Paired threshold: {summary.pairedThreshold}";
-        }
-
-        message =
-            $"{message}\nSeat effect: {summary.seatEffectSize:+0.0%;-0.0%;0.0%}\n\n" +
-            $"{summary.seat1Label}: {summary.seat1Wins}-{summary.seat1Draws}-{summary.seat1Losses} " +
-            $"score {summary.seat1ScoreRate:P1} effect {summary.seat1EffectSize:+0.0%;-0.0%;0.0%}\n" +
-            $"{summary.seat2Label}: {summary.seat2Wins}-{summary.seat2Draws}-{summary.seat2Losses} " +
-            $"score {summary.seat2ScoreRate:P1} effect {summary.seat2EffectSize:+0.0%;-0.0%;0.0%}";
 
         return message;
     }

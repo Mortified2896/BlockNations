@@ -365,7 +365,6 @@ MonoBehaviour:
   gridManager: {fileID: 575130739}
   visibilityRadius: 1
   unitPrefab: {fileID: 8613717610168908074, guid: 201cae50cac1013489cb65af371b9783, type: 3}
-  scoutPrefab: {fileID: 8613717610168908074, guid: 4cc5a9ecabaed43ab9f5dc0a0b5df2ce, type: 3}
   officialUnitRegistrations:
   - unitTypeId: warrior
     prefab: {fileID: 8613717610168908074, guid: 201cae50cac1013489cb65af371b9783, type: 3}

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using UnityEngine;
@@ -6,19 +7,19 @@ using UnityEngine;
 public static class AIVsAIMatchCsvLogger
 {
     private const string RootFolderName = "DevMatchResults";
-    private const string MatchResultsFileName = "ai_vs_ai_match_results_v3.csv";
-    private const string RunSummaryFileName = "ai_vs_ai_run_summaries_v3.csv";
+    private const string MatchResultsFileName = "ai_vs_ai_match_results_v4.csv";
+    private const string RunSummaryFileName = "ai_vs_ai_run_summaries_v4.csv";
     private const string MatchHeader =
-        "timestampUtc,runId,matchIndexInRun,plannedMatchCountInRun,appVersion,mapSizePreset,boardWidth,boardHeight,gameMode,sideAAIConfig,sideBAIConfig,sideAProfile,sideBProfile,winner,totalTurnCount,sideAFinalCityCount,sideBFinalCityCount,sideAFinalUnitCount,sideBFinalUnitCount";
+        "timestampUtc,runId,matchIndexInRun,runEmergencyHardMaxGames,appVersion,mapSizePreset,boardWidth,boardHeight,gameMode,sideAAIConfig,sideBAIConfig,sideAProfile,sideBProfile,winner,totalTurnCount,sideAFinalCityCount,sideBFinalCityCount,sideAFinalUnitCount,sideBFinalUnitCount";
     private const string RunSummaryHeader =
-        "timestampUtc,runId,appVersion,mapSizePreset,boardWidth,boardHeight,gameMode,sideAAIConfig,sideBAIConfig,matchCount,sideAWins,sideBWins,drawsOrAborts,trueDraws,aborts,sideAWinRate,averageTotalTurnCount,comparisonMode,trackedEntityLabel,seat1Label,seat2Label,pairedStatsApplicable,completePairCount,unmatchedIgnoredGameCount,pairedMeanScoreRate,pairedEffectSize,pairedPValue,pairedThreshold,seatEffectSize,seat1GameCount,seat1Wins,seat1Draws,seat1Losses,seat1ScoreRate,seat1EffectSize,seat2GameCount,seat2Wins,seat2Draws,seat2Losses,seat2ScoreRate,seat2EffectSize";
+        "timestampUtc,runId,appVersion,mapSizePreset,boardWidth,boardHeight,gameMode,sideAAIConfig,sideBAIConfig,matchCount,sideAWins,sideBWins,drawsOrAborts,trueDraws,aborts,elapsedSeconds,turnsPerSecond,sideAWinRate,sideAScoreRate,sideAEffectSize,averageTotalTurnCount,simulationPreset,simulationSettingsLabel,evaluationMethod,evaluationMethodLabel,certaintyThreshold,minimumGames,batchSize,timeBudgetSeconds,emergencyHardMaxGames,bayesianDecisiveGames,bayesianSideABetterProbability,runEndedNormally,stopReason,comparisonMode,trackedEntityLabel,seat1Label,seat2Label,pairedStatsApplicable,completePairCount,unmatchedIgnoredGameCount,pairedMeanScoreRate,pairedEffectSize,pairedPValue,pairedThreshold,seatEffectSize,seat1GameCount,seat1Wins,seat1Draws,seat1Losses,seat1ScoreRate,seat1EffectSize,seat2GameCount,seat2Wins,seat2Draws,seat2Losses,seat2ScoreRate,seat2EffectSize";
 
     public sealed class MatchResult
     {
         public string timestampUtc;
         public string runId;
         public int matchIndexInRun;
-        public int plannedMatchCountInRun;
+        public int runEmergencyHardMaxGames;
         public string appVersion;
         public string mapSizePreset;
         public int boardWidth;
@@ -60,7 +61,22 @@ public static class AIVsAIMatchCsvLogger
         public float elapsedSeconds;
         public float turnsPerSecond;
         public float sideAWinRate;
+        public float sideAScoreRate;
+        public float sideAEffectSize;
         public float averageTotalTurnCount;
+        public AIVsAIBatchRunController.SimulationPreset simulationPreset;
+        public string simulationSettingsLabel;
+        public AIVsAIBatchRunController.EvaluationMethod evaluationMethod;
+        public string evaluationMethodLabel;
+        public float certaintyThreshold;
+        public int minimumGames;
+        public int batchSize;
+        public float timeBudgetSeconds;
+        public int emergencyHardMaxGames;
+        public int bayesianDecisiveGames;
+        public float bayesianSideABetterProbability;
+        public bool runEndedNormally;
+        public string stopReason;
         public string comparisonMode;
         public string trackedEntityLabel;
         public string seat1Label;
@@ -145,7 +161,7 @@ public static class AIVsAIMatchCsvLogger
             Escape(result.timestampUtc),
             Escape(result.runId),
             result.matchIndexInRun.ToString(),
-            result.plannedMatchCountInRun.ToString(),
+            result.runEmergencyHardMaxGames.ToString(),
             Escape(result.appVersion),
             Escape(result.mapSizePreset),
             result.boardWidth.ToString(),
@@ -181,8 +197,25 @@ public static class AIVsAIMatchCsvLogger
             summary.drawsOrAborts.ToString(),
             summary.trueDraws.ToString(),
             summary.aborts.ToString(),
-            summary.sideAWinRate.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture),
-            summary.averageTotalTurnCount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+            FormatFloat(summary.elapsedSeconds, 2),
+            FormatFloat(summary.turnsPerSecond, 2),
+            FormatFloat(summary.sideAWinRate, 4),
+            FormatFloat(summary.sideAScoreRate, 4),
+            FormatFloat(summary.sideAEffectSize, 4),
+            FormatFloat(summary.averageTotalTurnCount, 2),
+            Escape(summary.simulationPreset.ToString()),
+            Escape(summary.simulationSettingsLabel),
+            Escape(summary.evaluationMethod.ToString()),
+            Escape(summary.evaluationMethodLabel),
+            FormatFloat(summary.certaintyThreshold, 4),
+            summary.minimumGames.ToString(),
+            summary.batchSize.ToString(),
+            FormatFloat(summary.timeBudgetSeconds, 2),
+            summary.emergencyHardMaxGames.ToString(),
+            summary.bayesianDecisiveGames.ToString(),
+            FormatFloat(summary.bayesianSideABetterProbability, 4),
+            summary.runEndedNormally ? "true" : "false",
+            Escape(summary.stopReason),
             Escape(summary.comparisonMode),
             Escape(summary.trackedEntityLabel),
             Escape(summary.seat1Label),
@@ -241,6 +274,6 @@ public static class AIVsAIMatchCsvLogger
     private static string FormatFloat(float value, int decimals)
     {
         string format = decimals <= 2 ? "0.00" : "0.0000";
-        return value.ToString(format, System.Globalization.CultureInfo.InvariantCulture);
+        return value.ToString(format, CultureInfo.InvariantCulture);
     }
 }

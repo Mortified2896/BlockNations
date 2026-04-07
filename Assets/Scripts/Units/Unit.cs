@@ -71,13 +71,49 @@ public class Unit : MonoBehaviour
     [Header("Visuals")]
     public SpriteRenderer moveOutline;
     [SerializeField] private SpriteRenderer presentationRenderer;
+    [SerializeField] private Color moveReadyOutlineColor = new Color(0.86415094f, 0.7444677f, 0.11576363f, 1f);
+    [SerializeField] private Color attackReadyOutlineColor = new Color(0.68f, 0.42f, 0.39f, 1f);
+    [SerializeField] private float moveReadyOutlineScaleMultiplier = 1f;
+    [SerializeField] private float attackReadyOutlineScaleMultiplier = 0.85f;
+
+    private Vector3 moveOutlineBaseLocalScale = Vector3.one;
+    private bool hasMoveOutlineBaseLocalScale;
 
     public void UpdateMoveOutline(bool isTurnForThisUnit)
     {
         if (moveOutline == null) return;
 
-        bool shouldShow = isTurnForThisUnit && CanMoveThisTurn();
-        moveOutline.enabled = shouldShow;
+        CacheMoveOutlineBaseLocalScale();
+
+        if (!isTurnForThisUnit)
+        {
+            moveOutline.enabled = false;
+            return;
+        }
+
+        bool canMove = CanMoveThisTurn();
+        bool canAttack = CanAttackThisTurn();
+
+        if (canMove)
+        {
+            moveOutline.color = moveReadyOutlineColor;
+            ApplyMoveOutlineScale(moveReadyOutlineScaleMultiplier);
+            moveOutline.enabled = true;
+            return;
+        }
+
+        bool hasAttackTargetNow = canAttack &&
+                                  UnitSelectionManager.Instance != null &&
+                                  UnitSelectionManager.Instance.HasLegalAttackTargetNow(this);
+        if (hasAttackTargetNow)
+        {
+            moveOutline.color = attackReadyOutlineColor;
+            ApplyMoveOutlineScale(attackReadyOutlineScaleMultiplier);
+            moveOutline.enabled = true;
+            return;
+        }
+
+        moveOutline.enabled = false;
     }
 
     [Header("City Link")]
@@ -108,6 +144,8 @@ public class Unit : MonoBehaviour
 
     void Awake()
     {
+        CacheMoveOutlineBaseLocalScale();
+
         if (presentationRenderer == null)
         {
             presentationRenderer = ResolvePresentationRenderer();
@@ -305,6 +343,29 @@ public class Unit : MonoBehaviour
         }
 
         return null;
+    }
+
+    private void CacheMoveOutlineBaseLocalScale()
+    {
+        if (moveOutline == null || hasMoveOutlineBaseLocalScale)
+        {
+            return;
+        }
+
+        moveOutlineBaseLocalScale = moveOutline.transform.localScale;
+        hasMoveOutlineBaseLocalScale = true;
+    }
+
+    private void ApplyMoveOutlineScale(float scaleMultiplier)
+    {
+        if (moveOutline == null)
+        {
+            return;
+        }
+
+        CacheMoveOutlineBaseLocalScale();
+        float clampedMultiplier = Mathf.Max(0f, scaleMultiplier);
+        moveOutline.transform.localScale = moveOutlineBaseLocalScale * clampedMultiplier;
     }
 
     private bool UsesCommittedMoveActionThisTurn()

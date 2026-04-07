@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
@@ -98,10 +99,10 @@ public class MainMenuUITKView : MonoBehaviour
     private Button generalSettingsSideAAiProfileCalculusButton;
     private Button generalSettingsSideBAiProfileBaselineButton;
     private Button generalSettingsSideBAiProfileCalculusButton;
-    private Button generalSettingsAIVsAiMatchCount1Button;
-    private Button generalSettingsAIVsAiMatchCount10Button;
-    private Button generalSettingsAIVsAiMatchCount50Button;
-    private Button generalSettingsAIVsAiMatchCount100Button;
+    private Button generalSettingsAIVsAiPresetQuickButton;
+    private Button generalSettingsAIVsAiPresetStandardButton;
+    private Button generalSettingsAIVsAiPresetStrictButton;
+    private Button generalSettingsAIVsAiEvaluationMethodBayesianButton;
     private Button generalSettingsAIVsAiBatchSpeedNormalButton;
     private Button generalSettingsAIVsAiBatchSpeedFastButton;
     private Button generalSettingsAIVsAiBatchSpeedVeryFastButton;
@@ -121,6 +122,11 @@ public class MainMenuUITKView : MonoBehaviour
     private Button profileCopyPlayerIdButton;
     private Button profileBackButton;
     private TextField profileTypedDisplayNameInput;
+    private TextField generalSettingsAIVsAiCertaintyThresholdInput;
+    private TextField generalSettingsAIVsAiMinimumGamesInput;
+    private TextField generalSettingsAIVsAiTimeBudgetMinutesInput;
+    private TextField generalSettingsAIVsAiBatchSizeInput;
+    private TextField generalSettingsAIVsAiEmergencyHardMaxGamesInput;
     private VisualElement multiplayerBadge;
 
     private bool subscribedToMenuEvents;
@@ -154,7 +160,8 @@ public class MainMenuUITKView : MonoBehaviour
     private TurnManager.AIRecruitVariant selectedSideBAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
     private TurnManager.AIDebugProfile selectedSideAAIProfile = TurnManager.AIDebugProfile.Baseline;
     private TurnManager.AIDebugProfile selectedSideBAIProfile = TurnManager.AIDebugProfile.Baseline;
-    private int selectedAIVsAIMatchCount = 1;
+    private AIVsAIBatchRunController.SimulationSettings selectedAIVsAISimulationSettings =
+        AIVsAIBatchRunController.GetDefaultSimulationSettings();
     private TurnManager.AIVsAIBatchSpeedPreset selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.UltraFast;
 
     private enum PendingGeneralSettingsMode
@@ -452,10 +459,10 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsSideAAiProfileCalculusButton = root.Q<Button>("GeneralSettingsSideAAiProfileCalculusButton");
         generalSettingsSideBAiProfileBaselineButton = root.Q<Button>("GeneralSettingsSideBAiProfileBaselineButton");
         generalSettingsSideBAiProfileCalculusButton = root.Q<Button>("GeneralSettingsSideBAiProfileCalculusButton");
-        generalSettingsAIVsAiMatchCount1Button = root.Q<Button>("GeneralSettingsAIVsAiMatchCount1Button");
-        generalSettingsAIVsAiMatchCount10Button = root.Q<Button>("GeneralSettingsAIVsAiMatchCount10Button");
-        generalSettingsAIVsAiMatchCount50Button = root.Q<Button>("GeneralSettingsAIVsAiMatchCount50Button");
-        generalSettingsAIVsAiMatchCount100Button = root.Q<Button>("GeneralSettingsAIVsAiMatchCount100Button");
+        generalSettingsAIVsAiPresetQuickButton = root.Q<Button>("GeneralSettingsAIVsAiPresetQuickButton");
+        generalSettingsAIVsAiPresetStandardButton = root.Q<Button>("GeneralSettingsAIVsAiPresetStandardButton");
+        generalSettingsAIVsAiPresetStrictButton = root.Q<Button>("GeneralSettingsAIVsAiPresetStrictButton");
+        generalSettingsAIVsAiEvaluationMethodBayesianButton = root.Q<Button>("GeneralSettingsAIVsAiEvaluationMethodBayesianButton");
         generalSettingsAIVsAiBatchSpeedNormalButton = root.Q<Button>("GeneralSettingsAIVsAiBatchSpeedNormalButton");
         generalSettingsAIVsAiBatchSpeedFastButton = root.Q<Button>("GeneralSettingsAIVsAiBatchSpeedFastButton");
         generalSettingsAIVsAiBatchSpeedVeryFastButton = root.Q<Button>("GeneralSettingsAIVsAiBatchSpeedVeryFastButton");
@@ -474,12 +481,33 @@ public class MainMenuUITKView : MonoBehaviour
         profileRegenerateButton = root.Q<Button>("ProfileRegenerateButton");
         profileCopyPlayerIdButton = root.Q<Button>("ProfileCopyPlayerIdButton");
         profileBackButton = root.Q<Button>("ProfileBackButton");
+        generalSettingsAIVsAiCertaintyThresholdInput = root.Q<TextField>("GeneralSettingsAIVsAiCertaintyThresholdInput");
+        generalSettingsAIVsAiMinimumGamesInput = root.Q<TextField>("GeneralSettingsAIVsAiMinimumGamesInput");
+        generalSettingsAIVsAiTimeBudgetMinutesInput = root.Q<TextField>("GeneralSettingsAIVsAiTimeBudgetMinutesInput");
+        generalSettingsAIVsAiBatchSizeInput = root.Q<TextField>("GeneralSettingsAIVsAiBatchSizeInput");
+        generalSettingsAIVsAiEmergencyHardMaxGamesInput = root.Q<TextField>("GeneralSettingsAIVsAiEmergencyHardMaxGamesInput");
 
         if (profileTypedDisplayNameInput != null)
         {
             profileTypedDisplayNameInput.maxLength = ProfileUsernameGenerator.MaxUsernameLength;
             profileTypedDisplayNameInput.isDelayed = false;
         }
+
+        ConfigureDelayedTextField(generalSettingsAIVsAiCertaintyThresholdInput);
+        ConfigureDelayedTextField(generalSettingsAIVsAiMinimumGamesInput);
+        ConfigureDelayedTextField(generalSettingsAIVsAiTimeBudgetMinutesInput);
+        ConfigureDelayedTextField(generalSettingsAIVsAiBatchSizeInput);
+        ConfigureDelayedTextField(generalSettingsAIVsAiEmergencyHardMaxGamesInput);
+    }
+
+    private static void ConfigureDelayedTextField(TextField textField)
+    {
+        if (textField == null)
+        {
+            return;
+        }
+
+        textField.isDelayed = true;
     }
 
     private void ConfigureActiveGamesList()
@@ -951,24 +979,24 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsSideBAiProfileCalculusButton.clicked += HandleGeneralSettingsSideBAiProfileCalculusClicked;
         }
 
-        if (generalSettingsAIVsAiMatchCount1Button != null)
+        if (generalSettingsAIVsAiPresetQuickButton != null)
         {
-            generalSettingsAIVsAiMatchCount1Button.clicked += HandleGeneralSettingsAIVsAiMatchCount1Clicked;
+            generalSettingsAIVsAiPresetQuickButton.clicked += HandleGeneralSettingsAIVsAiPresetQuickClicked;
         }
 
-        if (generalSettingsAIVsAiMatchCount10Button != null)
+        if (generalSettingsAIVsAiPresetStandardButton != null)
         {
-            generalSettingsAIVsAiMatchCount10Button.clicked += HandleGeneralSettingsAIVsAiMatchCount10Clicked;
+            generalSettingsAIVsAiPresetStandardButton.clicked += HandleGeneralSettingsAIVsAiPresetStandardClicked;
         }
 
-        if (generalSettingsAIVsAiMatchCount50Button != null)
+        if (generalSettingsAIVsAiPresetStrictButton != null)
         {
-            generalSettingsAIVsAiMatchCount50Button.clicked += HandleGeneralSettingsAIVsAiMatchCount50Clicked;
+            generalSettingsAIVsAiPresetStrictButton.clicked += HandleGeneralSettingsAIVsAiPresetStrictClicked;
         }
 
-        if (generalSettingsAIVsAiMatchCount100Button != null)
+        if (generalSettingsAIVsAiEvaluationMethodBayesianButton != null)
         {
-            generalSettingsAIVsAiMatchCount100Button.clicked += HandleGeneralSettingsAIVsAiMatchCount100Clicked;
+            generalSettingsAIVsAiEvaluationMethodBayesianButton.clicked += HandleGeneralSettingsAIVsAiEvaluationMethodBayesianClicked;
         }
 
         if (generalSettingsAIVsAiBatchSpeedNormalButton != null)
@@ -994,6 +1022,31 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsWatchAIVsAIToggle != null)
         {
             generalSettingsWatchAIVsAIToggle.RegisterValueChangedCallback(HandleGeneralSettingsWatchAIVsAIChanged);
+        }
+
+        if (generalSettingsAIVsAiCertaintyThresholdInput != null)
+        {
+            generalSettingsAIVsAiCertaintyThresholdInput.RegisterValueChangedCallback(HandleGeneralSettingsAIVsAiCertaintyThresholdChanged);
+        }
+
+        if (generalSettingsAIVsAiMinimumGamesInput != null)
+        {
+            generalSettingsAIVsAiMinimumGamesInput.RegisterValueChangedCallback(HandleGeneralSettingsAIVsAiMinimumGamesChanged);
+        }
+
+        if (generalSettingsAIVsAiTimeBudgetMinutesInput != null)
+        {
+            generalSettingsAIVsAiTimeBudgetMinutesInput.RegisterValueChangedCallback(HandleGeneralSettingsAIVsAiTimeBudgetMinutesChanged);
+        }
+
+        if (generalSettingsAIVsAiBatchSizeInput != null)
+        {
+            generalSettingsAIVsAiBatchSizeInput.RegisterValueChangedCallback(HandleGeneralSettingsAIVsAiBatchSizeChanged);
+        }
+
+        if (generalSettingsAIVsAiEmergencyHardMaxGamesInput != null)
+        {
+            generalSettingsAIVsAiEmergencyHardMaxGamesInput.RegisterValueChangedCallback(HandleGeneralSettingsAIVsAiEmergencyHardMaxGamesChanged);
         }
 
         if (generalSettingsConfirmButton != null)
@@ -1205,24 +1258,24 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsSideBAiProfileCalculusButton.clicked -= HandleGeneralSettingsSideBAiProfileCalculusClicked;
         }
 
-        if (generalSettingsAIVsAiMatchCount1Button != null)
+        if (generalSettingsAIVsAiPresetQuickButton != null)
         {
-            generalSettingsAIVsAiMatchCount1Button.clicked -= HandleGeneralSettingsAIVsAiMatchCount1Clicked;
+            generalSettingsAIVsAiPresetQuickButton.clicked -= HandleGeneralSettingsAIVsAiPresetQuickClicked;
         }
 
-        if (generalSettingsAIVsAiMatchCount10Button != null)
+        if (generalSettingsAIVsAiPresetStandardButton != null)
         {
-            generalSettingsAIVsAiMatchCount10Button.clicked -= HandleGeneralSettingsAIVsAiMatchCount10Clicked;
+            generalSettingsAIVsAiPresetStandardButton.clicked -= HandleGeneralSettingsAIVsAiPresetStandardClicked;
         }
 
-        if (generalSettingsAIVsAiMatchCount50Button != null)
+        if (generalSettingsAIVsAiPresetStrictButton != null)
         {
-            generalSettingsAIVsAiMatchCount50Button.clicked -= HandleGeneralSettingsAIVsAiMatchCount50Clicked;
+            generalSettingsAIVsAiPresetStrictButton.clicked -= HandleGeneralSettingsAIVsAiPresetStrictClicked;
         }
 
-        if (generalSettingsAIVsAiMatchCount100Button != null)
+        if (generalSettingsAIVsAiEvaluationMethodBayesianButton != null)
         {
-            generalSettingsAIVsAiMatchCount100Button.clicked -= HandleGeneralSettingsAIVsAiMatchCount100Clicked;
+            generalSettingsAIVsAiEvaluationMethodBayesianButton.clicked -= HandleGeneralSettingsAIVsAiEvaluationMethodBayesianClicked;
         }
 
         if (generalSettingsAIVsAiBatchSpeedNormalButton != null)
@@ -1248,6 +1301,31 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsWatchAIVsAIToggle != null)
         {
             generalSettingsWatchAIVsAIToggle.UnregisterValueChangedCallback(HandleGeneralSettingsWatchAIVsAIChanged);
+        }
+
+        if (generalSettingsAIVsAiCertaintyThresholdInput != null)
+        {
+            generalSettingsAIVsAiCertaintyThresholdInput.UnregisterValueChangedCallback(HandleGeneralSettingsAIVsAiCertaintyThresholdChanged);
+        }
+
+        if (generalSettingsAIVsAiMinimumGamesInput != null)
+        {
+            generalSettingsAIVsAiMinimumGamesInput.UnregisterValueChangedCallback(HandleGeneralSettingsAIVsAiMinimumGamesChanged);
+        }
+
+        if (generalSettingsAIVsAiTimeBudgetMinutesInput != null)
+        {
+            generalSettingsAIVsAiTimeBudgetMinutesInput.UnregisterValueChangedCallback(HandleGeneralSettingsAIVsAiTimeBudgetMinutesChanged);
+        }
+
+        if (generalSettingsAIVsAiBatchSizeInput != null)
+        {
+            generalSettingsAIVsAiBatchSizeInput.UnregisterValueChangedCallback(HandleGeneralSettingsAIVsAiBatchSizeChanged);
+        }
+
+        if (generalSettingsAIVsAiEmergencyHardMaxGamesInput != null)
+        {
+            generalSettingsAIVsAiEmergencyHardMaxGamesInput.UnregisterValueChangedCallback(HandleGeneralSettingsAIVsAiEmergencyHardMaxGamesChanged);
         }
 
         if (generalSettingsConfirmButton != null)
@@ -1498,27 +1576,95 @@ public class MainMenuUITKView : MonoBehaviour
         RefreshGeneralSettingsSelectionState();
     }
 
-    private void HandleGeneralSettingsAIVsAiMatchCount1Clicked()
+    private void HandleGeneralSettingsAIVsAiPresetQuickClicked()
     {
-        selectedAIVsAIMatchCount = 1;
+        ApplyAIVsAiSimulationPreset(AIVsAIBatchRunController.SimulationPreset.QuickExploration);
+    }
+
+    private void HandleGeneralSettingsAIVsAiPresetStandardClicked()
+    {
+        ApplyAIVsAiSimulationPreset(AIVsAIBatchRunController.SimulationPreset.StandardComparison);
+    }
+
+    private void HandleGeneralSettingsAIVsAiPresetStrictClicked()
+    {
+        ApplyAIVsAiSimulationPreset(AIVsAIBatchRunController.SimulationPreset.StrictComparison);
+    }
+
+    private void HandleGeneralSettingsAIVsAiEvaluationMethodBayesianClicked()
+    {
+        selectedAIVsAISimulationSettings.evaluationMethod = AIVsAIBatchRunController.EvaluationMethod.Bayesian;
         RefreshGeneralSettingsSelectionState();
     }
 
-    private void HandleGeneralSettingsAIVsAiMatchCount10Clicked()
+    private void HandleGeneralSettingsAIVsAiCertaintyThresholdChanged(ChangeEvent<string> evt)
     {
-        selectedAIVsAIMatchCount = 10;
+        if (TryParseFloat(evt != null ? evt.newValue : null, out float parsedValue))
+        {
+            if (!Mathf.Approximately(selectedAIVsAISimulationSettings.certaintyThreshold, parsedValue))
+            {
+                selectedAIVsAISimulationSettings.certaintyThreshold = parsedValue;
+                MarkAIVsAiSimulationSettingsAsManual();
+            }
+        }
+
         RefreshGeneralSettingsSelectionState();
     }
 
-    private void HandleGeneralSettingsAIVsAiMatchCount50Clicked()
+    private void HandleGeneralSettingsAIVsAiMinimumGamesChanged(ChangeEvent<string> evt)
     {
-        selectedAIVsAIMatchCount = 50;
+        if (TryParseInt(evt != null ? evt.newValue : null, out int parsedValue))
+        {
+            if (selectedAIVsAISimulationSettings.minimumGames != parsedValue)
+            {
+                selectedAIVsAISimulationSettings.minimumGames = parsedValue;
+                MarkAIVsAiSimulationSettingsAsManual();
+            }
+        }
+
         RefreshGeneralSettingsSelectionState();
     }
 
-    private void HandleGeneralSettingsAIVsAiMatchCount100Clicked()
+    private void HandleGeneralSettingsAIVsAiTimeBudgetMinutesChanged(ChangeEvent<string> evt)
     {
-        selectedAIVsAIMatchCount = 100;
+        if (TryParseFloat(evt != null ? evt.newValue : null, out float parsedMinutes))
+        {
+            float parsedSeconds = Mathf.Max(0f, parsedMinutes) * 60f;
+            if (!Mathf.Approximately(selectedAIVsAISimulationSettings.timeBudgetSeconds, parsedSeconds))
+            {
+                selectedAIVsAISimulationSettings.timeBudgetSeconds = parsedSeconds;
+                MarkAIVsAiSimulationSettingsAsManual();
+            }
+        }
+
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAIVsAiBatchSizeChanged(ChangeEvent<string> evt)
+    {
+        if (TryParseInt(evt != null ? evt.newValue : null, out int parsedValue))
+        {
+            if (selectedAIVsAISimulationSettings.batchSize != parsedValue)
+            {
+                selectedAIVsAISimulationSettings.batchSize = parsedValue;
+                MarkAIVsAiSimulationSettingsAsManual();
+            }
+        }
+
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAIVsAiEmergencyHardMaxGamesChanged(ChangeEvent<string> evt)
+    {
+        if (TryParseInt(evt != null ? evt.newValue : null, out int parsedValue))
+        {
+            if (selectedAIVsAISimulationSettings.emergencyHardMaxGames != parsedValue)
+            {
+                selectedAIVsAISimulationSettings.emergencyHardMaxGames = parsedValue;
+                MarkAIVsAiSimulationSettingsAsManual();
+            }
+        }
+
         RefreshGeneralSettingsSelectionState();
     }
 
@@ -1572,18 +1718,19 @@ public class MainMenuUITKView : MonoBehaviour
         bool started = false;
         if (pendingGeneralSettingsMode == PendingGeneralSettingsMode.VsAI)
         {
+            CommitAIVsAiSimulationTextInputs();
             mainMenuController.StartVsAIGameWithSettings(
                 selectedAIDifficulty,
                 selectedMapSizePreset,
                 selectedAIRecruitVariant,
                 selectedStoreSnapshotHistory,
                 selectedEnableAIVsAIDebugMode,
-                selectedAIVsAIMatchCount,
                 selectedAIVsAIBatchSpeedPreset,
                 selectedSideAAIRecruitVariant,
                 selectedSideBAIRecruitVariant,
                 selectedSideAAIProfile,
-                selectedSideBAIProfile);
+                selectedSideBAIProfile,
+                selectedAIVsAISimulationSettings);
             started = true;
         }
         else if (pendingGeneralSettingsMode == PendingGeneralSettingsMode.PlayByPost)
@@ -2283,7 +2430,7 @@ public class MainMenuUITKView : MonoBehaviour
         selectedSideBAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
         selectedSideAAIProfile = TurnManager.AIDebugProfile.Baseline;
         selectedSideBAIProfile = TurnManager.AIDebugProfile.Baseline;
-        selectedAIVsAIMatchCount = 1;
+        selectedAIVsAISimulationSettings = AIVsAIBatchRunController.GetDefaultSimulationSettings();
         selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.UltraFast;
         HideCreateSuccessPanel();
         HideJoinPanel();
@@ -2454,18 +2601,20 @@ public class MainMenuUITKView : MonoBehaviour
         UpdateGeneralSettingsSelectionButton(
             generalSettingsSideBAiProfileCalculusButton,
             selectedSideBAIProfile == TurnManager.AIDebugProfile.Calculus);
+        selectedAIVsAISimulationSettings =
+            AIVsAIBatchRunController.SanitizeSimulationSettings(selectedAIVsAISimulationSettings);
         UpdateGeneralSettingsSelectionButton(
-            generalSettingsAIVsAiMatchCount1Button,
-            selectedAIVsAIMatchCount == 1);
+            generalSettingsAIVsAiPresetQuickButton,
+            selectedAIVsAISimulationSettings.preset == AIVsAIBatchRunController.SimulationPreset.QuickExploration);
         UpdateGeneralSettingsSelectionButton(
-            generalSettingsAIVsAiMatchCount10Button,
-            selectedAIVsAIMatchCount == 10);
+            generalSettingsAIVsAiPresetStandardButton,
+            selectedAIVsAISimulationSettings.preset == AIVsAIBatchRunController.SimulationPreset.StandardComparison);
         UpdateGeneralSettingsSelectionButton(
-            generalSettingsAIVsAiMatchCount50Button,
-            selectedAIVsAIMatchCount == 50);
+            generalSettingsAIVsAiPresetStrictButton,
+            selectedAIVsAISimulationSettings.preset == AIVsAIBatchRunController.SimulationPreset.StrictComparison);
         UpdateGeneralSettingsSelectionButton(
-            generalSettingsAIVsAiMatchCount100Button,
-            selectedAIVsAIMatchCount == 100);
+            generalSettingsAIVsAiEvaluationMethodBayesianButton,
+            selectedAIVsAISimulationSettings.evaluationMethod == AIVsAIBatchRunController.EvaluationMethod.Bayesian);
         UpdateGeneralSettingsSelectionButton(
             generalSettingsAIVsAiBatchSpeedNormalButton,
             selectedAIVsAIBatchSpeedPreset == TurnManager.AIVsAIBatchSpeedPreset.Normal);
@@ -2478,6 +2627,143 @@ public class MainMenuUITKView : MonoBehaviour
         UpdateGeneralSettingsSelectionButton(
             generalSettingsAIVsAiBatchSpeedUltraFastButton,
             selectedAIVsAIBatchSpeedPreset == TurnManager.AIVsAIBatchSpeedPreset.UltraFast);
+        SetTextFieldValue(
+            generalSettingsAIVsAiCertaintyThresholdInput,
+            FormatAIVsAiFloat(selectedAIVsAISimulationSettings.certaintyThreshold));
+        SetTextFieldValue(
+            generalSettingsAIVsAiMinimumGamesInput,
+            selectedAIVsAISimulationSettings.minimumGames.ToString(CultureInfo.InvariantCulture));
+        SetTextFieldValue(
+            generalSettingsAIVsAiTimeBudgetMinutesInput,
+            FormatAIVsAiFloat(selectedAIVsAISimulationSettings.timeBudgetSeconds / 60f));
+        SetTextFieldValue(
+            generalSettingsAIVsAiBatchSizeInput,
+            selectedAIVsAISimulationSettings.batchSize.ToString(CultureInfo.InvariantCulture));
+        SetTextFieldValue(
+            generalSettingsAIVsAiEmergencyHardMaxGamesInput,
+            selectedAIVsAISimulationSettings.emergencyHardMaxGames.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private void ApplyAIVsAiSimulationPreset(AIVsAIBatchRunController.SimulationPreset preset)
+    {
+        selectedAIVsAISimulationSettings = AIVsAIBatchRunController.GetPresetSettings(preset);
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void CommitAIVsAiSimulationTextInputs()
+    {
+        bool changed = false;
+
+        if (TryParseFloat(generalSettingsAIVsAiCertaintyThresholdInput != null ? generalSettingsAIVsAiCertaintyThresholdInput.value : null, out float certaintyThreshold))
+        {
+            if (!Mathf.Approximately(selectedAIVsAISimulationSettings.certaintyThreshold, certaintyThreshold))
+            {
+                selectedAIVsAISimulationSettings.certaintyThreshold = certaintyThreshold;
+                changed = true;
+            }
+        }
+
+        if (TryParseInt(generalSettingsAIVsAiMinimumGamesInput != null ? generalSettingsAIVsAiMinimumGamesInput.value : null, out int minimumGames))
+        {
+            if (selectedAIVsAISimulationSettings.minimumGames != minimumGames)
+            {
+                selectedAIVsAISimulationSettings.minimumGames = minimumGames;
+                changed = true;
+            }
+        }
+
+        if (TryParseFloat(generalSettingsAIVsAiTimeBudgetMinutesInput != null ? generalSettingsAIVsAiTimeBudgetMinutesInput.value : null, out float timeBudgetMinutes))
+        {
+            float timeBudgetSeconds = Mathf.Max(0f, timeBudgetMinutes) * 60f;
+            if (!Mathf.Approximately(selectedAIVsAISimulationSettings.timeBudgetSeconds, timeBudgetSeconds))
+            {
+                selectedAIVsAISimulationSettings.timeBudgetSeconds = timeBudgetSeconds;
+                changed = true;
+            }
+        }
+
+        if (TryParseInt(generalSettingsAIVsAiBatchSizeInput != null ? generalSettingsAIVsAiBatchSizeInput.value : null, out int batchSize))
+        {
+            if (selectedAIVsAISimulationSettings.batchSize != batchSize)
+            {
+                selectedAIVsAISimulationSettings.batchSize = batchSize;
+                changed = true;
+            }
+        }
+
+        if (TryParseInt(generalSettingsAIVsAiEmergencyHardMaxGamesInput != null ? generalSettingsAIVsAiEmergencyHardMaxGamesInput.value : null, out int emergencyHardMaxGames))
+        {
+            if (selectedAIVsAISimulationSettings.emergencyHardMaxGames != emergencyHardMaxGames)
+            {
+                selectedAIVsAISimulationSettings.emergencyHardMaxGames = emergencyHardMaxGames;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            MarkAIVsAiSimulationSettingsAsManual();
+        }
+
+        selectedAIVsAISimulationSettings =
+            AIVsAIBatchRunController.SanitizeSimulationSettings(selectedAIVsAISimulationSettings);
+    }
+
+    private void MarkAIVsAiSimulationSettingsAsManual()
+    {
+        selectedAIVsAISimulationSettings.preset = AIVsAIBatchRunController.SimulationPreset.Manual;
+        selectedAIVsAISimulationSettings = AIVsAIBatchRunController.SanitizeSimulationSettings(selectedAIVsAISimulationSettings);
+        selectedAIVsAISimulationSettings.preset = AIVsAIBatchRunController.SimulationPreset.Manual;
+    }
+
+    private static bool TryParseInt(string rawValue, out int parsedValue)
+    {
+        parsedValue = 0;
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return false;
+        }
+
+        string trimmed = rawValue.Trim();
+        return int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out parsedValue) ||
+               int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.CurrentCulture, out parsedValue);
+    }
+
+    private static bool TryParseFloat(string rawValue, out float parsedValue)
+    {
+        parsedValue = 0f;
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return false;
+        }
+
+        string trimmed = rawValue.Trim();
+        return float.TryParse(trimmed, NumberStyles.Float, CultureInfo.InvariantCulture, out parsedValue) ||
+               float.TryParse(trimmed, NumberStyles.Float, CultureInfo.CurrentCulture, out parsedValue);
+    }
+
+    private static string FormatAIVsAiFloat(float value)
+    {
+        if (Mathf.Abs(value - Mathf.Round(value)) <= 0.0001f)
+        {
+            return Mathf.RoundToInt(value).ToString(CultureInfo.InvariantCulture);
+        }
+
+        return value.ToString("0.##", CultureInfo.InvariantCulture);
+    }
+
+    private static void SetTextFieldValue(TextField textField, string value)
+    {
+        if (textField == null)
+        {
+            return;
+        }
+
+        string safeValue = value ?? string.Empty;
+        if (textField.value != safeValue)
+        {
+            textField.SetValueWithoutNotify(safeValue);
+        }
     }
 
     private static void UpdateGeneralSettingsSelectionButton(Button button, bool selected)
@@ -2987,10 +3273,10 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsSideAAiProfileCalculusButton = null;
         generalSettingsSideBAiProfileBaselineButton = null;
         generalSettingsSideBAiProfileCalculusButton = null;
-        generalSettingsAIVsAiMatchCount1Button = null;
-        generalSettingsAIVsAiMatchCount10Button = null;
-        generalSettingsAIVsAiMatchCount50Button = null;
-        generalSettingsAIVsAiMatchCount100Button = null;
+        generalSettingsAIVsAiPresetQuickButton = null;
+        generalSettingsAIVsAiPresetStandardButton = null;
+        generalSettingsAIVsAiPresetStrictButton = null;
+        generalSettingsAIVsAiEvaluationMethodBayesianButton = null;
         generalSettingsAIVsAiBatchSpeedNormalButton = null;
         generalSettingsAIVsAiBatchSpeedFastButton = null;
         generalSettingsAIVsAiBatchSpeedVeryFastButton = null;
@@ -3009,6 +3295,11 @@ public class MainMenuUITKView : MonoBehaviour
         profileRegenerateButton = null;
         profileCopyPlayerIdButton = null;
         profileBackButton = null;
+        generalSettingsAIVsAiCertaintyThresholdInput = null;
+        generalSettingsAIVsAiMinimumGamesInput = null;
+        generalSettingsAIVsAiTimeBudgetMinutesInput = null;
+        generalSettingsAIVsAiBatchSizeInput = null;
+        generalSettingsAIVsAiEmergencyHardMaxGamesInput = null;
     }
 
     private void TryShowPendingCreateSuccessPanel()

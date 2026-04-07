@@ -122,6 +122,11 @@ public class UnitSelectionManager : MonoBehaviour
         }
     }
 
+    public bool HasLegalAttackTargetNow(Unit unit)
+    {
+        return HasAttackableTilesInRange(unit);
+    }
+
     private bool HasAttackableTilesInRange(Unit unit)
     {
         if (unit == null || !unit.CanAttackThisTurn())
@@ -680,6 +685,7 @@ public class UnitSelectionManager : MonoBehaviour
 
         if (actionPerformed && turnManager != null)
         {
+            RefreshMoveOutlinesForCurrentTurn();
             turnManager.AutoSaveIfEnabled();
             turnManager.ScheduleAutoEndTurnCheck();
         }

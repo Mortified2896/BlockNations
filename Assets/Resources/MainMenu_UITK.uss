@@ -1746,6 +1746,18 @@
     flex-direction: column;
 }
 
+.general-settings-help-text {
+    margin-top: -2px;
+    margin-bottom: 14px;
+    color: rgba(226, 235, 248, 0.88);
+    font-size: 18px;
+    white-space: normal;
+}
+
+.general-settings-help-text--warning {
+    color: rgb(255, 218, 174);
+}
+
 .general-settings-option-button {
     flex-grow: 1;
     min-width: 0;
@@ -1826,6 +1838,96 @@
     flex-shrink: 0;
 }
 
+.general-settings-input-field {
+    margin-top: 2px;
+    margin-bottom: 0;
+    padding-left: 16px;
+    padding-right: 16px;
+    padding-top: 14px;
+    padding-bottom: 14px;
+    background-color: rgba(126, 146, 196, 0.52);
+    border-top-width: 1px;
+    border-right-width: 1px;
+    border-bottom-width: 1px;
+    border-left-width: 1px;
+    border-top-color: rgba(255, 255, 255, 0.08);
+    border-right-color: rgba(255, 255, 255, 0.08);
+    border-bottom-color: rgba(255, 255, 255, 0.06);
+    border-left-color: rgba(255, 255, 255, 0.08);
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    border-bottom-left-radius: 10px;
+    border-bottom-right-radius: 10px;
+}
+
+.general-settings-input-field .unity-base-field__label {
+    min-width: 0;
+    margin-right: 16px;
+    font-size: 22px;
+    color: rgb(245, 249, 255);
+    white-space: normal;
+}
+
+.general-settings-input-field .unity-base-text-field__input,
+.general-settings-input-field .unity-text-field__input,
+.general-settings-input-field .unity-base-field__input {
+    min-height: 48px;
+    padding-left: 14px;
+    padding-right: 14px;
+    font-size: 24px;
+    color: rgb(244, 245, 248);
+    background-color: rgba(36, 49, 83, 0.82);
+    border-top-width: 1px;
+    border-right-width: 1px;
+    border-bottom-width: 1px;
+    border-left-width: 1px;
+    border-top-color: rgba(255, 255, 255, 0.12);
+    border-right-color: rgba(255, 255, 255, 0.08);
+    border-bottom-color: rgba(13, 22, 42, 0.5);
+    border-left-color: rgba(255, 255, 255, 0.08);
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+}
+
+.general-settings-subcard {
+    margin-top: 10px;
+    margin-bottom: 10px;
+    padding-left: 16px;
+    padding-right: 16px;
+    padding-top: 16px;
+    padding-bottom: 14px;
+    background-color: rgba(45, 61, 103, 0.52);
+    border-top-width: 1px;
+    border-right-width: 1px;
+    border-bottom-width: 1px;
+    border-left-width: 1px;
+    border-top-color: rgba(255, 255, 255, 0.09);
+    border-right-color: rgba(255, 255, 255, 0.09);
+    border-bottom-color: rgba(12, 19, 39, 0.34);
+    border-left-color: rgba(255, 255, 255, 0.09);
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
+}
+
+.general-settings-subcard--danger {
+    background-color: rgba(101, 72, 31, 0.36);
+    border-top-color: rgba(255, 216, 160, 0.16);
+    border-right-color: rgba(255, 216, 160, 0.16);
+    border-bottom-color: rgba(58, 36, 10, 0.34);
+    border-left-color: rgba(255, 216, 160, 0.16);
+}
+
+.general-settings-subcard-title {
+    margin-bottom: 10px;
+    font-size: 22px;
+    -unity-font-style: bold;
+    color: rgb(255, 231, 198);
+}
+
 .general-settings-actions {
     flex-direction: row;
     justify-content: stretch;
@@ -1894,4 +1996,16 @@
 .ui-responsive-root.menu-phone-wide .general-settings-dev-toggle .unity-toggle__input {
     min-width: 42px;
     min-height: 42px;
+}
+
+.ui-responsive-root.menu-phone-wide .general-settings-help-text,
+.ui-responsive-root.menu-phone-wide .general-settings-subcard-title {
+    font-size: 28px;
+}
+
+.ui-responsive-root.menu-phone-wide .general-settings-input-field .unity-base-field__label,
+.ui-responsive-root.menu-phone-wide .general-settings-input-field .unity-base-text-field__input,
+.ui-responsive-root.menu-phone-wide .general-settings-input-field .unity-text-field__input,
+.ui-responsive-root.menu-phone-wide .general-settings-input-field .unity-base-field__input {
+    font-size: 32px;
 }

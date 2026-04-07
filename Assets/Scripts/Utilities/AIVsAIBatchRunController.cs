@@ -4,10 +4,59 @@ using UnityEngine;
 
 public static class AIVsAIBatchRunController
 {
-    private const int DefaultRequestedMatchCount = 1;
+    public enum EvaluationMethod
+    {
+        Bayesian = 0
+    }
 
-    private static int pendingRequestedMatchCount = DefaultRequestedMatchCount;
-    private static bool hasPendingRequestedMatchCount;
+    public enum SimulationPreset
+    {
+        Manual = 0,
+        QuickExploration = 1,
+        StandardComparison = 2,
+        StrictComparison = 3
+    }
+
+    public enum StopReason
+    {
+        None = 0,
+        CertaintyReached_A_Better = 1,
+        CertaintyReached_A_Worse = 2,
+        TimeBudgetReached = 3,
+        EmergencySafetyFuseTriggered = 4,
+        InvalidStatsDetected = 5
+    }
+
+    public enum RunCompletionKind
+    {
+        None = 0,
+        NormalCompleted = 1,
+        AbnormalAborted = 2
+    }
+
+    [Serializable]
+    public struct SimulationSettings
+    {
+        public SimulationPreset preset;
+        public EvaluationMethod evaluationMethod;
+        public float certaintyThreshold;
+        public int minimumGames;
+        public float timeBudgetSeconds;
+        public int batchSize;
+        public int emergencyHardMaxGames;
+    }
+
+    private const float QuickExplorationTimeBudgetSeconds = 120f;
+    private const float StandardComparisonTimeBudgetSeconds = 300f;
+    private const float StrictComparisonTimeBudgetSeconds = 900f;
+    private const float MinCertaintyThreshold = 0.5f;
+    private const float MaxCertaintyThreshold = 0.9999f;
+    private const float MinTimeBudgetSeconds = 1f;
+    private const int MinPositiveValue = 1;
+    private const int BayesianNormalApproximationThreshold = 200;
+
+    private static SimulationSettings pendingSimulationSettings = GetDefaultSimulationSettings();
+    private static bool hasPendingSimulationSettings;
     private static ActiveRun activeRun;
 
     private sealed class ActiveRun
@@ -24,7 +73,7 @@ public static class AIVsAIBatchRunController
         }
 
         public string runId;
-        public int plannedMatchCount;
+        public SimulationSettings settings;
         public int completedMatchCount;
         public int sideAWins;
         public int sideBWins;
@@ -47,25 +96,166 @@ public static class AIVsAIBatchRunController
         public readonly List<CompletedMatchRecord> completedMatches = new List<CompletedMatchRecord>();
     }
 
-    public static bool HasActiveRun => activeRun != null;
-
-    public static void SetPendingRequestedMatchCount(int requestedMatchCount)
+    private readonly struct RunStopDecision
     {
-        pendingRequestedMatchCount = Math.Max(DefaultRequestedMatchCount, requestedMatchCount);
-        hasPendingRequestedMatchCount = true;
+        public readonly bool shouldStop;
+        public readonly RunCompletionKind completionKind;
+        public readonly StopReason stopReason;
+        public readonly double sideABetterProbability;
+
+        public RunStopDecision(
+            bool shouldStop,
+            RunCompletionKind completionKind,
+            StopReason stopReason,
+            double sideABetterProbability)
+        {
+            this.shouldStop = shouldStop;
+            this.completionKind = completionKind;
+            this.stopReason = stopReason;
+            this.sideABetterProbability = sideABetterProbability;
+        }
     }
 
-    public static bool TryConsumePendingRequestedMatchCount(out int requestedMatchCount)
+    public static bool HasActiveRun => activeRun != null;
+
+    public static SimulationSettings GetDefaultSimulationSettings()
     {
-        requestedMatchCount = Math.Max(DefaultRequestedMatchCount, pendingRequestedMatchCount);
-        pendingRequestedMatchCount = DefaultRequestedMatchCount;
-        bool hadPending = hasPendingRequestedMatchCount;
-        hasPendingRequestedMatchCount = false;
+        return GetPresetSettings(SimulationPreset.StandardComparison);
+    }
+
+    public static SimulationSettings GetPresetSettings(SimulationPreset preset)
+    {
+        switch (preset)
+        {
+            case SimulationPreset.QuickExploration:
+                return new SimulationSettings
+                {
+                    preset = SimulationPreset.QuickExploration,
+                    evaluationMethod = EvaluationMethod.Bayesian,
+                    certaintyThreshold = 0.90f,
+                    minimumGames = 50,
+                    timeBudgetSeconds = QuickExplorationTimeBudgetSeconds,
+                    batchSize = 25,
+                    emergencyHardMaxGames = 5000
+                };
+
+            case SimulationPreset.StrictComparison:
+                return new SimulationSettings
+                {
+                    preset = SimulationPreset.StrictComparison,
+                    evaluationMethod = EvaluationMethod.Bayesian,
+                    certaintyThreshold = 0.99f,
+                    minimumGames = 200,
+                    timeBudgetSeconds = StrictComparisonTimeBudgetSeconds,
+                    batchSize = 50,
+                    emergencyHardMaxGames = 25000
+                };
+
+            case SimulationPreset.StandardComparison:
+            default:
+                return new SimulationSettings
+                {
+                    preset = SimulationPreset.StandardComparison,
+                    evaluationMethod = EvaluationMethod.Bayesian,
+                    certaintyThreshold = 0.95f,
+                    minimumGames = 100,
+                    timeBudgetSeconds = StandardComparisonTimeBudgetSeconds,
+                    batchSize = 50,
+                    emergencyHardMaxGames = 10000
+                };
+        }
+    }
+
+    public static SimulationSettings SanitizeSimulationSettings(SimulationSettings settings)
+    {
+        SimulationPreset sanitizedPreset = Enum.IsDefined(typeof(SimulationPreset), settings.preset)
+            ? settings.preset
+            : SimulationPreset.Manual;
+        SimulationSettings fallback = sanitizedPreset == SimulationPreset.Manual
+            ? GetDefaultSimulationSettings()
+            : GetPresetSettings(sanitizedPreset);
+        bool missingAllNumericSettings =
+            settings.certaintyThreshold <= 0f &&
+            settings.minimumGames <= 0 &&
+            settings.timeBudgetSeconds <= 0f &&
+            settings.batchSize <= 0 &&
+            settings.emergencyHardMaxGames <= 0;
+
+        if (missingAllNumericSettings)
+        {
+            return fallback;
+        }
+
+        settings.preset = sanitizedPreset;
+        settings.evaluationMethod = EvaluationMethod.Bayesian;
+        settings.certaintyThreshold = SanitizeFloat(
+            settings.certaintyThreshold,
+            fallback.certaintyThreshold,
+            MinCertaintyThreshold,
+            MaxCertaintyThreshold);
+        settings.minimumGames = SanitizeInt(
+            settings.minimumGames,
+            MinPositiveValue);
+        settings.timeBudgetSeconds = SanitizeFloat(
+            settings.timeBudgetSeconds,
+            fallback.timeBudgetSeconds,
+            MinTimeBudgetSeconds,
+            float.MaxValue);
+        settings.batchSize = SanitizeInt(
+            settings.batchSize,
+            MinPositiveValue);
+        settings.emergencyHardMaxGames = SanitizeInt(
+            settings.emergencyHardMaxGames,
+            MinPositiveValue);
+        return settings;
+    }
+
+    public static string GetPresetDisplayName(SimulationPreset preset)
+    {
+        switch (preset)
+        {
+            case SimulationPreset.QuickExploration:
+                return "Quick Exploration";
+
+            case SimulationPreset.StandardComparison:
+                return "Standard Comparison";
+
+            case SimulationPreset.StrictComparison:
+                return "Strict Comparison";
+
+            case SimulationPreset.Manual:
+            default:
+                return "Manual";
+        }
+    }
+
+    public static string GetEvaluationMethodDisplayName(EvaluationMethod evaluationMethod)
+    {
+        switch (evaluationMethod)
+        {
+            case EvaluationMethod.Bayesian:
+            default:
+                return "Bayesian";
+        }
+    }
+
+    public static void SetPendingSimulationSettings(SimulationSettings settings)
+    {
+        pendingSimulationSettings = SanitizeSimulationSettings(settings);
+        hasPendingSimulationSettings = true;
+    }
+
+    public static bool TryConsumePendingSimulationSettings(out SimulationSettings settings)
+    {
+        settings = SanitizeSimulationSettings(pendingSimulationSettings);
+        pendingSimulationSettings = GetDefaultSimulationSettings();
+        bool hadPending = hasPendingSimulationSettings;
+        hasPendingSimulationSettings = false;
         return hadPending;
     }
 
     public static void BeginNewRun(
-        int requestedMatchCount,
+        SimulationSettings settings,
         TurnManager.AIRecruitVariant baseSideARecruitVariant,
         TurnManager.AIRecruitVariant baseSideBRecruitVariant,
         TurnManager.AIDebugProfile baseSideAProfile,
@@ -74,7 +264,7 @@ public static class AIVsAIBatchRunController
         activeRun = new ActiveRun
         {
             runId = Guid.NewGuid().ToString("N"),
-            plannedMatchCount = Math.Max(DefaultRequestedMatchCount, requestedMatchCount),
+            settings = SanitizeSimulationSettings(settings),
             startedAtUtc = DateTime.UtcNow,
             baseSideARecruitVariant = baseSideARecruitVariant,
             baseSideBRecruitVariant = baseSideBRecruitVariant,
@@ -118,8 +308,8 @@ public static class AIVsAIBatchRunController
 
     public static void ClearAll()
     {
-        pendingRequestedMatchCount = DefaultRequestedMatchCount;
-        hasPendingRequestedMatchCount = false;
+        pendingSimulationSettings = GetDefaultSimulationSettings();
+        hasPendingSimulationSettings = false;
         activeRun = null;
     }
 
@@ -175,46 +365,76 @@ public static class AIVsAIBatchRunController
 
         matchResult.runId = activeRun.runId;
         matchResult.matchIndexInRun = activeRun.completedMatchCount;
-        matchResult.plannedMatchCountInRun = activeRun.plannedMatchCount;
+        matchResult.runEmergencyHardMaxGames = activeRun.settings.emergencyHardMaxGames;
 
-        isRunComplete = activeRun.completedMatchCount >= activeRun.plannedMatchCount;
+        RunStopDecision decision = EvaluateRunStopDecision(activeRun);
+        isRunComplete = decision.shouldStop;
         if (!isRunComplete)
         {
             return true;
         }
 
-        int completedMatches = Math.Max(1, activeRun.completedMatchCount);
-        float elapsedSeconds = Mathf.Max(0.001f, (float)(DateTime.UtcNow - activeRun.startedAtUtc).TotalSeconds);
-        summary = new AIVsAIMatchCsvLogger.RunSummary
-        {
-            timestampUtc = DateTime.UtcNow.ToString("o"),
-            runId = activeRun.runId,
-            appVersion = activeRun.appVersion,
-            mapSizePreset = activeRun.mapSizePreset,
-            boardWidth = activeRun.boardWidth,
-            boardHeight = activeRun.boardHeight,
-            gameMode = activeRun.gameMode,
-            sideAAIConfig = activeRun.sideAAIConfig,
-            sideBAIConfig = activeRun.sideBAIConfig,
-            baseSideARecruitVariant = activeRun.baseSideARecruitVariant,
-            baseSideBRecruitVariant = activeRun.baseSideBRecruitVariant,
-            baseSideAProfile = activeRun.baseSideAProfile,
-            baseSideBProfile = activeRun.baseSideBProfile,
-            matchCount = activeRun.completedMatchCount,
-            sideAWins = activeRun.sideAWins,
-            sideBWins = activeRun.sideBWins,
-            drawsOrAborts = activeRun.drawsOrAborts,
-            trueDraws = activeRun.trueDraws,
-            aborts = activeRun.aborts,
-            elapsedSeconds = elapsedSeconds,
-            turnsPerSecond = activeRun.totalTurnCount / elapsedSeconds,
-            sideAWinRate = activeRun.sideAWins / (float)completedMatches,
-            averageTotalTurnCount = activeRun.totalTurnCount / (float)completedMatches
-        };
-        PopulateComparisonStats(activeRun, summary);
-
+        summary = BuildRunSummary(activeRun, decision);
         activeRun = null;
         return true;
+    }
+
+    private static AIVsAIMatchCsvLogger.RunSummary BuildRunSummary(ActiveRun run, RunStopDecision decision)
+    {
+        if (run == null)
+        {
+            return null;
+        }
+
+        int completedMatches = Math.Max(1, run.completedMatchCount);
+        int decisiveGames = Math.Max(0, run.sideAWins + run.sideBWins);
+        float elapsedSeconds = Mathf.Max(0.001f, (float)(DateTime.UtcNow - run.startedAtUtc).TotalSeconds);
+        float sideAScoreRate = (float)((run.sideAWins + (0.5d * run.drawsOrAborts)) / completedMatches);
+
+        AIVsAIMatchCsvLogger.RunSummary summary = new AIVsAIMatchCsvLogger.RunSummary
+        {
+            timestampUtc = DateTime.UtcNow.ToString("o"),
+            runId = run.runId,
+            appVersion = run.appVersion,
+            mapSizePreset = run.mapSizePreset,
+            boardWidth = run.boardWidth,
+            boardHeight = run.boardHeight,
+            gameMode = run.gameMode,
+            sideAAIConfig = run.sideAAIConfig,
+            sideBAIConfig = run.sideBAIConfig,
+            baseSideARecruitVariant = run.baseSideARecruitVariant,
+            baseSideBRecruitVariant = run.baseSideBRecruitVariant,
+            baseSideAProfile = run.baseSideAProfile,
+            baseSideBProfile = run.baseSideBProfile,
+            matchCount = run.completedMatchCount,
+            sideAWins = run.sideAWins,
+            sideBWins = run.sideBWins,
+            drawsOrAborts = run.drawsOrAborts,
+            trueDraws = run.trueDraws,
+            aborts = run.aborts,
+            elapsedSeconds = elapsedSeconds,
+            turnsPerSecond = run.totalTurnCount / elapsedSeconds,
+            sideAWinRate = run.sideAWins / (float)completedMatches,
+            sideAScoreRate = sideAScoreRate,
+            sideAEffectSize = sideAScoreRate - 0.5f,
+            averageTotalTurnCount = run.totalTurnCount / (float)completedMatches,
+            simulationPreset = run.settings.preset,
+            simulationSettingsLabel = GetPresetDisplayName(run.settings.preset),
+            evaluationMethod = run.settings.evaluationMethod,
+            evaluationMethodLabel = GetEvaluationMethodDisplayName(run.settings.evaluationMethod),
+            certaintyThreshold = run.settings.certaintyThreshold,
+            minimumGames = run.settings.minimumGames,
+            batchSize = run.settings.batchSize,
+            timeBudgetSeconds = run.settings.timeBudgetSeconds,
+            emergencyHardMaxGames = run.settings.emergencyHardMaxGames,
+            bayesianDecisiveGames = decisiveGames,
+            bayesianSideABetterProbability = Mathf.Clamp01((float)decision.sideABetterProbability),
+            runEndedNormally = decision.completionKind == RunCompletionKind.NormalCompleted,
+            stopReason = decision.stopReason.ToString()
+        };
+
+        PopulateComparisonStats(run, summary);
+        return summary;
     }
 
     private static ActiveRun.CompletedMatchRecord BuildCompletedMatchRecord(AIVsAIMatchCsvLogger.MatchResult matchResult)
@@ -243,6 +463,145 @@ public static class AIVsAIBatchRunController
         record.player1Score = GetSeatScore(matchResult.winner, 0);
         record.player2Score = GetSeatScore(matchResult.winner, 1);
         return record;
+    }
+
+    private static RunStopDecision EvaluateRunStopDecision(ActiveRun run)
+    {
+        if (run == null)
+        {
+            return new RunStopDecision(false, RunCompletionKind.None, StopReason.None, 0.5d);
+        }
+
+        double sideABetterProbability = ComputeSideABetterProbability(
+            run.settings.evaluationMethod,
+            run.sideAWins,
+            run.sideBWins);
+
+        if (!HasValidRecordedCounts(run) ||
+            double.IsNaN(sideABetterProbability) ||
+            double.IsInfinity(sideABetterProbability) ||
+            sideABetterProbability < 0d ||
+            sideABetterProbability > 1d)
+        {
+            return new RunStopDecision(
+                shouldStop: true,
+                completionKind: RunCompletionKind.AbnormalAborted,
+                stopReason: StopReason.InvalidStatsDetected,
+                sideABetterProbability: sideABetterProbability);
+        }
+
+        if (run.completedMatchCount >= run.settings.emergencyHardMaxGames)
+        {
+            return new RunStopDecision(
+                shouldStop: true,
+                completionKind: RunCompletionKind.AbnormalAborted,
+                stopReason: StopReason.EmergencySafetyFuseTriggered,
+                sideABetterProbability: sideABetterProbability);
+        }
+
+        bool reachedBatchBoundary = (run.completedMatchCount % Math.Max(MinPositiveValue, run.settings.batchSize)) == 0;
+        if (reachedBatchBoundary && run.completedMatchCount >= run.settings.minimumGames)
+        {
+            if (sideABetterProbability >= run.settings.certaintyThreshold)
+            {
+                return new RunStopDecision(
+                    shouldStop: true,
+                    completionKind: RunCompletionKind.NormalCompleted,
+                    stopReason: StopReason.CertaintyReached_A_Better,
+                    sideABetterProbability: sideABetterProbability);
+            }
+
+            if (sideABetterProbability <= (1d - run.settings.certaintyThreshold))
+            {
+                return new RunStopDecision(
+                    shouldStop: true,
+                    completionKind: RunCompletionKind.NormalCompleted,
+                    stopReason: StopReason.CertaintyReached_A_Worse,
+                    sideABetterProbability: sideABetterProbability);
+            }
+        }
+
+        float elapsedSeconds = Mathf.Max(0f, (float)(DateTime.UtcNow - run.startedAtUtc).TotalSeconds);
+        if (elapsedSeconds >= run.settings.timeBudgetSeconds)
+        {
+            return new RunStopDecision(
+                shouldStop: true,
+                completionKind: RunCompletionKind.NormalCompleted,
+                stopReason: StopReason.TimeBudgetReached,
+                sideABetterProbability: sideABetterProbability);
+        }
+
+        return new RunStopDecision(
+            shouldStop: false,
+            completionKind: RunCompletionKind.None,
+            stopReason: StopReason.None,
+            sideABetterProbability: sideABetterProbability);
+    }
+
+    private static bool HasValidRecordedCounts(ActiveRun run)
+    {
+        if (run == null)
+        {
+            return false;
+        }
+
+        if (run.completedMatchCount < 0 ||
+            run.sideAWins < 0 ||
+            run.sideBWins < 0 ||
+            run.drawsOrAborts < 0 ||
+            run.trueDraws < 0 ||
+            run.aborts < 0 ||
+            run.totalTurnCount < 0)
+        {
+            return false;
+        }
+
+        if (run.trueDraws + run.aborts != run.drawsOrAborts)
+        {
+            return false;
+        }
+
+        if (run.sideAWins + run.sideBWins + run.drawsOrAborts != run.completedMatchCount)
+        {
+            return false;
+        }
+
+        if (run.completedMatches.Count != run.completedMatchCount)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static double ComputeSideABetterProbability(
+        EvaluationMethod evaluationMethod,
+        int sideAWins,
+        int sideBWins)
+    {
+        switch (evaluationMethod)
+        {
+            case EvaluationMethod.Bayesian:
+            default:
+                double alpha = 1d + Math.Max(0, sideAWins);
+                double beta = 1d + Math.Max(0, sideBWins);
+                int decisiveGames = Math.Max(0, sideAWins + sideBWins);
+                if (decisiveGames >= BayesianNormalApproximationThreshold)
+                {
+                    double mean = alpha / (alpha + beta);
+                    double variance = (alpha * beta) / (((alpha + beta) * (alpha + beta)) * (alpha + beta + 1d));
+                    if (variance <= 0d)
+                    {
+                        return mean > 0.5d ? 1d : mean < 0.5d ? 0d : 0.5d;
+                    }
+
+                    double standardDeviation = Math.Sqrt(variance);
+                    return Math.Max(0d, Math.Min(1d, NormalCdf((mean - 0.5d) / standardDeviation)));
+                }
+
+                double probability = 1d - RegularizedIncompleteBeta(alpha, beta, 0.5d);
+                return Math.Max(0d, Math.Min(1d, probability));
+        }
     }
 
     private static double GetSeatScore(string winner, int trackedSeatIndex)
@@ -613,6 +972,22 @@ public static class AIVsAIBatchRunController
         return h;
     }
 
+    private static double NormalCdf(double zScore)
+    {
+        return 0.5d * (1d + Erf(zScore / Math.Sqrt(2d)));
+    }
+
+    private static double Erf(double x)
+    {
+        double sign = x < 0d ? -1d : 1d;
+        double absoluteX = Math.Abs(x);
+        double t = 1d / (1d + (0.3275911d * absoluteX));
+        double polynomial =
+            (((((1.061405429d * t) - 1.453152027d) * t) + 1.421413741d) * t - 0.284496736d) * t + 0.254829592d;
+        double approximation = 1d - (polynomial * t * Math.Exp(-(absoluteX * absoluteX)));
+        return sign * approximation;
+    }
+
     private static double LogGamma(double value)
     {
         double[] coefficients =
@@ -638,5 +1013,17 @@ public static class AIVsAIBatchRunController
         }
 
         return -tmp + Math.Log(2.5066282746310005d * series / x);
+    }
+
+    private static float SanitizeFloat(float value, float fallback, float minValue, float maxValue)
+    {
+        float sanitized = float.IsNaN(value) || float.IsInfinity(value) ? fallback : value;
+        return Mathf.Clamp(sanitized, minValue, maxValue);
+    }
+
+    private static int SanitizeInt(int value, int minValue)
+    {
+        int sanitized = value <= 0 ? minValue : value;
+        return Math.Max(minValue, sanitized);
     }
 }

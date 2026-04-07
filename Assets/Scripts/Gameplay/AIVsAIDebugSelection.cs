@@ -71,6 +71,12 @@ public static class AIVsAIDebugSelection
         return hadPendingSettings;
     }
 
+    public static bool TryPeek(out Settings settings)
+    {
+        settings = pendingSettings;
+        return hasPendingSettings;
+    }
+
     public static void SaveForGame(string gameId, Settings settings)
     {
         if (string.IsNullOrWhiteSpace(gameId))

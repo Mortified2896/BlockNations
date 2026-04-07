@@ -205,15 +205,10 @@ public class CameraController : MonoBehaviour
             return false;
         }
 
-        if (turnManager.IsAIVsAIDebugModeEnabledForUi())
+        if (ShouldUseAIVsAIDebugOverviewCamera(turnManager))
         {
             ClearPendingRestoreState();
-            if (cam.orthographic)
-            {
-                cam.orthographicSize = GetDynamicMaxOrthographicSize();
-            }
-
-            SetCameraWorldPosition(GetBoardCenter(turnManager.gridManager));
+            ApplyAIVsAIDebugOverviewCamera(turnManager.gridManager);
             initialFocusApplied = true;
             return true;
         }
@@ -236,6 +231,40 @@ public class CameraController : MonoBehaviour
         SetCameraWorldPosition(focusPosition);
         initialFocusApplied = true;
         return true;
+    }
+
+    private static bool ShouldUseAIVsAIDebugOverviewCamera(TurnManager turnManager)
+    {
+        if (turnManager != null && turnManager.IsAIVsAIDebugModeEnabledForUi())
+        {
+            return true;
+        }
+
+        if (SaveLoadRequest.HasPendingRequest)
+        {
+            return false;
+        }
+
+        return GameModeSelection.TryPeek(out TurnManager.GameMode pendingMode) &&
+               pendingMode == TurnManager.GameMode.VsAI &&
+               AIVsAIDebugSelection.TryPeek(out AIVsAIDebugSelection.Settings pendingSettings) &&
+               pendingSettings.enabled;
+    }
+
+    private void ApplyAIVsAIDebugOverviewCamera(GridManager gridManager)
+    {
+        if (cam == null || gridManager == null)
+        {
+            return;
+        }
+
+        ClearPendingRestoreState();
+        if (cam.orthographic)
+        {
+            cam.orthographicSize = GetDynamicMaxOrthographicSize();
+        }
+
+        SetCameraWorldPosition(GetBoardCenter(gridManager));
     }
 
     private bool TryApplyPendingRestoreState()

@@ -168,16 +168,34 @@
                                 <ui:Button name="GeneralSettingsSideBAiProfileBaselineButton" text="Baseline" class="menu-button general-settings-option-button" />
                                 <ui:Button name="GeneralSettingsSideBAiProfileCalculusButton" text="Calculus AI" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                             </ui:VisualElement>
-                            <ui:Label text="Match Count" class="general-settings-section-label" />
+                            <ui:Label text="Simulation Presets" class="general-settings-section-label" />
                             <ui:VisualElement class="general-settings-option-grid">
                                 <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
-                                    <ui:Button name="GeneralSettingsAIVsAiMatchCount1Button" text="1" class="menu-button general-settings-option-button" />
-                                    <ui:Button name="GeneralSettingsAIVsAiMatchCount10Button" text="10" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                                    <ui:Button name="GeneralSettingsAIVsAiPresetQuickButton" text="Quick" class="menu-button general-settings-option-button" />
+                                    <ui:Button name="GeneralSettingsAIVsAiPresetStandardButton" text="Standard" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                                 </ui:VisualElement>
                                 <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
-                                    <ui:Button name="GeneralSettingsAIVsAiMatchCount50Button" text="50" class="menu-button general-settings-option-button" />
-                                    <ui:Button name="GeneralSettingsAIVsAiMatchCount100Button" text="100" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                                    <ui:Button name="GeneralSettingsAIVsAiPresetStrictButton" text="Strict" class="menu-button general-settings-option-button" />
                                 </ui:VisualElement>
+                            </ui:VisualElement>
+                            <ui:Label text="Presets fill recommended defaults. You can edit every value after choosing one." class="general-settings-help-text" />
+                            <ui:Label text="Evaluation Method" class="general-settings-section-label" />
+                            <ui:VisualElement class="general-settings-option-row">
+                                <ui:Button name="GeneralSettingsAIVsAiEvaluationMethodBayesianButton" text="Bayesian" class="menu-button general-settings-option-button" />
+                            </ui:VisualElement>
+                            <ui:Label text="Bayesian certainty uses decisive wins and losses only. Draws and aborts are reported separately." class="general-settings-help-text" />
+                            <ui:TextField name="GeneralSettingsAIVsAiCertaintyThresholdInput" label="Certainty Threshold" class="general-settings-input-field" />
+                            <ui:Label text="Stop when the system is this sure one AI is better." class="general-settings-help-text" />
+                            <ui:TextField name="GeneralSettingsAIVsAiMinimumGamesInput" label="Minimum Games" class="general-settings-input-field" />
+                            <ui:Label text="Prevents early stops from tiny samples." class="general-settings-help-text" />
+                            <ui:TextField name="GeneralSettingsAIVsAiTimeBudgetMinutesInput" label="Time Budget (Minutes)" class="general-settings-input-field" />
+                            <ui:Label text="Normal stop when this wall-clock budget is reached." class="general-settings-help-text" />
+                            <ui:TextField name="GeneralSettingsAIVsAiBatchSizeInput" label="Batch Size" class="general-settings-input-field" />
+                            <ui:Label text="Games to run between certainty checks." class="general-settings-help-text" />
+                            <ui:VisualElement class="general-settings-subcard general-settings-subcard--danger">
+                                <ui:Label text="Emergency Failsafe" class="general-settings-subcard-title" />
+                                <ui:TextField name="GeneralSettingsAIVsAiEmergencyHardMaxGamesInput" label="Emergency Hard Max Games" class="general-settings-input-field" />
+                                <ui:Label text="Failsafe only. If this fuse trips, the run is abnormal and may be unreliable." class="general-settings-help-text general-settings-help-text--warning" />
                             </ui:VisualElement>
                             <ui:Label text="Batch Speed" class="general-settings-section-label" />
                             <ui:VisualElement class="general-settings-option-grid">
