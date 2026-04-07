@@ -324,6 +324,12 @@ public class TurnManager : MonoBehaviour
         MainMenu
     }
 
+    private enum GameOverTertiaryAction
+    {
+        None,
+        RestartAIVsAIBatch
+    }
+
     private enum GameOverPrimaryUiAction
     {
         ReplayCurrentMode,
@@ -349,6 +355,17 @@ public class TurnManager : MonoBehaviour
     private bool gameOverUiSecondaryButtonVisible = false;
     private bool gameOverUiSecondaryButtonInteractable = false;
     private GameOverSecondaryAction gameOverUiSecondaryAction = GameOverSecondaryAction.None;
+    private string gameOverUiTertiaryButtonLabel = string.Empty;
+    private bool gameOverUiTertiaryButtonVisible = false;
+    private bool gameOverUiTertiaryButtonInteractable = false;
+    private GameOverTertiaryAction gameOverUiTertiaryAction = GameOverTertiaryAction.None;
+    private int gameOverUiRepeatAIVsAIMatchCount = 1;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private AIRecruitVariant gameOverUiRepeatSideARecruitVariant = AIRecruitVariant.Default;
+    private AIRecruitVariant gameOverUiRepeatSideBRecruitVariant = AIRecruitVariant.Default;
+    private AIDebugProfile gameOverUiRepeatSideAProfile = AIDebugProfile.Baseline;
+    private AIDebugProfile gameOverUiRepeatSideBProfile = AIDebugProfile.Baseline;
+#endif
     [System.Serializable]
     private class SavedCity
     {
@@ -436,6 +453,9 @@ public class TurnManager : MonoBehaviour
     public bool GameOverUiSecondaryButtonVisible => gameOverUiSecondaryButtonVisible;
     public string GameOverUiSecondaryButtonLabel => gameOverUiSecondaryButtonLabel;
     public bool GameOverUiSecondaryButtonInteractable => gameOverUiSecondaryButtonInteractable;
+    public bool GameOverUiTertiaryButtonVisible => gameOverUiTertiaryButtonVisible;
+    public string GameOverUiTertiaryButtonLabel => gameOverUiTertiaryButtonLabel;
+    public bool GameOverUiTertiaryButtonInteractable => gameOverUiTertiaryButtonInteractable;
     public bool IsPbpEndgameMenuExitBlocked =>
         currentMode == GameMode.PlayByPost &&
         gameOver &&
@@ -1230,6 +1250,17 @@ public class TurnManager : MonoBehaviour
         gameOverUiSecondaryButtonVisible = false;
         gameOverUiSecondaryButtonInteractable = false;
         gameOverUiSecondaryAction = GameOverSecondaryAction.None;
+        gameOverUiTertiaryButtonLabel = string.Empty;
+        gameOverUiTertiaryButtonVisible = false;
+        gameOverUiTertiaryButtonInteractable = false;
+        gameOverUiTertiaryAction = GameOverTertiaryAction.None;
+        gameOverUiRepeatAIVsAIMatchCount = 1;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        gameOverUiRepeatSideARecruitVariant = AIRecruitVariant.Default;
+        gameOverUiRepeatSideBRecruitVariant = AIRecruitVariant.Default;
+        gameOverUiRepeatSideAProfile = AIDebugProfile.Baseline;
+        gameOverUiRepeatSideBProfile = AIDebugProfile.Baseline;
+#endif
     }
 
     private void SetGameOverUiTitle(string title)
@@ -1404,6 +1435,41 @@ public class TurnManager : MonoBehaviour
         SceneManager.LoadScene(MainMenuSceneName);
     }
 
+    public void OnGameOverTertiaryButtonPressed()
+    {
+        if (!gameOverUiTertiaryButtonVisible || !gameOverUiTertiaryButtonInteractable)
+        {
+            return;
+        }
+
+        if (gameOverUiTertiaryAction != GameOverTertiaryAction.RestartAIVsAIBatch)
+        {
+            return;
+        }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        SaveLoadRequest.ClearPending();
+        GameModeSelection.SetPendingMode(GameMode.VsAI);
+        MapSizeSelection.SetPending(GetCurrentMapSizePreset());
+        AIDifficultySelection.SetPending(aiDifficulty);
+        AIRecruitVariantSelection.SetPending(aiRecruitVariant);
+        SnapshotHistorySelection.SetPending(MatchSnapshotHistorySettings.IsEnabled(currentGameId));
+        AIVsAIDebugSelection.SetPending(
+            enabled: true,
+            sideARecruitVariant: gameOverUiRepeatSideARecruitVariant,
+            sideBRecruitVariant: gameOverUiRepeatSideBRecruitVariant,
+            sideAProfile: gameOverUiRepeatSideAProfile,
+            sideBProfile: gameOverUiRepeatSideBProfile,
+            batchSpeedPreset: aiVsAiBatchSpeedPreset);
+        AIVsAIBatchRunController.SetPendingRequestedMatchCount(gameOverUiRepeatAIVsAIMatchCount);
+
+        Time.timeScale = 1f;
+        CameraController.ClearPendingRestoreState();
+        Scene currentScene = SceneManager.GetActiveScene();
+        SceneManager.LoadScene(currentScene.name);
+#endif
+    }
+
     private void SetGameOverPrimaryButtonState(string label, bool interactable, PbpEndgamePrimaryAction action)
     {
         pbpEndgamePrimaryAction = action;
@@ -1427,6 +1493,14 @@ public class TurnManager : MonoBehaviour
         gameOverUiSecondaryButtonVisible = visible;
         gameOverUiSecondaryButtonInteractable = visible && interactable;
         gameOverUiSecondaryAction = visible ? action : GameOverSecondaryAction.None;
+    }
+
+    private void SetGameOverTertiaryButtonState(string label, bool visible, bool interactable, GameOverTertiaryAction action)
+    {
+        gameOverUiTertiaryButtonLabel = visible && !string.IsNullOrWhiteSpace(label) ? label.Trim() : string.Empty;
+        gameOverUiTertiaryButtonVisible = visible;
+        gameOverUiTertiaryButtonInteractable = visible && interactable;
+        gameOverUiTertiaryAction = visible ? action : GameOverTertiaryAction.None;
     }
 
     private void ShowGameOverPopup(string message, bool writeLog = true)
@@ -5193,6 +5267,18 @@ public class TurnManager : MonoBehaviour
                 visible: true,
                 interactable: true,
                 action: GameOverSecondaryAction.MainMenu);
+            SetGameOverTertiaryButtonState(
+                "Run Again",
+                visible: true,
+                interactable: true,
+                action: GameOverTertiaryAction.RestartAIVsAIBatch);
+            gameOverUiRepeatAIVsAIMatchCount = Mathf.Max(1, runSummary.matchCount);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            gameOverUiRepeatSideARecruitVariant = runSummary.baseSideARecruitVariant;
+            gameOverUiRepeatSideBRecruitVariant = runSummary.baseSideBRecruitVariant;
+            gameOverUiRepeatSideAProfile = runSummary.baseSideAProfile;
+            gameOverUiRepeatSideBProfile = runSummary.baseSideBProfile;
+#endif
             ShowGameOverPopup(BuildAIVsAIBatchCompletionMessage(runSummary));
             Debug.Log(
                 $"[AIVsAIBatch] Completed runId={runSummary.runId} matches={runSummary.matchCount} " +

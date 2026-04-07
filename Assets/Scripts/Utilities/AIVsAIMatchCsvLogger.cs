@@ -47,6 +47,10 @@ public static class AIVsAIMatchCsvLogger
         public string gameMode;
         public string sideAAIConfig;
         public string sideBAIConfig;
+        public TurnManager.AIRecruitVariant baseSideARecruitVariant;
+        public TurnManager.AIRecruitVariant baseSideBRecruitVariant;
+        public TurnManager.AIDebugProfile baseSideAProfile;
+        public TurnManager.AIDebugProfile baseSideBProfile;
         public int matchCount;
         public int sideAWins;
         public int sideBWins;
