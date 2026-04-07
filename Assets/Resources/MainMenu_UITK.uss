@@ -1810,7 +1810,9 @@
 
 .general-settings-dev-toggle .unity-base-field__label,
 .general-settings-dev-toggle .unity-toggle__label {
+    flex-basis: 0;
     flex-grow: 1;
+    min-width: 0;
     margin-right: 16px;
     font-size: 24px;
     color: rgb(245, 249, 255);
@@ -1821,6 +1823,7 @@
 .general-settings-dev-toggle .unity-toggle__input {
     min-width: 34px;
     min-height: 34px;
+    flex-shrink: 0;
 }
 
 .general-settings-actions {

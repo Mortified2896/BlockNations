@@ -155,7 +155,7 @@ public class MainMenuUITKView : MonoBehaviour
     private TurnManager.AIDebugProfile selectedSideAAIProfile = TurnManager.AIDebugProfile.Baseline;
     private TurnManager.AIDebugProfile selectedSideBAIProfile = TurnManager.AIDebugProfile.Baseline;
     private int selectedAIVsAIMatchCount = 1;
-    private TurnManager.AIVsAIBatchSpeedPreset selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.Normal;
+    private TurnManager.AIVsAIBatchSpeedPreset selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.UltraFast;
 
     private enum PendingGeneralSettingsMode
     {
@@ -2284,7 +2284,7 @@ public class MainMenuUITKView : MonoBehaviour
         selectedSideAAIProfile = TurnManager.AIDebugProfile.Baseline;
         selectedSideBAIProfile = TurnManager.AIDebugProfile.Baseline;
         selectedAIVsAIMatchCount = 1;
-        selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.Normal;
+        selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.UltraFast;
         HideCreateSuccessPanel();
         HideJoinPanel();
         SetDetailsConfirmState(false);
