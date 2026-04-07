@@ -156,7 +156,8 @@ public class City : MonoBehaviour
         stationedUnit = spawnedUnit;
         hasRecruitedThisTurn = true;
 
-        if (SoundManager.Instance != null)
+        if (SoundManager.Instance != null &&
+            (TurnManager.Instance == null || !TurnManager.Instance.ShouldSuppressAIVsAIAudio()))
         {
             SoundManager.Instance.PlayRecruit();
         }

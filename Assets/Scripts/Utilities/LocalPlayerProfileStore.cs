@@ -43,9 +43,9 @@ public static class LocalPlayerProfileStore
 
         string typedDisplayName = NormalizeTypedDisplayName(PlayerPrefs.GetString(TypedDisplayNameKey, string.Empty));
         string storedTypedDisplayName = PlayerPrefs.GetString(TypedDisplayNameKey, string.Empty);
-        if (!IsValidTypedDisplayName(typedDisplayName))
+        if (!HasRecognizableTypedDisplayName(typedDisplayName))
         {
-            typedDisplayName = GenerateValidTypedDisplayNameFallback();
+            typedDisplayName = string.Empty;
         }
 
         if (!string.Equals(storedTypedDisplayName, typedDisplayName, StringComparison.Ordinal))
@@ -82,8 +82,9 @@ public static class LocalPlayerProfileStore
     public static string SetTypedDisplayName(string typedDisplayName)
     {
         string normalized = NormalizeTypedDisplayName(typedDisplayName);
-        if (!IsValidTypedDisplayName(normalized))
+        if (!HasRecognizableTypedDisplayName(normalized))
         {
+            PlayerPrefs.SetString(TypedDisplayNameKey, string.Empty);
             return string.Empty;
         }
 
@@ -107,6 +108,12 @@ public static class LocalPlayerProfileStore
     {
         string normalized = NormalizeTypedDisplayName(typedDisplayName);
         return normalized.Length >= 2 && normalized.Length <= ProfileUsernameGenerator.MaxUsernameLength;
+    }
+
+    public static bool HasRecognizableTypedDisplayName(string typedDisplayName)
+    {
+        string normalized = NormalizeTypedDisplayName(typedDisplayName);
+        return IsValidTypedDisplayName(normalized) && !ProfileUsernameGenerator.IsGeneratedUsername(normalized);
     }
 
     public static string GenerateValidTypedDisplayNameFallback()

@@ -203,7 +203,8 @@ public class Unit : MonoBehaviour
             return false;
         }
 
-        if (SoundManager.Instance != null)
+        if (SoundManager.Instance != null &&
+            (TurnManager.Instance == null || !TurnManager.Instance.ShouldSuppressAIVsAIAudio()))
         {
             SoundManager.Instance.PlayAttack();
         }
@@ -250,7 +251,8 @@ public class Unit : MonoBehaviour
             healthLabel.Hide();
         }
 
-        if (SoundManager.Instance != null)
+        if (SoundManager.Instance != null &&
+            (TurnManager.Instance == null || !TurnManager.Instance.ShouldSuppressAIVsAIAudio()))
         {
             SoundManager.Instance.PlayUnitDown();
         }

@@ -13,6 +13,8 @@ public static class AIVsAIDebugSelection
         public bool enabled;
         public TurnManager.AIRecruitVariant sideARecruitVariant;
         public TurnManager.AIRecruitVariant sideBRecruitVariant;
+        public TurnManager.AIDebugProfile sideAProfile;
+        public TurnManager.AIDebugProfile sideBProfile;
         public TurnManager.AIVsAIBatchSpeedPreset batchSpeedPreset;
 
         public static Settings Default => new Settings
@@ -20,6 +22,8 @@ public static class AIVsAIDebugSelection
             enabled = false,
             sideARecruitVariant = TurnManager.AIRecruitVariant.Default,
             sideBRecruitVariant = TurnManager.AIRecruitVariant.Default,
+            sideAProfile = TurnManager.AIDebugProfile.Baseline,
+            sideBProfile = TurnManager.AIDebugProfile.Baseline,
             batchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.Normal
         };
     }
@@ -30,6 +34,8 @@ public static class AIVsAIDebugSelection
         public bool enabled;
         public string sideARecruitVariant;
         public string sideBRecruitVariant;
+        public string sideAProfile;
+        public string sideBProfile;
         public string batchSpeedPreset;
     }
 
@@ -40,6 +46,8 @@ public static class AIVsAIDebugSelection
         bool enabled,
         TurnManager.AIRecruitVariant sideARecruitVariant,
         TurnManager.AIRecruitVariant sideBRecruitVariant,
+        TurnManager.AIDebugProfile sideAProfile,
+        TurnManager.AIDebugProfile sideBProfile,
         TurnManager.AIVsAIBatchSpeedPreset batchSpeedPreset)
     {
         pendingSettings = new Settings
@@ -47,6 +55,8 @@ public static class AIVsAIDebugSelection
             enabled = enabled,
             sideARecruitVariant = sideARecruitVariant,
             sideBRecruitVariant = sideBRecruitVariant,
+            sideAProfile = sideAProfile,
+            sideBProfile = sideBProfile,
             batchSpeedPreset = batchSpeedPreset
         };
         hasPendingSettings = true;
@@ -81,6 +91,8 @@ public static class AIVsAIDebugSelection
             enabled = true,
             sideARecruitVariant = settings.sideARecruitVariant.ToString(),
             sideBRecruitVariant = settings.sideBRecruitVariant.ToString(),
+            sideAProfile = settings.sideAProfile.ToString(),
+            sideBProfile = settings.sideBProfile.ToString(),
             batchSpeedPreset = settings.batchSpeedPreset.ToString()
         };
 
@@ -115,6 +127,8 @@ public static class AIVsAIDebugSelection
                 enabled = true,
                 sideARecruitVariant = ParseVariantOrDefault(persisted.sideARecruitVariant),
                 sideBRecruitVariant = ParseVariantOrDefault(persisted.sideBRecruitVariant),
+                sideAProfile = ParseProfileOrDefault(persisted.sideAProfile),
+                sideBProfile = ParseProfileOrDefault(persisted.sideBProfile),
                 batchSpeedPreset = ParseBatchSpeedPresetOrDefault(persisted.batchSpeedPreset)
             };
             return true;
@@ -145,6 +159,17 @@ public static class AIVsAIDebugSelection
         }
 
         return TurnManager.AIVsAIBatchSpeedPreset.Normal;
+    }
+
+    private static TurnManager.AIDebugProfile ParseProfileOrDefault(string rawProfile)
+    {
+        if (!string.IsNullOrWhiteSpace(rawProfile) &&
+            System.Enum.TryParse(rawProfile, out TurnManager.AIDebugProfile parsedProfile))
+        {
+            return parsedProfile;
+        }
+
+        return TurnManager.AIDebugProfile.Baseline;
     }
 
     private static string BuildPlayerPrefsKey(string gameId)

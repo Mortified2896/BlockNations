@@ -111,6 +111,24 @@ public static class ProfileUsernameGenerator
         return ValidUsernames[startIndex];
     }
 
+    public static bool IsGeneratedUsername(string username)
+    {
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            return false;
+        }
+
+        for (int i = 0; i < ValidUsernames.Length; i++)
+        {
+            if (string.Equals(ValidUsernames[i], username, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static string[] BuildValidUsernames()
     {
         List<string> names = new List<string>();

@@ -94,6 +94,10 @@ public class MainMenuUITKView : MonoBehaviour
     private Button generalSettingsSideAAiStyleRiderFocusButton;
     private Button generalSettingsSideBAiStyleDefaultButton;
     private Button generalSettingsSideBAiStyleRiderFocusButton;
+    private Button generalSettingsSideAAiProfileBaselineButton;
+    private Button generalSettingsSideAAiProfileCalculusButton;
+    private Button generalSettingsSideBAiProfileBaselineButton;
+    private Button generalSettingsSideBAiProfileCalculusButton;
     private Button generalSettingsAIVsAiMatchCount1Button;
     private Button generalSettingsAIVsAiMatchCount10Button;
     private Button generalSettingsAIVsAiMatchCount50Button;
@@ -101,6 +105,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Button generalSettingsAIVsAiBatchSpeedNormalButton;
     private Button generalSettingsAIVsAiBatchSpeedFastButton;
     private Button generalSettingsAIVsAiBatchSpeedVeryFastButton;
+    private Button generalSettingsAIVsAiBatchSpeedUltraFastButton;
     private Button generalSettingsConfirmButton;
     private Button generalSettingsBackButton;
     private Button detailsOpenButton;
@@ -121,6 +126,7 @@ public class MainMenuUITKView : MonoBehaviour
     private bool subscribedToMenuEvents;
     private bool uiReady;
     private bool hasSelectedGame;
+    private bool profileOpenedFromMultiplayerRedirect;
     private bool activeGamesPullStartedFromRest;
     private bool activeGamesPullRefreshArmed;
     private bool suppressNextGameCardClick;
@@ -146,6 +152,8 @@ public class MainMenuUITKView : MonoBehaviour
     private bool selectedEnableAIVsAIDebugMode;
     private TurnManager.AIRecruitVariant selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
     private TurnManager.AIRecruitVariant selectedSideBAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
+    private TurnManager.AIDebugProfile selectedSideAAIProfile = TurnManager.AIDebugProfile.Baseline;
+    private TurnManager.AIDebugProfile selectedSideBAIProfile = TurnManager.AIDebugProfile.Baseline;
     private int selectedAIVsAIMatchCount = 1;
     private TurnManager.AIVsAIBatchSpeedPreset selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.Normal;
 
@@ -368,8 +376,7 @@ public class MainMenuUITKView : MonoBehaviour
 
         if (mainMenuController != null && mainMenuController.IsMultiplayerScreenRequested)
         {
-            ShowMultiplayerPanel();
-            SetStatus(mainMenuController.CurrentImportStatus);
+            OpenMultiplayerPanelOrRedirect(requestControllerOpen: false);
         }
         else
         {
@@ -441,6 +448,10 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsSideAAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsSideAAiStyleRiderFocusButton");
         generalSettingsSideBAiStyleDefaultButton = root.Q<Button>("GeneralSettingsSideBAiStyleDefaultButton");
         generalSettingsSideBAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsSideBAiStyleRiderFocusButton");
+        generalSettingsSideAAiProfileBaselineButton = root.Q<Button>("GeneralSettingsSideAAiProfileBaselineButton");
+        generalSettingsSideAAiProfileCalculusButton = root.Q<Button>("GeneralSettingsSideAAiProfileCalculusButton");
+        generalSettingsSideBAiProfileBaselineButton = root.Q<Button>("GeneralSettingsSideBAiProfileBaselineButton");
+        generalSettingsSideBAiProfileCalculusButton = root.Q<Button>("GeneralSettingsSideBAiProfileCalculusButton");
         generalSettingsAIVsAiMatchCount1Button = root.Q<Button>("GeneralSettingsAIVsAiMatchCount1Button");
         generalSettingsAIVsAiMatchCount10Button = root.Q<Button>("GeneralSettingsAIVsAiMatchCount10Button");
         generalSettingsAIVsAiMatchCount50Button = root.Q<Button>("GeneralSettingsAIVsAiMatchCount50Button");
@@ -448,6 +459,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAIVsAiBatchSpeedNormalButton = root.Q<Button>("GeneralSettingsAIVsAiBatchSpeedNormalButton");
         generalSettingsAIVsAiBatchSpeedFastButton = root.Q<Button>("GeneralSettingsAIVsAiBatchSpeedFastButton");
         generalSettingsAIVsAiBatchSpeedVeryFastButton = root.Q<Button>("GeneralSettingsAIVsAiBatchSpeedVeryFastButton");
+        generalSettingsAIVsAiBatchSpeedUltraFastButton = root.Q<Button>("GeneralSettingsAIVsAiBatchSpeedUltraFastButton");
         generalSettingsConfirmButton = root.Q<Button>("GeneralSettingsConfirmButton");
         generalSettingsBackButton = root.Q<Button>("GeneralSettingsBackButton");
         detailsOpenButton = root.Q<Button>("DetailsOpenButton");
@@ -919,6 +931,26 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsSideBAiStyleRiderFocusButton.clicked += HandleGeneralSettingsSideBAiStyleRiderFocusClicked;
         }
 
+        if (generalSettingsSideAAiProfileBaselineButton != null)
+        {
+            generalSettingsSideAAiProfileBaselineButton.clicked += HandleGeneralSettingsSideAAiProfileBaselineClicked;
+        }
+
+        if (generalSettingsSideAAiProfileCalculusButton != null)
+        {
+            generalSettingsSideAAiProfileCalculusButton.clicked += HandleGeneralSettingsSideAAiProfileCalculusClicked;
+        }
+
+        if (generalSettingsSideBAiProfileBaselineButton != null)
+        {
+            generalSettingsSideBAiProfileBaselineButton.clicked += HandleGeneralSettingsSideBAiProfileBaselineClicked;
+        }
+
+        if (generalSettingsSideBAiProfileCalculusButton != null)
+        {
+            generalSettingsSideBAiProfileCalculusButton.clicked += HandleGeneralSettingsSideBAiProfileCalculusClicked;
+        }
+
         if (generalSettingsAIVsAiMatchCount1Button != null)
         {
             generalSettingsAIVsAiMatchCount1Button.clicked += HandleGeneralSettingsAIVsAiMatchCount1Clicked;
@@ -952,6 +984,11 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsAIVsAiBatchSpeedVeryFastButton != null)
         {
             generalSettingsAIVsAiBatchSpeedVeryFastButton.clicked += HandleGeneralSettingsAIVsAiBatchSpeedVeryFastClicked;
+        }
+
+        if (generalSettingsAIVsAiBatchSpeedUltraFastButton != null)
+        {
+            generalSettingsAIVsAiBatchSpeedUltraFastButton.clicked += HandleGeneralSettingsAIVsAiBatchSpeedUltraFastClicked;
         }
 
         if (generalSettingsWatchAIVsAIToggle != null)
@@ -1148,6 +1185,26 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsSideBAiStyleRiderFocusButton.clicked -= HandleGeneralSettingsSideBAiStyleRiderFocusClicked;
         }
 
+        if (generalSettingsSideAAiProfileBaselineButton != null)
+        {
+            generalSettingsSideAAiProfileBaselineButton.clicked -= HandleGeneralSettingsSideAAiProfileBaselineClicked;
+        }
+
+        if (generalSettingsSideAAiProfileCalculusButton != null)
+        {
+            generalSettingsSideAAiProfileCalculusButton.clicked -= HandleGeneralSettingsSideAAiProfileCalculusClicked;
+        }
+
+        if (generalSettingsSideBAiProfileBaselineButton != null)
+        {
+            generalSettingsSideBAiProfileBaselineButton.clicked -= HandleGeneralSettingsSideBAiProfileBaselineClicked;
+        }
+
+        if (generalSettingsSideBAiProfileCalculusButton != null)
+        {
+            generalSettingsSideBAiProfileCalculusButton.clicked -= HandleGeneralSettingsSideBAiProfileCalculusClicked;
+        }
+
         if (generalSettingsAIVsAiMatchCount1Button != null)
         {
             generalSettingsAIVsAiMatchCount1Button.clicked -= HandleGeneralSettingsAIVsAiMatchCount1Clicked;
@@ -1181,6 +1238,11 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsAIVsAiBatchSpeedVeryFastButton != null)
         {
             generalSettingsAIVsAiBatchSpeedVeryFastButton.clicked -= HandleGeneralSettingsAIVsAiBatchSpeedVeryFastClicked;
+        }
+
+        if (generalSettingsAIVsAiBatchSpeedUltraFastButton != null)
+        {
+            generalSettingsAIVsAiBatchSpeedUltraFastButton.clicked -= HandleGeneralSettingsAIVsAiBatchSpeedUltraFastClicked;
         }
 
         if (generalSettingsWatchAIVsAIToggle != null)
@@ -1306,10 +1368,7 @@ public class MainMenuUITKView : MonoBehaviour
             return;
         }
 
-        ShowMultiplayerPanel();
-        RefreshGamesList();
-        RefreshMultiplayerRefreshCountdown();
-        SetStatus(mainMenuController != null ? mainMenuController.CurrentImportStatus : string.Empty);
+        OpenMultiplayerPanelOrRedirect(requestControllerOpen: false);
     }
 
     private void HandleContinueClicked()
@@ -1327,19 +1386,12 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HandleMultiplayerClicked()
     {
-        if (mainMenuController != null)
-        {
-            mainMenuController.OpenMultiplayerScreen();
-        }
-
-        ShowMultiplayerPanel();
-        RefreshGamesList();
-        RefreshMultiplayerRefreshCountdown();
-        SetStatus(mainMenuController != null ? mainMenuController.CurrentImportStatus : string.Empty);
+        OpenMultiplayerPanelOrRedirect(requestControllerOpen: true);
     }
 
     private void HandleProfileClicked()
     {
+        profileOpenedFromMultiplayerRedirect = false;
         ShowProfilePanel();
     }
 
@@ -1422,6 +1474,30 @@ public class MainMenuUITKView : MonoBehaviour
         RefreshGeneralSettingsSelectionState();
     }
 
+    private void HandleGeneralSettingsSideAAiProfileBaselineClicked()
+    {
+        selectedSideAAIProfile = TurnManager.AIDebugProfile.Baseline;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsSideAAiProfileCalculusClicked()
+    {
+        selectedSideAAIProfile = TurnManager.AIDebugProfile.Calculus;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsSideBAiProfileBaselineClicked()
+    {
+        selectedSideBAIProfile = TurnManager.AIDebugProfile.Baseline;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsSideBAiProfileCalculusClicked()
+    {
+        selectedSideBAIProfile = TurnManager.AIDebugProfile.Calculus;
+        RefreshGeneralSettingsSelectionState();
+    }
+
     private void HandleGeneralSettingsAIVsAiMatchCount1Clicked()
     {
         selectedAIVsAIMatchCount = 1;
@@ -1464,6 +1540,12 @@ public class MainMenuUITKView : MonoBehaviour
         RefreshGeneralSettingsSelectionState();
     }
 
+    private void HandleGeneralSettingsAIVsAiBatchSpeedUltraFastClicked()
+    {
+        selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.UltraFast;
+        RefreshGeneralSettingsSelectionState();
+    }
+
     private void HandleGeneralSettingsWatchAIVsAIChanged(ChangeEvent<bool> evt)
     {
         selectedEnableAIVsAIDebugMode = evt != null && evt.newValue;
@@ -1499,7 +1581,9 @@ public class MainMenuUITKView : MonoBehaviour
                 selectedAIVsAIMatchCount,
                 selectedAIVsAIBatchSpeedPreset,
                 selectedSideAAIRecruitVariant,
-                selectedSideBAIRecruitVariant);
+                selectedSideBAIRecruitVariant,
+                selectedSideAAIProfile,
+                selectedSideBAIProfile);
             started = true;
         }
         else if (pendingGeneralSettingsMode == PendingGeneralSettingsMode.PlayByPost)
@@ -1585,6 +1669,17 @@ public class MainMenuUITKView : MonoBehaviour
     {
         CommitOrRestoreTypedDisplayNameInput();
         PlayerPrefs.Save();
+
+        bool returnToMultiplayer = profileOpenedFromMultiplayerRedirect &&
+            LocalPlayerProfileStore.HasRecognizableTypedDisplayName(profileData.TypedDisplayName);
+        profileOpenedFromMultiplayerRedirect = false;
+
+        if (returnToMultiplayer)
+        {
+            OpenMultiplayerPanelOrRedirect(requestControllerOpen: true);
+            return;
+        }
+
         ShowMainPanel();
     }
 
@@ -1621,22 +1716,10 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         string normalized = LocalPlayerProfileStore.NormalizeTypedDisplayName(profileTypedDisplayNameInput.value);
-        if (LocalPlayerProfileStore.IsValidTypedDisplayName(normalized))
+        string committedTypedDisplayName = LocalPlayerProfileStore.SetTypedDisplayName(normalized);
+        if (!string.Equals(profileData.TypedDisplayName, committedTypedDisplayName, System.StringComparison.Ordinal))
         {
-            if (!string.Equals(profileData.TypedDisplayName, normalized, System.StringComparison.Ordinal))
-            {
-                profileData.TypedDisplayName = LocalPlayerProfileStore.SetTypedDisplayName(normalized);
-                ClearProfileStatus();
-            }
-
-            profileTypedDisplayNameInput.SetValueWithoutNotify(profileData.TypedDisplayName ?? string.Empty);
-            return;
-        }
-
-        if (!LocalPlayerProfileStore.IsValidTypedDisplayName(profileData.TypedDisplayName))
-        {
-            profileData.TypedDisplayName = LocalPlayerProfileStore.SetTypedDisplayName(
-                LocalPlayerProfileStore.GenerateValidTypedDisplayNameFallback());
+            profileData.TypedDisplayName = committedTypedDisplayName;
             ClearProfileStatus();
         }
 
@@ -1988,6 +2071,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void ShowMainPanel()
     {
+        profileOpenedFromMultiplayerRedirect = false;
         ResetActiveGamesElasticOffset();
         StopRefreshCountdownTimer();
         HideGeneralSettingsPanel();
@@ -2016,6 +2100,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void ShowMultiplayerPanel()
     {
+        profileOpenedFromMultiplayerRedirect = false;
         ResetActiveGamesElasticOffset();
         HideGeneralSettingsPanel();
         SetDetailsConfirmState(false);
@@ -2039,6 +2124,28 @@ public class MainMenuUITKView : MonoBehaviour
         StartRefreshCountdownTimer();
         RefreshMultiplayerRefreshCountdown();
         TryShowPendingCreateSuccessPanel();
+    }
+
+    private void OpenMultiplayerPanelOrRedirect(bool requestControllerOpen)
+    {
+        profileData = LocalPlayerProfileStore.GetOrCreateProfile();
+        if (!LocalPlayerProfileStore.HasRecognizableTypedDisplayName(profileData.TypedDisplayName))
+        {
+            profileOpenedFromMultiplayerRedirect = true;
+            ShowProfilePanel();
+            return;
+        }
+
+        if (requestControllerOpen && mainMenuController != null)
+        {
+            mainMenuController.OpenMultiplayerScreen();
+            return;
+        }
+
+        ShowMultiplayerPanel();
+        RefreshGamesList();
+        RefreshMultiplayerRefreshCountdown();
+        SetStatus(mainMenuController != null ? mainMenuController.CurrentImportStatus : string.Empty);
     }
 
     private void HideDetailsPanel()
@@ -2172,6 +2279,8 @@ public class MainMenuUITKView : MonoBehaviour
         selectedEnableAIVsAIDebugMode = false;
         selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
         selectedSideBAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
+        selectedSideAAIProfile = TurnManager.AIDebugProfile.Baseline;
+        selectedSideBAIProfile = TurnManager.AIDebugProfile.Baseline;
         selectedAIVsAIMatchCount = 1;
         selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.Normal;
         HideCreateSuccessPanel();
@@ -2332,6 +2441,18 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsSideBAiStyleRiderFocusButton,
             selectedSideBAIRecruitVariant == TurnManager.AIRecruitVariant.RiderFocus);
         UpdateGeneralSettingsSelectionButton(
+            generalSettingsSideAAiProfileBaselineButton,
+            selectedSideAAIProfile == TurnManager.AIDebugProfile.Baseline);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsSideAAiProfileCalculusButton,
+            selectedSideAAIProfile == TurnManager.AIDebugProfile.Calculus);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsSideBAiProfileBaselineButton,
+            selectedSideBAIProfile == TurnManager.AIDebugProfile.Baseline);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsSideBAiProfileCalculusButton,
+            selectedSideBAIProfile == TurnManager.AIDebugProfile.Calculus);
+        UpdateGeneralSettingsSelectionButton(
             generalSettingsAIVsAiMatchCount1Button,
             selectedAIVsAIMatchCount == 1);
         UpdateGeneralSettingsSelectionButton(
@@ -2352,6 +2473,9 @@ public class MainMenuUITKView : MonoBehaviour
         UpdateGeneralSettingsSelectionButton(
             generalSettingsAIVsAiBatchSpeedVeryFastButton,
             selectedAIVsAIBatchSpeedPreset == TurnManager.AIVsAIBatchSpeedPreset.VeryFast);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsAIVsAiBatchSpeedUltraFastButton,
+            selectedAIVsAIBatchSpeedPreset == TurnManager.AIVsAIBatchSpeedPreset.UltraFast);
     }
 
     private static void UpdateGeneralSettingsSelectionButton(Button button, bool selected)
@@ -2857,6 +2981,10 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsSideAAiStyleRiderFocusButton = null;
         generalSettingsSideBAiStyleDefaultButton = null;
         generalSettingsSideBAiStyleRiderFocusButton = null;
+        generalSettingsSideAAiProfileBaselineButton = null;
+        generalSettingsSideAAiProfileCalculusButton = null;
+        generalSettingsSideBAiProfileBaselineButton = null;
+        generalSettingsSideBAiProfileCalculusButton = null;
         generalSettingsAIVsAiMatchCount1Button = null;
         generalSettingsAIVsAiMatchCount10Button = null;
         generalSettingsAIVsAiMatchCount50Button = null;
@@ -2864,6 +2992,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAIVsAiBatchSpeedNormalButton = null;
         generalSettingsAIVsAiBatchSpeedFastButton = null;
         generalSettingsAIVsAiBatchSpeedVeryFastButton = null;
+        generalSettingsAIVsAiBatchSpeedUltraFastButton = null;
         generalSettingsConfirmButton = null;
         generalSettingsBackButton = null;
         detailsOpenButton = null;

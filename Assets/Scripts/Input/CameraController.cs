@@ -8,6 +8,15 @@ public class CameraController : MonoBehaviour
     private const float FitMarginTilesPerEdge = 0.5f;
     private const float PanOverscrollTilesPerEdge = 15f;
 
+    private struct PendingCameraRestoreState
+    {
+        public bool hasPendingState;
+        public Vector3 position;
+        public float orthographicSize;
+        public float fieldOfView;
+        public bool isOrthographic;
+    }
+
     [Header("General")]
     public float panSpeed = 1f;          // how fast the camera moves
     public float pixelsPerUnit = 16f;    // MUST match your sprite PPU
@@ -30,6 +39,30 @@ public class CameraController : MonoBehaviour
 
     private Camera cam;
     private bool initialFocusApplied;
+    private static PendingCameraRestoreState pendingRestoreState;
+
+    public static void CaptureCurrentStateForNextSceneLoad()
+    {
+        Camera cameraToCapture = Camera.main;
+        if (cameraToCapture == null)
+        {
+            return;
+        }
+
+        pendingRestoreState = new PendingCameraRestoreState
+        {
+            hasPendingState = true,
+            position = cameraToCapture.transform.position,
+            orthographicSize = cameraToCapture.orthographicSize,
+            fieldOfView = cameraToCapture.fieldOfView,
+            isOrthographic = cameraToCapture.orthographic
+        };
+    }
+
+    public static void ClearPendingRestoreState()
+    {
+        pendingRestoreState = default;
+    }
 
     private void Awake()
     {
@@ -157,6 +190,16 @@ public class CameraController : MonoBehaviour
             return false;
         }
 
+        if (turnManager.IsAIVsAIDebugModeEnabledForUi())
+        {
+            ClearPendingRestoreState();
+        }
+        else if (TryApplyPendingRestoreState())
+        {
+            initialFocusApplied = true;
+            return true;
+        }
+
         Vector3 focusPosition = GetBoardCenter(turnManager.gridManager);
         if (TryGetOwnedCityFocus(turnManager, out Vector3 cityFocus))
         {
@@ -169,6 +212,36 @@ public class CameraController : MonoBehaviour
 
         SetCameraWorldPosition(focusPosition);
         initialFocusApplied = true;
+        return true;
+    }
+
+    private bool TryApplyPendingRestoreState()
+    {
+        if (!pendingRestoreState.hasPendingState || cam == null)
+        {
+            return false;
+        }
+
+        if (cam.orthographic == pendingRestoreState.isOrthographic)
+        {
+            if (cam.orthographic)
+            {
+                cam.orthographicSize = Mathf.Clamp(
+                    pendingRestoreState.orthographicSize,
+                    minOrthoSize,
+                    GetDynamicMaxOrthographicSize());
+            }
+            else
+            {
+                cam.fieldOfView = Mathf.Clamp(
+                    pendingRestoreState.fieldOfView,
+                    minFieldOfView,
+                    maxFieldOfView);
+            }
+        }
+
+        SetCameraWorldPosition(pendingRestoreState.position);
+        pendingRestoreState = default;
         return true;
     }
 

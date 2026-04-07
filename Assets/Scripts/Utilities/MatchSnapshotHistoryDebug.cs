@@ -81,10 +81,45 @@ public static class MatchSnapshotHistoryStore
     {
         public bool actingSideIsPlayerOwned;
         public bool viewerIsPlayerOwned;
+        public string aiProfile;
         public int visibleTileCount;
         public List<SnapshotHistoryGridCoord> visibleTiles = new List<SnapshotHistoryGridCoord>();
         public List<SnapshotHistoryVisibleUnitSummary> visibleEnemyUnits = new List<SnapshotHistoryVisibleUnitSummary>();
         public List<SnapshotHistoryCityThreatSummary> threatenedFriendlyCities = new List<SnapshotHistoryCityThreatSummary>();
+        public SnapshotHistoryAIReasoning aiReasoning;
+    }
+
+    [Serializable]
+    public sealed class SnapshotHistoryAIReasoning
+    {
+        public string aiDifficulty;
+        public string aiRecruitVariant;
+        public bool aiHasPerfectInfo;
+        public bool hasKeyCity;
+        public int keyCityX;
+        public int keyCityY;
+        public int currentGold;
+        public int visibleEnemyUnitCount;
+        public int visibleFriendlyUnitCount;
+        public int estimatedEnemyGoldMin;
+        public int estimatedEnemyGoldMax;
+        public int estimatedPossibleEnemyRecruitCountMin;
+        public int estimatedPossibleEnemyRecruitCountMax;
+        public bool canWinThisTurn;
+        public bool couldLoseKeyCityNextTurn;
+        public bool canDefendKeyCityThisTurn;
+        public int unsafeTilesNearKeyCityCount;
+        public int immediateThreatSourceCountNearKeyCity;
+        public int visibleFastEnemyCountNearKeyCity;
+        public int defenderCountNearKeyCity;
+        public int defenderDeficitNearKeyCity;
+        public int candidateActionCount;
+        public int chosenActionScore;
+        public int secondBestActionScore;
+        public string chosenActionReason;
+        public string chosenRecruitReason;
+        public string chosenDefensePlanSummary;
+        public string chosenActionSummary;
     }
 
     [Serializable]

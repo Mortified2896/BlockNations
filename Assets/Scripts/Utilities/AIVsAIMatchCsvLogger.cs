@@ -6,12 +6,12 @@ using UnityEngine;
 public static class AIVsAIMatchCsvLogger
 {
     private const string RootFolderName = "DevMatchResults";
-    private const string MatchResultsFileName = "ai_vs_ai_match_results.csv";
-    private const string RunSummaryFileName = "ai_vs_ai_run_summaries.csv";
+    private const string MatchResultsFileName = "ai_vs_ai_match_results_v3.csv";
+    private const string RunSummaryFileName = "ai_vs_ai_run_summaries_v3.csv";
     private const string MatchHeader =
-        "timestampUtc,runId,matchIndexInRun,plannedMatchCountInRun,appVersion,mapSizePreset,boardWidth,boardHeight,gameMode,sideAAIConfig,sideBAIConfig,winner,totalTurnCount,sideAFinalCityCount,sideBFinalCityCount,sideAFinalUnitCount,sideBFinalUnitCount";
+        "timestampUtc,runId,matchIndexInRun,plannedMatchCountInRun,appVersion,mapSizePreset,boardWidth,boardHeight,gameMode,sideAAIConfig,sideBAIConfig,sideAProfile,sideBProfile,winner,totalTurnCount,sideAFinalCityCount,sideBFinalCityCount,sideAFinalUnitCount,sideBFinalUnitCount";
     private const string RunSummaryHeader =
-        "timestampUtc,runId,appVersion,mapSizePreset,boardWidth,boardHeight,gameMode,sideAAIConfig,sideBAIConfig,matchCount,sideAWins,sideBWins,drawsOrAborts,sideAWinRate,averageTotalTurnCount";
+        "timestampUtc,runId,appVersion,mapSizePreset,boardWidth,boardHeight,gameMode,sideAAIConfig,sideBAIConfig,matchCount,sideAWins,sideBWins,drawsOrAborts,trueDraws,aborts,sideAWinRate,averageTotalTurnCount,comparisonMode,trackedEntityLabel,seat1Label,seat2Label,pairedStatsApplicable,completePairCount,unmatchedIgnoredGameCount,pairedMeanScoreRate,pairedEffectSize,pairedPValue,pairedThreshold,seatEffectSize,seat1GameCount,seat1Wins,seat1Draws,seat1Losses,seat1ScoreRate,seat1EffectSize,seat2GameCount,seat2Wins,seat2Draws,seat2Losses,seat2ScoreRate,seat2EffectSize";
 
     public sealed class MatchResult
     {
@@ -26,6 +26,8 @@ public static class AIVsAIMatchCsvLogger
         public string gameMode;
         public string sideAAIConfig;
         public string sideBAIConfig;
+        public string sideAProfile;
+        public string sideBProfile;
         public string winner;
         public int totalTurnCount;
         public int sideAFinalCityCount;
@@ -49,8 +51,36 @@ public static class AIVsAIMatchCsvLogger
         public int sideAWins;
         public int sideBWins;
         public int drawsOrAborts;
+        public int trueDraws;
+        public int aborts;
+        public float elapsedSeconds;
+        public float turnsPerSecond;
         public float sideAWinRate;
         public float averageTotalTurnCount;
+        public string comparisonMode;
+        public string trackedEntityLabel;
+        public string seat1Label;
+        public string seat2Label;
+        public bool pairedStatsApplicable;
+        public int completePairCount;
+        public int unmatchedIgnoredGameCount;
+        public float pairedMeanScoreRate;
+        public float pairedEffectSize;
+        public float pairedPValue = -1f;
+        public string pairedThreshold;
+        public float seatEffectSize;
+        public int seat1GameCount;
+        public int seat1Wins;
+        public int seat1Draws;
+        public int seat1Losses;
+        public float seat1ScoreRate;
+        public float seat1EffectSize;
+        public int seat2GameCount;
+        public int seat2Wins;
+        public int seat2Draws;
+        public int seat2Losses;
+        public float seat2ScoreRate;
+        public float seat2EffectSize;
     }
 
     public static string GetResultsFilePath()
@@ -119,6 +149,8 @@ public static class AIVsAIMatchCsvLogger
             Escape(result.gameMode),
             Escape(result.sideAAIConfig),
             Escape(result.sideBAIConfig),
+            Escape(result.sideAProfile),
+            Escape(result.sideBProfile),
             Escape(result.winner),
             result.totalTurnCount.ToString(),
             result.sideAFinalCityCount.ToString(),
@@ -143,8 +175,34 @@ public static class AIVsAIMatchCsvLogger
             summary.sideAWins.ToString(),
             summary.sideBWins.ToString(),
             summary.drawsOrAborts.ToString(),
+            summary.trueDraws.ToString(),
+            summary.aborts.ToString(),
             summary.sideAWinRate.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture),
-            summary.averageTotalTurnCount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture));
+            summary.averageTotalTurnCount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+            Escape(summary.comparisonMode),
+            Escape(summary.trackedEntityLabel),
+            Escape(summary.seat1Label),
+            Escape(summary.seat2Label),
+            summary.pairedStatsApplicable ? "true" : "false",
+            summary.completePairCount.ToString(),
+            summary.unmatchedIgnoredGameCount.ToString(),
+            FormatFloat(summary.pairedMeanScoreRate, 4),
+            FormatFloat(summary.pairedEffectSize, 4),
+            summary.pairedPValue >= 0f ? FormatFloat(summary.pairedPValue, 4) : string.Empty,
+            Escape(summary.pairedThreshold),
+            FormatFloat(summary.seatEffectSize, 4),
+            summary.seat1GameCount.ToString(),
+            summary.seat1Wins.ToString(),
+            summary.seat1Draws.ToString(),
+            summary.seat1Losses.ToString(),
+            FormatFloat(summary.seat1ScoreRate, 4),
+            FormatFloat(summary.seat1EffectSize, 4),
+            summary.seat2GameCount.ToString(),
+            summary.seat2Wins.ToString(),
+            summary.seat2Draws.ToString(),
+            summary.seat2Losses.ToString(),
+            FormatFloat(summary.seat2ScoreRate, 4),
+            FormatFloat(summary.seat2EffectSize, 4));
     }
 
     private static void AppendLine(string path, string header, string line)
@@ -174,5 +232,11 @@ public static class AIVsAIMatchCsvLogger
         }
 
         return "\"" + safeValue.Replace("\"", "\"\"") + "\"";
+    }
+
+    private static string FormatFloat(float value, int decimals)
+    {
+        string format = decimals <= 2 ? "0.00" : "0.0000";
+        return value.ToString(format, System.Globalization.CultureInfo.InvariantCulture);
     }
 }

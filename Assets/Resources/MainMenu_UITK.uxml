@@ -88,8 +88,8 @@
                     <ui:VisualElement class="profile-title-line" />
                 </ui:VisualElement>
 
-                <ui:Label name="ProfileUsernameValueLabel" text="" class="profile-username-value" />
-                <ui:Button name="ProfileRegenerateButton" text="Regenerate Name" class="menu-button profile-action-button profile-action-button-primary ui-text-button" />
+                <ui:Label name="ProfileUsernameValueLabel" text="" class="profile-username-value" style="display: none;" />
+                <ui:Button name="ProfileRegenerateButton" text="Regenerate Name" class="menu-button profile-action-button profile-action-button-primary ui-text-button" style="display: none;" />
 
                 <ui:VisualElement class="profile-divider" />
 
@@ -153,10 +153,20 @@
                                 <ui:Button name="GeneralSettingsSideAAiStyleDefaultButton" text="Default" class="menu-button general-settings-option-button" />
                                 <ui:Button name="GeneralSettingsSideAAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                             </ui:VisualElement>
+                            <ui:Label text="Side A AI Profile" class="general-settings-section-label" />
+                            <ui:VisualElement class="general-settings-option-row">
+                                <ui:Button name="GeneralSettingsSideAAiProfileBaselineButton" text="Baseline" class="menu-button general-settings-option-button" />
+                                <ui:Button name="GeneralSettingsSideAAiProfileCalculusButton" text="Calculus AI" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                            </ui:VisualElement>
                             <ui:Label text="Side B AI Style" class="general-settings-section-label" />
                             <ui:VisualElement class="general-settings-option-row">
                                 <ui:Button name="GeneralSettingsSideBAiStyleDefaultButton" text="Default" class="menu-button general-settings-option-button" />
                                 <ui:Button name="GeneralSettingsSideBAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                            </ui:VisualElement>
+                            <ui:Label text="Side B AI Profile" class="general-settings-section-label" />
+                            <ui:VisualElement class="general-settings-option-row">
+                                <ui:Button name="GeneralSettingsSideBAiProfileBaselineButton" text="Baseline" class="menu-button general-settings-option-button" />
+                                <ui:Button name="GeneralSettingsSideBAiProfileCalculusButton" text="Calculus AI" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                             </ui:VisualElement>
                             <ui:Label text="Match Count" class="general-settings-section-label" />
                             <ui:VisualElement class="general-settings-option-grid">
@@ -176,7 +186,8 @@
                                     <ui:Button name="GeneralSettingsAIVsAiBatchSpeedFastButton" text="Fast" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                                 </ui:VisualElement>
                                 <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
-                                    <ui:Button name="GeneralSettingsAIVsAiBatchSpeedVeryFastButton" text="Very Fast" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                                    <ui:Button name="GeneralSettingsAIVsAiBatchSpeedVeryFastButton" text="Very Fast" class="menu-button general-settings-option-button" />
+                                    <ui:Button name="GeneralSettingsAIVsAiBatchSpeedUltraFastButton" text="Ultra Fast" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                                 </ui:VisualElement>
                             </ui:VisualElement>
                         </ui:VisualElement>

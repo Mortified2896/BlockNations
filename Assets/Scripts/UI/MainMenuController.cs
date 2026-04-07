@@ -244,7 +244,9 @@ public class MainMenuController : MonoBehaviour
         int aiVsAiMatchCount = 1,
         TurnManager.AIVsAIBatchSpeedPreset aiVsAiBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.Normal,
         TurnManager.AIRecruitVariant sideARecruitVariant = TurnManager.AIRecruitVariant.Default,
-        TurnManager.AIRecruitVariant sideBRecruitVariant = TurnManager.AIRecruitVariant.Default)
+        TurnManager.AIRecruitVariant sideBRecruitVariant = TurnManager.AIRecruitVariant.Default,
+        TurnManager.AIDebugProfile sideAProfile = TurnManager.AIDebugProfile.Baseline,
+        TurnManager.AIDebugProfile sideBProfile = TurnManager.AIDebugProfile.Baseline)
     {
         StartVsAIGame(
             difficulty,
@@ -255,7 +257,9 @@ public class MainMenuController : MonoBehaviour
             aiVsAiMatchCount,
             aiVsAiBatchSpeedPreset,
             sideARecruitVariant,
-            sideBRecruitVariant);
+            sideBRecruitVariant,
+            sideAProfile,
+            sideBProfile);
     }
 
     private void StartVsAIGame(
@@ -267,7 +271,9 @@ public class MainMenuController : MonoBehaviour
         int aiVsAiMatchCount = 1,
         TurnManager.AIVsAIBatchSpeedPreset aiVsAiBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.Normal,
         TurnManager.AIRecruitVariant sideARecruitVariant = TurnManager.AIRecruitVariant.Default,
-        TurnManager.AIRecruitVariant sideBRecruitVariant = TurnManager.AIRecruitVariant.Default)
+        TurnManager.AIRecruitVariant sideBRecruitVariant = TurnManager.AIRecruitVariant.Default,
+        TurnManager.AIDebugProfile sideAProfile = TurnManager.AIDebugProfile.Baseline,
+        TurnManager.AIDebugProfile sideBProfile = TurnManager.AIDebugProfile.Baseline)
     {
         GameModeSelection.SetPendingMode(TurnManager.GameMode.VsAI);
         AIDifficultySelection.SetPending(difficulty);
@@ -276,6 +282,8 @@ public class MainMenuController : MonoBehaviour
             enableAIVsAIDebugMode,
             sideARecruitVariant,
             sideBRecruitVariant,
+            sideAProfile,
+            sideBProfile,
             aiVsAiBatchSpeedPreset);
         if (enableAIVsAIDebugMode)
         {

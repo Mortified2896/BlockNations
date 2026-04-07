@@ -34,4 +34,10 @@ public static class SaveLoadRequest
         pendingPath = null;
         return true;
     }
+
+    public static void ClearPending()
+    {
+        pending = false;
+        pendingPath = null;
+    }
 }
