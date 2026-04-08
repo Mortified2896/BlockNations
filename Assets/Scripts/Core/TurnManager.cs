@@ -150,6 +150,7 @@ public class TurnManager : MonoBehaviour
     private ITurnTransport turnTransport;
     private ITurnTelemetrySink telemetrySink = NullTurnTelemetrySink.Instance;
     private Coroutine playByPostPollRoutine;
+    private Coroutine pbpIncomingAudioRoutine;
     private int lastAppliedTurnNumberForPolling = 0;
     private bool isPlayByPostFetchInProgress = false;
     private bool isApplyingFetchedPlayByPostSnapshot = false;
@@ -170,6 +171,12 @@ public class TurnManager : MonoBehaviour
     private string aiVsAiCompletedTournamentAutoRestartMessage = string.Empty;
     private const string AIVsAISimulationCompleteTitle = "AI Simulation Complete";
     private const string AIVsAISimulationAbortedTitle = "AI Simulation Aborted";
+    private const string AIVsAITournamentPausedTitle = "Tournament Paused";
+    private const string BottomRightControlNextLabel = "Next";
+    private const string BottomRightControlBatchPauseLabel = "Pause";
+    private const string BottomRightControlBatchResumeLabel = "Resume";
+    private const string BottomRightControlBatchStopLabel = "Stop";
+    private const string BottomRightControlBatchContinueTournamentLabel = "Continue Tournament";
     private const string AIVsAIDebugAbortWinner = "Abort";
     private const int AIVsAIBatchTurnLimit = 200;
     private const float AIVsAIFastTurnDelaySeconds = 0.2f;
@@ -323,13 +330,40 @@ public class TurnManager : MonoBehaviour
     private enum GameOverTertiaryAction
     {
         None,
-        RestartAIVsAIBatch
+        RestartAIVsAIBatch,
+        ResumeAIVsAIBatch
     }
 
     private enum GameOverPrimaryUiAction
     {
         ReplayCurrentMode,
         CopyGameOverMessage
+    }
+
+    public enum BottomRightControlKind
+    {
+        DefaultNext,
+        BatchPause,
+        BatchResume,
+        BatchStopPendingRestart,
+        BatchContinueTournament
+    }
+
+    public readonly struct BottomRightControlUiState
+    {
+        public readonly BottomRightControlKind kind;
+        public readonly string label;
+        public readonly bool interactable;
+
+        public BottomRightControlUiState(
+            BottomRightControlKind kind,
+            string label,
+            bool interactable)
+        {
+            this.kind = kind;
+            this.label = string.IsNullOrWhiteSpace(label) ? BottomRightControlNextLabel : label;
+            this.interactable = interactable;
+        }
     }
 
     private PbpEndgamePrimaryAction pbpEndgamePrimaryAction = PbpEndgamePrimaryAction.None;
@@ -355,7 +389,9 @@ public class TurnManager : MonoBehaviour
     private bool gameOverUiTertiaryButtonVisible = false;
     private bool gameOverUiTertiaryButtonInteractable = false;
     private GameOverTertiaryAction gameOverUiTertiaryAction = GameOverTertiaryAction.None;
+    private bool aiVsAiPausedTournamentSummaryVisible = false;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private string lastBottomRightControlTraceSignature = string.Empty;
     private AIVsAIBatchRunController.SimulationSettings gameOverUiRepeatAIVsAISimulationSettings =
         AIVsAIBatchRunController.GetDefaultSimulationSettings();
 #endif
@@ -402,6 +438,12 @@ public class TurnManager : MonoBehaviour
         public bool opponentSeen;
     }
 
+    private struct PbpIncomingAudioUnitSummary
+    {
+        public int playerUnitCount;
+        public int opponentUnitCount;
+    }
+
     [System.Serializable]
     private class GameSave
     {
@@ -437,19 +479,54 @@ public class TurnManager : MonoBehaviour
     public event System.Action<bool, string> PlayByPostSubmitResult;
     public event System.Action<bool, string> PlayByPostFetchResult;
     public bool IsGameOverUiVisible =>
-        gameOver &&
+        (gameOver || aiVsAiPausedTournamentSummaryVisible) &&
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         !aiVsAiDebugRestartPending;
 #else
         true;
 #endif
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private bool HasAIVsAIBatchRunActiveForUi()
+    {
+        return AIVsAIBatchRunController.TryGetActiveRunSnapshot(out _);
+    }
+
+    public bool IsAIVsAIBatchRunActiveForUi()
+    {
+        return HasAIVsAIBatchRunActiveForUi();
+    }
+
+    public bool IsAIVsAIBatchHudVisibleForUi()
+    {
+        return AIVsAIBatchRunController.TryGetHudSnapshot(out _);
+    }
+
     public bool IsAIVsAICompletedTournamentAutoRestartPendingForUi() =>
-        IsAIVsAIDebugModeActive() &&
         aiVsAiDebugRestartPending &&
         aiVsAiCompletedTournamentAutoRestartPending;
+
+    public bool IsContinuousTournamentBatchControlActiveForUi()
+    {
+        if (IsAIVsAICompletedTournamentAutoRestartPendingForUi())
+        {
+            return true;
+        }
+
+        if (AIVsAIBatchRunController.TryGetActiveSimulationSettings(out AIVsAIBatchRunController.SimulationSettings activeSettings))
+        {
+            return activeSettings.mode == AIVsAIBatchRunController.SimulationMode.Tournament &&
+                   activeSettings.tournamentRunContinuously;
+        }
+
+        return gameOver &&
+               gameOverUiRepeatAIVsAISimulationSettings.mode == AIVsAIBatchRunController.SimulationMode.Tournament &&
+               gameOverUiRepeatAIVsAISimulationSettings.tournamentRunContinuously;
+    }
 #else
+    public bool IsAIVsAIBatchRunActiveForUi() => false;
+    public bool IsAIVsAIBatchHudVisibleForUi() => false;
     public bool IsAIVsAICompletedTournamentAutoRestartPendingForUi() => false;
+    public bool IsContinuousTournamentBatchControlActiveForUi() => false;
 #endif
     public string GameOverUiTitle =>
         string.IsNullOrWhiteSpace(gameOverUiTitle) ? DefaultGameOverTitle : gameOverUiTitle;
@@ -1262,6 +1339,7 @@ public class TurnManager : MonoBehaviour
         gameOverUiTertiaryButtonVisible = false;
         gameOverUiTertiaryButtonInteractable = false;
         gameOverUiTertiaryAction = GameOverTertiaryAction.None;
+        aiVsAiPausedTournamentSummaryVisible = false;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         gameOverUiRepeatAIVsAISimulationSettings = AIVsAIBatchRunController.GetDefaultSimulationSettings();
         gameOverUiRepeatSideARecruitVariant = AIRecruitVariant.Default;
@@ -1475,6 +1553,23 @@ public class TurnManager : MonoBehaviour
     {
         if (!gameOverUiTertiaryButtonVisible || !gameOverUiTertiaryButtonInteractable)
         {
+            return;
+        }
+
+        if (gameOverUiTertiaryAction == GameOverTertiaryAction.ResumeAIVsAIBatch)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            aiVsAiPausedTournamentSummaryVisible = false;
+            aiVsAiDebugPaused = false;
+            AIVsAIBatchRunController.SetPaused(false);
+            ResetGameOverUiState();
+            if (gameOver && HasAIVsAIBatchRunActiveForUi())
+            {
+                QueueAIVsAIDebugMatchRestart();
+                return;
+            }
+            RefreshEndTurnButtonInteractable(force: true);
+#endif
             return;
         }
 
@@ -3130,12 +3225,12 @@ public class TurnManager : MonoBehaviour
 
     public bool IsAIVsAIDebugPausedForUi()
     {
-        return IsAIVsAIDebugModeActive() && aiVsAiDebugPaused;
+        return currentMode == GameMode.VsAI && aiVsAiDebugPaused;
     }
 
     public bool CanToggleAIVsAIDebugPauseForUi()
     {
-        return IsAIVsAIDebugModeActive() && !aiVsAiDebugRestartPending;
+        return CanUseAIVsAIBatchPauseResumeControlForUi();
     }
 
     public bool CanCancelAIVsAICompletedTournamentAutoRestartForUi()
@@ -3143,15 +3238,194 @@ public class TurnManager : MonoBehaviour
         return IsAIVsAICompletedTournamentAutoRestartPendingForUi();
     }
 
-    public void ToggleAIVsAIDebugPause()
+    private bool ShouldUseAIVsAIBatchPauseResumeControlForUi()
     {
-        if (!IsAIVsAIDebugModeActive() || aiVsAiDebugRestartPending)
+        return IsAIVsAIBatchHudVisibleForUi() ||
+               (currentMode == GameMode.VsAI &&
+                IsAIVsAIDebugModeActive() &&
+                (!gameOver || aiVsAiDebugRestartPending));
+    }
+
+    private bool CanUseAIVsAIBatchPauseResumeControlForUi()
+    {
+        if (!ShouldUseAIVsAIBatchPauseResumeControlForUi())
+        {
+            return false;
+        }
+
+        return HasAIVsAIBatchRunActiveForUi() || CanPauseContinuousTournamentBetweenMatchesForUi();
+    }
+
+    private BottomRightControlUiState ResolveBottomRightControlForUiInternal(string checkpoint = null, bool forceTrace = false)
+    {
+        BottomRightControlUiState resolvedState;
+        if (IsAIVsAICompletedTournamentAutoRestartPendingForUi())
+        {
+            resolvedState = new BottomRightControlUiState(
+                BottomRightControlKind.BatchStopPendingRestart,
+                BottomRightControlBatchStopLabel,
+                CanCancelAIVsAICompletedTournamentAutoRestartForUi());
+            TraceBottomRightControlState(resolvedState, checkpoint, forceTrace);
+            return resolvedState;
+        }
+
+        if (IsContinuousTournamentBatchControlActiveForUi() && IsGameOverUiVisible)
+        {
+            resolvedState = new BottomRightControlUiState(
+                BottomRightControlKind.BatchContinueTournament,
+                BottomRightControlBatchContinueTournamentLabel,
+                GameOverUiTertiaryButtonVisible && GameOverUiTertiaryButtonInteractable);
+            TraceBottomRightControlState(resolvedState, checkpoint, forceTrace);
+            return resolvedState;
+        }
+
+        if (ShouldUseAIVsAIBatchPauseResumeControlForUi())
+        {
+            bool isPaused = IsAIVsAIDebugPausedForUi();
+            resolvedState = new BottomRightControlUiState(
+                isPaused ? BottomRightControlKind.BatchResume : BottomRightControlKind.BatchPause,
+                isPaused ? BottomRightControlBatchResumeLabel : BottomRightControlBatchPauseLabel,
+                CanUseAIVsAIBatchPauseResumeControlForUi());
+            TraceBottomRightControlState(resolvedState, checkpoint, forceTrace);
+            return resolvedState;
+        }
+
+        resolvedState = new BottomRightControlUiState(
+            BottomRightControlKind.DefaultNext,
+            BottomRightControlNextLabel,
+            CanAdvanceTurn());
+        TraceBottomRightControlState(resolvedState, checkpoint, forceTrace);
+        return resolvedState;
+    }
+
+    public BottomRightControlUiState ResolveBottomRightControlForUi()
+    {
+        return ResolveBottomRightControlForUiInternal();
+    }
+
+    public void TraceBottomRightControlCheckpointForUi(string checkpoint)
+    {
+        ResolveBottomRightControlForUiInternal(checkpoint, forceTrace: true);
+    }
+
+    public void OnBottomRightControlPressedForUi()
+    {
+        BottomRightControlUiState controlState = ResolveBottomRightControlForUi();
+        if (!controlState.interactable)
         {
             return;
         }
 
+        switch (controlState.kind)
+        {
+            case BottomRightControlKind.BatchStopPendingRestart:
+                CancelAIVsAICompletedTournamentAutoRestartForUi();
+                return;
+
+            case BottomRightControlKind.BatchContinueTournament:
+                OnGameOverTertiaryButtonPressed();
+                return;
+
+            case BottomRightControlKind.BatchPause:
+            case BottomRightControlKind.BatchResume:
+                ToggleAIVsAIDebugPause();
+                return;
+
+            case BottomRightControlKind.DefaultNext:
+            default:
+                OnEndTurnButtonPressed();
+                return;
+        }
+    }
+
+    public void ToggleAIVsAIDebugPause()
+    {
+        if (!HasAIVsAIBatchRunActiveForUi())
+        {
+            return;
+        }
+
+        if (aiVsAiDebugRestartPending)
+        {
+            if (TryPauseContinuousTournamentBetweenMatchesForUi())
+            {
+                return;
+            }
+
+            return;
+        }
+
         aiVsAiDebugPaused = !aiVsAiDebugPaused;
+        AIVsAIBatchRunController.SetPaused(aiVsAiDebugPaused);
+        if (aiVsAiDebugPaused)
+        {
+            TryShowPausedContinuousTournamentSummary();
+        }
+        else if (aiVsAiPausedTournamentSummaryVisible)
+        {
+            ResetGameOverUiState();
+        }
+
         RefreshEndTurnButtonInteractable(force: true);
+    }
+
+    private bool CanPauseContinuousTournamentBetweenMatchesForUi()
+    {
+        return currentMode == GameMode.VsAI &&
+               gameOver &&
+               aiVsAiDebugRestartPending &&
+               !IsAIVsAICompletedTournamentAutoRestartPendingForUi() &&
+               HasAIVsAIBatchRunActiveForUi() &&
+               IsContinuousTournamentBatchControlActiveForUi();
+    }
+
+    private bool TryPauseContinuousTournamentBetweenMatchesForUi()
+    {
+        if (!CanPauseContinuousTournamentBetweenMatchesForUi())
+        {
+            return false;
+        }
+
+        aiVsAiDebugRestartPending = false;
+        aiVsAiDebugPaused = true;
+        AIVsAIBatchRunController.SetPaused(true);
+        TryShowPausedContinuousTournamentSummary();
+        RefreshEndTurnButtonInteractable(force: true);
+        return true;
+    }
+
+    private void TraceBottomRightControlState(
+        BottomRightControlUiState state,
+        string checkpoint,
+        bool forceTrace)
+    {
+        bool hasHudSnapshot = AIVsAIBatchRunController.TryGetHudSnapshot(out _);
+        bool hasActiveRunSnapshot = AIVsAIBatchRunController.TryGetActiveRunSnapshot(out _);
+        bool continuousTournamentBatchControlActive = IsContinuousTournamentBatchControlActiveForUi();
+        bool shouldTrace =
+            hasHudSnapshot ||
+            hasActiveRunSnapshot ||
+            aiVsAiDebugRestartPending ||
+            aiVsAiCompletedTournamentAutoRestartPending ||
+            aiVsAiDebugPaused ||
+            continuousTournamentBatchControlActive ||
+            IsAIVsAIDebugModeActive();
+        if (!shouldTrace)
+        {
+            return;
+        }
+
+        string signature =
+            $"{state.kind}|{state.label}|{state.interactable}|mode={currentMode}|gameOver={gameOver}|paused={aiVsAiDebugPaused}|restartPending={aiVsAiDebugRestartPending}|completedRestartPending={aiVsAiCompletedTournamentAutoRestartPending}|gameOverUi={IsGameOverUiVisible}|hudSnapshot={hasHudSnapshot}|activeRunSnapshot={hasActiveRunSnapshot}|continuousBatch={continuousTournamentBatchControlActive}";
+        if (!forceTrace &&
+            string.Equals(lastBottomRightControlTraceSignature, signature, System.StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        lastBottomRightControlTraceSignature = signature;
+        string checkpointLabel = string.IsNullOrWhiteSpace(checkpoint) ? "StateChanged" : checkpoint;
+        Debug.Log($"[AIVsAIBottomRight] checkpoint={checkpointLabel} {signature}");
     }
 
     public void CancelAIVsAICompletedTournamentAutoRestartForUi()
@@ -3167,11 +3441,65 @@ public class TurnManager : MonoBehaviour
         ClearAIVsAICompletedTournamentAutoRestartState();
         RefreshEndTurnButtonInteractable(force: true);
     }
+
+    private bool TryShowPausedContinuousTournamentSummary()
+    {
+        if (!IsContinuousTournamentBatchControlActiveForUi() ||
+            !AIVsAIBatchRunController.TryGetActiveRunSnapshot(out AIVsAIBatchRunController.ActiveRunSnapshot snapshot) ||
+            snapshot.simulationMode != AIVsAIBatchRunController.SimulationMode.Tournament)
+        {
+            return false;
+        }
+
+        aiVsAiPausedTournamentSummaryVisible = true;
+        SetGameOverUiTitle(AIVsAITournamentPausedTitle);
+        SetGameOverPrimaryCopyTextButtonState("Copy Text", true);
+        SetGameOverSecondaryButtonState(string.Empty, visible: false, interactable: false, action: GameOverSecondaryAction.None);
+        SetGameOverTertiaryButtonState(
+            "Continue Tournament",
+            visible: true,
+            interactable: true,
+            action: GameOverTertiaryAction.ResumeAIVsAIBatch);
+        ShowGameOverPopup(BuildPausedTournamentSummaryMessage(snapshot), writeLog: false);
+        return true;
+    }
+
+    private string BuildPausedTournamentSummaryMessage(AIVsAIBatchRunController.ActiveRunSnapshot snapshot)
+    {
+        string standingsPreview = string.IsNullOrWhiteSpace(snapshot.tournamentStandingsPreview)
+            ? "Standings pending"
+            : snapshot.tournamentStandingsPreview;
+        string remainingTimeText = snapshot.gamesPerSecond > 0.0001f
+            ? FormatDuration(snapshot.remainingTimeSeconds)
+            : "Estimating";
+        string tournamentTypeLabel = "Tournament";
+        if (AIVsAIBatchRunController.TryGetActiveSimulationSettings(out AIVsAIBatchRunController.SimulationSettings activeSettings))
+        {
+            tournamentTypeLabel = AIVsAIBatchRunController.GetTournamentTypeDisplayName(activeSettings.tournamentType);
+        }
+
+        return
+            $"Current tournament paused.\n" +
+            $"Format: {tournamentTypeLabel}\n" +
+            $"Participants: {snapshot.participantCount}\n" +
+            $"Pairings: {snapshot.scheduledPairings}\n" +
+            $"Completed games: {snapshot.completedGames}/{snapshot.scheduledGames}\n" +
+            $"Draws: {snapshot.trueDraws}\n" +
+            $"Aborts: {snapshot.aborts}\n" +
+            $"Elapsed time: {FormatDuration(snapshot.elapsedSeconds)}\n" +
+            $"Estimated time remaining: {remainingTimeText}\n" +
+            $"Games/sec: {snapshot.gamesPerSecond:0.00}\n" +
+            $"Standings preview:\n{standingsPreview}";
+    }
 #else
     public bool IsAIVsAIDebugModeEnabledForUi() => false;
     public bool IsAIVsAIDebugPausedForUi() => false;
     public bool CanToggleAIVsAIDebugPauseForUi() => false;
     public bool CanCancelAIVsAICompletedTournamentAutoRestartForUi() => false;
+    public BottomRightControlUiState ResolveBottomRightControlForUi() =>
+        new BottomRightControlUiState(BottomRightControlKind.DefaultNext, BottomRightControlNextLabel, CanAdvanceTurn());
+    public void TraceBottomRightControlCheckpointForUi(string checkpoint) { }
+    public void OnBottomRightControlPressedForUi() => OnEndTurnButtonPressed();
     public void ToggleAIVsAIDebugPause() { }
     public void CancelAIVsAICompletedTournamentAutoRestartForUi() { }
 #endif
@@ -3322,6 +3650,7 @@ public class TurnManager : MonoBehaviour
                     yield break;
 
                 BeginSideTurn(isPlayerTurn, playTurnStartSound: true);
+                yield return null;
             }
         }
         finally
@@ -3428,8 +3757,14 @@ public class TurnManager : MonoBehaviour
 
         if (currentMode == GameMode.VsAI && enableAIVsAIDebugMode)
         {
+            if (AIVsAIBatchRunController.HasActiveRun)
+            {
+                return;
+            }
+
             AIVsAIBatchRunController.BeginNewRun(
                 simulationSettings,
+                aiVsAiBatchSpeedPreset,
                 aiVsAiSideARecruitVariant,
                 aiVsAiSideBRecruitVariant,
                 aiVsAiSideAFeatures,
@@ -4779,6 +5114,8 @@ public class TurnManager : MonoBehaviour
             return false;
         }
 
+        TraceBottomRightControlCheckpointForUi("MatchCompletionStart");
+
         AIVsAIBatchRunController.SimulationSettings completedRunSettings = default;
         bool hadCompletedRunSettings = IsAIVsAIBatchModeActive() &&
                                        AIVsAIBatchRunController.TryGetActiveSimulationSettings(out completedRunSettings);
@@ -4800,6 +5137,7 @@ public class TurnManager : MonoBehaviour
 
         if (!isRunComplete)
         {
+            TraceBottomRightControlCheckpointForUi("MatchCompletionQueuedRestart");
             QueueAIVsAIDebugMatchRestart();
             return true;
         }
@@ -4807,19 +5145,6 @@ public class TurnManager : MonoBehaviour
         if (runSummary != null)
         {
             AIVsAIMatchCsvLogger.TryAppendRunSummary(runSummary);
-            SetGameOverUiTitle(runSummary.runEndedNormally ? AIVsAISimulationCompleteTitle : AIVsAISimulationAbortedTitle);
-            SetGameOverPrimaryCopyTextButtonState("Copy Text", true);
-            SetGameOverSecondaryButtonState(
-                "Back",
-                visible: true,
-                interactable: true,
-                action: GameOverSecondaryAction.BackToAIVsAISettings);
-            SetGameOverTertiaryButtonState(
-                "Run Again",
-                visible: true,
-                interactable: true,
-                action: GameOverTertiaryAction.RestartAIVsAIBatch);
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
             gameOverUiRepeatAIVsAISimulationSettings = hadCompletedRunSettings
                 ? AIVsAIBatchRunController.SanitizeSimulationSettings(completedRunSettings)
                 : AIVsAIBatchRunController.SanitizeSimulationSettings(
@@ -4839,6 +5164,19 @@ public class TurnManager : MonoBehaviour
             gameOverUiRepeatSideBFeatures = runSummary.baseSideBFeatures;
             gameOverUiRepeatSideAProfile = runSummary.baseSideAProfile;
             gameOverUiRepeatSideBProfile = runSummary.baseSideBProfile;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            SetGameOverUiTitle(runSummary.runEndedNormally ? AIVsAISimulationCompleteTitle : AIVsAISimulationAbortedTitle);
+            SetGameOverPrimaryCopyTextButtonState("Copy Text", true);
+            SetGameOverSecondaryButtonState(
+                "Back",
+                visible: true,
+                interactable: true,
+                action: GameOverSecondaryAction.BackToAIVsAISettings);
+            SetGameOverTertiaryButtonState(
+                GetAIVsAIBatchCompletionContinueLabel(runSummary),
+                visible: true,
+                interactable: true,
+                action: GameOverTertiaryAction.RestartAIVsAIBatch);
 #endif
             string completionMessage = BuildAIVsAISimulationCompletionMessage(runSummary);
             bool shouldAutoRestartCompletedTournament =
@@ -4857,6 +5195,7 @@ public class TurnManager : MonoBehaviour
                     $"matches={runSummary.matchCount}/{runSummary.tournamentScheduledGameCount} " +
                     $"participants={runSummary.tournamentParticipantCount} " +
                     $"continuous={gameOverUiRepeatAIVsAISimulationSettings.tournamentRunContinuously}");
+                TraceBottomRightControlCheckpointForUi("CompletedTournamentQueuedAutoRestart");
                 QueueCompletedTournamentAutoRestart(completionMessage);
                 return true;
             }
@@ -4894,6 +5233,21 @@ public class TurnManager : MonoBehaviour
         aiVsAiCompletedTournamentAutoRestartPending = true;
         aiVsAiCompletedTournamentAutoRestartMessage = completionMessage ?? string.Empty;
         QueueAIVsAIDebugMatchRestart();
+    }
+
+    private string GetAIVsAIBatchCompletionContinueLabel(AIVsAIMatchCsvLogger.RunSummary runSummary)
+    {
+        if (runSummary != null &&
+            runSummary.simulationMode == AIVsAIBatchRunController.SimulationMode.Tournament &&
+            runSummary.runEndedNormally)
+        {
+            return gameOverUiRepeatAIVsAISimulationSettings.mode == AIVsAIBatchRunController.SimulationMode.Tournament &&
+                   gameOverUiRepeatAIVsAISimulationSettings.tournamentRunContinuously
+                ? "Continue Tournament"
+                : "Run Again";
+        }
+
+        return "Run Again";
     }
 
     private static bool ShouldAutoRestartCompletedTournament(
@@ -5217,6 +5571,7 @@ public class TurnManager : MonoBehaviour
         }
 
         aiVsAiDebugRestartPending = true;
+        TraceBottomRightControlCheckpointForUi("RestartQueued");
         RefreshEndTurnButtonInteractable(force: true);
         StartCoroutine(RestartAIVsAIDebugMatchAfterDelay());
     }
@@ -5274,6 +5629,7 @@ public class TurnManager : MonoBehaviour
             nextSideAProfile,
             nextSideBProfile);
 
+        TraceBottomRightControlCheckpointForUi("RestartCoroutineBeforeSceneLoad");
         ClearAIVsAICompletedTournamentAutoRestartState();
         Time.timeScale = 1f;
         CameraController.ClearPendingRestoreState();
@@ -5299,6 +5655,7 @@ public class TurnManager : MonoBehaviour
 
         AIVsAIBatchRunController.SimulationSettings sanitizedSettings =
             AIVsAIBatchRunController.SanitizeSimulationSettings(simulationSettings);
+        AIVsAIBatchRunController.SetPendingSimulationSettings(sanitizedSettings);
         if (sanitizedSettings.mode == AIVsAIBatchRunController.SimulationMode.Tournament)
         {
             AIVsAIBatchRunController.TryGetInitialTournamentMatchSettings(
@@ -6072,6 +6429,102 @@ public class TurnManager : MonoBehaviour
         return "load_file";
     }
 
+    private static PbpIncomingAudioUnitSummary BuildPbpIncomingAudioSummaryFromLiveUnits(Unit[] units)
+    {
+        PbpIncomingAudioUnitSummary summary = default;
+        if (units == null)
+            return summary;
+
+        for (int i = 0; i < units.Length; i++)
+        {
+            Unit unit = units[i];
+            if (unit == null || !unit.gameObject.activeInHierarchy)
+                continue;
+
+            if (unit.isPlayerOwned)
+            {
+                summary.playerUnitCount++;
+            }
+            else
+            {
+                summary.opponentUnitCount++;
+            }
+        }
+
+        return summary;
+    }
+
+    private static PbpIncomingAudioUnitSummary BuildPbpIncomingAudioSummaryFromSavedUnits(List<SavedUnit> units)
+    {
+        PbpIncomingAudioUnitSummary summary = default;
+        if (units == null)
+            return summary;
+
+        for (int i = 0; i < units.Count; i++)
+        {
+            SavedUnit unit = units[i];
+            if (unit == null)
+                continue;
+
+            if (unit.isPlayerOwned)
+            {
+                summary.playerUnitCount++;
+            }
+            else
+            {
+                summary.opponentUnitCount++;
+            }
+        }
+
+        return summary;
+    }
+
+    private void TryPresentIncomingPlayByPostAudio(PbpIncomingAudioUnitSummary beforeSummary, PbpIncomingAudioUnitSummary afterSummary)
+    {
+        if (!isApplyingFetchedPlayByPostSnapshot ||
+            currentMode != GameMode.PlayByPost ||
+            SoundManager.Instance == null)
+        {
+            return;
+        }
+
+        int playerDeaths = Mathf.Max(0, beforeSummary.playerUnitCount - afterSummary.playerUnitCount);
+        int opponentDeaths = Mathf.Max(0, beforeSummary.opponentUnitCount - afterSummary.opponentUnitCount);
+        int totalDeaths = playerDeaths + opponentDeaths;
+        if (totalDeaths <= 0)
+            return;
+
+        int playbackCount = Mathf.Clamp(totalDeaths, 1, 2);
+        if (pbpIncomingAudioRoutine != null)
+        {
+            StopCoroutine(pbpIncomingAudioRoutine);
+            pbpIncomingAudioRoutine = null;
+        }
+
+        pbpIncomingAudioRoutine = StartCoroutine(PlayIncomingPbpDeathAudio(playbackCount));
+    }
+
+    private IEnumerator PlayIncomingPbpDeathAudio(int playbackCount)
+    {
+        int remaining = Mathf.Max(0, playbackCount);
+        for (int i = 0; i < remaining; i++)
+        {
+            if (SoundManager.Instance == null)
+            {
+                pbpIncomingAudioRoutine = null;
+                yield break;
+            }
+
+            SoundManager.Instance.PlayUnitDown();
+            if (i < remaining - 1)
+            {
+                yield return new WaitForSecondsRealtime(0.08f);
+            }
+        }
+
+        pbpIncomingAudioRoutine = null;
+    }
+
     private bool TryBuildSaveJsonForDisk(out string json)
     {
         json = null;
@@ -6459,6 +6912,7 @@ private void PBpDebugSyncNow_Context()
                 save.mode,
                 GameMode.PlayByPost.ToString(),
                 System.StringComparison.Ordinal);
+            bool shouldPresentIncomingPbpAudio = loadedModeIsPbp && isApplyingFetchedPlayByPostSnapshot;
             int migrationSourceProtocolVersion = 0;
             if (loadedModeIsPbp)
             {
@@ -6573,9 +7027,17 @@ private void PBpDebugSyncNow_Context()
             int pbpSeat = 0;
             bool pbpHasSeat = false;
             string pbpSeatTextForLog = "<none>";
+            PbpIncomingAudioUnitSummary incomingPbpBeforeSummary = default;
+            PbpIncomingAudioUnitSummary incomingPbpAfterSummary = default;
 
             // Clear units
             Unit[] existingUnits = Object.FindObjectsByType<Unit>();
+            if (shouldPresentIncomingPbpAudio)
+            {
+                incomingPbpBeforeSummary = BuildPbpIncomingAudioSummaryFromLiveUnits(existingUnits);
+                incomingPbpAfterSummary = BuildPbpIncomingAudioSummaryFromSavedUnits(save.units);
+            }
+
             foreach (Unit u in existingUnits)
             {
                 if (u != null)
@@ -6751,6 +7213,11 @@ private void PBpDebugSyncNow_Context()
                 lastAppliedTurnNumberForPolling = turnNumber;
             }
             RefreshEndTurnButtonInteractable(force: true);
+            if (shouldPresentIncomingPbpAudio)
+            {
+                TryPresentIncomingPlayByPostAudio(incomingPbpBeforeSummary, incomingPbpAfterSummary);
+            }
+
             if (currentMode == GameMode.PlayByPost)
             {
                 if (!string.IsNullOrWhiteSpace(rawLoadedJson))

@@ -245,6 +245,12 @@ public class TileHoverManager : MonoBehaviour
 
             if (hoveredTile == null)
             {
+                // Clicked empty space: clear world/tactical selection UI too.
+                if (UnitSelectionManager.Instance != null)
+                {
+                    UnitSelectionManager.Instance.ClearSelection();
+                }
+
                 // Clicked empty space: deselect current tile
                 if (selectedTile != null)
                 {

@@ -6,5 +6,18 @@
             <ui:Label name="GoldLabel" text="Gold 0" class="gameplay-top-hud-label gameplay-top-hud-gold" />
             <ui:Label name="PbpStatusLabel" text="" class="gameplay-top-hud-label gameplay-top-hud-status" />
         </ui:VisualElement>
+        <ui:VisualElement name="TournamentStandingsPanel" class="gameplay-tournament-standings-panel">
+            <ui:Label name="TournamentStandingsTitle" text="Standings" class="gameplay-tournament-standings-title" />
+            <ui:VisualElement class="gameplay-tournament-standings-header">
+                <ui:Label name="TournamentStandingsRankHeader" text="#" class="gameplay-tournament-standings-cell gameplay-tournament-standings-cell-rank gameplay-tournament-standings-cell-header" />
+                <ui:Label text="Variant" class="gameplay-tournament-standings-cell gameplay-tournament-standings-cell-variant gameplay-tournament-standings-cell-header" />
+                <ui:Label text="G" class="gameplay-tournament-standings-cell gameplay-tournament-standings-cell-games gameplay-tournament-standings-cell-header" />
+                <ui:Label text="W" class="gameplay-tournament-standings-cell gameplay-tournament-standings-cell-small gameplay-tournament-standings-cell-header" />
+                <ui:Label text="L" class="gameplay-tournament-standings-cell gameplay-tournament-standings-cell-small gameplay-tournament-standings-cell-header" />
+                <ui:Label text="D" class="gameplay-tournament-standings-cell gameplay-tournament-standings-cell-small gameplay-tournament-standings-cell-header" />
+                <ui:Label name="TournamentStandingsScoreHeader" text="Score %" class="gameplay-tournament-standings-cell gameplay-tournament-standings-cell-score gameplay-tournament-standings-cell-header" />
+            </ui:VisualElement>
+            <ui:VisualElement name="TournamentStandingsRows" class="gameplay-tournament-standings-rows" />
+        </ui:VisualElement>
     </ui:VisualElement>
 </ui:UXML>

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -6,6 +7,7 @@ using UnityEngine.UIElements;
 public sealed class GameplayTopHudUITKView : MonoBehaviour
 {
     private const string ThemeResourceName = "GameplayTopHud_UITK_Theme";
+    private const float TournamentStandingsDesktopWidthThreshold = 1200f;
 
     [Header("Spike Toggle")]
     [SerializeField] private bool enableGameplayTopHudUITK = true;
@@ -20,6 +22,11 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
     private VisualElement root;
     private VisualElement hudRoot;
+    private VisualElement tournamentStandingsPanel;
+    private VisualElement tournamentStandingsRows;
+    private Label tournamentStandingsTitleLabel;
+    private Label tournamentStandingsRankHeaderLabel;
+    private Label tournamentStandingsScoreHeaderLabel;
     private Label turnLabel;
     private Label goldLabel;
     private Label statusLabel;
@@ -170,6 +177,11 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
         root = currentRoot;
         hudRoot = root.Q<VisualElement>("GameplayTopHudRoot") ?? root;
+        tournamentStandingsPanel = root.Q<VisualElement>("TournamentStandingsPanel");
+        tournamentStandingsRows = root.Q<VisualElement>("TournamentStandingsRows");
+        tournamentStandingsTitleLabel = root.Q<Label>("TournamentStandingsTitle");
+        tournamentStandingsRankHeaderLabel = root.Q<Label>("TournamentStandingsRankHeader");
+        tournamentStandingsScoreHeaderLabel = root.Q<Label>("TournamentStandingsScoreHeader");
         turnLabel = root.Q<Label>("TurnLabel");
         goldLabel = root.Q<Label>("GoldLabel");
         statusLabel = root.Q<Label>("PbpStatusLabel");
@@ -303,6 +315,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
                 statusLabel.style.display = DisplayStyle.Flex;
             }
 
+            RefreshTournamentStandingsPanel();
             return;
         }
 
@@ -326,6 +339,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             $"{pairProgressLabel} | W{snapshot.sideAWins} L{snapshot.sideBWins} D{snapshot.trueDraws} A{snapshot.aborts}";
         goldLabel.text =
             $"{FormatDurationCompact(snapshot.elapsedSeconds)} elapsed | {FormatDurationCompact(snapshot.remainingTimeSeconds)} left";
+        SetTournamentStandingsPanelVisible(false);
 
         if (statusLabel == null)
         {
@@ -349,6 +363,8 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         {
             statusLabel.style.width = defaultStatusLabelWidth;
         }
+
+        SetTournamentStandingsPanelVisible(false);
     }
 
     private string BuildTurnLabel()
@@ -389,6 +405,107 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         }
 
         return $"{minutes}m {seconds:00}s";
+    }
+
+    private void RefreshTournamentStandingsPanel()
+    {
+        if (tournamentStandingsPanel == null || tournamentStandingsRows == null)
+        {
+            return;
+        }
+
+        List<AIVsAIBatchRunController.TournamentStandingSnapshot> standings = null;
+        bool shouldShow =
+            Screen.width >= TournamentStandingsDesktopWidthThreshold &&
+            AIVsAIBatchRunController.TryGetTournamentStandingsSnapshot(out standings) &&
+            standings != null &&
+            standings.Count > 0;
+
+        SetTournamentStandingsPanelVisible(shouldShow);
+        if (!shouldShow)
+        {
+            tournamentStandingsRows.Clear();
+            return;
+        }
+
+        bool isRanked = false;
+        for (int i = 0; i < standings.Count; i++)
+        {
+            if (standings[i].isRanked)
+            {
+                isRanked = true;
+                break;
+            }
+        }
+
+        if (tournamentStandingsTitleLabel != null)
+        {
+            tournamentStandingsTitleLabel.text = isRanked ? "Standings" : "Participants";
+        }
+
+        if (tournamentStandingsRankHeaderLabel != null)
+        {
+            tournamentStandingsRankHeaderLabel.text = isRanked ? "#" : string.Empty;
+        }
+
+        if (tournamentStandingsScoreHeaderLabel != null)
+        {
+            tournamentStandingsScoreHeaderLabel.text = isRanked ? "Score %" : string.Empty;
+        }
+
+        tournamentStandingsRows.Clear();
+        for (int i = 0; i < standings.Count; i++)
+        {
+            AIVsAIBatchRunController.TournamentStandingSnapshot standing = standings[i];
+            tournamentStandingsRows.Add(CreateStandingsRow(standing));
+        }
+    }
+
+    private void SetTournamentStandingsPanelVisible(bool visible)
+    {
+        if (tournamentStandingsPanel == null)
+        {
+            return;
+        }
+
+        tournamentStandingsPanel.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
+    }
+
+    private static VisualElement CreateStandingsRow(AIVsAIBatchRunController.TournamentStandingSnapshot standing)
+    {
+        VisualElement row = new VisualElement();
+        row.AddToClassList("gameplay-tournament-standings-row");
+        row.Add(CreateStandingsCell(
+            standing.isRanked ? standing.rank.ToString() : string.Empty,
+            "gameplay-tournament-standings-cell-rank"));
+        row.Add(CreateStandingsCell(
+            standing.label,
+            "gameplay-tournament-standings-cell-variant"));
+        row.Add(CreateStandingsCell(
+            standing.games.ToString(),
+            "gameplay-tournament-standings-cell-games"));
+        row.Add(CreateStandingsCell(
+            standing.wins.ToString(),
+            "gameplay-tournament-standings-cell-small"));
+        row.Add(CreateStandingsCell(
+            standing.losses.ToString(),
+            "gameplay-tournament-standings-cell-small"));
+        row.Add(CreateStandingsCell(
+            standing.draws.ToString(),
+            "gameplay-tournament-standings-cell-small"));
+        row.Add(CreateStandingsCell(
+            standing.isRanked ? standing.scoreRate.ToString("P0") : "--",
+            "gameplay-tournament-standings-cell-score"));
+        return row;
+    }
+
+    private static Label CreateStandingsCell(string text, string modifierClass)
+    {
+        Label label = new Label(text);
+        label.AddToClassList("gameplay-tournament-standings-cell");
+        label.AddToClassList(modifierClass);
+        label.tooltip = text;
+        return label;
     }
 
     private void ApplySafeArea(bool force)
@@ -489,6 +606,11 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         responsiveSizeTierController.Reset(root);
         root = null;
         hudRoot = null;
+        tournamentStandingsPanel = null;
+        tournamentStandingsRows = null;
+        tournamentStandingsTitleLabel = null;
+        tournamentStandingsRankHeaderLabel = null;
+        tournamentStandingsScoreHeaderLabel = null;
         turnLabel = null;
         goldLabel = null;
         statusLabel = null;

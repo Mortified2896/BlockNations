@@ -88,6 +88,41 @@ public static class AIVsAIBatchRunController
         public bool tournamentRunContinuously;
     }
 
+    public readonly struct TournamentStandingSnapshot
+    {
+        public readonly int rank;
+        public readonly bool isRanked;
+        public readonly string label;
+        public readonly int wins;
+        public readonly int losses;
+        public readonly int draws;
+        public readonly int aborts;
+        public readonly int games;
+        public readonly double scoreRate;
+
+        public TournamentStandingSnapshot(
+            int rank,
+            bool isRanked,
+            string label,
+            int wins,
+            int losses,
+            int draws,
+            int aborts,
+            int games,
+            double scoreRate)
+        {
+            this.rank = rank;
+            this.isRanked = isRanked;
+            this.label = label ?? string.Empty;
+            this.wins = wins;
+            this.losses = losses;
+            this.draws = draws;
+            this.aborts = aborts;
+            this.games = games;
+            this.scoreRate = scoreRate;
+        }
+    }
+
     public readonly struct ActiveRunSnapshot
     {
         public readonly SimulationMode simulationMode;
@@ -177,6 +212,7 @@ public static class AIVsAIBatchRunController
     private static SimulationSettings pendingSimulationSettings = GetDefaultSimulationSettings();
     private static bool hasPendingSimulationSettings;
     private static ActiveRun activeRun;
+    private static ContinuousTournamentSession continuousTournamentSession;
     private static float lastObservedGamesPerSecond = -1f;
 
     private sealed class ActiveRun
@@ -209,6 +245,10 @@ public static class AIVsAIBatchRunController
         public int aborts;
         public int totalTurnCount;
         public DateTime startedAtUtc;
+        public DateTime pausedAtUtc;
+        public float accumulatedPausedSeconds;
+        public bool isPaused;
+        public float estimatedGamesPerSecondBaseline;
         public string appVersion;
         public string mapSizePreset;
         public int boardWidth;
@@ -225,6 +265,22 @@ public static class AIVsAIBatchRunController
         public readonly List<AIVariant> tournamentParticipants = new List<AIVariant>();
         public readonly List<ScheduledMatch> tournamentSchedule = new List<ScheduledMatch>();
         public readonly List<CompletedMatchRecord> completedMatches = new List<CompletedMatchRecord>();
+    }
+
+    private sealed class ContinuousTournamentSession
+    {
+        public SimulationSettings settings;
+        public int completedCycles;
+        public int completedMatchCount;
+        public int sideAWins;
+        public int sideBWins;
+        public int drawsOrAborts;
+        public int trueDraws;
+        public int aborts;
+        public int totalTurnCount;
+        public float accumulatedElapsedSeconds;
+        public readonly List<AIVariant> tournamentParticipants = new List<AIVariant>();
+        public readonly List<ActiveRun.CompletedMatchRecord> completedMatches = new List<ActiveRun.CompletedMatchRecord>();
     }
 
     private readonly struct RunStopDecision
@@ -325,6 +381,7 @@ public static class AIVsAIBatchRunController
 
     private sealed class TournamentStanding
     {
+        public int participantIndex;
         public string label;
         public int wins;
         public int losses;
@@ -675,6 +732,7 @@ public static class AIVsAIBatchRunController
 
     public static void BeginNewRun(
         SimulationSettings settings,
+        TurnManager.AIVsAIBatchSpeedPreset speedPreset,
         TurnManager.AIRecruitVariant baseSideARecruitVariant,
         TurnManager.AIRecruitVariant baseSideBRecruitVariant,
         AILocalDecisionFeatures baseSideAFeatures,
@@ -688,6 +746,10 @@ public static class AIVsAIBatchRunController
             runId = Guid.NewGuid().ToString("N"),
             settings = sanitizedSettings,
             startedAtUtc = DateTime.UtcNow,
+            pausedAtUtc = default,
+            accumulatedPausedSeconds = 0f,
+            isPaused = false,
+            estimatedGamesPerSecondBaseline = GetEstimatedGamesPerSecond(speedPreset),
             baseSideARecruitVariant = baseSideARecruitVariant,
             baseSideBRecruitVariant = baseSideBRecruitVariant,
             baseSideAFeatures = baseSideAFeatures,
@@ -698,11 +760,13 @@ public static class AIVsAIBatchRunController
 
         if (sanitizedSettings.mode != SimulationMode.Tournament)
         {
+            continuousTournamentSession = null;
             return;
         }
 
         activeRun.tournamentParticipants.AddRange(BuildTournamentParticipants(sanitizedSettings.tournamentParticipantMask));
         activeRun.tournamentSchedule.AddRange(BuildTournamentSchedule(sanitizedSettings, activeRun.tournamentParticipants));
+        EnsureContinuousTournamentSession(activeRun);
         if (activeRun.tournamentParticipants.Count >= 2)
         {
             activeRun.baseSideARecruitVariant = activeRun.tournamentParticipants[0].baseModel;
@@ -752,6 +816,32 @@ public static class AIVsAIBatchRunController
         pendingSimulationSettings = GetDefaultSimulationSettings();
         hasPendingSimulationSettings = false;
         activeRun = null;
+        continuousTournamentSession = null;
+    }
+
+    public static void SetPaused(bool isPaused)
+    {
+        if (activeRun == null || activeRun.isPaused == isPaused)
+        {
+            return;
+        }
+
+        if (isPaused)
+        {
+            activeRun.isPaused = true;
+            activeRun.pausedAtUtc = DateTime.UtcNow;
+            return;
+        }
+
+        if (activeRun.pausedAtUtc != default)
+        {
+            activeRun.accumulatedPausedSeconds += Mathf.Max(
+                0f,
+                (float)(DateTime.UtcNow - activeRun.pausedAtUtc).TotalSeconds);
+        }
+
+        activeRun.isPaused = false;
+        activeRun.pausedAtUtc = default;
     }
 
     public static bool TryGetActiveRunSnapshot(out ActiveRunSnapshot snapshot)
@@ -762,13 +852,17 @@ public static class AIVsAIBatchRunController
             return false;
         }
 
-        float elapsedSeconds = Mathf.Max(0f, (float)(DateTime.UtcNow - activeRun.startedAtUtc).TotalSeconds);
-        float safeElapsedSeconds = Mathf.Max(0.001f, elapsedSeconds);
-        float gamesPerSecond = activeRun.completedMatchCount / safeElapsedSeconds;
+        float elapsedSeconds = GetEffectiveElapsedSeconds(activeRun);
+        float gamesPerSecond = ResolveSnapshotGamesPerSecond(activeRun, elapsedSeconds);
         UpdateObservedGamesPerSecond(gamesPerSecond);
 
         if (activeRun.settings.mode == SimulationMode.Tournament)
         {
+            if (TryBuildContinuousTournamentSnapshot(activeRun, elapsedSeconds, gamesPerSecond, out snapshot))
+            {
+                return true;
+            }
+
             int scheduledGames = activeRun.tournamentSchedule.Count;
             float remainingGames = Mathf.Max(0, scheduledGames - activeRun.completedMatchCount);
             float remainingTime = gamesPerSecond > 0.0001f ? remainingGames / gamesPerSecond : 0f;
@@ -793,7 +887,7 @@ public static class AIVsAIBatchRunController
                 certaintyThreshold: 0f,
                 decisiveEdgePoints: 0f,
                 isWaitingForBatchAfterThreshold: false,
-                tournamentStandingsPreview: BuildTournamentStandingsPreview(activeRun, 2));
+                tournamentStandingsPreview: BuildTournamentStandingsPreview(activeRun.tournamentParticipants, activeRun.completedMatches, 2));
             return true;
         }
 
@@ -856,6 +950,11 @@ public static class AIVsAIBatchRunController
         SimulationSettings settings = SanitizeSimulationSettings(pendingSimulationSettings);
         if (settings.mode == SimulationMode.Tournament)
         {
+            if (TryBuildPendingContinuousTournamentSnapshot(settings, out snapshot))
+            {
+                return true;
+            }
+
             TournamentEstimate estimate = EstimateTournament(settings, TurnManager.AIVsAIBatchSpeedPreset.UltraFast);
             snapshot = new ActiveRunSnapshot(
                 simulationMode: settings.mode,
@@ -902,6 +1001,95 @@ public static class AIVsAIBatchRunController
             decisiveEdgePoints: 0f,
             isWaitingForBatchAfterThreshold: false,
             tournamentStandingsPreview: string.Empty);
+        return true;
+    }
+
+    public static bool TryGetTournamentStandingsSnapshot(out List<TournamentStandingSnapshot> standings)
+    {
+        standings = null;
+
+        if (activeRun != null && activeRun.settings.mode == SimulationMode.Tournament)
+        {
+            bool hasCompletedGames = activeRun.completedMatches.Count > 0;
+            if (activeRun.settings.tournamentRunContinuously &&
+                continuousTournamentSession != null &&
+                ContinuousTournamentSessionMatches(
+                    continuousTournamentSession,
+                    activeRun.settings,
+                    activeRun.tournamentParticipants))
+            {
+                hasCompletedGames = hasCompletedGames || continuousTournamentSession.completedMatches.Count > 0;
+            }
+
+            if (!hasCompletedGames)
+            {
+                standings = BuildTournamentStandingSnapshots(
+                    activeRun.tournamentParticipants,
+                    isRanked: false);
+                return true;
+            }
+
+            List<TournamentStanding> activeStandings;
+            if (activeRun.settings.tournamentRunContinuously &&
+                continuousTournamentSession != null &&
+                ContinuousTournamentSessionMatches(
+                    continuousTournamentSession,
+                    activeRun.settings,
+                    activeRun.tournamentParticipants))
+            {
+                activeStandings = BuildSortedTournamentStandings(
+                    activeRun.tournamentParticipants,
+                    continuousTournamentSession.completedMatches,
+                    activeRun.completedMatches);
+            }
+            else
+            {
+                activeStandings = BuildSortedTournamentStandings(
+                    activeRun.tournamentParticipants,
+                activeRun.completedMatches);
+            }
+
+            standings = BuildTournamentStandingSnapshots(activeStandings, isRanked: true);
+            return true;
+        }
+
+        if (!hasPendingSimulationSettings)
+        {
+            return false;
+        }
+
+        SimulationSettings settings = SanitizeSimulationSettings(pendingSimulationSettings);
+        if (settings.mode != SimulationMode.Tournament)
+        {
+            return false;
+        }
+
+        List<TournamentStanding> pendingStandings;
+        if (continuousTournamentSession != null &&
+            ContinuousTournamentSessionMatches(
+                continuousTournamentSession,
+                settings,
+                continuousTournamentSession.tournamentParticipants))
+        {
+            if (continuousTournamentSession.completedMatches.Count <= 0)
+            {
+                standings = BuildTournamentStandingSnapshots(
+                    continuousTournamentSession.tournamentParticipants,
+                    isRanked: false);
+                return true;
+            }
+
+            pendingStandings = BuildSortedTournamentStandings(
+                continuousTournamentSession.tournamentParticipants,
+                continuousTournamentSession.completedMatches);
+            standings = BuildTournamentStandingSnapshots(pendingStandings, isRanked: true);
+            return true;
+        }
+
+        List<AIVariant> pendingParticipants = BuildTournamentParticipants(settings.tournamentParticipantMask);
+        standings = BuildTournamentStandingSnapshots(
+            pendingParticipants,
+            isRanked: false);
         return true;
     }
 
@@ -1010,7 +1198,212 @@ public static class AIVsAIBatchRunController
         }
 
         summary = BuildRunSummary(activeRun, decision);
+        AccumulateContinuousTournamentCycleIfNeeded(activeRun, summary, decision);
         activeRun = null;
+        return true;
+    }
+
+    private static void EnsureContinuousTournamentSession(ActiveRun run)
+    {
+        if (run == null ||
+            run.settings.mode != SimulationMode.Tournament ||
+            !run.settings.tournamentRunContinuously)
+        {
+            continuousTournamentSession = null;
+            return;
+        }
+
+        if (continuousTournamentSession != null &&
+            ContinuousTournamentSessionMatches(continuousTournamentSession, run.settings, run.tournamentParticipants))
+        {
+            return;
+        }
+
+        continuousTournamentSession = new ContinuousTournamentSession
+        {
+            settings = run.settings
+        };
+        continuousTournamentSession.tournamentParticipants.AddRange(run.tournamentParticipants);
+    }
+
+    private static bool ContinuousTournamentSessionMatches(
+        ContinuousTournamentSession session,
+        SimulationSettings settings,
+        List<AIVariant> participants)
+    {
+        if (session == null ||
+            settings.mode != SimulationMode.Tournament ||
+            !settings.tournamentRunContinuously)
+        {
+            return false;
+        }
+
+        if (session.settings.tournamentType != settings.tournamentType ||
+            session.settings.tournamentParticipantMask != settings.tournamentParticipantMask ||
+            session.settings.tournamentGamesPerPairing != settings.tournamentGamesPerPairing ||
+            session.settings.tournamentSeatSwap != settings.tournamentSeatSwap)
+        {
+            return false;
+        }
+
+        if (session.tournamentParticipants.Count != (participants != null ? participants.Count : 0))
+        {
+            return false;
+        }
+
+        for (int i = 0; i < session.tournamentParticipants.Count; i++)
+        {
+            if (session.tournamentParticipants[i].baseModel != participants[i].baseModel ||
+                session.tournamentParticipants[i].localFeatures != participants[i].localFeatures)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static void AccumulateContinuousTournamentCycleIfNeeded(
+        ActiveRun run,
+        AIVsAIMatchCsvLogger.RunSummary summary,
+        RunStopDecision decision)
+    {
+        if (run == null ||
+            summary == null ||
+            decision.stopReason != StopReason.TournamentScheduleCompleted ||
+            run.settings.mode != SimulationMode.Tournament ||
+            !run.settings.tournamentRunContinuously)
+        {
+            return;
+        }
+
+        EnsureContinuousTournamentSession(run);
+        if (continuousTournamentSession == null)
+        {
+            return;
+        }
+
+        continuousTournamentSession.completedCycles++;
+        continuousTournamentSession.completedMatchCount += run.completedMatchCount;
+        continuousTournamentSession.sideAWins += run.sideAWins;
+        continuousTournamentSession.sideBWins += run.sideBWins;
+        continuousTournamentSession.drawsOrAborts += run.drawsOrAborts;
+        continuousTournamentSession.trueDraws += run.trueDraws;
+        continuousTournamentSession.aborts += run.aborts;
+        continuousTournamentSession.totalTurnCount += run.totalTurnCount;
+        continuousTournamentSession.accumulatedElapsedSeconds += Mathf.Max(0f, summary.elapsedSeconds);
+        continuousTournamentSession.completedMatches.AddRange(run.completedMatches);
+    }
+
+    private static bool TryBuildContinuousTournamentSnapshot(
+        ActiveRun run,
+        float currentRunElapsedSeconds,
+        float currentRunGamesPerSecond,
+        out ActiveRunSnapshot snapshot)
+    {
+        snapshot = default;
+        if (run == null ||
+            run.settings.mode != SimulationMode.Tournament ||
+            !run.settings.tournamentRunContinuously ||
+            continuousTournamentSession == null ||
+            !ContinuousTournamentSessionMatches(continuousTournamentSession, run.settings, run.tournamentParticipants))
+        {
+            return false;
+        }
+
+        int scheduleGamesPerCycle = run.tournamentSchedule.Count;
+        int schedulePairingsPerCycle = GetRoundRobinPairingCount(run.tournamentParticipants.Count);
+        int completedGames = continuousTournamentSession.completedMatchCount + run.completedMatchCount;
+        int scheduledGames = Mathf.Max(scheduleGamesPerCycle, (continuousTournamentSession.completedCycles + 1) * scheduleGamesPerCycle);
+        int scheduledPairings = Mathf.Max(schedulePairingsPerCycle, (continuousTournamentSession.completedCycles + 1) * schedulePairingsPerCycle);
+        float elapsedSeconds = continuousTournamentSession.accumulatedElapsedSeconds + Mathf.Max(0f, currentRunElapsedSeconds);
+        float safeElapsedSeconds = Mathf.Max(0.001f, elapsedSeconds);
+        float gamesPerSecond = completedGames > 0
+            ? completedGames / safeElapsedSeconds
+            : currentRunGamesPerSecond;
+        float remainingGames = Mathf.Max(0, scheduledGames - completedGames);
+        float remainingTime = gamesPerSecond > 0.0001f ? remainingGames / gamesPerSecond : 0f;
+        float estimatedTotal = elapsedSeconds + remainingTime;
+        snapshot = new ActiveRunSnapshot(
+            simulationMode: run.settings.mode,
+            completedGames: completedGames,
+            scheduledGames: scheduledGames,
+            scheduledPairings: scheduledPairings,
+            participantCount: run.tournamentParticipants.Count,
+            sideAWins: continuousTournamentSession.sideAWins + run.sideAWins,
+            sideBWins: continuousTournamentSession.sideBWins + run.sideBWins,
+            trueDraws: continuousTournamentSession.trueDraws + run.trueDraws,
+            aborts: continuousTournamentSession.aborts + run.aborts,
+            decisiveGames: Mathf.Max(0, (continuousTournamentSession.sideAWins + run.sideAWins) + (continuousTournamentSession.sideBWins + run.sideBWins)),
+            batchSize: Math.Max(1, run.settings.tournamentGamesPerPairing * (run.settings.tournamentSeatSwap ? 2 : 1)),
+            elapsedSeconds: elapsedSeconds,
+            timeBudgetSeconds: estimatedTotal,
+            remainingTimeSeconds: remainingTime,
+            gamesPerSecond: gamesPerSecond,
+            bayesianSideABetterProbability: 0.5f,
+            certaintyThreshold: 0f,
+            decisiveEdgePoints: 0f,
+            isWaitingForBatchAfterThreshold: false,
+            tournamentStandingsPreview: BuildTournamentStandingsPreview(
+                run.tournamentParticipants,
+                continuousTournamentSession.completedMatches,
+                run.completedMatches,
+                2));
+        return true;
+    }
+
+    private static bool TryBuildPendingContinuousTournamentSnapshot(
+        SimulationSettings settings,
+        out ActiveRunSnapshot snapshot)
+    {
+        snapshot = default;
+        if (continuousTournamentSession == null ||
+            settings.mode != SimulationMode.Tournament ||
+            !settings.tournamentRunContinuously ||
+            !ContinuousTournamentSessionMatches(continuousTournamentSession, settings, continuousTournamentSession.tournamentParticipants))
+        {
+            return false;
+        }
+
+        int schedulePairingsPerCycle = GetRoundRobinPairingCount(continuousTournamentSession.tournamentParticipants.Count);
+        int scheduleGamesPerCycle = Math.Max(
+            1,
+            schedulePairingsPerCycle * Math.Max(1, settings.tournamentGamesPerPairing) * (settings.tournamentSeatSwap ? 2 : 1));
+        int scheduledGames = Mathf.Max(scheduleGamesPerCycle, (continuousTournamentSession.completedCycles + 1) * scheduleGamesPerCycle);
+        int scheduledPairings = Mathf.Max(schedulePairingsPerCycle, (continuousTournamentSession.completedCycles + 1) * schedulePairingsPerCycle);
+        float elapsedSeconds = Mathf.Max(0f, continuousTournamentSession.accumulatedElapsedSeconds);
+        float safeElapsedSeconds = Mathf.Max(0.001f, elapsedSeconds);
+        float gamesPerSecond = continuousTournamentSession.completedMatchCount > 0
+            ? continuousTournamentSession.completedMatchCount / safeElapsedSeconds
+            : GetEstimatedGamesPerSecond(TurnManager.AIVsAIBatchSpeedPreset.UltraFast);
+        float remainingGames = Mathf.Max(0, scheduledGames - continuousTournamentSession.completedMatchCount);
+        float remainingTime = gamesPerSecond > 0.0001f ? remainingGames / gamesPerSecond : 0f;
+        float estimatedTotal = elapsedSeconds + remainingTime;
+
+        snapshot = new ActiveRunSnapshot(
+            simulationMode: settings.mode,
+            completedGames: continuousTournamentSession.completedMatchCount,
+            scheduledGames: scheduledGames,
+            scheduledPairings: scheduledPairings,
+            participantCount: continuousTournamentSession.tournamentParticipants.Count,
+            sideAWins: continuousTournamentSession.sideAWins,
+            sideBWins: continuousTournamentSession.sideBWins,
+            trueDraws: continuousTournamentSession.trueDraws,
+            aborts: continuousTournamentSession.aborts,
+            decisiveGames: Mathf.Max(0, continuousTournamentSession.sideAWins + continuousTournamentSession.sideBWins),
+            batchSize: Math.Max(1, settings.tournamentGamesPerPairing * (settings.tournamentSeatSwap ? 2 : 1)),
+            elapsedSeconds: elapsedSeconds,
+            timeBudgetSeconds: estimatedTotal,
+            remainingTimeSeconds: remainingTime,
+            gamesPerSecond: gamesPerSecond,
+            bayesianSideABetterProbability: 0.5f,
+            certaintyThreshold: 0f,
+            decisiveEdgePoints: 0f,
+            isWaitingForBatchAfterThreshold: false,
+            tournamentStandingsPreview: BuildTournamentStandingsPreview(
+                continuousTournamentSession.tournamentParticipants,
+                continuousTournamentSession.completedMatches,
+                2));
         return true;
     }
 
@@ -1023,7 +1416,7 @@ public static class AIVsAIBatchRunController
 
         int completedMatches = Math.Max(1, run.completedMatchCount);
         int decisiveGames = Math.Max(0, run.sideAWins + run.sideBWins);
-        float elapsedSeconds = Mathf.Max(0.001f, (float)(DateTime.UtcNow - run.startedAtUtc).TotalSeconds);
+        float elapsedSeconds = Mathf.Max(0.001f, GetEffectiveElapsedSeconds(run));
         float turnsPerSecond = run.totalTurnCount / elapsedSeconds;
         UpdateObservedGamesPerSecond(run.completedMatchCount / elapsedSeconds);
 
@@ -1121,6 +1514,44 @@ public static class AIVsAIBatchRunController
         record.logicalVariantAScore = GetLogicalVariantScore(matchResult.winner, context.seatsWereSwapped, logicalVariantA: true);
         record.logicalVariantBScore = GetLogicalVariantScore(matchResult.winner, context.seatsWereSwapped, logicalVariantA: false);
         return record;
+    }
+
+    private static float GetEffectiveElapsedSeconds(ActiveRun run)
+    {
+        if (run == null)
+        {
+            return 0f;
+        }
+
+        float totalElapsedSeconds = Mathf.Max(0f, (float)(DateTime.UtcNow - run.startedAtUtc).TotalSeconds);
+        float pausedSeconds = Mathf.Max(0f, run.accumulatedPausedSeconds);
+        if (run.isPaused && run.pausedAtUtc != default)
+        {
+            pausedSeconds += Mathf.Max(0f, (float)(DateTime.UtcNow - run.pausedAtUtc).TotalSeconds);
+        }
+
+        return Mathf.Max(0f, totalElapsedSeconds - pausedSeconds);
+    }
+
+    private static float ResolveSnapshotGamesPerSecond(ActiveRun run, float elapsedSeconds)
+    {
+        float baselineGamesPerSecond = run != null && run.estimatedGamesPerSecondBaseline > 0.0001f
+            ? run.estimatedGamesPerSecondBaseline
+            : GetEstimatedGamesPerSecond(TurnManager.AIVsAIBatchSpeedPreset.UltraFast);
+        if (run == null)
+        {
+            return baselineGamesPerSecond;
+        }
+
+        float safeElapsedSeconds = Mathf.Max(0.001f, elapsedSeconds);
+        float observedGamesPerSecond = run.completedMatchCount / safeElapsedSeconds;
+        if (run.completedMatchCount <= 0 || observedGamesPerSecond <= 0.0001f)
+        {
+            return baselineGamesPerSecond;
+        }
+
+        float observedWeight = Mathf.Clamp01(run.completedMatchCount / 5f);
+        return Mathf.Lerp(baselineGamesPerSecond, observedGamesPerSecond, observedWeight);
     }
 
     private static MatchContext BuildMatchContext(ActiveRun run, int matchIndex)
@@ -1354,7 +1785,7 @@ public static class AIVsAIBatchRunController
             }
         }
 
-        float elapsedSeconds = Mathf.Max(0f, (float)(DateTime.UtcNow - run.startedAtUtc).TotalSeconds);
+        float elapsedSeconds = GetEffectiveElapsedSeconds(run);
         if (elapsedSeconds >= run.settings.timeBudgetSeconds)
         {
             return new RunStopDecision(
@@ -1799,24 +2230,77 @@ public static class AIVsAIBatchRunController
 
     private static List<TournamentStanding> BuildSortedTournamentStandings(ActiveRun run)
     {
-        List<TournamentStanding> standings = new List<TournamentStanding>();
         if (run == null)
+        {
+            return new List<TournamentStanding>();
+        }
+
+        return BuildSortedTournamentStandings(run.tournamentParticipants, run.completedMatches);
+    }
+
+    private static List<TournamentStanding> BuildSortedTournamentStandings(
+        List<AIVariant> participants,
+        IList<ActiveRun.CompletedMatchRecord> completedMatches)
+    {
+        return BuildSortedTournamentStandings(participants, completedMatches, null);
+    }
+
+    private static List<TournamentStanding> BuildSortedTournamentStandings(
+        List<AIVariant> participants,
+        IList<ActiveRun.CompletedMatchRecord> primaryCompletedMatches,
+        IList<ActiveRun.CompletedMatchRecord> secondaryCompletedMatches)
+    {
+        List<TournamentStanding> standings = new List<TournamentStanding>();
+        if (participants == null)
         {
             return standings;
         }
 
-        standings = new List<TournamentStanding>(run.tournamentParticipants.Count);
-        for (int i = 0; i < run.tournamentParticipants.Count; i++)
+        standings = new List<TournamentStanding>(participants.Count);
+        for (int i = 0; i < participants.Count; i++)
         {
             standings.Add(new TournamentStanding
             {
-                label = GetVariantLabel(run.tournamentParticipants[i])
+                participantIndex = i,
+                label = GetVariantLabel(participants[i])
             });
         }
 
-        for (int i = 0; i < run.completedMatches.Count; i++)
+        for (int i = 0; primaryCompletedMatches != null && i < primaryCompletedMatches.Count; i++)
         {
-            ActiveRun.CompletedMatchRecord record = run.completedMatches[i];
+            ActiveRun.CompletedMatchRecord record = primaryCompletedMatches[i];
+            TournamentStanding standingA = standings[record.logicalVariantAIndex];
+            TournamentStanding standingB = standings[record.logicalVariantBIndex];
+            standingA.games++;
+            standingB.games++;
+            standingA.scoreSum += record.logicalVariantAScore;
+            standingB.scoreSum += record.logicalVariantBScore;
+
+            if (record.isAbort)
+            {
+                standingA.aborts++;
+                standingB.aborts++;
+            }
+            else if (record.isDraw)
+            {
+                standingA.draws++;
+                standingB.draws++;
+            }
+            else if (record.logicalVariantAScore > record.logicalVariantBScore)
+            {
+                standingA.wins++;
+                standingB.losses++;
+            }
+            else
+            {
+                standingA.losses++;
+                standingB.wins++;
+            }
+        }
+
+        for (int i = 0; secondaryCompletedMatches != null && i < secondaryCompletedMatches.Count; i++)
+        {
+            ActiveRun.CompletedMatchRecord record = secondaryCompletedMatches[i];
             TournamentStanding standingA = standings[record.logicalVariantAIndex];
             TournamentStanding standingB = standings[record.logicalVariantBIndex];
             standingA.games++;
@@ -1876,7 +2360,25 @@ public static class AIVsAIBatchRunController
 
     private static string BuildTournamentStandingsPreview(ActiveRun run, int maxEntries)
     {
-        List<TournamentStanding> standings = BuildSortedTournamentStandings(run);
+        if (run == null)
+        {
+            return "Standings pending";
+        }
+
+        return BuildTournamentStandingsPreview(run.tournamentParticipants, run.completedMatches, maxEntries);
+    }
+
+    private static string BuildTournamentStandingsPreview(
+        List<AIVariant> participants,
+        IList<ActiveRun.CompletedMatchRecord> completedMatches,
+        int maxEntries)
+    {
+        if (completedMatches == null || completedMatches.Count <= 0)
+        {
+            return "Standings pending";
+        }
+
+        List<TournamentStanding> standings = BuildSortedTournamentStandings(participants, completedMatches);
         if (standings.Count <= 0)
         {
             return "Standings pending";
@@ -1903,6 +2405,144 @@ public static class AIVsAIBatchRunController
         }
 
         return builder.ToString();
+    }
+
+    private static string BuildTournamentStandingsPreview(
+        List<AIVariant> participants,
+        IList<ActiveRun.CompletedMatchRecord> primaryCompletedMatches,
+        IList<ActiveRun.CompletedMatchRecord> secondaryCompletedMatches,
+        int maxEntries)
+    {
+        int primaryCount = primaryCompletedMatches != null ? primaryCompletedMatches.Count : 0;
+        int secondaryCount = secondaryCompletedMatches != null ? secondaryCompletedMatches.Count : 0;
+        if (primaryCount + secondaryCount <= 0)
+        {
+            return "Standings pending";
+        }
+
+        List<TournamentStanding> standings = BuildSortedTournamentStandings(
+            participants,
+            primaryCompletedMatches,
+            secondaryCompletedMatches);
+        if (standings.Count <= 0)
+        {
+            return "Standings pending";
+        }
+
+        int previewCount = Math.Max(1, Math.Min(maxEntries, standings.Count));
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < previewCount; i++)
+        {
+            TournamentStanding standing = standings[i];
+            double scoreRate = standing.games > 0 ? standing.scoreSum / standing.games : 0d;
+            if (i > 0)
+            {
+                builder.Append(" | ");
+            }
+
+            builder.Append(i + 1);
+            builder.Append(". ");
+            builder.Append(standing.label);
+            builder.Append(' ');
+            builder.Append(scoreRate.ToString("P0"));
+            builder.Append(" W");
+            builder.Append(standing.wins);
+        }
+
+        return builder.ToString();
+    }
+
+    private static List<TournamentStandingSnapshot> BuildTournamentStandingSnapshots(
+        List<TournamentStanding> standings,
+        bool isRanked)
+    {
+        List<TournamentStandingSnapshot> snapshots = new List<TournamentStandingSnapshot>();
+        if (standings == null)
+        {
+            return snapshots;
+        }
+
+        List<TournamentStanding> playedStandings = new List<TournamentStanding>(standings.Count);
+        List<TournamentStanding> unplayedStandings = new List<TournamentStanding>(standings.Count);
+        for (int i = 0; i < standings.Count; i++)
+        {
+            TournamentStanding standing = standings[i];
+            if (standing.games > 0)
+            {
+                playedStandings.Add(standing);
+            }
+            else
+            {
+                unplayedStandings.Add(standing);
+            }
+        }
+
+        if (isRanked)
+        {
+            unplayedStandings.Sort((left, right) => left.participantIndex.CompareTo(right.participantIndex));
+        }
+
+        snapshots = new List<TournamentStandingSnapshot>(standings.Count);
+        for (int i = 0; i < playedStandings.Count; i++)
+        {
+            TournamentStanding standing = playedStandings[i];
+            double scoreRate = standing.scoreSum / standing.games;
+            snapshots.Add(new TournamentStandingSnapshot(
+                rank: i + 1,
+                isRanked: isRanked,
+                label: standing.label,
+                wins: standing.wins,
+                losses: standing.losses,
+                draws: standing.draws,
+                aborts: standing.aborts,
+                games: standing.games,
+                scoreRate: scoreRate));
+        }
+
+        for (int i = 0; i < unplayedStandings.Count; i++)
+        {
+            TournamentStanding standing = unplayedStandings[i];
+            snapshots.Add(new TournamentStandingSnapshot(
+                rank: 0,
+                isRanked: false,
+                label: standing.label,
+                wins: standing.wins,
+                losses: standing.losses,
+                draws: standing.draws,
+                aborts: standing.aborts,
+                games: standing.games,
+                scoreRate: 0d));
+        }
+
+        return snapshots;
+    }
+
+    private static List<TournamentStandingSnapshot> BuildTournamentStandingSnapshots(
+        List<AIVariant> participants,
+        bool isRanked)
+    {
+        List<TournamentStandingSnapshot> snapshots = new List<TournamentStandingSnapshot>();
+        if (participants == null)
+        {
+            return snapshots;
+        }
+
+        snapshots = new List<TournamentStandingSnapshot>(participants.Count);
+        for (int i = 0; i < participants.Count; i++)
+        {
+            snapshots.Add(new TournamentStandingSnapshot(
+                rank: i + 1,
+                isRanked: isRanked,
+                label: GetVariantLabel(participants[i]),
+                wins: 0,
+                losses: 0,
+                draws: 0,
+                aborts: 0,
+                games: 0,
+                scoreRate: 0d));
+        }
+
+        return snapshots;
     }
 
     private static double ComputeMean(List<double> values)

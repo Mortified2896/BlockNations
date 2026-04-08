@@ -18,9 +18,6 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private const string PlayByPostEndgameShareText = "Well played! Want to play again?";
     private const string GameOverOverlayDefaultTitleText = "Game Over";
     private const string NextButtonDefaultText = "Next";
-    private const string AIVsAIPauseButtonText = "Pause";
-    private const string AIVsAIResumeButtonText = "Resume";
-    private const string AIVsAIStopButtonText = "Stop";
 
     [Header("Spike Toggle")]
     [SerializeField] private bool enableGameplayBottomHudUITK = true;
@@ -61,8 +58,16 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private bool warnedMissingPanelSettings;
     private bool warnedMissingLayout;
     private bool warnedMissingControls;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private bool loggedFirstBottomHudUpdate;
+    private bool hasLoggedShowDefaultBottomState;
+    private bool lastLoggedShowDefaultBottomState;
+#endif
     private TurnManager subscribedTurnManager;
     private string visibleSharePromptGameId = string.Empty;
+    private string cachedNextButtonText = string.Empty;
+    private bool cachedNextButtonEnabled;
+    private bool hasCachedNextButtonState;
 
     private Rect lastSafeArea = Rect.zero;
     private Vector2Int lastScreenSize = Vector2Int.zero;
@@ -465,19 +470,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     {
         if (turnManager != null)
         {
-            if (turnManager.IsAIVsAICompletedTournamentAutoRestartPendingForUi())
-            {
-                turnManager.CancelAIVsAICompletedTournamentAutoRestartForUi();
-                return;
-            }
-
-            if (IsAIVsAiBatchSimulationActive())
-            {
-                turnManager.ToggleAIVsAIDebugPause();
-                return;
-            }
-
-            turnManager.OnEndTurnButtonPressed();
+            turnManager.OnBottomRightControlPressedForUi();
         }
     }
 
@@ -587,6 +580,27 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         bool cityPanelOpen = cityUIManager != null && cityUIManager.IsPanelOpen;
         bool showDefaultBottom = !unitPanelOpen && !cityPanelOpen;
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        bool shouldTraceBatchBottomHud = turnManager != null &&
+                                         (turnManager.IsAIVsAIBatchHudVisibleForUi() ||
+                                          turnManager.IsAIVsAIDebugModeEnabledForUi() ||
+                                          turnManager.IsContinuousTournamentBatchControlActiveForUi());
+        if (shouldTraceBatchBottomHud &&
+            (!hasLoggedShowDefaultBottomState || lastLoggedShowDefaultBottomState != showDefaultBottom))
+        {
+            hasLoggedShowDefaultBottomState = true;
+            lastLoggedShowDefaultBottomState = showDefaultBottom;
+            Debug.Log(
+                $"[AIVsAIBottomRightView] showDefaultBottom={showDefaultBottom} unitPanelOpen={unitPanelOpen} cityPanelOpen={cityPanelOpen}");
+        }
+
+        if (shouldTraceBatchBottomHud && !loggedFirstBottomHudUpdate)
+        {
+            loggedFirstBottomHudUpdate = true;
+            turnManager.TraceBottomRightControlCheckpointForUi("BottomHudFirstUpdate");
+        }
+#endif
+
         defaultBottomPanel.style.display = showDefaultBottom ? DisplayStyle.Flex : DisplayStyle.None;
 
         if (menuButton != null)
@@ -596,34 +610,29 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
 
         if (nextButton != null)
         {
-            bool isAIVsAiBatchSimulation = IsAIVsAiBatchSimulationActive();
-            bool isCompletedTournamentRestartPending = turnManager != null &&
-                                                       turnManager.IsAIVsAICompletedTournamentAutoRestartPendingForUi();
-            bool canUseAIVsAiToggle = turnManager != null && turnManager.CanToggleAIVsAIDebugPauseForUi();
-            bool canCancelCompletedTournamentRestart = turnManager != null &&
-                                                       turnManager.CanCancelAIVsAICompletedTournamentAutoRestartForUi();
-            bool canAdvance = turnManager != null && turnManager.CanAdvanceTurn();
-            nextButton.text = isCompletedTournamentRestartPending
-                ? AIVsAIStopButtonText
-                : isAIVsAiBatchSimulation
-                ? (turnManager.IsAIVsAIDebugPausedForUi() ? AIVsAIResumeButtonText : AIVsAIPauseButtonText)
-                : NextButtonDefaultText;
-            nextButton.SetEnabled(showDefaultBottom &&
-                                  (isCompletedTournamentRestartPending
-                                      ? canCancelCompletedTournamentRestart
-                                      : isAIVsAiBatchSimulation
-                                          ? canUseAIVsAiToggle
-                                          : canAdvance));
+            TurnManager.BottomRightControlUiState resolvedControlState = turnManager != null
+                ? turnManager.ResolveBottomRightControlForUi()
+                : new TurnManager.BottomRightControlUiState(
+                    TurnManager.BottomRightControlKind.DefaultNext,
+                    NextButtonDefaultText,
+                    false);
+            string resolvedNextButtonText = resolvedControlState.label;
+            bool resolvedNextButtonEnabled = resolvedControlState.interactable;
+            if (!string.Equals(cachedNextButtonText, resolvedNextButtonText, StringComparison.Ordinal))
+            {
+                nextButton.text = resolvedNextButtonText;
+                cachedNextButtonText = resolvedNextButtonText;
+            }
+
+            if (!hasCachedNextButtonState || cachedNextButtonEnabled != resolvedNextButtonEnabled)
+            {
+                nextButton.SetEnabled(resolvedNextButtonEnabled);
+                cachedNextButtonEnabled = resolvedNextButtonEnabled;
+                hasCachedNextButtonState = true;
+            }
         }
 
         RefreshGameOverOverlayState();
-    }
-
-    private bool IsAIVsAiBatchSimulationActive()
-    {
-        return turnManager != null &&
-               turnManager.IsAIVsAIDebugModeEnabledForUi() &&
-               AIVsAIBatchRunController.HasActiveRun;
     }
 
     private void EnsurePlayByPostShareOverlay()
@@ -1232,6 +1241,14 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         gameOverSecondaryButton = null;
         gameOverTertiaryButton = null;
         visibleSharePromptGameId = string.Empty;
+        cachedNextButtonText = string.Empty;
+        cachedNextButtonEnabled = false;
+        hasCachedNextButtonState = false;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        loggedFirstBottomHudUpdate = false;
+        hasLoggedShowDefaultBottomState = false;
+        lastLoggedShowDefaultBottomState = false;
+#endif
         uiReady = false;
         lastSafeArea = Rect.zero;
         lastScreenSize = Vector2Int.zero;

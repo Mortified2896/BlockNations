@@ -43,3 +43,95 @@
     width: 460px;
     font-size: 28px;
 }
+
+.gameplay-tournament-standings-panel {
+    position: absolute;
+    top: 212px;
+    right: 16px;
+    width: 680px;
+    max-height: 70%;
+    padding: 18px 22px 20px 22px;
+    background-color: rgba(0, 0, 0, 0.78);
+    border-top-left-radius: 14px;
+    border-top-right-radius: 14px;
+    border-bottom-left-radius: 14px;
+    border-bottom-right-radius: 14px;
+    display: none;
+    flex-direction: column;
+    row-gap: 10px;
+}
+
+.gameplay-tournament-standings-title {
+    color: rgb(255, 255, 255);
+    font-size: 34px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-left;
+}
+
+.gameplay-tournament-standings-header,
+.gameplay-tournament-standings-row {
+    flex-direction: row;
+    column-gap: 10px;
+}
+
+.gameplay-tournament-standings-header {
+    align-items: center;
+    padding-bottom: 6px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(255, 255, 255, 0.18);
+}
+
+.gameplay-tournament-standings-rows {
+    flex-direction: column;
+    row-gap: 6px;
+}
+
+.gameplay-tournament-standings-row {
+    align-items: flex-start;
+    min-height: 38px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+
+.gameplay-tournament-standings-cell {
+    color: rgb(255, 255, 255);
+    font-size: 22px;
+    -unity-text-align: middle-left;
+}
+
+.gameplay-tournament-standings-cell-header {
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 20px;
+    -unity-font-style: bold;
+}
+
+.gameplay-tournament-standings-cell-rank {
+    width: 28px;
+    min-width: 28px;
+}
+
+.gameplay-tournament-standings-cell-variant {
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-basis: 0;
+    min-width: 0;
+    white-space: normal;
+}
+
+.gameplay-tournament-standings-cell-games {
+    width: 34px;
+    min-width: 34px;
+    -unity-text-align: middle-right;
+}
+
+.gameplay-tournament-standings-cell-small {
+    width: 32px;
+    min-width: 32px;
+    -unity-text-align: middle-right;
+}
+
+.gameplay-tournament-standings-cell-score {
+    width: 96px;
+    min-width: 96px;
+    -unity-text-align: middle-right;
+}
