@@ -95,6 +95,9 @@ public static class MatchSnapshotHistoryStore
         public string aiDifficulty;
         public string aiRecruitVariant;
         public bool aiHasPerfectInfo;
+        public bool calculusUsesApproximateRuleModel;
+        public string calculusApproximationSummary;
+        public string calculusApproximationLocations;
         public bool hasKeyCity;
         public int keyCityX;
         public int keyCityY;
@@ -107,6 +110,8 @@ public static class MatchSnapshotHistoryStore
         public int estimatedPossibleEnemyRecruitCountMax;
         public bool canWinThisTurn;
         public bool couldLoseKeyCityNextTurn;
+        public bool keyCityThreatSearchUsedFallback;
+        public string keyCityThreatSearchSummary;
         public bool canDefendKeyCityThisTurn;
         public int unsafeTilesNearKeyCityCount;
         public int immediateThreatSourceCountNearKeyCity;

@@ -70,8 +70,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Label createSuccessGameCodeLabel;
     private Label generalSettingsTitleLabel;
     private Label generalSettingsSubtitleLabel;
-    private Toggle generalSettingsStoreSnapshotHistoryToggle;
-    private Toggle generalSettingsWatchAIVsAIToggle;
+    private Label generalSettingsStoreSnapshotHistoryHelperLabel;
 
     private Button continueButton;
     private Button playVsAiButton;
@@ -91,6 +90,8 @@ public class MainMenuUITKView : MonoBehaviour
     private Button generalSettingsAiLevel3Button;
     private Button generalSettingsAiStyleDefaultButton;
     private Button generalSettingsAiStyleRiderFocusButton;
+    private Button generalSettingsStoreSnapshotHistoryButton;
+    private Button generalSettingsWatchAIVsAIButton;
     private Button generalSettingsSideAAiStyleDefaultButton;
     private Button generalSettingsSideAAiStyleRiderFocusButton;
     private Button generalSettingsSideBAiStyleDefaultButton;
@@ -428,8 +429,7 @@ public class MainMenuUITKView : MonoBehaviour
         createSuccessGameCodeLabel = root.Q<Label>("CreateSuccessGameCodeLabel");
         generalSettingsTitleLabel = root.Q<Label>("GeneralSettingsTitleLabel");
         generalSettingsSubtitleLabel = root.Q<Label>("GeneralSettingsSubtitleLabel");
-        generalSettingsStoreSnapshotHistoryToggle = root.Q<Toggle>("GeneralSettingsStoreSnapshotHistoryToggle");
-        generalSettingsWatchAIVsAIToggle = root.Q<Toggle>("GeneralSettingsWatchAIVsAIToggle");
+        generalSettingsStoreSnapshotHistoryHelperLabel = root.Q<Label>("GeneralSettingsStoreSnapshotHistoryHelperLabel");
 
         continueButton = root.Q<Button>("ContinueButton");
         playVsAiButton = root.Q<Button>("PlayVsAIButton");
@@ -451,6 +451,8 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAiLevel3Button = root.Q<Button>("GeneralSettingsAiLevel3Button");
         generalSettingsAiStyleDefaultButton = root.Q<Button>("GeneralSettingsAiStyleDefaultButton");
         generalSettingsAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsAiStyleRiderFocusButton");
+        generalSettingsStoreSnapshotHistoryButton = root.Q<Button>("GeneralSettingsStoreSnapshotHistoryButton");
+        generalSettingsWatchAIVsAIButton = root.Q<Button>("GeneralSettingsWatchAIVsAIButton");
         generalSettingsSideAAiStyleDefaultButton = root.Q<Button>("GeneralSettingsSideAAiStyleDefaultButton");
         generalSettingsSideAAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsSideAAiStyleRiderFocusButton");
         generalSettingsSideBAiStyleDefaultButton = root.Q<Button>("GeneralSettingsSideBAiStyleDefaultButton");
@@ -1019,9 +1021,14 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsAIVsAiBatchSpeedUltraFastButton.clicked += HandleGeneralSettingsAIVsAiBatchSpeedUltraFastClicked;
         }
 
-        if (generalSettingsWatchAIVsAIToggle != null)
+        if (generalSettingsStoreSnapshotHistoryButton != null)
         {
-            generalSettingsWatchAIVsAIToggle.RegisterValueChangedCallback(HandleGeneralSettingsWatchAIVsAIChanged);
+            generalSettingsStoreSnapshotHistoryButton.clicked += HandleGeneralSettingsStoreSnapshotHistoryClicked;
+        }
+
+        if (generalSettingsWatchAIVsAIButton != null)
+        {
+            generalSettingsWatchAIVsAIButton.clicked += HandleGeneralSettingsWatchAIVsAIClicked;
         }
 
         if (generalSettingsAIVsAiCertaintyThresholdInput != null)
@@ -1298,9 +1305,14 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsAIVsAiBatchSpeedUltraFastButton.clicked -= HandleGeneralSettingsAIVsAiBatchSpeedUltraFastClicked;
         }
 
-        if (generalSettingsWatchAIVsAIToggle != null)
+        if (generalSettingsStoreSnapshotHistoryButton != null)
         {
-            generalSettingsWatchAIVsAIToggle.UnregisterValueChangedCallback(HandleGeneralSettingsWatchAIVsAIChanged);
+            generalSettingsStoreSnapshotHistoryButton.clicked -= HandleGeneralSettingsStoreSnapshotHistoryClicked;
+        }
+
+        if (generalSettingsWatchAIVsAIButton != null)
+        {
+            generalSettingsWatchAIVsAIButton.clicked -= HandleGeneralSettingsWatchAIVsAIClicked;
         }
 
         if (generalSettingsAIVsAiCertaintyThresholdInput != null)
@@ -1560,7 +1572,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HandleGeneralSettingsSideAAiProfileCalculusClicked()
     {
-        selectedSideAAIProfile = TurnManager.AIDebugProfile.Calculus;
+        selectedSideAAIProfile = TurnManager.AIDebugProfile.Baseline;
         RefreshGeneralSettingsSelectionState();
     }
 
@@ -1572,7 +1584,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HandleGeneralSettingsSideBAiProfileCalculusClicked()
     {
-        selectedSideBAIProfile = TurnManager.AIDebugProfile.Calculus;
+        selectedSideBAIProfile = TurnManager.AIDebugProfile.Baseline;
         RefreshGeneralSettingsSelectionState();
     }
 
@@ -1692,9 +1704,25 @@ public class MainMenuUITKView : MonoBehaviour
         RefreshGeneralSettingsSelectionState();
     }
 
-    private void HandleGeneralSettingsWatchAIVsAIChanged(ChangeEvent<bool> evt)
+    private void HandleGeneralSettingsStoreSnapshotHistoryClicked()
     {
-        selectedEnableAIVsAIDebugMode = evt != null && evt.newValue;
+        if (selectedEnableAIVsAIDebugMode)
+        {
+            return;
+        }
+
+        selectedStoreSnapshotHistory = !selectedStoreSnapshotHistory;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsWatchAIVsAIClicked()
+    {
+        selectedEnableAIVsAIDebugMode = !selectedEnableAIVsAIDebugMode;
+        if (selectedEnableAIVsAIDebugMode)
+        {
+            selectedStoreSnapshotHistory = false;
+        }
+
         RefreshGeneralSettingsSelectionState();
     }
 
@@ -1703,16 +1731,6 @@ public class MainMenuUITKView : MonoBehaviour
         if (mainMenuController == null)
         {
             return;
-        }
-
-        if (generalSettingsStoreSnapshotHistoryToggle != null)
-        {
-            selectedStoreSnapshotHistory = generalSettingsStoreSnapshotHistoryToggle.value;
-        }
-
-        if (generalSettingsWatchAIVsAIToggle != null)
-        {
-            selectedEnableAIVsAIDebugMode = generalSettingsWatchAIVsAIToggle.value;
         }
 
         bool started = false;
@@ -2473,16 +2491,6 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsDevSection.style.display = IsDevBuild() ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
-        if (generalSettingsStoreSnapshotHistoryToggle != null)
-        {
-            generalSettingsStoreSnapshotHistoryToggle.value = selectedStoreSnapshotHistory;
-        }
-
-        if (generalSettingsWatchAIVsAIToggle != null)
-        {
-            generalSettingsWatchAIVsAIToggle.value = selectedEnableAIVsAIDebugMode;
-        }
-
         if (generalSettingsConfirmButton != null)
         {
             generalSettingsConfirmButton.text = isVsAi ? "Start Game" : "Create Match";
@@ -2535,17 +2543,41 @@ public class MainMenuUITKView : MonoBehaviour
     private void RefreshGeneralSettingsSelectionState()
     {
         bool isVsAi = pendingGeneralSettingsMode == PendingGeneralSettingsMode.VsAI;
+        bool disableSnapshotHistory = isVsAi && selectedEnableAIVsAIDebugMode;
 
-        if (generalSettingsWatchAIVsAIToggle != null &&
-            generalSettingsWatchAIVsAIToggle.value != selectedEnableAIVsAIDebugMode)
+        if (selectedSideAAIProfile == TurnManager.AIDebugProfile.Calculus)
         {
-            generalSettingsWatchAIVsAIToggle.SetValueWithoutNotify(selectedEnableAIVsAIDebugMode);
+            selectedSideAAIProfile = TurnManager.AIDebugProfile.Baseline;
         }
 
-        if (generalSettingsWatchAIVsAIToggle != null)
+        if (selectedSideBAIProfile == TurnManager.AIDebugProfile.Calculus)
         {
-            generalSettingsWatchAIVsAIToggle.style.display =
+            selectedSideBAIProfile = TurnManager.AIDebugProfile.Baseline;
+        }
+
+        if (generalSettingsStoreSnapshotHistoryButton != null)
+        {
+            UpdateGeneralSettingsSelectionButton(
+                generalSettingsStoreSnapshotHistoryButton,
+                selectedStoreSnapshotHistory);
+            UpdateGeneralSettingsDisabledButton(
+                generalSettingsStoreSnapshotHistoryButton,
+                disableSnapshotHistory);
+        }
+
+        if (generalSettingsWatchAIVsAIButton != null)
+        {
+            generalSettingsWatchAIVsAIButton.style.display =
                 IsDevBuild() && isVsAi ? DisplayStyle.Flex : DisplayStyle.None;
+            UpdateGeneralSettingsSelectionButton(
+                generalSettingsWatchAIVsAIButton,
+                selectedEnableAIVsAIDebugMode);
+        }
+
+        if (generalSettingsStoreSnapshotHistoryHelperLabel != null)
+        {
+            generalSettingsStoreSnapshotHistoryHelperLabel.style.display =
+                IsDevBuild() && disableSnapshotHistory ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
         if (generalSettingsAIVsAIOptionsSection != null)
@@ -2592,15 +2624,23 @@ public class MainMenuUITKView : MonoBehaviour
         UpdateGeneralSettingsSelectionButton(
             generalSettingsSideAAiProfileBaselineButton,
             selectedSideAAIProfile == TurnManager.AIDebugProfile.Baseline);
+        if (generalSettingsSideAAiProfileCalculusButton != null)
+        {
+            generalSettingsSideAAiProfileCalculusButton.style.display = DisplayStyle.None;
+        }
         UpdateGeneralSettingsSelectionButton(
             generalSettingsSideAAiProfileCalculusButton,
-            selectedSideAAIProfile == TurnManager.AIDebugProfile.Calculus);
+            false);
         UpdateGeneralSettingsSelectionButton(
             generalSettingsSideBAiProfileBaselineButton,
             selectedSideBAIProfile == TurnManager.AIDebugProfile.Baseline);
+        if (generalSettingsSideBAiProfileCalculusButton != null)
+        {
+            generalSettingsSideBAiProfileCalculusButton.style.display = DisplayStyle.None;
+        }
         UpdateGeneralSettingsSelectionButton(
             generalSettingsSideBAiProfileCalculusButton,
-            selectedSideBAIProfile == TurnManager.AIDebugProfile.Calculus);
+            false);
         selectedAIVsAISimulationSettings =
             AIVsAIBatchRunController.SanitizeSimulationSettings(selectedAIVsAISimulationSettings);
         UpdateGeneralSettingsSelectionButton(
@@ -2781,6 +2821,26 @@ public class MainMenuUITKView : MonoBehaviour
         else
         {
             button.RemoveFromClassList(SelectedClass);
+        }
+    }
+
+    private static void UpdateGeneralSettingsDisabledButton(Button button, bool disabled)
+    {
+        if (button == null)
+        {
+            return;
+        }
+
+        const string DisabledClass = "general-settings-option--disabled";
+        button.SetEnabled(!disabled);
+
+        if (disabled)
+        {
+            button.AddToClassList(DisabledClass);
+        }
+        else
+        {
+            button.RemoveFromClassList(DisabledClass);
         }
     }
 
@@ -3245,8 +3305,7 @@ public class MainMenuUITKView : MonoBehaviour
         createSuccessGameCodeLabel = null;
         generalSettingsTitleLabel = null;
         generalSettingsSubtitleLabel = null;
-        generalSettingsStoreSnapshotHistoryToggle = null;
-        generalSettingsWatchAIVsAIToggle = null;
+        generalSettingsStoreSnapshotHistoryHelperLabel = null;
         continueButton = null;
         playVsAiButton = null;
         multiplayerButton = null;
@@ -3265,6 +3324,8 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAiLevel3Button = null;
         generalSettingsAiStyleDefaultButton = null;
         generalSettingsAiStyleRiderFocusButton = null;
+        generalSettingsStoreSnapshotHistoryButton = null;
+        generalSettingsWatchAIVsAIButton = null;
         generalSettingsSideAAiStyleDefaultButton = null;
         generalSettingsSideAAiStyleRiderFocusButton = null;
         generalSettingsSideBAiStyleDefaultButton = null;

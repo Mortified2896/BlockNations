@@ -55,8 +55,8 @@ public static class AIVsAIDebugSelection
             enabled = enabled,
             sideARecruitVariant = sideARecruitVariant,
             sideBRecruitVariant = sideBRecruitVariant,
-            sideAProfile = sideAProfile,
-            sideBProfile = sideBProfile,
+            sideAProfile = NormalizeProfile(sideAProfile),
+            sideBProfile = NormalizeProfile(sideBProfile),
             batchSpeedPreset = batchSpeedPreset
         };
         hasPendingSettings = true;
@@ -172,10 +172,17 @@ public static class AIVsAIDebugSelection
         if (!string.IsNullOrWhiteSpace(rawProfile) &&
             System.Enum.TryParse(rawProfile, out TurnManager.AIDebugProfile parsedProfile))
         {
-            return parsedProfile;
+            return NormalizeProfile(parsedProfile);
         }
 
         return TurnManager.AIDebugProfile.Baseline;
+    }
+
+    private static TurnManager.AIDebugProfile NormalizeProfile(TurnManager.AIDebugProfile profile)
+    {
+        return profile == TurnManager.AIDebugProfile.Calculus
+            ? TurnManager.AIDebugProfile.Baseline
+            : profile;
     }
 
     private static string BuildPlayerPrefsKey(string gameId)

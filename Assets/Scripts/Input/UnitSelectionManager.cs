@@ -7,18 +7,6 @@ using System.Collections.Generic;
 /// </summary>
 public class UnitSelectionManager : MonoBehaviour
 {
-    private static readonly Vector2Int[] NeighborOffsets =
-    {
-        new Vector2Int(1, 0),
-        new Vector2Int(0, 1),
-        new Vector2Int(-1, 0),
-        new Vector2Int(0, -1),
-        new Vector2Int(1, 1),
-        new Vector2Int(1, -1),
-        new Vector2Int(-1, 1),
-        new Vector2Int(-1, -1)
-    };
-
     public static UnitSelectionManager Instance { get; private set; }
 
     [Header("References")]
@@ -55,12 +43,6 @@ public class UnitSelectionManager : MonoBehaviour
         {
             turnManager = TurnManager.Instance;
         }
-    }
-
-    private struct TileNode
-    {
-        public TileVisibility Tile;
-        public int Steps;
     }
 
     private void HighlightReachableTiles(Unit unit)
@@ -275,12 +257,7 @@ public class UnitSelectionManager : MonoBehaviour
 
     private static int GetChebyshevDistance(TileVisibility from, TileVisibility to)
     {
-        if (from == null || to == null)
-        {
-            return int.MaxValue;
-        }
-
-        return Mathf.Max(Mathf.Abs(to.gridX - from.gridX), Mathf.Abs(to.gridY - from.gridY));
+        return UnitActionRules.GetChebyshevDistance(from, to);
     }
 
     private Dictionary<TileVisibility, List<TileVisibility>> BuildReachablePathMap(Unit unit, TileVisibility originTile)
@@ -303,81 +280,15 @@ public class UnitSelectionManager : MonoBehaviour
             return reachablePaths;
         }
 
-        Queue<TileNode> frontier = new Queue<TileNode>();
-        Dictionary<TileVisibility, TileVisibility> previous = new Dictionary<TileVisibility, TileVisibility>();
-        Dictionary<TileVisibility, int> bestSteps = new Dictionary<TileVisibility, int>();
-
-        frontier.Enqueue(new TileNode { Tile = originTile, Steps = 0 });
-        bestSteps[originTile] = 0;
-
-        while (frontier.Count > 0)
-        {
-            TileNode node = frontier.Dequeue();
-            if (node.Steps >= remainingMoves)
+        return UnitActionRules.BuildReachablePathMap(
+            grid,
+            originTile,
+            remainingMoves,
+            nextTile =>
             {
-                continue;
-            }
-
-            for (int i = 0; i < NeighborOffsets.Length; i++)
-            {
-                Vector2Int offset = NeighborOffsets[i];
-                int nextX = node.Tile.gridX + offset.x;
-                int nextY = node.Tile.gridY + offset.y;
-                if (!grid.TryGetTile(nextX, nextY, out TileVisibility nextTile) || nextTile == null)
-                {
-                    continue;
-                }
-
                 Unit occupant = GridUtils.GetUnitAtPosition(nextTile.transform.position, unit);
-                if (occupant != null && nextTile.isVisibleNow)
-                {
-                    continue;
-                }
-
-                int nextSteps = node.Steps + 1;
-                if (bestSteps.TryGetValue(nextTile, out int existingSteps) && existingSteps <= nextSteps)
-                {
-                    continue;
-                }
-
-                bestSteps[nextTile] = nextSteps;
-                previous[nextTile] = node.Tile;
-                frontier.Enqueue(new TileNode { Tile = nextTile, Steps = nextSteps });
-            }
-        }
-
-        foreach (KeyValuePair<TileVisibility, int> entry in bestSteps)
-        {
-            TileVisibility targetTile = entry.Key;
-            if (targetTile == originTile)
-            {
-                continue;
-            }
-
-            reachablePaths[targetTile] = BuildPath(originTile, targetTile, previous);
-        }
-
-        return reachablePaths;
-    }
-
-    private static List<TileVisibility> BuildPath(
-        TileVisibility originTile,
-        TileVisibility targetTile,
-        Dictionary<TileVisibility, TileVisibility> previous)
-    {
-        List<TileVisibility> reversedPath = new List<TileVisibility>();
-        TileVisibility current = targetTile;
-        while (current != null && current != originTile)
-        {
-            reversedPath.Add(current);
-            if (!previous.TryGetValue(current, out current))
-            {
-                break;
-            }
-        }
-
-        reversedPath.Reverse();
-        return reversedPath;
+                return occupant != null && nextTile.isVisibleNow;
+            });
     }
 
     private static void SyncUnitCityOccupancy(Unit unit)

@@ -145,8 +145,17 @@
 
                     <ui:VisualElement name="GeneralSettingsDevSection" class="general-settings-section" style="display: none;">
                         <ui:Label text="Dev Options" class="general-settings-section-label" />
-                        <ui:Toggle name="GeneralSettingsStoreSnapshotHistoryToggle" label="Store Snapshot History" class="general-settings-dev-toggle" />
-                        <ui:Toggle name="GeneralSettingsWatchAIVsAIToggle" label="Watch AI vs AI" class="general-settings-dev-toggle" />
+                        <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
+                            <ui:Button name="GeneralSettingsStoreSnapshotHistoryButton" text="Store Snapshot History" class="menu-button general-settings-option-button general-settings-dev-option-button" />
+                        </ui:VisualElement>
+                        <ui:Label
+                            name="GeneralSettingsStoreSnapshotHistoryHelperLabel"
+                            text="Disabled during AI vs AI runs to avoid excessive snapshot storage."
+                            class="general-settings-help-text general-settings-help-text--warning"
+                            style="display: none;" />
+                        <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
+                            <ui:Button name="GeneralSettingsWatchAIVsAIButton" text="Watch AI vs AI" class="menu-button general-settings-option-button general-settings-dev-option-button" />
+                        </ui:VisualElement>
                         <ui:VisualElement name="GeneralSettingsAIVsAIOptionsSection" style="display: none;">
                             <ui:Label text="Side A AI Style" class="general-settings-section-label" />
                             <ui:VisualElement class="general-settings-option-row">

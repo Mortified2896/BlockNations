@@ -23,27 +23,16 @@ public class Unit : MonoBehaviour
 
     public int GetRemainingMoveRangeThisTurn()
     {
-        if (UsesCommittedMoveActionThisTurn())
-        {
-            return movesUsedThisTurn > 0 ? 0 : maxMovesPerTurn;
-        }
-
-        return Mathf.Max(0, maxMovesPerTurn - movesUsedThisTurn);
+        return UnitActionRules.GetRemainingMoveRangeThisTurn(UnitTypeId, maxMovesPerTurn, movesUsedThisTurn);
     }
 
     public bool CanAttackThisTurn()
     {
-        if (attacksUsedThisTurn >= maxAttacksPerTurn)
-        {
-            return false;
-        }
-
-        if (!CanAttackAfterMoving && movesUsedThisTurn > 0)
-        {
-            return false;
-        }
-
-        return true;
+        return UnitActionRules.CanAttackThisTurn(
+            CanAttackAfterMoving,
+            maxAttacksPerTurn,
+            attacksUsedThisTurn,
+            movesUsedThisTurn);
     }
 
     public void ResetMovementForTurn()
@@ -54,18 +43,12 @@ public class Unit : MonoBehaviour
 
     public void RegisterMove()
     {
-        if (movesUsedThisTurn < maxMovesPerTurn)
-        {
-            movesUsedThisTurn++;
-        }
+        movesUsedThisTurn = UnitActionRules.RegisterMove(movesUsedThisTurn, maxMovesPerTurn);
     }
 
     public void RegisterMove(int moveCount)
     {
-        for (int i = 0; i < moveCount; i++)
-        {
-            RegisterMove();
-        }
+        movesUsedThisTurn = UnitActionRules.RegisterMove(movesUsedThisTurn, maxMovesPerTurn, moveCount);
     }
 
     [Header("Visuals")]
@@ -138,7 +121,7 @@ public class Unit : MonoBehaviour
     public int VisionRange => resolvedDefinition != null ? resolvedDefinition.VisionRange : UnitRegistry.GetDefinitionOrDefault(UnitTypeId).VisionRange;
     public int AttackRange => resolvedDefinition != null ? resolvedDefinition.AttackRange : UnitRegistry.GetDefinitionOrDefault(UnitTypeId).AttackRange;
     public bool CanAttackAfterMoving => resolvedDefinition != null ? resolvedDefinition.CanAttackAfterMoving : UnitRegistry.GetDefinitionOrDefault(UnitTypeId).CanAttackAfterMoving;
-    public bool AdvancesIntoDefenderTileOnKill => AttackRange <= 1;
+    public bool AdvancesIntoDefenderTileOnKill => UnitActionRules.AdvancesIntoDefenderTileOnKill(AttackRange);
     public SpriteRenderer PrimarySpriteRenderer => presentationRenderer;
     public bool IsPresentationVisible => presentationRenderer == null || presentationRenderer.enabled;
 
@@ -217,10 +200,7 @@ public class Unit : MonoBehaviour
 
     public void RegisterAttack()
     {
-        if (attacksUsedThisTurn < maxAttacksPerTurn)
-        {
-            attacksUsedThisTurn++;
-        }
+        attacksUsedThisTurn = UnitActionRules.RegisterAttack(attacksUsedThisTurn, maxAttacksPerTurn);
     }
 
     public void ConsumeRemainingAttacksForTurn()
@@ -233,7 +213,7 @@ public class Unit : MonoBehaviour
         if (target == null) return false;
 
         int rawDamageUnits = attackUnits;
-        int mitigatedDamageUnits = Mathf.Max(0, rawDamageUnits - target.defenseUnits);
+        int mitigatedDamageUnits = UnitActionRules.ComputeMitigatedDamage(rawDamageUnits, target.defenseUnits);
 
         if (mitigatedDamageUnits <= 0)
         {
@@ -263,7 +243,7 @@ public class Unit : MonoBehaviour
 
     public bool IsTargetInAttackRange(int tileDistance)
     {
-        return tileDistance > 0 && tileDistance <= AttackRange;
+        return UnitActionRules.IsTargetInAttackRange(AttackRange, tileDistance);
     }
 
     public void Die()
@@ -370,6 +350,6 @@ public class Unit : MonoBehaviour
 
     private bool UsesCommittedMoveActionThisTurn()
     {
-        return UnitTypeId == UnitRegistry.RiderTypeId;
+        return UnitActionRules.UsesCommittedMoveActionThisTurn(UnitTypeId);
     }
 }

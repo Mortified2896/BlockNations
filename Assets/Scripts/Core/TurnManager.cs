@@ -47,6 +47,7 @@ public class TurnManager : MonoBehaviour
     public enum AIDebugProfile
     {
         Baseline,
+        // Legacy debug-only value retained for older saved selections; runtime sanitizes it back to Baseline.
         Calculus
     }
 
@@ -3888,11 +3889,18 @@ public class TurnManager : MonoBehaviour
         enableAIVsAIDebugMode = settings.enabled;
         aiVsAiSideARecruitVariant = settings.sideARecruitVariant;
         aiVsAiSideBRecruitVariant = settings.sideBRecruitVariant;
-        aiVsAiSideAProfile = settings.sideAProfile;
-        aiVsAiSideBProfile = settings.sideBProfile;
+        aiVsAiSideAProfile = SanitizeAIDebugProfile(settings.sideAProfile);
+        aiVsAiSideBProfile = SanitizeAIDebugProfile(settings.sideBProfile);
         aiVsAiBatchSpeedPreset = settings.batchSpeedPreset;
         aiVsAiDebugPaused = false;
         aiVsAiDebugRestartPending = false;
+    }
+
+    private static AIDebugProfile SanitizeAIDebugProfile(AIDebugProfile profile)
+    {
+        return profile == AIDebugProfile.Calculus
+            ? AIDebugProfile.Baseline
+            : profile;
     }
 #endif
 
@@ -3909,12 +3917,6 @@ public class TurnManager : MonoBehaviour
 
     private AIDebugProfile GetAIDebugProfileForSide(bool actingSideIsPlayerOwned)
     {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        if (IsAIVsAIDebugModeActive())
-        {
-            return actingSideIsPlayerOwned ? aiVsAiSideAProfile : aiVsAiSideBProfile;
-        }
-#endif
         return AIDebugProfile.Baseline;
     }
 
@@ -3932,22 +3934,6 @@ public class TurnManager : MonoBehaviour
         bool aiHasPerfectInfo = aiDifficulty == AIDifficulty.Unfair;
         HashSet<TileVisibility> aiVisibleTiles = aiHasPerfectInfo ? null : ComputeVisibilityForSide(actingSideIsPlayerOwned);
         City primaryControlledCity = FindPrimaryControlledCity(allCities, actingSideIsPlayerOwned);
-        Dictionary<City, AITurnLogic.CityDefensePlan> preRecruitCityDefensePlans = AITurnLogic.BuildCityDefensePlans(
-            gridManager,
-            allCities,
-            unitsBeforeRecruitment,
-            primaryControlledCity,
-            actingSideIsPlayerOwned,
-            aiVisibleTiles,
-            aiHasPerfectInfo);
-        CalculusDefenseOverrideDecision calculusDefenseOverride = EvaluateCalculusDefenseOverrideDecision(
-            actingSideIsPlayerOwned,
-            allCities,
-            unitsBeforeRecruitment,
-            aiVisibleTiles,
-            aiHasPerfectInfo,
-            primaryControlledCity,
-            preRecruitCityDefensePlans);
 
         // 1) Recruit from each controlled city (one unit per city per turn, if the city is empty)
         foreach (City city in allCities)
@@ -3957,13 +3943,7 @@ public class TurnManager : MonoBehaviour
 
             if (city.isPlayerOwned == actingSideIsPlayerOwned && city.CanRecruit())
             {
-                if (calculusDefenseOverride.shouldOverride &&
-                    calculusDefenseOverride.useDefensiveRecruit &&
-                    city == primaryControlledCity &&
-                    city.TrySpawnUnit(UnitRegistry.WarriorTypeId))
-                {
-                }
-                else if (TryRecruitVariantOverride(city))
+                if (TryRecruitVariantOverride(city))
                 {
                 }
                 else if (useImprovedLevel1Behavior)
@@ -4062,21 +4042,6 @@ public class TurnManager : MonoBehaviour
         {
             AITurnLogic.CityDefensePlan plan = entry.Value;
             AddDefenseAssignmentsForPlan(plan, combatDefenseAssignments, scoutDefenseAssignments);
-        }
-
-        Dictionary<Unit, AITurnLogic.CityDefensePlan> prioritizedCombatDefenseAssignments = combatDefenseAssignments;
-        Dictionary<Unit, AITurnLogic.CityDefensePlan> prioritizedScoutDefenseAssignments = scoutDefenseAssignments;
-        if (calculusDefenseOverride.shouldOverride &&
-            primaryControlledCity != null &&
-            cityDefensePlans.TryGetValue(primaryControlledCity, out AITurnLogic.CityDefensePlan prioritizedKeyCityPlan) &&
-            prioritizedKeyCityPlan != null)
-        {
-            prioritizedCombatDefenseAssignments = new Dictionary<Unit, AITurnLogic.CityDefensePlan>();
-            prioritizedScoutDefenseAssignments = new Dictionary<Unit, AITurnLogic.CityDefensePlan>();
-            AddDefenseAssignmentsForPlan(
-                prioritizedKeyCityPlan,
-                prioritizedCombatDefenseAssignments,
-                prioritizedScoutDefenseAssignments);
         }
 
         bool primaryCityProtectedByPlan = primaryControlledCity != null &&
@@ -4275,7 +4240,7 @@ public class TurnManager : MonoBehaviour
 
             unit.ResetMovementForTurn();
 
-            if (prioritizedCombatDefenseAssignments.TryGetValue(unit, out AITurnLogic.CityDefensePlan combatPlan))
+            if (combatDefenseAssignments.TryGetValue(unit, out AITurnLogic.CityDefensePlan combatPlan))
             {
                 if (ExecuteAssignedCityDefense(unit, combatPlan, stepSize))
                 {
@@ -4285,7 +4250,7 @@ public class TurnManager : MonoBehaviour
                 }
             }
 
-            if (prioritizedScoutDefenseAssignments.TryGetValue(unit, out AITurnLogic.CityDefensePlan scoutPlan))
+            if (scoutDefenseAssignments.TryGetValue(unit, out AITurnLogic.CityDefensePlan scoutPlan))
             {
                 if (ExecuteAssignedCityDefense(unit, scoutPlan, stepSize))
                 {
@@ -6067,191 +6032,17 @@ public class TurnManager : MonoBehaviour
             visibleTiles = visibleTileCoords,
             visibleEnemyUnits = visibleEnemyUnits,
             threatenedFriendlyCities = BuildSnapshotHistoryCityThreats(actingSideIsPlayerOwned, visibleEnemyUnits),
-            aiReasoning = BuildSnapshotHistoryAIReasoning(actingSideIsPlayerOwned, safeVisibleTiles)
+            aiReasoning = null
         };
     }
 
+    // Legacy Calculus-only debug scaffolding remains below for isolated cleanup later.
+    // Live AI execution and snapshot history no longer call into this path.
     private MatchSnapshotHistoryStore.SnapshotHistoryAIReasoning BuildSnapshotHistoryAIReasoning(
         bool actingSideIsPlayerOwned,
         HashSet<TileVisibility> visibleTiles)
     {
-        if (GetAIDebugProfileForSide(actingSideIsPlayerOwned) != AIDebugProfile.Calculus)
-        {
-            return null;
-        }
-
-        City[] allCities = Object.FindObjectsByType<City>();
-        Unit[] allUnits = Object.FindObjectsByType<Unit>();
-        bool aiHasPerfectInfo = aiDifficulty == AIDifficulty.Unfair;
-        HashSet<TileVisibility> reasoningVisibleTiles = aiHasPerfectInfo ? null : visibleTiles;
-        City primaryControlledCity = FindPrimaryControlledCity(allCities, actingSideIsPlayerOwned);
-        City firstRecruitableCity = FindFirstRecruitableControlledCity(allCities, actingSideIsPlayerOwned);
-        int currentGold = GetCurrentGoldForSide(actingSideIsPlayerOwned);
-        int visibleEnemyUnitCount = 0;
-        int visibleFriendlyUnitCount = 0;
-        bool anyVisibleEnemyUnit = false;
-        int visibleFastEnemyCountNearKeyCity = 0;
-
-        for (int unitIndex = 0; unitIndex < allUnits.Length; unitIndex++)
-        {
-            Unit unit = allUnits[unitIndex];
-            if (unit == null)
-            {
-                continue;
-            }
-
-            if (unit.isPlayerOwned == actingSideIsPlayerOwned)
-            {
-                visibleFriendlyUnitCount++;
-                continue;
-            }
-
-            if (gridManager == null)
-            {
-                continue;
-            }
-
-            if (!aiHasPerfectInfo)
-            {
-                if (reasoningVisibleTiles == null || reasoningVisibleTiles.Count == 0)
-                {
-                    continue;
-                }
-
-                if (!gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility enemyTile) ||
-                    enemyTile == null ||
-                    !reasoningVisibleTiles.Contains(enemyTile))
-                {
-                    continue;
-                }
-            }
-            else if (!gridManager.TryGetTileAtWorldPosition(unit.transform.position, out _))
-            {
-                continue;
-            }
-
-            visibleEnemyUnitCount++;
-            anyVisibleEnemyUnit = true;
-
-            if (primaryControlledCity != null &&
-                unit.maxMovesPerTurn >= 2 &&
-                gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility enemyPositionTile) &&
-                enemyPositionTile != null)
-            {
-                int distanceToKeyCity = Mathf.Max(
-                    Mathf.Abs(enemyPositionTile.gridX - primaryControlledCity.x),
-                    Mathf.Abs(enemyPositionTile.gridY - primaryControlledCity.y));
-                if (distanceToKeyCity <= 3)
-                {
-                    visibleFastEnemyCountNearKeyCity++;
-                }
-            }
-        }
-
-        Dictionary<City, AITurnLogic.CityDefensePlan> cityDefensePlans = AITurnLogic.BuildCityDefensePlans(
-            gridManager,
-            allCities,
-            allUnits,
-            primaryControlledCity,
-            actingSideIsPlayerOwned,
-            reasoningVisibleTiles,
-            aiHasPerfectInfo);
-
-        AITurnLogic.CityDefensePlan primaryCityDefensePlan = null;
-        if (primaryControlledCity != null)
-        {
-            cityDefensePlans.TryGetValue(primaryControlledCity, out primaryCityDefensePlan);
-        }
-
-        int defenderCountNearKeyCity = CountDefendersNearCity(primaryControlledCity, primaryCityDefensePlan, allUnits, actingSideIsPlayerOwned);
-        int defenderDeficitNearKeyCity = Mathf.Max(0, visibleFastEnemyCountNearKeyCity - defenderCountNearKeyCity);
-        CalculusDefenseOverrideDecision calculusDefenseOverride = EvaluateCalculusDefenseOverrideDecision(
-            actingSideIsPlayerOwned,
-            allCities,
-            allUnits,
-            reasoningVisibleTiles,
-            aiHasPerfectInfo,
-            primaryControlledCity,
-            cityDefensePlans);
-        int unsafeTilesNearKeyCityCount = calculusDefenseOverride.unsafeTilesNearKeyCityCount;
-        int immediateThreatSourceCountNearKeyCity = calculusDefenseOverride.immediateThreatSourceCountNearKeyCity;
-        bool canWinThisTurn = calculusDefenseOverride.canWinThisTurn;
-        bool couldLoseKeyCityNextTurn = calculusDefenseOverride.couldLoseKeyCityNextTurn;
-        bool canDefendKeyCityThisTurn = calculusDefenseOverride.canDefendKeyCityThisTurn;
-
-        int estimatedEnemyGoldMin = aiHasPerfectInfo ? GetCurrentGoldForSide(!actingSideIsPlayerOwned) : 0;
-        int estimatedEnemyGoldMax = aiHasPerfectInfo
-            ? GetCurrentGoldForSide(!actingSideIsPlayerOwned)
-            : EstimateEnemyGoldUpperBound();
-        int estimatedPossibleEnemyRecruitCountMin = aiHasPerfectInfo
-            ? EstimatePossibleRecruitCount(!actingSideIsPlayerOwned, estimatedEnemyGoldMin, allCities, exactRecruitability: true)
-            : 0;
-        int estimatedPossibleEnemyRecruitCountMax = EstimatePossibleRecruitCount(!actingSideIsPlayerOwned, estimatedEnemyGoldMax, allCities, exactRecruitability: aiHasPerfectInfo);
-
-        bool applyLevel2HoldBehavior = (aiDifficulty == AIDifficulty.Level2) && !anyVisibleEnemyUnit;
-        bool applyLevel3DefenderBehavior = (aiDifficulty == AIDifficulty.Level3) && primaryControlledCity != null;
-        bool primaryCityAtRisk = primaryCityDefensePlan != null && primaryCityDefensePlan.IsAtRisk;
-        List<CalculusActionCandidate> actionCandidates = BuildCalculusActionCandidates(
-            actingSideIsPlayerOwned,
-            allCities,
-            anyVisibleEnemyUnit,
-            canWinThisTurn,
-            couldLoseKeyCityNextTurn,
-            canDefendKeyCityThisTurn,
-            immediateThreatSourceCountNearKeyCity,
-            unsafeTilesNearKeyCityCount,
-            visibleEnemyUnitCount);
-        CalculusActionCandidate chosenActionCandidate = actionCandidates.Count > 0 ? actionCandidates[0] : null;
-        int secondBestActionScore = actionCandidates.Count > 1 ? actionCandidates[1].score : -1;
-
-        MatchSnapshotHistoryStore.SnapshotHistoryAIReasoning reasoning =
-            new MatchSnapshotHistoryStore.SnapshotHistoryAIReasoning
-            {
-                aiDifficulty = aiDifficulty.ToString(),
-                aiRecruitVariant = GetAIRecruitVariantForSide(actingSideIsPlayerOwned).ToString(),
-                aiHasPerfectInfo = aiHasPerfectInfo,
-                hasKeyCity = primaryControlledCity != null,
-                keyCityX = primaryControlledCity != null ? primaryControlledCity.x : -1,
-                keyCityY = primaryControlledCity != null ? primaryControlledCity.y : -1,
-                currentGold = currentGold,
-                visibleEnemyUnitCount = visibleEnemyUnitCount,
-                visibleFriendlyUnitCount = visibleFriendlyUnitCount,
-                estimatedEnemyGoldMin = estimatedEnemyGoldMin,
-                estimatedEnemyGoldMax = estimatedEnemyGoldMax,
-                estimatedPossibleEnemyRecruitCountMin = estimatedPossibleEnemyRecruitCountMin,
-                estimatedPossibleEnemyRecruitCountMax = estimatedPossibleEnemyRecruitCountMax,
-                canWinThisTurn = canWinThisTurn,
-                couldLoseKeyCityNextTurn = couldLoseKeyCityNextTurn,
-                canDefendKeyCityThisTurn = canDefendKeyCityThisTurn,
-                unsafeTilesNearKeyCityCount = unsafeTilesNearKeyCityCount,
-                immediateThreatSourceCountNearKeyCity = immediateThreatSourceCountNearKeyCity,
-                visibleFastEnemyCountNearKeyCity = visibleFastEnemyCountNearKeyCity,
-                defenderCountNearKeyCity = defenderCountNearKeyCity,
-                defenderDeficitNearKeyCity = defenderDeficitNearKeyCity,
-                candidateActionCount = actionCandidates.Count,
-                chosenActionScore = chosenActionCandidate != null ? chosenActionCandidate.score : 0,
-                secondBestActionScore = secondBestActionScore,
-                chosenActionReason = calculusDefenseOverride.shouldOverride
-                    ? calculusDefenseOverride.chosenActionReason
-                    : chosenActionCandidate != null ? chosenActionCandidate.reason : "mode=none",
-                chosenRecruitReason = BuildAIRecruitReasonSummary(
-                    actingSideIsPlayerOwned,
-                    firstRecruitableCity,
-                    allCities,
-                    allUnits,
-                    reasoningVisibleTiles,
-                    aiHasPerfectInfo),
-                chosenDefensePlanSummary = BuildAIDefensePlanSummary(primaryControlledCity, primaryCityDefensePlan),
-                chosenActionSummary = calculusDefenseOverride.shouldOverride
-                    ? calculusDefenseOverride.chosenActionSummary
-                    : BuildAIActionSummary(
-                        anyVisibleEnemyUnit,
-                        applyLevel2HoldBehavior,
-                        applyLevel3DefenderBehavior,
-                        primaryCityAtRisk)
-            };
-
-        return reasoning;
+        return null;
     }
 
     private City FindPrimaryControlledCity(City[] allCities, bool actingSideIsPlayerOwned)
@@ -6708,6 +6499,1034 @@ public class TurnManager : MonoBehaviour
         public bool useDefensiveRecruit;
         public string chosenActionReason;
         public string chosenActionSummary;
+        public bool keyCityThreatSearchUsedFallback;
+        public string keyCityThreatSearchSummary;
+    }
+
+    private const int CalculusThreatSearchNodeLimit = 5000;
+    private const int CalculusThreatSearchDepthLimit = 32;
+
+    private sealed class CalculusThreatSearchDiagnostics
+    {
+        public int nodesVisited;
+        public int repeatedStates;
+        public int invalidActions;
+        public int actionsGenerated;
+        public int actionsApplied;
+        public int maxDepth;
+        public int maxBranchingFactor;
+        public bool aborted;
+        public string abortReason;
+        public bool liveStateMutationDetected;
+        public bool fallbackUsed;
+
+        public string BuildSummary()
+        {
+            return $"nodes={nodesVisited};actionsGenerated={actionsGenerated};actionsApplied={actionsApplied};" +
+                   $"repeats={repeatedStates};invalid={invalidActions};maxDepth={maxDepth};" +
+                   $"maxBranch={maxBranchingFactor};aborted={aborted.ToString().ToLowerInvariant()};" +
+                   $"abortReason={(string.IsNullOrWhiteSpace(abortReason) ? "none" : abortReason)};" +
+                   $"liveStateMutationDetected={liveStateMutationDetected.ToString().ToLowerInvariant()};" +
+                   $"fallbackUsed={fallbackUsed.ToString().ToLowerInvariant()}";
+        }
+    }
+
+    private sealed class CalculusThreatSimCity
+    {
+        public int x;
+        public int y;
+        public bool isPlayerOwned;
+        public bool hasRecruitedThisTurn;
+
+        public CalculusThreatSimCity Clone()
+        {
+            return new CalculusThreatSimCity
+            {
+                x = x,
+                y = y,
+                isPlayerOwned = isPlayerOwned,
+                hasRecruitedThisTurn = hasRecruitedThisTurn
+            };
+        }
+    }
+
+    private sealed class CalculusThreatSimUnit
+    {
+        public int id;
+        public string unitTypeId;
+        public bool isPlayerOwned;
+        public int x;
+        public int y;
+        public int currentHealthUnits;
+        public int movesUsedThisTurn;
+        public int attacksUsedThisTurn;
+
+        public CalculusThreatSimUnit Clone()
+        {
+            return new CalculusThreatSimUnit
+            {
+                id = id,
+                unitTypeId = unitTypeId,
+                isPlayerOwned = isPlayerOwned,
+                x = x,
+                y = y,
+                currentHealthUnits = currentHealthUnits,
+                movesUsedThisTurn = movesUsedThisTurn,
+                attacksUsedThisTurn = attacksUsedThisTurn
+            };
+        }
+    }
+
+    private sealed class CalculusThreatSimState
+    {
+        public List<CalculusThreatSimCity> cities = new List<CalculusThreatSimCity>();
+        public List<CalculusThreatSimUnit> units = new List<CalculusThreatSimUnit>();
+        public int playerGold;
+        public int aiGold;
+        public int nextUnitId = 1;
+
+        public CalculusThreatSimState Clone()
+        {
+            CalculusThreatSimState clone = new CalculusThreatSimState
+            {
+                playerGold = playerGold,
+                aiGold = aiGold,
+                nextUnitId = nextUnitId
+            };
+
+            for (int cityIndex = 0; cityIndex < cities.Count; cityIndex++)
+            {
+                clone.cities.Add(cities[cityIndex].Clone());
+            }
+
+            for (int unitIndex = 0; unitIndex < units.Count; unitIndex++)
+            {
+                clone.units.Add(units[unitIndex].Clone());
+            }
+
+            return clone;
+        }
+    }
+
+    private enum CalculusThreatSimActionKind
+    {
+        Move,
+        Attack,
+        Recruit
+    }
+
+    private enum CalculusThreatSimApplyResult
+    {
+        Invalid,
+        None,
+        CapturedTargetCity,
+        CapturedDifferentCity
+    }
+
+    private sealed class CalculusThreatSimAction
+    {
+        public CalculusThreatSimActionKind kind;
+        public int unitId;
+        public int targetUnitId;
+        public int targetX;
+        public int targetY;
+        public int pathLength;
+        public int cityX;
+        public int cityY;
+        public string recruitUnitTypeId;
+        public int priority;
+    }
+
+    private bool TryCanSideCaptureSpecificCityOnNextTurn(
+        bool sideIsPlayerOwned,
+        City targetCity,
+        City[] allCities,
+        Unit[] allUnits,
+        out bool canCapture,
+        out string diagnosticsSummary)
+    {
+        canCapture = false;
+        diagnosticsSummary = "status=invalid_input";
+        if (targetCity == null || gridManager == null)
+        {
+            return false;
+        }
+
+        CalculusThreatSearchDiagnostics diagnostics = new CalculusThreatSearchDiagnostics();
+        string liveStateDigestBefore = BuildCalculusThreatLiveStateDigest(allCities, allUnits);
+
+        CalculusThreatSimState state = BuildCalculusThreatSimState(allCities, allUnits);
+        if (state == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            PrepareCalculusThreatSimStateForNextTurn(state, sideIsPlayerOwned);
+            List<UnitDefinition> recruitableDefinitions = BuildCalculusThreatSimulationRecruitDefinitions();
+            HashSet<string> visitedStates = new HashSet<string>();
+            canCapture = SearchCalculusThreatSimForCityCapture(
+                state,
+                sideIsPlayerOwned,
+                targetCity.x,
+                targetCity.y,
+                recruitableDefinitions,
+                visitedStates,
+                diagnostics,
+                depth: 0);
+        }
+        catch (System.Exception ex)
+        {
+            diagnostics.aborted = true;
+            diagnostics.abortReason = $"exception:{ex.GetType().Name}";
+            diagnostics.fallbackUsed = true;
+            diagnosticsSummary = diagnostics.BuildSummary();
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.LogWarning(
+                $"[CalculusThreatSearch] Exact search threw for city={targetCity.x},{targetCity.y} side={(sideIsPlayerOwned ? "player" : "ai")} " +
+                $"summary={diagnosticsSummary} msg={ex.Message}");
+#endif
+            return false;
+        }
+
+        string liveStateDigestAfter = BuildCalculusThreatLiveStateDigest(allCities, allUnits);
+        if (!string.Equals(liveStateDigestBefore, liveStateDigestAfter, System.StringComparison.Ordinal))
+        {
+            diagnostics.aborted = true;
+            diagnostics.abortReason = "live_state_mutated";
+            diagnostics.liveStateMutationDetected = true;
+            canCapture = false;
+        }
+
+        diagnosticsSummary = diagnostics.BuildSummary();
+        if (diagnostics.aborted)
+        {
+            diagnostics.fallbackUsed = true;
+            diagnosticsSummary = diagnostics.BuildSummary();
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.LogWarning(
+                $"[CalculusThreatSearch] Exact search aborted for city={targetCity.x},{targetCity.y} side={(sideIsPlayerOwned ? "player" : "ai")} " +
+                $"summary={diagnosticsSummary}");
+#endif
+            return false;
+        }
+
+        return true;
+    }
+
+    private CalculusThreatSimState BuildCalculusThreatSimState(City[] allCities, Unit[] allUnits)
+    {
+        CalculusThreatSimState state = new CalculusThreatSimState
+        {
+            playerGold = playerGold,
+            aiGold = aiGold
+        };
+
+        if (allCities != null)
+        {
+            for (int cityIndex = 0; cityIndex < allCities.Length; cityIndex++)
+            {
+                City city = allCities[cityIndex];
+                if (city == null)
+                {
+                    continue;
+                }
+
+                state.cities.Add(new CalculusThreatSimCity
+                {
+                    x = city.x,
+                    y = city.y,
+                    isPlayerOwned = city.isPlayerOwned,
+                    hasRecruitedThisTurn = city.hasRecruitedThisTurn
+                });
+            }
+        }
+
+        int nextUnitId = 1;
+        if (allUnits != null)
+        {
+            for (int unitIndex = 0; unitIndex < allUnits.Length; unitIndex++)
+            {
+                Unit unit = allUnits[unitIndex];
+                if (unit == null || !unit.gameObject.activeInHierarchy)
+                {
+                    continue;
+                }
+
+                if (!gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility unitTile) || unitTile == null)
+                {
+                    continue;
+                }
+
+                state.units.Add(new CalculusThreatSimUnit
+                {
+                    id = nextUnitId++,
+                    unitTypeId = unit.UnitTypeId,
+                    isPlayerOwned = unit.isPlayerOwned,
+                    x = unitTile.gridX,
+                    y = unitTile.gridY,
+                    currentHealthUnits = unit.currentHealthUnits,
+                    movesUsedThisTurn = unit.movesUsedThisTurn,
+                    attacksUsedThisTurn = unit.attacksUsedThisTurn
+                });
+            }
+        }
+
+        state.nextUnitId = nextUnitId;
+        return state;
+    }
+
+    private void PrepareCalculusThreatSimStateForNextTurn(CalculusThreatSimState state, bool sideIsPlayerOwned)
+    {
+        if (state == null)
+        {
+            return;
+        }
+
+        for (int cityIndex = 0; cityIndex < state.cities.Count; cityIndex++)
+        {
+            CalculusThreatSimCity city = state.cities[cityIndex];
+            if (city != null && city.isPlayerOwned == sideIsPlayerOwned)
+            {
+                city.hasRecruitedThisTurn = false;
+            }
+        }
+
+        for (int unitIndex = 0; unitIndex < state.units.Count; unitIndex++)
+        {
+            CalculusThreatSimUnit unit = state.units[unitIndex];
+            if (unit != null && unit.isPlayerOwned == sideIsPlayerOwned)
+            {
+                unit.movesUsedThisTurn = 0;
+                unit.attacksUsedThisTurn = 0;
+            }
+        }
+
+        int baseIncome = 0;
+        for (int cityIndex = 0; cityIndex < state.cities.Count; cityIndex++)
+        {
+            CalculusThreatSimCity city = state.cities[cityIndex];
+            if (city != null && city.isPlayerOwned == sideIsPlayerOwned)
+            {
+                baseIncome += goldPerCity;
+            }
+        }
+
+        int income = sideIsPlayerOwned
+            ? baseIncome
+            : ResolveAIGoldIncome(baseIncome, turnNumber);
+        if (income > 0)
+        {
+            if (sideIsPlayerOwned)
+            {
+                state.playerGold += income;
+            }
+            else
+            {
+                state.aiGold += income;
+            }
+        }
+    }
+
+    private List<UnitDefinition> BuildCalculusThreatSimulationRecruitDefinitions()
+    {
+        List<UnitDefinition> recruitableDefinitions = GetRecruitableOfficialUnitDefinitions();
+        List<UnitDefinition> legalDefinitions = new List<UnitDefinition>(recruitableDefinitions.Count);
+        for (int definitionIndex = 0; definitionIndex < recruitableDefinitions.Count; definitionIndex++)
+        {
+            UnitDefinition definition = recruitableDefinitions[definitionIndex];
+            if (definition == null || GetUnitPrefabForType(definition.TypeId) == null)
+            {
+                continue;
+            }
+
+            legalDefinitions.Add(definition);
+        }
+
+        return legalDefinitions;
+    }
+
+    private string BuildCalculusThreatLiveStateDigest(City[] allCities, Unit[] allUnits)
+    {
+        StringBuilder digest = new StringBuilder(256);
+        digest.Append("gold=").Append(playerGold).Append(',').Append(aiGold);
+        digest.Append("|turn=").Append(turnNumber).Append(',').Append(isPlayerTurn ? 'P' : 'A');
+        digest.Append("|gameOver=").Append(gameOver ? '1' : '0');
+
+        if (allCities != null)
+        {
+            List<string> cityEntries = new List<string>(allCities.Length);
+            for (int cityIndex = 0; cityIndex < allCities.Length; cityIndex++)
+            {
+                City city = allCities[cityIndex];
+                if (city == null)
+                {
+                    continue;
+                }
+
+                cityEntries.Add(
+                    $"{city.x},{city.y},{(city.isPlayerOwned ? 'P' : 'A')},{(city.hasRecruitedThisTurn ? '1' : '0')}");
+            }
+
+            cityEntries.Sort(System.StringComparer.Ordinal);
+            for (int i = 0; i < cityEntries.Count; i++)
+            {
+                digest.Append("|c:").Append(cityEntries[i]);
+            }
+        }
+
+        if (allUnits != null)
+        {
+            List<string> unitEntries = new List<string>(allUnits.Length);
+            for (int unitIndex = 0; unitIndex < allUnits.Length; unitIndex++)
+            {
+                Unit unit = allUnits[unitIndex];
+                if (unit == null)
+                {
+                    continue;
+                }
+
+                bool isActive = unit.gameObject != null && unit.gameObject.activeInHierarchy;
+                int unitX = int.MinValue;
+                int unitY = int.MinValue;
+                if (gridManager != null &&
+                    gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility unitTile) &&
+                    unitTile != null)
+                {
+                    unitX = unitTile.gridX;
+                    unitY = unitTile.gridY;
+                }
+
+                unitEntries.Add(
+                    $"{unit.UnitTypeId},{(unit.isPlayerOwned ? 'P' : 'A')},{(isActive ? '1' : '0')}," +
+                    $"{unitX},{unitY},{unit.currentHealthUnits},{unit.movesUsedThisTurn},{unit.attacksUsedThisTurn}");
+            }
+
+            unitEntries.Sort(System.StringComparer.Ordinal);
+            for (int i = 0; i < unitEntries.Count; i++)
+            {
+                digest.Append("|u:").Append(unitEntries[i]);
+            }
+        }
+
+        return digest.ToString();
+    }
+
+    private bool SearchCalculusThreatSimForCityCapture(
+        CalculusThreatSimState state,
+        bool sideIsPlayerOwned,
+        int targetCityX,
+        int targetCityY,
+        List<UnitDefinition> recruitableDefinitions,
+        HashSet<string> visitedStates,
+        CalculusThreatSearchDiagnostics diagnostics,
+        int depth)
+    {
+        if (state == null)
+        {
+            return false;
+        }
+
+        if (diagnostics == null)
+        {
+            return false;
+        }
+
+        diagnostics.nodesVisited++;
+        diagnostics.maxDepth = Mathf.Max(diagnostics.maxDepth, depth);
+
+        if (diagnostics.nodesVisited > CalculusThreatSearchNodeLimit)
+        {
+            diagnostics.aborted = true;
+            diagnostics.abortReason = "node_budget_exceeded";
+            return false;
+        }
+
+        if (depth > CalculusThreatSearchDepthLimit)
+        {
+            diagnostics.aborted = true;
+            diagnostics.abortReason = "depth_budget_exceeded";
+            return false;
+        }
+
+        CalculusThreatSimCity targetCity = GetCalculusThreatSimCityAt(state, targetCityX, targetCityY);
+        if (targetCity != null && targetCity.isPlayerOwned == sideIsPlayerOwned)
+        {
+            return true;
+        }
+
+        string stateSignature = BuildCalculusThreatSimStateSignature(state, targetCityX, targetCityY);
+        if (!visitedStates.Add(stateSignature))
+        {
+            diagnostics.repeatedStates++;
+            return false;
+        }
+
+        List<CalculusThreatSimAction> actions = BuildCalculusThreatSimActions(
+            state,
+            sideIsPlayerOwned,
+            targetCityX,
+            targetCityY,
+            recruitableDefinitions);
+        diagnostics.actionsGenerated += actions.Count;
+        diagnostics.maxBranchingFactor = Mathf.Max(diagnostics.maxBranchingFactor, actions.Count);
+        for (int actionIndex = 0; actionIndex < actions.Count; actionIndex++)
+        {
+            if (diagnostics.aborted)
+            {
+                return false;
+            }
+
+            CalculusThreatSimState nextState = state.Clone();
+            diagnostics.actionsApplied++;
+            CalculusThreatSimApplyResult applyResult = ApplyCalculusThreatSimAction(
+                nextState,
+                actions[actionIndex],
+                sideIsPlayerOwned,
+                targetCityX,
+                targetCityY);
+            if (applyResult == CalculusThreatSimApplyResult.Invalid)
+            {
+                diagnostics.invalidActions++;
+                continue;
+            }
+
+            if (applyResult == CalculusThreatSimApplyResult.CapturedTargetCity)
+            {
+                return true;
+            }
+
+            if (applyResult == CalculusThreatSimApplyResult.CapturedDifferentCity)
+            {
+                continue;
+            }
+
+            if (SearchCalculusThreatSimForCityCapture(
+                    nextState,
+                    sideIsPlayerOwned,
+                    targetCityX,
+                    targetCityY,
+                    recruitableDefinitions,
+                    visitedStates,
+                    diagnostics,
+                    depth + 1))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private List<CalculusThreatSimAction> BuildCalculusThreatSimActions(
+        CalculusThreatSimState state,
+        bool sideIsPlayerOwned,
+        int targetCityX,
+        int targetCityY,
+        List<UnitDefinition> recruitableDefinitions)
+    {
+        List<CalculusThreatSimAction> actions = new List<CalculusThreatSimAction>();
+
+        for (int unitIndex = 0; unitIndex < state.units.Count; unitIndex++)
+        {
+            CalculusThreatSimUnit unit = state.units[unitIndex];
+            if (unit == null || unit.currentHealthUnits <= 0 || unit.isPlayerOwned != sideIsPlayerOwned)
+            {
+                continue;
+            }
+
+            if (!UnitRegistry.TryGetDefinition(unit.unitTypeId, out UnitDefinition definition))
+            {
+                continue;
+            }
+
+            if (UnitActionRules.CanAttackThisTurn(
+                    definition.CanAttackAfterMoving,
+                    definition.MaxAttacksPerTurn,
+                    unit.attacksUsedThisTurn,
+                    unit.movesUsedThisTurn))
+            {
+                for (int targetIndex = 0; targetIndex < state.units.Count; targetIndex++)
+                {
+                    CalculusThreatSimUnit targetUnit = state.units[targetIndex];
+                    if (targetUnit == null ||
+                        targetUnit.currentHealthUnits <= 0 ||
+                        targetUnit.isPlayerOwned == sideIsPlayerOwned)
+                    {
+                        continue;
+                    }
+
+                    int tileDistance = UnitActionRules.GetChebyshevDistance(unit.x, unit.y, targetUnit.x, targetUnit.y);
+                    if (!UnitActionRules.IsTargetInAttackRange(definition.AttackRange, tileDistance))
+                    {
+                        continue;
+                    }
+
+                    if (!UnitRegistry.TryGetDefinition(targetUnit.unitTypeId, out UnitDefinition targetDefinition))
+                    {
+                        continue;
+                    }
+
+                    int predictedDamage = UnitActionRules.ComputeMitigatedDamage(definition.AttackUnits, targetDefinition.DefenseUnits);
+                    if (predictedDamage <= 0)
+                    {
+                        continue;
+                    }
+
+                    int actionPriority = 700 - UnitActionRules.GetChebyshevDistance(targetUnit.x, targetUnit.y, targetCityX, targetCityY);
+                    if (targetUnit.x == targetCityX && targetUnit.y == targetCityY)
+                    {
+                        bool killsTarget = predictedDamage >= targetUnit.currentHealthUnits;
+                        if (killsTarget && UnitActionRules.AdvancesIntoDefenderTileOnKill(definition.AttackRange))
+                        {
+                            actionPriority = 10000;
+                        }
+                        else if (killsTarget)
+                        {
+                            actionPriority = 9000;
+                        }
+                        else
+                        {
+                            actionPriority = 8000;
+                        }
+                    }
+
+                    actions.Add(new CalculusThreatSimAction
+                    {
+                        kind = CalculusThreatSimActionKind.Attack,
+                        unitId = unit.id,
+                        targetUnitId = targetUnit.id,
+                        priority = actionPriority
+                    });
+                }
+            }
+
+            int remainingMoveRange = UnitActionRules.GetRemainingMoveRangeThisTurn(
+                definition.TypeId,
+                definition.MaxMovesPerTurn,
+                unit.movesUsedThisTurn);
+            if (remainingMoveRange <= 0 ||
+                !gridManager.TryGetTile(unit.x, unit.y, out TileVisibility originTile) ||
+                originTile == null)
+            {
+                continue;
+            }
+
+            Dictionary<TileVisibility, List<TileVisibility>> reachablePaths = UnitActionRules.BuildReachablePathMap(
+                gridManager,
+                originTile,
+                remainingMoveRange,
+                candidateTile => GetCalculusThreatSimUnitAt(state, candidateTile.gridX, candidateTile.gridY, ignoreUnitId: unit.id) != null);
+            foreach (KeyValuePair<TileVisibility, List<TileVisibility>> entry in reachablePaths)
+            {
+                TileVisibility targetTile = entry.Key;
+                List<TileVisibility> path = entry.Value;
+                if (targetTile == null || path == null || path.Count <= 0)
+                {
+                    continue;
+                }
+
+                int actionPriority = 500 - UnitActionRules.GetChebyshevDistance(targetTile.gridX, targetTile.gridY, targetCityX, targetCityY);
+                CalculusThreatSimCity destinationCity = GetCalculusThreatSimCityAt(state, targetTile.gridX, targetTile.gridY);
+                if (destinationCity != null && destinationCity.isPlayerOwned != sideIsPlayerOwned)
+                {
+                    actionPriority = (destinationCity.x == targetCityX && destinationCity.y == targetCityY)
+                        ? 10000
+                        : 9500;
+                }
+
+                actions.Add(new CalculusThreatSimAction
+                {
+                    kind = CalculusThreatSimActionKind.Move,
+                    unitId = unit.id,
+                    targetX = targetTile.gridX,
+                    targetY = targetTile.gridY,
+                    pathLength = path.Count,
+                    priority = actionPriority
+                });
+            }
+        }
+
+        int availableGold = sideIsPlayerOwned ? state.playerGold : state.aiGold;
+        if (availableGold > 0)
+        {
+            for (int cityIndex = 0; cityIndex < state.cities.Count; cityIndex++)
+            {
+                CalculusThreatSimCity city = state.cities[cityIndex];
+                if (city == null ||
+                    city.isPlayerOwned != sideIsPlayerOwned ||
+                    city.hasRecruitedThisTurn ||
+                    GetCalculusThreatSimUnitAt(state, city.x, city.y) != null)
+                {
+                    continue;
+                }
+
+                for (int definitionIndex = 0; definitionIndex < recruitableDefinitions.Count; definitionIndex++)
+                {
+                    UnitDefinition definition = recruitableDefinitions[definitionIndex];
+                    if (definition == null || availableGold < definition.RecruitCost)
+                    {
+                        continue;
+                    }
+
+                    int actionPriority = 300 - UnitActionRules.GetChebyshevDistance(city.x, city.y, targetCityX, targetCityY);
+                    actions.Add(new CalculusThreatSimAction
+                    {
+                        kind = CalculusThreatSimActionKind.Recruit,
+                        cityX = city.x,
+                        cityY = city.y,
+                        recruitUnitTypeId = definition.TypeId,
+                        priority = actionPriority
+                    });
+                }
+            }
+        }
+
+        actions.Sort((left, right) =>
+        {
+            int priorityCompare = right.priority.CompareTo(left.priority);
+            if (priorityCompare != 0)
+            {
+                return priorityCompare;
+            }
+
+            int kindCompare = left.kind.CompareTo(right.kind);
+            if (kindCompare != 0)
+            {
+                return kindCompare;
+            }
+
+            int unitCompare = left.unitId.CompareTo(right.unitId);
+            if (unitCompare != 0)
+            {
+                return unitCompare;
+            }
+
+            int xCompare = left.targetX.CompareTo(right.targetX);
+            return xCompare != 0 ? xCompare : left.targetY.CompareTo(right.targetY);
+        });
+
+        return actions;
+    }
+
+    private CalculusThreatSimApplyResult ApplyCalculusThreatSimAction(
+        CalculusThreatSimState state,
+        CalculusThreatSimAction action,
+        bool sideIsPlayerOwned,
+        int targetCityX,
+        int targetCityY)
+    {
+        switch (action.kind)
+        {
+            case CalculusThreatSimActionKind.Move:
+                return ApplyCalculusThreatSimMoveAction(state, action, sideIsPlayerOwned, targetCityX, targetCityY);
+
+            case CalculusThreatSimActionKind.Attack:
+                return ApplyCalculusThreatSimAttackAction(state, action, sideIsPlayerOwned, targetCityX, targetCityY);
+
+            case CalculusThreatSimActionKind.Recruit:
+                return ApplyCalculusThreatSimRecruitAction(state, action, sideIsPlayerOwned);
+
+            default:
+                return CalculusThreatSimApplyResult.Invalid;
+        }
+    }
+
+    private CalculusThreatSimApplyResult ApplyCalculusThreatSimMoveAction(
+        CalculusThreatSimState state,
+        CalculusThreatSimAction action,
+        bool sideIsPlayerOwned,
+        int targetCityX,
+        int targetCityY)
+    {
+        CalculusThreatSimUnit unit = GetCalculusThreatSimUnitById(state, action.unitId);
+        if (unit == null || unit.currentHealthUnits <= 0 || unit.isPlayerOwned != sideIsPlayerOwned)
+        {
+            return CalculusThreatSimApplyResult.Invalid;
+        }
+
+        if (!UnitRegistry.TryGetDefinition(unit.unitTypeId, out UnitDefinition definition))
+        {
+            return CalculusThreatSimApplyResult.Invalid;
+        }
+
+        int remainingMoveRange = UnitActionRules.GetRemainingMoveRangeThisTurn(
+            definition.TypeId,
+            definition.MaxMovesPerTurn,
+            unit.movesUsedThisTurn);
+        if (action.pathLength <= 0 || action.pathLength > remainingMoveRange)
+        {
+            return CalculusThreatSimApplyResult.Invalid;
+        }
+
+        if (GetCalculusThreatSimUnitAt(state, action.targetX, action.targetY, ignoreUnitId: unit.id) != null)
+        {
+            return CalculusThreatSimApplyResult.Invalid;
+        }
+
+        unit.x = action.targetX;
+        unit.y = action.targetY;
+        unit.movesUsedThisTurn = UnitActionRules.RegisterMove(unit.movesUsedThisTurn, definition.MaxMovesPerTurn, action.pathLength);
+
+        CalculusThreatSimCity destinationCity = GetCalculusThreatSimCityAt(state, action.targetX, action.targetY);
+        if (destinationCity == null || destinationCity.isPlayerOwned == sideIsPlayerOwned)
+        {
+            return CalculusThreatSimApplyResult.None;
+        }
+
+        destinationCity.isPlayerOwned = sideIsPlayerOwned;
+        return (destinationCity.x == targetCityX && destinationCity.y == targetCityY)
+            ? CalculusThreatSimApplyResult.CapturedTargetCity
+            : CalculusThreatSimApplyResult.CapturedDifferentCity;
+    }
+
+    private CalculusThreatSimApplyResult ApplyCalculusThreatSimAttackAction(
+        CalculusThreatSimState state,
+        CalculusThreatSimAction action,
+        bool sideIsPlayerOwned,
+        int targetCityX,
+        int targetCityY)
+    {
+        CalculusThreatSimUnit attacker = GetCalculusThreatSimUnitById(state, action.unitId);
+        CalculusThreatSimUnit targetUnit = GetCalculusThreatSimUnitById(state, action.targetUnitId);
+        if (attacker == null ||
+            targetUnit == null ||
+            attacker.currentHealthUnits <= 0 ||
+            targetUnit.currentHealthUnits <= 0 ||
+            attacker.isPlayerOwned != sideIsPlayerOwned ||
+            targetUnit.isPlayerOwned == sideIsPlayerOwned)
+        {
+            return CalculusThreatSimApplyResult.Invalid;
+        }
+
+        if (!UnitRegistry.TryGetDefinition(attacker.unitTypeId, out UnitDefinition attackerDefinition) ||
+            !UnitRegistry.TryGetDefinition(targetUnit.unitTypeId, out UnitDefinition targetDefinition))
+        {
+            return CalculusThreatSimApplyResult.Invalid;
+        }
+
+        if (!UnitActionRules.CanAttackThisTurn(
+                attackerDefinition.CanAttackAfterMoving,
+                attackerDefinition.MaxAttacksPerTurn,
+                attacker.attacksUsedThisTurn,
+                attacker.movesUsedThisTurn))
+        {
+            return CalculusThreatSimApplyResult.Invalid;
+        }
+
+        int tileDistance = UnitActionRules.GetChebyshevDistance(attacker.x, attacker.y, targetUnit.x, targetUnit.y);
+        if (!UnitActionRules.IsTargetInAttackRange(attackerDefinition.AttackRange, tileDistance))
+        {
+            return CalculusThreatSimApplyResult.Invalid;
+        }
+
+        int damage = UnitActionRules.ComputeMitigatedDamage(attackerDefinition.AttackUnits, targetDefinition.DefenseUnits);
+        if (damage <= 0)
+        {
+            return CalculusThreatSimApplyResult.Invalid;
+        }
+
+        attacker.attacksUsedThisTurn = UnitActionRules.RegisterAttack(attacker.attacksUsedThisTurn, attackerDefinition.MaxAttacksPerTurn);
+        attacker.movesUsedThisTurn = UnitActionRules.RegisterMove(attacker.movesUsedThisTurn, attackerDefinition.MaxMovesPerTurn);
+
+        targetUnit.currentHealthUnits -= damage;
+        if (targetUnit.currentHealthUnits > 0)
+        {
+            return CalculusThreatSimApplyResult.None;
+        }
+
+        int defeatedUnitX = targetUnit.x;
+        int defeatedUnitY = targetUnit.y;
+        state.units.Remove(targetUnit);
+
+        if (!UnitActionRules.AdvancesIntoDefenderTileOnKill(attackerDefinition.AttackRange))
+        {
+            return CalculusThreatSimApplyResult.None;
+        }
+
+        attacker.x = defeatedUnitX;
+        attacker.y = defeatedUnitY;
+
+        CalculusThreatSimCity capturedCity = GetCalculusThreatSimCityAt(state, defeatedUnitX, defeatedUnitY);
+        if (capturedCity == null || capturedCity.isPlayerOwned == sideIsPlayerOwned)
+        {
+            return CalculusThreatSimApplyResult.None;
+        }
+
+        capturedCity.isPlayerOwned = sideIsPlayerOwned;
+        return (capturedCity.x == targetCityX && capturedCity.y == targetCityY)
+            ? CalculusThreatSimApplyResult.CapturedTargetCity
+            : CalculusThreatSimApplyResult.CapturedDifferentCity;
+    }
+
+    private CalculusThreatSimApplyResult ApplyCalculusThreatSimRecruitAction(
+        CalculusThreatSimState state,
+        CalculusThreatSimAction action,
+        bool sideIsPlayerOwned)
+    {
+        CalculusThreatSimCity city = GetCalculusThreatSimCityAt(state, action.cityX, action.cityY);
+        if (city == null || city.isPlayerOwned != sideIsPlayerOwned || city.hasRecruitedThisTurn)
+        {
+            return CalculusThreatSimApplyResult.Invalid;
+        }
+
+        if (GetCalculusThreatSimUnitAt(state, city.x, city.y) != null)
+        {
+            return CalculusThreatSimApplyResult.Invalid;
+        }
+
+        if (!UnitRegistry.TryGetDefinition(action.recruitUnitTypeId, out UnitDefinition definition) ||
+            GetUnitPrefabForType(definition.TypeId) == null)
+        {
+            return CalculusThreatSimApplyResult.Invalid;
+        }
+
+        int availableGold = sideIsPlayerOwned ? state.playerGold : state.aiGold;
+        if (availableGold < definition.RecruitCost)
+        {
+            return CalculusThreatSimApplyResult.Invalid;
+        }
+
+        if (sideIsPlayerOwned)
+        {
+            state.playerGold -= definition.RecruitCost;
+        }
+        else
+        {
+            state.aiGold -= definition.RecruitCost;
+        }
+
+        city.hasRecruitedThisTurn = true;
+        state.units.Add(new CalculusThreatSimUnit
+        {
+            id = state.nextUnitId++,
+            unitTypeId = definition.TypeId,
+            isPlayerOwned = sideIsPlayerOwned,
+            x = city.x,
+            y = city.y,
+            currentHealthUnits = definition.MaxHealthUnits,
+            movesUsedThisTurn = 0,
+            attacksUsedThisTurn = 0
+        });
+        return CalculusThreatSimApplyResult.None;
+    }
+
+    private CalculusThreatSimCity GetCalculusThreatSimCityAt(CalculusThreatSimState state, int x, int y)
+    {
+        if (state == null)
+        {
+            return null;
+        }
+
+        for (int cityIndex = 0; cityIndex < state.cities.Count; cityIndex++)
+        {
+            CalculusThreatSimCity city = state.cities[cityIndex];
+            if (city != null && city.x == x && city.y == y)
+            {
+                return city;
+            }
+        }
+
+        return null;
+    }
+
+    private CalculusThreatSimUnit GetCalculusThreatSimUnitById(CalculusThreatSimState state, int unitId)
+    {
+        if (state == null)
+        {
+            return null;
+        }
+
+        for (int unitIndex = 0; unitIndex < state.units.Count; unitIndex++)
+        {
+            CalculusThreatSimUnit unit = state.units[unitIndex];
+            if (unit != null && unit.id == unitId)
+            {
+                return unit;
+            }
+        }
+
+        return null;
+    }
+
+    private CalculusThreatSimUnit GetCalculusThreatSimUnitAt(
+        CalculusThreatSimState state,
+        int x,
+        int y,
+        int ignoreUnitId = -1)
+    {
+        if (state == null)
+        {
+            return null;
+        }
+
+        for (int unitIndex = 0; unitIndex < state.units.Count; unitIndex++)
+        {
+            CalculusThreatSimUnit unit = state.units[unitIndex];
+            if (unit == null ||
+                unit.id == ignoreUnitId ||
+                unit.currentHealthUnits <= 0)
+            {
+                continue;
+            }
+
+            if (unit.x == x && unit.y == y)
+            {
+                return unit;
+            }
+        }
+
+        return null;
+    }
+
+    private string BuildCalculusThreatSimStateSignature(
+        CalculusThreatSimState state,
+        int targetCityX,
+        int targetCityY)
+    {
+        StringBuilder signature = new StringBuilder(256);
+        signature.Append("target=").Append(targetCityX).Append(',').Append(targetCityY);
+        signature.Append("|gold=").Append(state.playerGold).Append(',').Append(state.aiGold);
+
+        List<string> cityEntries = new List<string>(state.cities.Count);
+        for (int cityIndex = 0; cityIndex < state.cities.Count; cityIndex++)
+        {
+            CalculusThreatSimCity city = state.cities[cityIndex];
+            if (city == null)
+            {
+                continue;
+            }
+
+            cityEntries.Add(
+                $"{city.x},{city.y},{(city.isPlayerOwned ? 'P' : 'A')},{(city.hasRecruitedThisTurn ? '1' : '0')}");
+        }
+        cityEntries.Sort(System.StringComparer.Ordinal);
+        for (int i = 0; i < cityEntries.Count; i++)
+        {
+            signature.Append("|c:").Append(cityEntries[i]);
+        }
+
+        List<string> unitEntries = new List<string>(state.units.Count);
+        for (int unitIndex = 0; unitIndex < state.units.Count; unitIndex++)
+        {
+            CalculusThreatSimUnit unit = state.units[unitIndex];
+            if (unit == null || unit.currentHealthUnits <= 0)
+            {
+                continue;
+            }
+
+            unitEntries.Add(
+                $"{unit.unitTypeId},{(unit.isPlayerOwned ? 'P' : 'A')},{unit.x},{unit.y}," +
+                $"{unit.currentHealthUnits},{unit.movesUsedThisTurn},{unit.attacksUsedThisTurn}");
+        }
+        unitEntries.Sort(System.StringComparer.Ordinal);
+        for (int i = 0; i < unitEntries.Count; i++)
+        {
+            signature.Append("|u:").Append(unitEntries[i]);
+        }
+
+        return signature.ToString();
     }
 
     private int CountUnsafeTilesNearCity(
@@ -7191,7 +8010,24 @@ public class TurnManager : MonoBehaviour
             allUnits,
             visibleTiles,
             aiHasPerfectInfo);
-        decision.couldLoseKeyCityNextTurn = decision.immediateThreatSourceCountNearKeyCity > 0;
+        if (TryCanSideCaptureSpecificCityOnNextTurn(
+                !actingSideIsPlayerOwned,
+                keyCity,
+                allCities,
+                allUnits,
+                out bool couldLoseKeyCityNextTurnExact,
+                out string keyCityThreatSearchSummary))
+        {
+            decision.couldLoseKeyCityNextTurn = couldLoseKeyCityNextTurnExact;
+            decision.keyCityThreatSearchUsedFallback = false;
+            decision.keyCityThreatSearchSummary = $"status=exact;{keyCityThreatSearchSummary}";
+        }
+        else
+        {
+            decision.couldLoseKeyCityNextTurn = decision.immediateThreatSourceCountNearKeyCity > 0;
+            decision.keyCityThreatSearchUsedFallback = true;
+            decision.keyCityThreatSearchSummary = $"status=fallback:immediate_threat_sources;{keyCityThreatSearchSummary}";
+        }
         decision.canDefendKeyCityThisTurn = EvaluateCanDefendKeyCityThisTurn(
             keyCity,
             decision.keyCityPlan,
