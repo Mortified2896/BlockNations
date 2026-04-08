@@ -14,6 +14,7 @@ This roadmap is the current planning view for the live MVP path in this repo. Fo
 
 - Turn-based core loop, grid gameplay, combat, cities, fog-of-war, and save/load are in place.
 - `VsAI` is supported as the main single-player mode.
+- Live AI runtime has been simplified back to the Baseline path, with `Rider Focus` remaining as the current alternate per-side AI model option for AI-vs-AI setup.
 - `PlayByPost` is supported via HTTP transport and the Node/Express relay server.
 - Main menu flow is UITK-based.
 - Gameplay HUD/UI for the MVP path is on UITK:
@@ -46,7 +47,8 @@ This roadmap is the current planning view for the live MVP path in this repo. Fo
 - Hotseat or other local pass-and-play modes
 - Re-opening the legacy gameplay UI path
 - Reintroducing `BottomStripController`
+- Reintroducing `Calculus` into live AI runtime behavior
 - Real-time multiplayer
 - Broad architecture refactors that do not directly support MVP stability
 
-Last reviewed: 2026-03-27
+Last reviewed: 2026-04-08

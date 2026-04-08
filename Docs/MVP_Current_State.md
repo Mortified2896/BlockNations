@@ -23,12 +23,23 @@ Current snapshot of the repo after the gameplay UITK migration. This is a factua
   - city panel
 - `TurnManager`, `CityUIManager`, and `UnitUIManager` still provide gameplay state/actions consumed by the UITK views.
 
+## AI Runtime Status
+
+- Live AI runtime is Baseline-only.
+- The current per-side AI model choice for AI-vs-AI setup is:
+  - `Baseline`
+  - `Rider Focus`
+- `Calculus` is no longer part of reachable runtime AI behavior.
+- The older AI Style/Profile split was simplified in the AI-vs-AI setup UI to per-side AI Model selectors.
+- AI-vs-AI comparison tooling now reflects the active same-profile seat-bias control path rather than old Calculus-vs-Baseline analysis.
+
 ## Removed / Not Current
 
 - `Tutorial`
 - `Hotseat`
 - `BottomStripController`
 - Legacy gameplay UI path as the active MVP route
+- `Calculus` as a live AI/runtime option
 
 ## PBp Truth Notes
 
