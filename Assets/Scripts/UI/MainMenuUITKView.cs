@@ -56,6 +56,9 @@ public class MainMenuUITKView : MonoBehaviour
     private VisualElement generalSettingsAiStyleSection;
     private VisualElement generalSettingsDevSection;
     private VisualElement generalSettingsAIVsAIOptionsSection;
+    private VisualElement generalSettingsAIVsAiHeadToHeadSection;
+    private VisualElement generalSettingsAIVsAiTournamentSection;
+    private VisualElement generalSettingsAIVsAiTournamentParticipantPool;
     private ScrollView activeGamesList;
     private Label detailsTitleLabel;
     private Label detailsSubtitleLabel;
@@ -72,6 +75,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Label generalSettingsTitleLabel;
     private Label generalSettingsSubtitleLabel;
     private Label generalSettingsStoreSnapshotHistoryHelperLabel;
+    private Label generalSettingsAIVsAiTournamentEstimateLabel;
 
     private Button continueButton;
     private Button playVsAiButton;
@@ -93,6 +97,8 @@ public class MainMenuUITKView : MonoBehaviour
     private Button generalSettingsAiStyleRiderFocusButton;
     private Button generalSettingsStoreSnapshotHistoryButton;
     private Button generalSettingsWatchAIVsAIButton;
+    private Button generalSettingsAIVsAiModeHeadToHeadButton;
+    private Button generalSettingsAIVsAiModeTournamentButton;
     private Button generalSettingsSideAAiStyleDefaultButton;
     private Button generalSettingsSideAAiStyleRiderFocusButton;
     private Button generalSettingsSideAFeatureOffenseButton;
@@ -111,6 +117,9 @@ public class MainMenuUITKView : MonoBehaviour
     private Button generalSettingsAIVsAiBatchSpeedFastButton;
     private Button generalSettingsAIVsAiBatchSpeedVeryFastButton;
     private Button generalSettingsAIVsAiBatchSpeedUltraFastButton;
+    private Button generalSettingsAIVsAiTournamentTypeRoundRobinButton;
+    private Button generalSettingsAIVsAiTournamentSeatSwapButton;
+    private Button generalSettingsAIVsAiTournamentSelectFullPoolButton;
     private Button generalSettingsConfirmButton;
     private Button generalSettingsBackButton;
     private Button detailsOpenButton;
@@ -131,7 +140,9 @@ public class MainMenuUITKView : MonoBehaviour
     private TextField generalSettingsAIVsAiTimeBudgetMinutesInput;
     private TextField generalSettingsAIVsAiBatchSizeInput;
     private TextField generalSettingsAIVsAiEmergencyHardMaxGamesInput;
+    private TextField generalSettingsAIVsAiTournamentGamesPerPairingInput;
     private VisualElement multiplayerBadge;
+    private readonly List<Button> generalSettingsAIVsAiTournamentParticipantButtons = new List<Button>();
 
     private bool subscribedToMenuEvents;
     private bool uiReady;
@@ -416,6 +427,9 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAiStyleSection = root.Q<VisualElement>("GeneralSettingsAiStyleSection");
         generalSettingsDevSection = root.Q<VisualElement>("GeneralSettingsDevSection");
         generalSettingsAIVsAIOptionsSection = root.Q<VisualElement>("GeneralSettingsAIVsAIOptionsSection");
+        generalSettingsAIVsAiHeadToHeadSection = root.Q<VisualElement>("GeneralSettingsAIVsAiHeadToHeadSection");
+        generalSettingsAIVsAiTournamentSection = root.Q<VisualElement>("GeneralSettingsAIVsAiTournamentSection");
+        generalSettingsAIVsAiTournamentParticipantPool = root.Q<VisualElement>("GeneralSettingsAIVsAiTournamentParticipantPool");
         activeGamesList = root.Q<ScrollView>("ActiveGamesList");
         detailsTitleLabel = root.Q<Label>("DetailsTitleLabel");
         detailsSubtitleLabel = root.Q<Label>("DetailsSubtitleLabel");
@@ -439,6 +453,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsTitleLabel = root.Q<Label>("GeneralSettingsTitleLabel");
         generalSettingsSubtitleLabel = root.Q<Label>("GeneralSettingsSubtitleLabel");
         generalSettingsStoreSnapshotHistoryHelperLabel = root.Q<Label>("GeneralSettingsStoreSnapshotHistoryHelperLabel");
+        generalSettingsAIVsAiTournamentEstimateLabel = root.Q<Label>("GeneralSettingsAIVsAiTournamentEstimateLabel");
 
         continueButton = root.Q<Button>("ContinueButton");
         playVsAiButton = root.Q<Button>("PlayVsAIButton");
@@ -462,6 +477,8 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsAiStyleRiderFocusButton");
         generalSettingsStoreSnapshotHistoryButton = root.Q<Button>("GeneralSettingsStoreSnapshotHistoryButton");
         generalSettingsWatchAIVsAIButton = root.Q<Button>("GeneralSettingsWatchAIVsAIButton");
+        generalSettingsAIVsAiModeHeadToHeadButton = root.Q<Button>("GeneralSettingsAIVsAiModeHeadToHeadButton");
+        generalSettingsAIVsAiModeTournamentButton = root.Q<Button>("GeneralSettingsAIVsAiModeTournamentButton");
         generalSettingsSideAAiStyleDefaultButton = root.Q<Button>("GeneralSettingsSideAAiStyleDefaultButton");
         generalSettingsSideAAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsSideAAiStyleRiderFocusButton");
         generalSettingsSideAFeatureOffenseButton = root.Q<Button>("GeneralSettingsSideAFeatureOffenseButton");
@@ -480,6 +497,9 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAIVsAiBatchSpeedFastButton = root.Q<Button>("GeneralSettingsAIVsAiBatchSpeedFastButton");
         generalSettingsAIVsAiBatchSpeedVeryFastButton = root.Q<Button>("GeneralSettingsAIVsAiBatchSpeedVeryFastButton");
         generalSettingsAIVsAiBatchSpeedUltraFastButton = root.Q<Button>("GeneralSettingsAIVsAiBatchSpeedUltraFastButton");
+        generalSettingsAIVsAiTournamentTypeRoundRobinButton = root.Q<Button>("GeneralSettingsAIVsAiTournamentTypeRoundRobinButton");
+        generalSettingsAIVsAiTournamentSeatSwapButton = root.Q<Button>("GeneralSettingsAIVsAiTournamentSeatSwapButton");
+        generalSettingsAIVsAiTournamentSelectFullPoolButton = root.Q<Button>("GeneralSettingsAIVsAiTournamentSelectFullPoolButton");
         generalSettingsConfirmButton = root.Q<Button>("GeneralSettingsConfirmButton");
         generalSettingsBackButton = root.Q<Button>("GeneralSettingsBackButton");
         detailsOpenButton = root.Q<Button>("DetailsOpenButton");
@@ -499,6 +519,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAIVsAiTimeBudgetMinutesInput = root.Q<TextField>("GeneralSettingsAIVsAiTimeBudgetMinutesInput");
         generalSettingsAIVsAiBatchSizeInput = root.Q<TextField>("GeneralSettingsAIVsAiBatchSizeInput");
         generalSettingsAIVsAiEmergencyHardMaxGamesInput = root.Q<TextField>("GeneralSettingsAIVsAiEmergencyHardMaxGamesInput");
+        generalSettingsAIVsAiTournamentGamesPerPairingInput = root.Q<TextField>("GeneralSettingsAIVsAiTournamentGamesPerPairingInput");
 
         if (profileTypedDisplayNameInput != null)
         {
@@ -511,6 +532,8 @@ public class MainMenuUITKView : MonoBehaviour
         ConfigureDelayedTextField(generalSettingsAIVsAiTimeBudgetMinutesInput);
         ConfigureDelayedTextField(generalSettingsAIVsAiBatchSizeInput);
         ConfigureDelayedTextField(generalSettingsAIVsAiEmergencyHardMaxGamesInput);
+        ConfigureDelayedTextField(generalSettingsAIVsAiTournamentGamesPerPairingInput);
+        EnsureTournamentParticipantButtons();
     }
 
     private static void ConfigureDelayedTextField(TextField textField)
@@ -521,6 +544,36 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         textField.isDelayed = true;
+    }
+
+    private void EnsureTournamentParticipantButtons()
+    {
+        if (generalSettingsAIVsAiTournamentParticipantPool == null)
+        {
+            generalSettingsAIVsAiTournamentParticipantButtons.Clear();
+            return;
+        }
+
+        if (generalSettingsAIVsAiTournamentParticipantButtons.Count == AIVsAIBatchRunController.GetGeneratedVariantCount())
+        {
+            return;
+        }
+
+        generalSettingsAIVsAiTournamentParticipantPool.Clear();
+        generalSettingsAIVsAiTournamentParticipantButtons.Clear();
+
+        for (int i = 0; i < AIVsAIBatchRunController.GetGeneratedVariantCount(); i++)
+        {
+            int capturedIndex = i;
+            Button button = new Button(() => ToggleTournamentParticipant(capturedIndex))
+            {
+                text = AIVsAIBatchRunController.GetGeneratedVariantLabel(capturedIndex)
+            };
+            button.AddToClassList("menu-button");
+            button.AddToClassList("general-settings-option-button");
+            generalSettingsAIVsAiTournamentParticipantPool.Add(button);
+            generalSettingsAIVsAiTournamentParticipantButtons.Add(button);
+        }
     }
 
     private void ConfigureActiveGamesList()
@@ -1052,6 +1105,16 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsWatchAIVsAIButton.clicked += HandleGeneralSettingsWatchAIVsAIClicked;
         }
 
+        if (generalSettingsAIVsAiModeHeadToHeadButton != null)
+        {
+            generalSettingsAIVsAiModeHeadToHeadButton.clicked += HandleGeneralSettingsAIVsAiModeHeadToHeadClicked;
+        }
+
+        if (generalSettingsAIVsAiModeTournamentButton != null)
+        {
+            generalSettingsAIVsAiModeTournamentButton.clicked += HandleGeneralSettingsAIVsAiModeTournamentClicked;
+        }
+
         if (generalSettingsAIVsAiCertaintyThresholdInput != null)
         {
             generalSettingsAIVsAiCertaintyThresholdInput.RegisterValueChangedCallback(HandleGeneralSettingsAIVsAiCertaintyThresholdChanged);
@@ -1075,6 +1138,26 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsAIVsAiEmergencyHardMaxGamesInput != null)
         {
             generalSettingsAIVsAiEmergencyHardMaxGamesInput.RegisterValueChangedCallback(HandleGeneralSettingsAIVsAiEmergencyHardMaxGamesChanged);
+        }
+
+        if (generalSettingsAIVsAiTournamentTypeRoundRobinButton != null)
+        {
+            generalSettingsAIVsAiTournamentTypeRoundRobinButton.clicked += HandleGeneralSettingsAIVsAiTournamentTypeRoundRobinClicked;
+        }
+
+        if (generalSettingsAIVsAiTournamentSeatSwapButton != null)
+        {
+            generalSettingsAIVsAiTournamentSeatSwapButton.clicked += HandleGeneralSettingsAIVsAiTournamentSeatSwapClicked;
+        }
+
+        if (generalSettingsAIVsAiTournamentSelectFullPoolButton != null)
+        {
+            generalSettingsAIVsAiTournamentSelectFullPoolButton.clicked += HandleGeneralSettingsAIVsAiTournamentSelectFullPoolClicked;
+        }
+
+        if (generalSettingsAIVsAiTournamentGamesPerPairingInput != null)
+        {
+            generalSettingsAIVsAiTournamentGamesPerPairingInput.RegisterValueChangedCallback(HandleGeneralSettingsAIVsAiTournamentGamesPerPairingChanged);
         }
 
         if (generalSettingsConfirmButton != null)
@@ -1346,6 +1429,16 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsWatchAIVsAIButton.clicked -= HandleGeneralSettingsWatchAIVsAIClicked;
         }
 
+        if (generalSettingsAIVsAiModeHeadToHeadButton != null)
+        {
+            generalSettingsAIVsAiModeHeadToHeadButton.clicked -= HandleGeneralSettingsAIVsAiModeHeadToHeadClicked;
+        }
+
+        if (generalSettingsAIVsAiModeTournamentButton != null)
+        {
+            generalSettingsAIVsAiModeTournamentButton.clicked -= HandleGeneralSettingsAIVsAiModeTournamentClicked;
+        }
+
         if (generalSettingsAIVsAiCertaintyThresholdInput != null)
         {
             generalSettingsAIVsAiCertaintyThresholdInput.UnregisterValueChangedCallback(HandleGeneralSettingsAIVsAiCertaintyThresholdChanged);
@@ -1369,6 +1462,26 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsAIVsAiEmergencyHardMaxGamesInput != null)
         {
             generalSettingsAIVsAiEmergencyHardMaxGamesInput.UnregisterValueChangedCallback(HandleGeneralSettingsAIVsAiEmergencyHardMaxGamesChanged);
+        }
+
+        if (generalSettingsAIVsAiTournamentTypeRoundRobinButton != null)
+        {
+            generalSettingsAIVsAiTournamentTypeRoundRobinButton.clicked -= HandleGeneralSettingsAIVsAiTournamentTypeRoundRobinClicked;
+        }
+
+        if (generalSettingsAIVsAiTournamentSeatSwapButton != null)
+        {
+            generalSettingsAIVsAiTournamentSeatSwapButton.clicked -= HandleGeneralSettingsAIVsAiTournamentSeatSwapClicked;
+        }
+
+        if (generalSettingsAIVsAiTournamentSelectFullPoolButton != null)
+        {
+            generalSettingsAIVsAiTournamentSelectFullPoolButton.clicked -= HandleGeneralSettingsAIVsAiTournamentSelectFullPoolClicked;
+        }
+
+        if (generalSettingsAIVsAiTournamentGamesPerPairingInput != null)
+        {
+            generalSettingsAIVsAiTournamentGamesPerPairingInput.UnregisterValueChangedCallback(HandleGeneralSettingsAIVsAiTournamentGamesPerPairingChanged);
         }
 
         if (generalSettingsConfirmButton != null)
@@ -1787,6 +1900,18 @@ public class MainMenuUITKView : MonoBehaviour
         RefreshGeneralSettingsSelectionState();
     }
 
+    private void HandleGeneralSettingsAIVsAiModeHeadToHeadClicked()
+    {
+        selectedAIVsAISimulationSettings.mode = AIVsAIBatchRunController.SimulationMode.HeadToHead;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAIVsAiModeTournamentClicked()
+    {
+        selectedAIVsAISimulationSettings.mode = AIVsAIBatchRunController.SimulationMode.Tournament;
+        RefreshGeneralSettingsSelectionState();
+    }
+
     private void ToggleSideAFeature(AILocalDecisionFeatures feature)
     {
         selectedSideAFeatures ^= feature;
@@ -1796,6 +1921,49 @@ public class MainMenuUITKView : MonoBehaviour
     private void ToggleSideBFeature(AILocalDecisionFeatures feature)
     {
         selectedSideBFeatures ^= feature;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAIVsAiTournamentTypeRoundRobinClicked()
+    {
+        selectedAIVsAISimulationSettings.tournamentType = AIVsAIBatchRunController.TournamentType.RoundRobin;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAIVsAiTournamentSeatSwapClicked()
+    {
+        selectedAIVsAISimulationSettings.tournamentSeatSwap = !selectedAIVsAISimulationSettings.tournamentSeatSwap;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAIVsAiTournamentSelectFullPoolClicked()
+    {
+        selectedAIVsAISimulationSettings.tournamentParticipantMask =
+            AIVsAIBatchRunController.GetDefaultTournamentParticipantMask();
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAIVsAiTournamentGamesPerPairingChanged(ChangeEvent<string> evt)
+    {
+        if (TryParseInt(evt != null ? evt.newValue : null, out int parsedValue))
+        {
+            if (selectedAIVsAISimulationSettings.tournamentGamesPerPairing != parsedValue)
+            {
+                selectedAIVsAISimulationSettings.tournamentGamesPerPairing = parsedValue;
+            }
+        }
+
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void ToggleTournamentParticipant(int generatedVariantIndex)
+    {
+        if (generatedVariantIndex < 0 || generatedVariantIndex >= AIVsAIBatchRunController.GetGeneratedVariantCount())
+        {
+            return;
+        }
+
+        selectedAIVsAISimulationSettings.tournamentParticipantMask ^= 1 << generatedVariantIndex;
         RefreshGeneralSettingsSelectionState();
     }
 
@@ -2661,6 +2829,11 @@ public class MainMenuUITKView : MonoBehaviour
                     : DisplayStyle.None;
         }
 
+        selectedAIVsAISimulationSettings =
+            AIVsAIBatchRunController.SanitizeSimulationSettings(selectedAIVsAISimulationSettings);
+        bool isTournamentMode =
+            selectedAIVsAISimulationSettings.mode == AIVsAIBatchRunController.SimulationMode.Tournament;
+
         UpdateGeneralSettingsSelectionButton(
             generalSettingsMapSmallButton,
             selectedMapSizePreset == TurnManager.MapSizePreset.Small);
@@ -2682,6 +2855,26 @@ public class MainMenuUITKView : MonoBehaviour
         UpdateGeneralSettingsSelectionButton(
             generalSettingsAiStyleRiderFocusButton,
             selectedAIRecruitVariant == TurnManager.AIRecruitVariant.RiderFocus);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsAIVsAiModeHeadToHeadButton,
+            !isTournamentMode);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsAIVsAiModeTournamentButton,
+            isTournamentMode);
+        if (generalSettingsAIVsAiHeadToHeadSection != null)
+        {
+            generalSettingsAIVsAiHeadToHeadSection.style.display = isTournamentMode
+                ? DisplayStyle.None
+                : DisplayStyle.Flex;
+        }
+
+        if (generalSettingsAIVsAiTournamentSection != null)
+        {
+            generalSettingsAIVsAiTournamentSection.style.display = isTournamentMode
+                ? DisplayStyle.Flex
+                : DisplayStyle.None;
+        }
+
         UpdateGeneralSettingsSelectionButton(
             generalSettingsSideAAiStyleDefaultButton,
             selectedSideAAIRecruitVariant == TurnManager.AIRecruitVariant.Default);
@@ -2712,8 +2905,6 @@ public class MainMenuUITKView : MonoBehaviour
         UpdateGeneralSettingsSelectionButton(
             generalSettingsSideBFeatureDefenseButton,
             (selectedSideBFeatures & AILocalDecisionFeatures.DefensiveVeto) != 0);
-        selectedAIVsAISimulationSettings =
-            AIVsAIBatchRunController.SanitizeSimulationSettings(selectedAIVsAISimulationSettings);
         UpdateGeneralSettingsSelectionButton(
             generalSettingsAIVsAiPresetQuickButton,
             selectedAIVsAISimulationSettings.preset == AIVsAIBatchRunController.SimulationPreset.QuickExploration);
@@ -2753,6 +2944,39 @@ public class MainMenuUITKView : MonoBehaviour
         SetTextFieldValue(
             generalSettingsAIVsAiEmergencyHardMaxGamesInput,
             selectedAIVsAISimulationSettings.emergencyHardMaxGames.ToString(CultureInfo.InvariantCulture));
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsAIVsAiTournamentTypeRoundRobinButton,
+            selectedAIVsAISimulationSettings.tournamentType == AIVsAIBatchRunController.TournamentType.RoundRobin);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsAIVsAiTournamentSeatSwapButton,
+            selectedAIVsAISimulationSettings.tournamentSeatSwap);
+        SetTextFieldValue(
+            generalSettingsAIVsAiTournamentGamesPerPairingInput,
+            selectedAIVsAISimulationSettings.tournamentGamesPerPairing.ToString(CultureInfo.InvariantCulture));
+
+        int selectedTournamentParticipants = AIVsAIBatchRunController.CountTournamentParticipants(
+            selectedAIVsAISimulationSettings.tournamentParticipantMask);
+        for (int i = 0; i < generalSettingsAIVsAiTournamentParticipantButtons.Count; i++)
+        {
+            bool selected = (selectedAIVsAISimulationSettings.tournamentParticipantMask & (1 << i)) != 0;
+            UpdateGeneralSettingsSelectionButton(generalSettingsAIVsAiTournamentParticipantButtons[i], selected);
+        }
+
+        if (generalSettingsAIVsAiTournamentEstimateLabel != null)
+        {
+            AIVsAIBatchRunController.TournamentEstimate estimate =
+                AIVsAIBatchRunController.EstimateTournament(
+                    selectedAIVsAISimulationSettings,
+                    selectedAIVsAIBatchSpeedPreset);
+            generalSettingsAIVsAiTournamentEstimateLabel.text =
+                $"Estimate only: {estimate.participantCount} variants | {estimate.totalPairings} pairings | {estimate.totalGames} games | approx {FormatDurationEstimate(estimate.estimatedRuntimeSeconds)}";
+        }
+
+        bool tournamentReady = !isTournamentMode || selectedTournamentParticipants >= 2;
+        if (generalSettingsConfirmButton != null)
+        {
+            generalSettingsConfirmButton.SetEnabled(tournamentReady);
+        }
     }
 
     private void ApplyAIVsAiSimulationPreset(AIVsAIBatchRunController.SimulationPreset preset)
@@ -2811,6 +3035,15 @@ public class MainMenuUITKView : MonoBehaviour
             }
         }
 
+        if (TryParseInt(generalSettingsAIVsAiTournamentGamesPerPairingInput != null ? generalSettingsAIVsAiTournamentGamesPerPairingInput.value : null, out int tournamentGamesPerPairing))
+        {
+            if (selectedAIVsAISimulationSettings.tournamentGamesPerPairing != tournamentGamesPerPairing)
+            {
+                selectedAIVsAISimulationSettings.tournamentGamesPerPairing = tournamentGamesPerPairing;
+                changed = true;
+            }
+        }
+
         if (changed)
         {
             MarkAIVsAiSimulationSettingsAsManual();
@@ -2861,6 +3094,26 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         return value.ToString("0.##", CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatDurationEstimate(float totalSeconds)
+    {
+        totalSeconds = Mathf.Max(0f, totalSeconds);
+        if (totalSeconds >= 3600f)
+        {
+            int hours = Mathf.FloorToInt(totalSeconds / 3600f);
+            int minutes = Mathf.FloorToInt((totalSeconds % 3600f) / 60f);
+            return $"{hours}h {minutes}m";
+        }
+
+        if (totalSeconds >= 60f)
+        {
+            int minutes = Mathf.FloorToInt(totalSeconds / 60f);
+            int seconds = Mathf.FloorToInt(totalSeconds % 60f);
+            return $"{minutes}m {seconds}s";
+        }
+
+        return $"{totalSeconds:0.0}s";
     }
 
     private static void SetTextFieldValue(TextField textField, string value)
@@ -3361,6 +3614,9 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAiStyleSection = null;
         generalSettingsDevSection = null;
         generalSettingsAIVsAIOptionsSection = null;
+        generalSettingsAIVsAiHeadToHeadSection = null;
+        generalSettingsAIVsAiTournamentSection = null;
+        generalSettingsAIVsAiTournamentParticipantPool = null;
         activeGamesList = null;
         detailsTitleLabel = null;
         detailsSubtitleLabel = null;
@@ -3378,6 +3634,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsTitleLabel = null;
         generalSettingsSubtitleLabel = null;
         generalSettingsStoreSnapshotHistoryHelperLabel = null;
+        generalSettingsAIVsAiTournamentEstimateLabel = null;
         continueButton = null;
         playVsAiButton = null;
         multiplayerButton = null;
@@ -3398,6 +3655,8 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAiStyleRiderFocusButton = null;
         generalSettingsStoreSnapshotHistoryButton = null;
         generalSettingsWatchAIVsAIButton = null;
+        generalSettingsAIVsAiModeHeadToHeadButton = null;
+        generalSettingsAIVsAiModeTournamentButton = null;
         generalSettingsSideAAiStyleDefaultButton = null;
         generalSettingsSideAAiStyleRiderFocusButton = null;
         generalSettingsSideAFeatureOffenseButton = null;
@@ -3416,6 +3675,9 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAIVsAiBatchSpeedFastButton = null;
         generalSettingsAIVsAiBatchSpeedVeryFastButton = null;
         generalSettingsAIVsAiBatchSpeedUltraFastButton = null;
+        generalSettingsAIVsAiTournamentTypeRoundRobinButton = null;
+        generalSettingsAIVsAiTournamentSeatSwapButton = null;
+        generalSettingsAIVsAiTournamentSelectFullPoolButton = null;
         generalSettingsConfirmButton = null;
         generalSettingsBackButton = null;
         detailsOpenButton = null;
@@ -3435,6 +3697,8 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAIVsAiTimeBudgetMinutesInput = null;
         generalSettingsAIVsAiBatchSizeInput = null;
         generalSettingsAIVsAiEmergencyHardMaxGamesInput = null;
+        generalSettingsAIVsAiTournamentGamesPerPairingInput = null;
+        generalSettingsAIVsAiTournamentParticipantButtons.Clear();
     }
 
     private void TryShowPendingCreateSuccessPanel()

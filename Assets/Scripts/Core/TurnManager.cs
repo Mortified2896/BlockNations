@@ -1490,16 +1490,15 @@ public class TurnManager : MonoBehaviour
         AIDifficultySelection.SetPending(aiDifficulty);
         AIRecruitVariantSelection.SetPending(aiRecruitVariant);
         SnapshotHistorySelection.SetPending(MatchSnapshotHistorySettings.IsEnabled(currentGameId));
-        AIVsAIDebugSelection.SetPending(
-            enabled: true,
-            sideARecruitVariant: gameOverUiRepeatSideARecruitVariant,
-            sideBRecruitVariant: gameOverUiRepeatSideBRecruitVariant,
-            sideAFeatures: gameOverUiRepeatSideAFeatures,
-            sideBFeatures: gameOverUiRepeatSideBFeatures,
-            sideAProfile: gameOverUiRepeatSideAProfile,
-            sideBProfile: gameOverUiRepeatSideBProfile,
-            batchSpeedPreset: aiVsAiBatchSpeedPreset);
         AIVsAIBatchRunController.SetPendingSimulationSettings(gameOverUiRepeatAIVsAISimulationSettings);
+        QueuePendingAIVsAIDebugSelectionForSimulation(
+            gameOverUiRepeatAIVsAISimulationSettings,
+            gameOverUiRepeatSideARecruitVariant,
+            gameOverUiRepeatSideBRecruitVariant,
+            gameOverUiRepeatSideAFeatures,
+            gameOverUiRepeatSideBFeatures,
+            gameOverUiRepeatSideAProfile,
+            gameOverUiRepeatSideBProfile);
 
         Time.timeScale = 1f;
         CameraController.ClearPendingRestoreState();
@@ -3376,7 +3375,7 @@ public class TurnManager : MonoBehaviour
                         if (occupant != null && occupant.isPlayerOwned == unit.isPlayerOwned)
                             continue;
 
-                        MoveAIUnitOneStep(unit, targetPos, stepSize);
+                        MoveAIUnitOneStep(unit, targetPos, stepSize, aiHasPerfectInfo);
                         steppedOffCity = true;
                         break;
                     }
@@ -3441,7 +3440,7 @@ public class TurnManager : MonoBehaviour
                             }
 
                             // Move toward the defensive anchor tile rather than the city center.
-                            MoveAIUnitOneStep(unit, anchorTile.transform.position, stepSize);
+                            MoveAIUnitOneStep(unit, anchorTile.transform.position, stepSize, aiHasPerfectInfo);
                             continue;
                         }
                     }
@@ -3453,7 +3452,7 @@ public class TurnManager : MonoBehaviour
                         continue;
                     }
 
-                    MoveAIUnitOneStep(unit, primaryAICity.transform.position, stepSize);
+                    MoveAIUnitOneStep(unit, primaryAICity.transform.position, stepSize, aiHasPerfectInfo);
                     continue;
                 }
             }
@@ -3538,7 +3537,7 @@ public class TurnManager : MonoBehaviour
                     }
                 }
 
-                MoveAIUnitOneStep(unit, chosenTarget, stepSize);
+                MoveAIUnitOneStep(unit, chosenTarget, stepSize, aiHasPerfectInfo);
             }
         }
     }
@@ -4061,7 +4060,7 @@ public class TurnManager : MonoBehaviour
 
         if (chosenCandidate.requiresAttack)
         {
-            MoveAIUnitOneStep(unit, chosenCandidate.targetPosition, tileSize);
+            MoveAIUnitOneStep(unit, chosenCandidate.targetPosition, tileSize, aiHasPerfectInfo);
             return gameOver;
         }
 
@@ -4177,6 +4176,44 @@ public class TurnManager : MonoBehaviour
         return AIPostCalculusLocalDecisionHelper.ChooseAttackTarget(
             GetAILocalDecisionFeaturesForSide(attacker.isPlayerOwned),
             candidates);
+    }
+
+    private List<Unit> BuildPerceivedEnemyUnitsForSide(
+        bool actingSideIsPlayerOwned,
+        HashSet<TileVisibility> visibleTiles,
+        bool aiHasPerfectInfo)
+    {
+        List<Unit> perceivedEnemyUnits = new List<Unit>();
+        Unit[] allUnits = Object.FindObjectsByType<Unit>();
+        for (int i = 0; i < allUnits.Length; i++)
+        {
+            Unit unit = allUnits[i];
+            if (unit == null ||
+                unit.isPlayerOwned == actingSideIsPlayerOwned ||
+                !unit.gameObject.activeInHierarchy)
+            {
+                continue;
+            }
+
+            if (aiHasPerfectInfo)
+            {
+                perceivedEnemyUnits.Add(unit);
+                continue;
+            }
+
+            if (gridManager == null ||
+                visibleTiles == null ||
+                !gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility tile) ||
+                tile == null ||
+                !visibleTiles.Contains(tile))
+            {
+                continue;
+            }
+
+            perceivedEnemyUnits.Add(unit);
+        }
+
+        return perceivedEnemyUnits;
     }
 
     private bool WouldMoveCandidateExposeVisibleImmediateThreatToKeyCity(
@@ -4743,7 +4780,7 @@ public class TurnManager : MonoBehaviour
                         if (occupant != null && occupant.isPlayerOwned == unit.isPlayerOwned)
                             continue;
 
-                        MoveAIUnitOneStep(unit, targetPos, stepSize);
+                        MoveAIUnitOneStep(unit, targetPos, stepSize, aiHasPerfectInfo);
                         steppedOffCity = true;
                         if (gameOver)
                             return;
@@ -4795,7 +4832,7 @@ public class TurnManager : MonoBehaviour
                                 continue;
                             }
 
-                            MoveAIUnitOneStep(unit, anchorTile.transform.position, stepSize);
+                            MoveAIUnitOneStep(unit, anchorTile.transform.position, stepSize, aiHasPerfectInfo);
                             if (gameOver)
                                 return;
                             continue;
@@ -4807,7 +4844,7 @@ public class TurnManager : MonoBehaviour
                         continue;
                     }
 
-                    MoveAIUnitOneStep(unit, primaryControlledCity.transform.position, stepSize);
+                    MoveAIUnitOneStep(unit, primaryControlledCity.transform.position, stepSize, aiHasPerfectInfo);
                     if (gameOver)
                         return;
                     continue;
@@ -4885,7 +4922,7 @@ public class TurnManager : MonoBehaviour
                     }
                 }
 
-                MoveAIUnitOneStep(unit, chosenTarget, stepSize);
+                MoveAIUnitOneStep(unit, chosenTarget, stepSize, aiHasPerfectInfo);
                 if (gameOver)
                     return;
             }
@@ -5117,7 +5154,7 @@ public class TurnManager : MonoBehaviour
 
             Vector3 startPosition = unit.transform.position;
             int attacksUsedBeforeMove = unit.attacksUsedThisTurn;
-            MoveAIUnitOneStep(unit, chosenTarget.Value, tileSize);
+            MoveAIUnitOneStep(unit, chosenTarget.Value, tileSize, aiHasPerfectInfo);
             if (gameOver)
                 return;
 
@@ -5211,7 +5248,7 @@ public class TurnManager : MonoBehaviour
                     Unit occupant = GridUtils.GetUnitAtPosition(targetPosition, unit);
                     if (occupant == null)
                     {
-                        MoveAIUnitOneStep(unit, targetPosition, tileSize);
+                        MoveAIUnitOneStep(unit, targetPosition, tileSize, aiHasPerfectInfo);
                     }
                     else if (occupant.isPlayerOwned == unit.isPlayerOwned)
                     {
@@ -5408,7 +5445,7 @@ public class TurnManager : MonoBehaviour
         }
     }
 
-    void MoveAIUnitOneStep(Unit unit, Vector3 targetPosition, float tileSize)
+    void MoveAIUnitOneStep(Unit unit, Vector3 targetPosition, float tileSize, bool aiHasPerfectInfo = false)
     {
         if (!unit.CanMoveThisTurn())
             return;
@@ -5493,8 +5530,13 @@ public class TurnManager : MonoBehaviour
         // look for an enemy within attack range (move-then-attack).
         if (unit.CanAttackThisTurn())
         {
-            Unit[] allUnits = Object.FindObjectsByType<Unit>();
-            Unit bestEnemy = SelectBestLocalAttackTarget(unit, allUnits);
+            IList<Unit> perceivedEnemyUnits = aiHasPerfectInfo
+                ? (IList<Unit>)Object.FindObjectsByType<Unit>()
+                : BuildPerceivedEnemyUnitsForSide(
+                    unit.isPlayerOwned,
+                    ComputeVisibilityForSide(unit.isPlayerOwned),
+                    aiHasPerfectInfo: false);
+            Unit bestEnemy = SelectBestLocalAttackTarget(unit, perceivedEnemyUnits);
 
             if (bestEnemy != null)
             {
@@ -5684,14 +5726,26 @@ public class TurnManager : MonoBehaviour
             gameOverUiRepeatSideBProfile = runSummary.baseSideBProfile;
 #endif
             ShowGameOverPopup(BuildAIVsAISimulationCompletionMessage(runSummary));
-            Debug.Log(
-                $"[AIVsAIBatch] Finished runId={runSummary.runId} status={(runSummary.runEndedNormally ? "Normal" : "Abnormal")} " +
-                $"stopReason={runSummary.stopReason} matches={runSummary.matchCount} " +
-                $"sideAWins={runSummary.sideAWins} sideBWins={runSummary.sideBWins} draws={runSummary.trueDraws} aborts={runSummary.aborts} " +
-                $"scoreRate={runSummary.sideAScoreRate:P1} effect={runSummary.sideAEffectSize:+0.0%;-0.0%;0.0%} " +
-                $"bayesProb={runSummary.bayesianSideABetterProbability:P1} decisiveGames={runSummary.bayesianDecisiveGames} " +
-                $"elapsed={runSummary.elapsedSeconds:0.00}s batchSize={runSummary.batchSize} " +
-                $"matchCsv={AIVsAIMatchCsvLogger.GetResultsFilePath()} summaryCsv={AIVsAIMatchCsvLogger.GetRunSummaryFilePath()}");
+            if (runSummary.simulationMode == AIVsAIBatchRunController.SimulationMode.Tournament)
+            {
+                Debug.Log(
+                    $"[AIVsAIBatch] Finished tournament runId={runSummary.runId} status={(runSummary.runEndedNormally ? "Normal" : "Abnormal")} " +
+                    $"stopReason={runSummary.stopReason} matches={runSummary.matchCount}/{runSummary.tournamentScheduledGameCount} " +
+                    $"participants={runSummary.tournamentParticipantCount} pairings={runSummary.tournamentScheduledPairingCount} " +
+                    $"winner={runSummary.tournamentWinnerLabel} elapsed={runSummary.elapsedSeconds:0.00}s " +
+                    $"matchCsv={AIVsAIMatchCsvLogger.GetResultsFilePath()} summaryCsv={AIVsAIMatchCsvLogger.GetRunSummaryFilePath()}");
+            }
+            else
+            {
+                Debug.Log(
+                    $"[AIVsAIBatch] Finished runId={runSummary.runId} status={(runSummary.runEndedNormally ? "Normal" : "Abnormal")} " +
+                    $"stopReason={runSummary.stopReason} matches={runSummary.matchCount} " +
+                    $"sideAWins={runSummary.sideAWins} sideBWins={runSummary.sideBWins} draws={runSummary.trueDraws} aborts={runSummary.aborts} " +
+                    $"scoreRate={runSummary.sideAScoreRate:P1} effect={runSummary.sideAEffectSize:+0.0%;-0.0%;0.0%} " +
+                    $"bayesProb={runSummary.bayesianSideABetterProbability:P1} decisiveGames={runSummary.bayesianDecisiveGames} " +
+                    $"elapsed={runSummary.elapsedSeconds:0.00}s batchSize={runSummary.batchSize} " +
+                    $"matchCsv={AIVsAIMatchCsvLogger.GetResultsFilePath()} summaryCsv={AIVsAIMatchCsvLogger.GetRunSummaryFilePath()}");
+            }
             return true;
         }
 
@@ -5832,6 +5886,45 @@ public class TurnManager : MonoBehaviour
         if (summary == null)
         {
             return "AI simulation finished.";
+        }
+
+        if (summary.simulationMode == AIVsAIBatchRunController.SimulationMode.Tournament)
+        {
+            string tournamentStatusText = summary.runEndedNormally
+                ? "Normal"
+                : "Abnormal (result may be unreliable)";
+            string standings = summary.tournamentStandingsSummary ?? string.Empty;
+            string[] standingLines = standings.Split(new[] { '\r', '\n' }, System.StringSplitOptions.RemoveEmptyEntries);
+            string topStandings = standingLines.Length > 0
+                ? string.Join("\n", standingLines, 0, Mathf.Min(5, standingLines.Length))
+                : "No completed standings.";
+            string pairings = summary.tournamentPairingSummary ?? string.Empty;
+            string[] pairingLines = pairings.Split(new[] { '\r', '\n' }, System.StringSplitOptions.RemoveEmptyEntries);
+            string topPairings = pairingLines.Length > 0
+                ? string.Join("\n", pairingLines, 0, Mathf.Min(3, pairingLines.Length))
+                : "No completed pairings.";
+            string winnerLabel = string.IsNullOrWhiteSpace(summary.tournamentWinnerLabel)
+                ? "No tournament leader"
+                : summary.tournamentWinnerLabel;
+
+            return
+                $"Tournament winner: {winnerLabel}\n" +
+                $"Run status: {tournamentStatusText}\n" +
+                $"Stop reason: {summary.stopReason}\n" +
+                $"Mode: {AIVsAIBatchRunController.GetSimulationModeDisplayName(summary.simulationMode)}\n" +
+                $"Format: {AIVsAIBatchRunController.GetTournamentTypeDisplayName(summary.tournamentType)}\n" +
+                $"Participants: {summary.tournamentParticipantCount}\n" +
+                $"Pairings: {summary.tournamentScheduledPairingCount}\n" +
+                $"Completed games: {summary.matchCount}/{summary.tournamentScheduledGameCount}\n" +
+                $"Games per pairing: {summary.tournamentGamesPerPairing}\n" +
+                $"Seat swap: {(summary.tournamentSeatSwapEnabled ? "On" : "Off")}\n" +
+                $"Draws: {summary.trueDraws}\n" +
+                $"Aborts: {summary.aborts}\n" +
+                $"Elapsed time: {FormatDuration(summary.elapsedSeconds)}\n" +
+                $"Average turns: {summary.averageTotalTurnCount:0.00}\n" +
+                $"Turns/sec: {summary.turnsPerSecond:0.00}\n" +
+                $"Top standings:\n{topStandings}\n" +
+                $"Pairing samples:\n{topPairings}";
         }
 
         string primarySideALabel = BuildPrimaryAIVsAIDisplayLabel(summary.sideAAIConfig, "Side A");
@@ -6003,20 +6096,66 @@ public class TurnManager : MonoBehaviour
                 out nextSideBProfile);
         }
 
-        AIVsAIDebugSelection.SetPending(
-            enabled: true,
-            sideARecruitVariant: nextSideARecruitVariant,
-            sideBRecruitVariant: nextSideBRecruitVariant,
-            sideAFeatures: nextSideAFeatures,
-            sideBFeatures: nextSideBFeatures,
-            sideAProfile: nextSideAProfile,
-            sideBProfile: nextSideBProfile,
-            batchSpeedPreset: aiVsAiBatchSpeedPreset);
+        AIVsAIBatchRunController.SimulationSettings simulationSettingsForRestart = gameOverUiRepeatAIVsAISimulationSettings;
+        if (AIVsAIBatchRunController.TryGetActiveSimulationSettings(out AIVsAIBatchRunController.SimulationSettings activeSimulationSettings))
+        {
+            simulationSettingsForRestart = activeSimulationSettings;
+        }
+
+        QueuePendingAIVsAIDebugSelectionForSimulation(
+            simulationSettingsForRestart,
+            nextSideARecruitVariant,
+            nextSideBRecruitVariant,
+            nextSideAFeatures,
+            nextSideBFeatures,
+            nextSideAProfile,
+            nextSideBProfile);
 
         Time.timeScale = 1f;
         CameraController.ClearPendingRestoreState();
         Scene currentScene = SceneManager.GetActiveScene();
         SceneManager.LoadScene(currentScene.name);
+    }
+
+    private void QueuePendingAIVsAIDebugSelectionForSimulation(
+        AIVsAIBatchRunController.SimulationSettings simulationSettings,
+        AIRecruitVariant fallbackSideARecruitVariant,
+        AIRecruitVariant fallbackSideBRecruitVariant,
+        AILocalDecisionFeatures fallbackSideAFeatures,
+        AILocalDecisionFeatures fallbackSideBFeatures,
+        AIDebugProfile fallbackSideAProfile,
+        AIDebugProfile fallbackSideBProfile)
+    {
+        AIRecruitVariant pendingSideARecruitVariant = fallbackSideARecruitVariant;
+        AIRecruitVariant pendingSideBRecruitVariant = fallbackSideBRecruitVariant;
+        AILocalDecisionFeatures pendingSideAFeatures = fallbackSideAFeatures;
+        AILocalDecisionFeatures pendingSideBFeatures = fallbackSideBFeatures;
+        AIDebugProfile pendingSideAProfile = fallbackSideAProfile;
+        AIDebugProfile pendingSideBProfile = fallbackSideBProfile;
+
+        AIVsAIBatchRunController.SimulationSettings sanitizedSettings =
+            AIVsAIBatchRunController.SanitizeSimulationSettings(simulationSettings);
+        if (sanitizedSettings.mode == AIVsAIBatchRunController.SimulationMode.Tournament)
+        {
+            AIVsAIBatchRunController.TryGetInitialTournamentMatchSettings(
+                sanitizedSettings,
+                out pendingSideARecruitVariant,
+                out pendingSideBRecruitVariant,
+                out pendingSideAFeatures,
+                out pendingSideBFeatures,
+                out pendingSideAProfile,
+                out pendingSideBProfile);
+        }
+
+        AIVsAIDebugSelection.SetPending(
+            enabled: true,
+            sideARecruitVariant: pendingSideARecruitVariant,
+            sideBRecruitVariant: pendingSideBRecruitVariant,
+            sideAFeatures: pendingSideAFeatures,
+            sideBFeatures: pendingSideBFeatures,
+            sideAProfile: pendingSideAProfile,
+            sideBProfile: pendingSideBProfile,
+            batchSpeedPreset: aiVsAiBatchSpeedPreset);
     }
 #endif
 

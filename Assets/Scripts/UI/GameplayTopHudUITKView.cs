@@ -280,6 +280,30 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         turnLabel.style.width = 520f;
         goldLabel.style.width = 520f;
 
+        if (snapshot.simulationMode == AIVsAIBatchRunController.SimulationMode.Tournament)
+        {
+            string progressLabel = snapshot.scheduledGames > 0
+                ? $"Games {snapshot.completedGames}/{snapshot.scheduledGames}"
+                : $"Games {snapshot.completedGames}";
+            string pairingLabel = snapshot.scheduledPairings > 0
+                ? $"{snapshot.scheduledPairings} pairings"
+                : "Pairings pending";
+            turnLabel.text =
+                $"{progressLabel} | Variants {snapshot.participantCount} | {pairingLabel}";
+            goldLabel.text =
+                $"{FormatDurationCompact(snapshot.elapsedSeconds)} elapsed | {FormatDurationCompact(snapshot.remainingTimeSeconds)} est left";
+
+            if (statusLabel != null)
+            {
+                statusLabel.style.width = 560f;
+                statusLabel.text =
+                    $"{snapshot.gamesPerSecond:0.00} games/s | Seat A W{snapshot.sideAWins} L{snapshot.sideBWins} D{snapshot.trueDraws} A{snapshot.aborts}";
+                statusLabel.style.display = DisplayStyle.Flex;
+            }
+
+            return;
+        }
+
         int completedMatches = snapshot.completedGames;
         int completedPairs = AIVsAIBatchRunController.GetCompletedPairs(completedMatches);
         string pairProgressLabel = $"Pairs {completedPairs} ({completedMatches} matches)";

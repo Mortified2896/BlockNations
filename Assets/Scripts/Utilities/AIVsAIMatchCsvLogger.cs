@@ -7,12 +7,12 @@ using UnityEngine;
 public static class AIVsAIMatchCsvLogger
 {
     private const string RootFolderName = "DevMatchResults";
-    private const string MatchResultsFileName = "ai_vs_ai_match_results_v4.csv";
-    private const string RunSummaryFileName = "ai_vs_ai_run_summaries_v4.csv";
+    private const string MatchResultsFileName = "ai_vs_ai_match_results_v5.csv";
+    private const string RunSummaryFileName = "ai_vs_ai_run_summaries_v5.csv";
     private const string MatchHeader =
-        "timestampUtc,runId,matchIndexInRun,runEmergencyHardMaxGames,appVersion,mapSizePreset,boardWidth,boardHeight,gameMode,sideAAIConfig,sideBAIConfig,sideAProfile,sideBProfile,winner,totalTurnCount,sideAFinalCityCount,sideBFinalCityCount,sideAFinalUnitCount,sideBFinalUnitCount";
+        "timestampUtc,runId,matchIndexInRun,runEmergencyHardMaxGames,appVersion,mapSizePreset,boardWidth,boardHeight,gameMode,simulationMode,participantCount,sideAAIConfig,sideBAIConfig,sideAVariantLabel,sideBVariantLabel,pairingLabel,pairingIndex,pairingGameIndex,seatsSwapped,sideAProfile,sideBProfile,winner,totalTurnCount,sideAFinalCityCount,sideBFinalCityCount,sideAFinalUnitCount,sideBFinalUnitCount";
     private const string RunSummaryHeader =
-        "timestampUtc,runId,appVersion,mapSizePreset,boardWidth,boardHeight,gameMode,sideAAIConfig,sideBAIConfig,matchCount,sideAWins,sideBWins,drawsOrAborts,trueDraws,aborts,elapsedSeconds,turnsPerSecond,sideAWinRate,sideAScoreRate,sideAEffectSize,averageTotalTurnCount,simulationPreset,simulationSettingsLabel,evaluationMethod,evaluationMethodLabel,certaintyThreshold,minimumGames,batchSize,timeBudgetSeconds,emergencyHardMaxGames,bayesianDecisiveGames,bayesianSideABetterProbability,runEndedNormally,stopReason,comparisonMode,trackedEntityLabel,seat1Label,seat2Label,pairedStatsApplicable,completePairCount,unmatchedIgnoredGameCount,pairedAFavoredCount,pairedSplitCount,pairedBFavoredCount,pairedMeanScoreRate,pairedEffectSize,pairedPValue,pairedThreshold,seatEffectSize,seat1GameCount,seat1Wins,seat1Draws,seat1Losses,seat1ScoreRate,seat1EffectSize,seat2GameCount,seat2Wins,seat2Draws,seat2Losses,seat2ScoreRate,seat2EffectSize";
+        "timestampUtc,runId,appVersion,mapSizePreset,boardWidth,boardHeight,gameMode,simulationMode,tournamentType,tournamentParticipantCount,tournamentScheduledPairingCount,tournamentScheduledGameCount,tournamentGamesPerPairing,tournamentSeatSwapEnabled,tournamentWinnerLabel,tournamentParticipantsSummary,tournamentStandingsSummary,tournamentPairingSummary,sideAAIConfig,sideBAIConfig,matchCount,sideAWins,sideBWins,drawsOrAborts,trueDraws,aborts,elapsedSeconds,turnsPerSecond,sideAWinRate,sideAScoreRate,sideAEffectSize,averageTotalTurnCount,simulationPreset,simulationSettingsLabel,evaluationMethod,evaluationMethodLabel,certaintyThreshold,minimumGames,batchSize,timeBudgetSeconds,emergencyHardMaxGames,bayesianDecisiveGames,bayesianSideABetterProbability,runEndedNormally,stopReason,comparisonMode,trackedEntityLabel,seat1Label,seat2Label,pairedStatsApplicable,completePairCount,unmatchedIgnoredGameCount,pairedAFavoredCount,pairedSplitCount,pairedBFavoredCount,pairedMeanScoreRate,pairedEffectSize,pairedPValue,pairedThreshold,seatEffectSize,seat1GameCount,seat1Wins,seat1Draws,seat1Losses,seat1ScoreRate,seat1EffectSize,seat2GameCount,seat2Wins,seat2Draws,seat2Losses,seat2ScoreRate,seat2EffectSize";
 
     public sealed class MatchResult
     {
@@ -25,8 +25,16 @@ public static class AIVsAIMatchCsvLogger
         public int boardWidth;
         public int boardHeight;
         public string gameMode;
+        public string simulationMode;
+        public int participantCount;
         public string sideAAIConfig;
         public string sideBAIConfig;
+        public string sideAVariantLabel;
+        public string sideBVariantLabel;
+        public string pairingLabel;
+        public int pairingIndex;
+        public int pairingGameIndex;
+        public bool seatsSwapped;
         public string sideAProfile;
         public string sideBProfile;
         public string winner;
@@ -106,6 +114,17 @@ public static class AIVsAIMatchCsvLogger
         public int seat2Losses;
         public float seat2ScoreRate;
         public float seat2EffectSize;
+        public AIVsAIBatchRunController.SimulationMode simulationMode;
+        public AIVsAIBatchRunController.TournamentType tournamentType;
+        public int tournamentParticipantCount;
+        public int tournamentScheduledPairingCount;
+        public int tournamentScheduledGameCount;
+        public int tournamentGamesPerPairing;
+        public bool tournamentSeatSwapEnabled;
+        public string tournamentWinnerLabel;
+        public string tournamentParticipantsSummary;
+        public string tournamentStandingsSummary;
+        public string tournamentPairingSummary;
     }
 
     public static string GetResultsFilePath()
@@ -172,8 +191,16 @@ public static class AIVsAIMatchCsvLogger
             result.boardWidth.ToString(),
             result.boardHeight.ToString(),
             Escape(result.gameMode),
+            Escape(result.simulationMode),
+            result.participantCount.ToString(),
             Escape(result.sideAAIConfig),
             Escape(result.sideBAIConfig),
+            Escape(result.sideAVariantLabel),
+            Escape(result.sideBVariantLabel),
+            Escape(result.pairingLabel),
+            result.pairingIndex.ToString(),
+            result.pairingGameIndex.ToString(),
+            result.seatsSwapped ? "true" : "false",
             Escape(result.sideAProfile),
             Escape(result.sideBProfile),
             Escape(result.winner),
@@ -194,6 +221,17 @@ public static class AIVsAIMatchCsvLogger
             summary.boardWidth.ToString(),
             summary.boardHeight.ToString(),
             Escape(summary.gameMode),
+            Escape(summary.simulationMode.ToString()),
+            Escape(summary.tournamentType.ToString()),
+            summary.tournamentParticipantCount.ToString(),
+            summary.tournamentScheduledPairingCount.ToString(),
+            summary.tournamentScheduledGameCount.ToString(),
+            summary.tournamentGamesPerPairing.ToString(),
+            summary.tournamentSeatSwapEnabled ? "true" : "false",
+            Escape(summary.tournamentWinnerLabel),
+            Escape(summary.tournamentParticipantsSummary),
+            Escape(summary.tournamentStandingsSummary),
+            Escape(summary.tournamentPairingSummary),
             Escape(summary.sideAAIConfig),
             Escape(summary.sideBAIConfig),
             summary.matchCount.ToString(),
@@ -258,30 +296,48 @@ public static class AIVsAIMatchCsvLogger
             Directory.CreateDirectory(directory);
         }
 
-        bool writeHeader = !File.Exists(path) || new FileInfo(path).Length == 0;
-        using StreamWriter writer = new StreamWriter(path, append: true, Encoding.UTF8);
-        if (writeHeader)
+        bool fileExists = File.Exists(path);
+        using (StreamWriter writer = new StreamWriter(path, append: true, Encoding.UTF8))
         {
-            writer.WriteLine(header);
-        }
+            if (!fileExists)
+            {
+                writer.WriteLine(header);
+            }
 
-        writer.WriteLine(line);
+            writer.WriteLine(line);
+        }
     }
 
     private static string Escape(string value)
     {
-        string safeValue = value ?? string.Empty;
-        if (safeValue.IndexOfAny(new[] { ',', '"', '\n', '\r' }) < 0)
+        if (string.IsNullOrEmpty(value))
         {
-            return safeValue;
+            return string.Empty;
         }
 
-        return "\"" + safeValue.Replace("\"", "\"\"") + "\"";
+        bool requiresQuotes =
+            value.IndexOf(',') >= 0 ||
+            value.IndexOf('"') >= 0 ||
+            value.IndexOf('\n') >= 0 ||
+            value.IndexOf('\r') >= 0;
+        if (!requiresQuotes)
+        {
+            return value;
+        }
+
+        return $"\"{value.Replace("\"", "\"\"")}\"";
     }
 
     private static string FormatFloat(float value, int decimals)
     {
-        string format = decimals <= 2 ? "0.00" : "0.0000";
+        if (float.IsNaN(value) || float.IsInfinity(value))
+        {
+            return string.Empty;
+        }
+
+        string format = decimals <= 0
+            ? "0"
+            : $"0.{new string('0', decimals)}";
         return value.ToString(format, CultureInfo.InvariantCulture);
     }
 }

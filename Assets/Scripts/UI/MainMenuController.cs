@@ -314,6 +314,20 @@ public class MainMenuController : MonoBehaviour
         TurnManager.AIDebugProfile sideBProfile = TurnManager.AIDebugProfile.Baseline,
         AIVsAIBatchRunController.SimulationSettings aiVsAiSimulationSettings = default)
     {
+        aiVsAiSimulationSettings = AIVsAIBatchRunController.SanitizeSimulationSettings(aiVsAiSimulationSettings);
+        if (enableAIVsAIDebugMode &&
+            aiVsAiSimulationSettings.mode == AIVsAIBatchRunController.SimulationMode.Tournament)
+        {
+            AIVsAIBatchRunController.TryGetInitialTournamentMatchSettings(
+                aiVsAiSimulationSettings,
+                out sideARecruitVariant,
+                out sideBRecruitVariant,
+                out sideAFeatures,
+                out sideBFeatures,
+                out sideAProfile,
+                out sideBProfile);
+        }
+
         GameModeSelection.SetPendingMode(TurnManager.GameMode.VsAI);
         AIDifficultySelection.SetPending(difficulty);
         AIRecruitVariantSelection.SetPending(recruitVariant);

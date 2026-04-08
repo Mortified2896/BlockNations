@@ -159,64 +159,86 @@
                             <ui:Button name="GeneralSettingsWatchAIVsAIButton" text="Watch AI vs AI" class="menu-button general-settings-option-button general-settings-dev-option-button" />
                         </ui:VisualElement>
                         <ui:VisualElement name="GeneralSettingsAIVsAIOptionsSection" style="display: none;">
-                            <ui:Label text="Side A AI Model" class="general-settings-section-label" />
+                            <ui:Label text="Simulation Mode" class="general-settings-section-label" />
                             <ui:VisualElement class="general-settings-option-row">
-                                <ui:Button name="GeneralSettingsSideAAiStyleDefaultButton" text="Baseline" class="menu-button general-settings-option-button" />
-                                <ui:Button name="GeneralSettingsSideAAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                                <ui:Button name="GeneralSettingsAIVsAiModeHeadToHeadButton" text="Head-to-Head" class="menu-button general-settings-option-button" />
+                                <ui:Button name="GeneralSettingsAIVsAiModeTournamentButton" text="Tournament" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                             </ui:VisualElement>
-                            <ui:Label text="Side A Local Features" class="general-settings-section-label" />
-                            <ui:VisualElement class="general-settings-option-grid">
-                                <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
-                                    <ui:Button name="GeneralSettingsSideAFeatureOffenseButton" text="Offensive Obvious Win" class="menu-button general-settings-option-button" />
-                                    <ui:Button name="GeneralSettingsSideAFeatureExchangeButton" text="Exchange Scoring" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                            <ui:VisualElement name="GeneralSettingsAIVsAiHeadToHeadSection">
+                                <ui:Label text="Side A AI Model" class="general-settings-section-label" />
+                                <ui:VisualElement class="general-settings-option-row">
+                                    <ui:Button name="GeneralSettingsSideAAiStyleDefaultButton" text="Baseline" class="menu-button general-settings-option-button" />
+                                    <ui:Button name="GeneralSettingsSideAAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                                 </ui:VisualElement>
-                                <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
-                                    <ui:Button name="GeneralSettingsSideAFeatureDefenseButton" text="Defensive Veto" class="menu-button general-settings-option-button" />
+                                <ui:Label text="Side A Local Features" class="general-settings-section-label" />
+                                <ui:VisualElement class="general-settings-option-grid">
+                                    <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
+                                        <ui:Button name="GeneralSettingsSideAFeatureOffenseButton" text="Offensive Obvious Win" class="menu-button general-settings-option-button" />
+                                        <ui:Button name="GeneralSettingsSideAFeatureExchangeButton" text="Exchange Scoring" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                                    </ui:VisualElement>
+                                    <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
+                                        <ui:Button name="GeneralSettingsSideAFeatureDefenseButton" text="Defensive Veto" class="menu-button general-settings-option-button" />
+                                    </ui:VisualElement>
+                                </ui:VisualElement>
+                                <ui:Label text="Side B AI Model" class="general-settings-section-label" />
+                                <ui:VisualElement class="general-settings-option-row">
+                                    <ui:Button name="GeneralSettingsSideBAiStyleDefaultButton" text="Baseline" class="menu-button general-settings-option-button" />
+                                    <ui:Button name="GeneralSettingsSideBAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                                </ui:VisualElement>
+                                <ui:Label text="Side B Local Features" class="general-settings-section-label" />
+                                <ui:VisualElement class="general-settings-option-grid">
+                                    <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
+                                        <ui:Button name="GeneralSettingsSideBFeatureOffenseButton" text="Offensive Obvious Win" class="menu-button general-settings-option-button" />
+                                        <ui:Button name="GeneralSettingsSideBFeatureExchangeButton" text="Exchange Scoring" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                                    </ui:VisualElement>
+                                    <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
+                                        <ui:Button name="GeneralSettingsSideBFeatureDefenseButton" text="Defensive Veto" class="menu-button general-settings-option-button" />
+                                    </ui:VisualElement>
+                                </ui:VisualElement>
+                                <ui:Label text="Simulation Presets" class="general-settings-section-label" />
+                                <ui:VisualElement class="general-settings-option-grid">
+                                    <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
+                                        <ui:Button name="GeneralSettingsAIVsAiPresetQuickButton" text="Quick" class="menu-button general-settings-option-button" />
+                                        <ui:Button name="GeneralSettingsAIVsAiPresetStandardButton" text="Standard" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                                    </ui:VisualElement>
+                                    <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
+                                        <ui:Button name="GeneralSettingsAIVsAiPresetStrictButton" text="Strict" class="menu-button general-settings-option-button" />
+                                    </ui:VisualElement>
+                                </ui:VisualElement>
+                                <ui:Label text="Presets fill recommended defaults. You can edit every value after choosing one." class="general-settings-help-text" />
+                                <ui:Label text="Evaluation Method" class="general-settings-section-label" />
+                                <ui:VisualElement class="general-settings-option-row">
+                                    <ui:Button name="GeneralSettingsAIVsAiEvaluationMethodBayesianButton" text="Bayesian" class="menu-button general-settings-option-button" />
+                                </ui:VisualElement>
+                                <ui:Label text="Bayesian certainty uses decisive wins and losses only. Draws and aborts are reported separately." class="general-settings-help-text" />
+                                <ui:TextField name="GeneralSettingsAIVsAiCertaintyThresholdInput" label="Certainty Threshold" class="general-settings-input-field" />
+                                <ui:Label text="Stop when the system is this sure one AI is better." class="general-settings-help-text" />
+                                <ui:TextField name="GeneralSettingsAIVsAiMinimumGamesInput" label="Minimum Games" class="general-settings-input-field" />
+                                <ui:Label text="Prevents early stops from tiny samples." class="general-settings-help-text" />
+                                <ui:TextField name="GeneralSettingsAIVsAiTimeBudgetMinutesInput" label="Time Budget (Minutes)" class="general-settings-input-field" />
+                                <ui:Label text="Normal stop when this wall-clock budget is reached." class="general-settings-help-text" />
+                                <ui:TextField name="GeneralSettingsAIVsAiBatchSizeInput" label="Batch Size" class="general-settings-input-field" />
+                                <ui:Label text="Games to run between certainty checks." class="general-settings-help-text" />
+                                <ui:VisualElement class="general-settings-subcard general-settings-subcard--danger">
+                                    <ui:Label text="Emergency Failsafe" class="general-settings-subcard-title" />
+                                    <ui:TextField name="GeneralSettingsAIVsAiEmergencyHardMaxGamesInput" label="Emergency Hard Max Games" class="general-settings-input-field" />
+                                    <ui:Label text="Failsafe only. If this fuse trips, the run is abnormal and may be unreliable." class="general-settings-help-text general-settings-help-text--warning" />
                                 </ui:VisualElement>
                             </ui:VisualElement>
-                            <ui:Label text="Side B AI Model" class="general-settings-section-label" />
-                            <ui:VisualElement class="general-settings-option-row">
-                                <ui:Button name="GeneralSettingsSideBAiStyleDefaultButton" text="Baseline" class="menu-button general-settings-option-button" />
-                                <ui:Button name="GeneralSettingsSideBAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
-                            </ui:VisualElement>
-                            <ui:Label text="Side B Local Features" class="general-settings-section-label" />
-                            <ui:VisualElement class="general-settings-option-grid">
-                                <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
-                                    <ui:Button name="GeneralSettingsSideBFeatureOffenseButton" text="Offensive Obvious Win" class="menu-button general-settings-option-button" />
-                                    <ui:Button name="GeneralSettingsSideBFeatureExchangeButton" text="Exchange Scoring" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                            <ui:VisualElement name="GeneralSettingsAIVsAiTournamentSection" style="display: none;">
+                                <ui:Label text="Tournament Type" class="general-settings-section-label" />
+                                <ui:VisualElement class="general-settings-option-row">
+                                    <ui:Button name="GeneralSettingsAIVsAiTournamentTypeRoundRobinButton" text="Round Robin" class="menu-button general-settings-option-button" />
                                 </ui:VisualElement>
-                                <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
-                                    <ui:Button name="GeneralSettingsSideBFeatureDefenseButton" text="Defensive Veto" class="menu-button general-settings-option-button" />
+                                <ui:TextField name="GeneralSettingsAIVsAiTournamentGamesPerPairingInput" label="Games Per Pairing" class="general-settings-input-field" />
+                                <ui:Label text="Fixed schedule per variant pairing. Seat swap adds one mirrored game per scheduled game." class="general-settings-help-text" />
+                                <ui:VisualElement class="general-settings-option-row">
+                                    <ui:Button name="GeneralSettingsAIVsAiTournamentSeatSwapButton" text="Seat Swap" class="menu-button general-settings-option-button" />
+                                    <ui:Button name="GeneralSettingsAIVsAiTournamentSelectFullPoolButton" text="Use Full 16-Variant Pool" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                                 </ui:VisualElement>
-                            </ui:VisualElement>
-                            <ui:Label text="Simulation Presets" class="general-settings-section-label" />
-                            <ui:VisualElement class="general-settings-option-grid">
-                                <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
-                                    <ui:Button name="GeneralSettingsAIVsAiPresetQuickButton" text="Quick" class="menu-button general-settings-option-button" />
-                                    <ui:Button name="GeneralSettingsAIVsAiPresetStandardButton" text="Standard" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
-                                </ui:VisualElement>
-                                <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
-                                    <ui:Button name="GeneralSettingsAIVsAiPresetStrictButton" text="Strict" class="menu-button general-settings-option-button" />
-                                </ui:VisualElement>
-                            </ui:VisualElement>
-                            <ui:Label text="Presets fill recommended defaults. You can edit every value after choosing one." class="general-settings-help-text" />
-                            <ui:Label text="Evaluation Method" class="general-settings-section-label" />
-                            <ui:VisualElement class="general-settings-option-row">
-                                <ui:Button name="GeneralSettingsAIVsAiEvaluationMethodBayesianButton" text="Bayesian" class="menu-button general-settings-option-button" />
-                            </ui:VisualElement>
-                            <ui:Label text="Bayesian certainty uses decisive wins and losses only. Draws and aborts are reported separately." class="general-settings-help-text" />
-                            <ui:TextField name="GeneralSettingsAIVsAiCertaintyThresholdInput" label="Certainty Threshold" class="general-settings-input-field" />
-                            <ui:Label text="Stop when the system is this sure one AI is better." class="general-settings-help-text" />
-                            <ui:TextField name="GeneralSettingsAIVsAiMinimumGamesInput" label="Minimum Games" class="general-settings-input-field" />
-                            <ui:Label text="Prevents early stops from tiny samples." class="general-settings-help-text" />
-                            <ui:TextField name="GeneralSettingsAIVsAiTimeBudgetMinutesInput" label="Time Budget (Minutes)" class="general-settings-input-field" />
-                            <ui:Label text="Normal stop when this wall-clock budget is reached." class="general-settings-help-text" />
-                            <ui:TextField name="GeneralSettingsAIVsAiBatchSizeInput" label="Batch Size" class="general-settings-input-field" />
-                            <ui:Label text="Games to run between certainty checks." class="general-settings-help-text" />
-                            <ui:VisualElement class="general-settings-subcard general-settings-subcard--danger">
-                                <ui:Label text="Emergency Failsafe" class="general-settings-subcard-title" />
-                                <ui:TextField name="GeneralSettingsAIVsAiEmergencyHardMaxGamesInput" label="Emergency Hard Max Games" class="general-settings-input-field" />
-                                <ui:Label text="Failsafe only. If this fuse trips, the run is abnormal and may be unreliable." class="general-settings-help-text general-settings-help-text--warning" />
+                                <ui:Label text="Participants" class="general-settings-section-label" />
+                                <ui:VisualElement name="GeneralSettingsAIVsAiTournamentParticipantPool" class="general-settings-option-grid" />
+                                <ui:Label name="GeneralSettingsAIVsAiTournamentEstimateLabel" text="" class="general-settings-help-text" />
                             </ui:VisualElement>
                             <ui:Label text="Batch Speed" class="general-settings-section-label" />
                             <ui:VisualElement class="general-settings-option-grid">

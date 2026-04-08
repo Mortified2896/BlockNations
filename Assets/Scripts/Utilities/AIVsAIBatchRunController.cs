@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 
 public static class AIVsAIBatchRunController
@@ -17,6 +18,17 @@ public static class AIVsAIBatchRunController
         StrictComparison = 3
     }
 
+    public enum SimulationMode
+    {
+        HeadToHead = 0,
+        Tournament = 1
+    }
+
+    public enum TournamentType
+    {
+        RoundRobin = 0
+    }
+
     public enum StopReason
     {
         None = 0,
@@ -24,7 +36,8 @@ public static class AIVsAIBatchRunController
         CertaintyReached_A_Worse = 2,
         TimeBudgetReached = 3,
         EmergencySafetyFuseTriggered = 4,
-        InvalidStatsDetected = 5
+        InvalidStatsDetected = 5,
+        TournamentScheduleCompleted = 6
     }
 
     public enum RunCompletionKind
@@ -32,6 +45,29 @@ public static class AIVsAIBatchRunController
         None = 0,
         NormalCompleted = 1,
         AbnormalAborted = 2
+    }
+
+    [Serializable]
+    public struct AIVariant
+    {
+        public TurnManager.AIRecruitVariant baseModel;
+        public AILocalDecisionFeatures localFeatures;
+
+        public AIVariant(TurnManager.AIRecruitVariant baseModel, AILocalDecisionFeatures localFeatures)
+        {
+            this.baseModel = baseModel;
+            this.localFeatures = localFeatures;
+        }
+    }
+
+    [Serializable]
+    public struct TournamentEstimate
+    {
+        public int participantCount;
+        public int totalPairings;
+        public int totalGames;
+        public float gamesPerSecondUsed;
+        public float estimatedRuntimeSeconds;
     }
 
     [Serializable]
@@ -44,11 +80,20 @@ public static class AIVsAIBatchRunController
         public float timeBudgetSeconds;
         public int batchSize;
         public int emergencyHardMaxGames;
+        public SimulationMode mode;
+        public TournamentType tournamentType;
+        public int tournamentParticipantMask;
+        public int tournamentGamesPerPairing;
+        public bool tournamentSeatSwap;
     }
 
     public readonly struct ActiveRunSnapshot
     {
+        public readonly SimulationMode simulationMode;
         public readonly int completedGames;
+        public readonly int scheduledGames;
+        public readonly int scheduledPairings;
+        public readonly int participantCount;
         public readonly int sideAWins;
         public readonly int sideBWins;
         public readonly int trueDraws;
@@ -65,7 +110,11 @@ public static class AIVsAIBatchRunController
         public readonly bool isWaitingForBatchAfterThreshold;
 
         public ActiveRunSnapshot(
+            SimulationMode simulationMode,
             int completedGames,
+            int scheduledGames,
+            int scheduledPairings,
+            int participantCount,
             int sideAWins,
             int sideBWins,
             int trueDraws,
@@ -81,7 +130,11 @@ public static class AIVsAIBatchRunController
             float decisiveEdgePoints,
             bool isWaitingForBatchAfterThreshold)
         {
+            this.simulationMode = simulationMode;
             this.completedGames = completedGames;
+            this.scheduledGames = scheduledGames;
+            this.scheduledPairings = scheduledPairings;
+            this.participantCount = participantCount;
             this.sideAWins = sideAWins;
             this.sideBWins = sideBWins;
             this.trueDraws = trueDraws;
@@ -106,16 +159,35 @@ public static class AIVsAIBatchRunController
     private const float MaxCertaintyThreshold = 0.9999f;
     private const float MinTimeBudgetSeconds = 1f;
     private const int MinPositiveValue = 1;
+    private const int MinTournamentParticipantCount = 2;
+    private const int DefaultTournamentGamesPerPairing = 1;
+    private const int GeneratedVariantPoolCount = 16;
+    private const int AllGeneratedVariantsMask = (1 << GeneratedVariantPoolCount) - 1;
     private const int BayesianNormalApproximationThreshold = 200;
+    private const float DefaultNormalGamesPerSecond = 0.15f;
+    private const float DefaultFastGamesPerSecond = 0.50f;
+    private const float DefaultVeryFastGamesPerSecond = 1.25f;
+    private const float DefaultUltraFastGamesPerSecond = 2.50f;
 
+    private static readonly AIVariant[] GeneratedVariantPool = BuildGeneratedVariantPool();
     private static SimulationSettings pendingSimulationSettings = GetDefaultSimulationSettings();
     private static bool hasPendingSimulationSettings;
     private static ActiveRun activeRun;
+    private static float lastObservedGamesPerSecond = -1f;
 
     private sealed class ActiveRun
     {
         public sealed class CompletedMatchRecord
         {
+            public int pairingIndex;
+            public int pairingGameIndex;
+            public bool seatsWereSwapped;
+            public int logicalVariantAIndex;
+            public int logicalVariantBIndex;
+            public string logicalVariantALabel;
+            public string logicalVariantBLabel;
+            public double logicalVariantAScore;
+            public double logicalVariantBScore;
             public double player1Score;
             public double player2Score;
             public double baseSideAScore;
@@ -146,6 +218,8 @@ public static class AIVsAIBatchRunController
         public AILocalDecisionFeatures baseSideBFeatures;
         public TurnManager.AIDebugProfile baseSideAProfile;
         public TurnManager.AIDebugProfile baseSideBProfile;
+        public readonly List<AIVariant> tournamentParticipants = new List<AIVariant>();
+        public readonly List<ScheduledMatch> tournamentSchedule = new List<ScheduledMatch>();
         public readonly List<CompletedMatchRecord> completedMatches = new List<CompletedMatchRecord>();
     }
 
@@ -169,7 +243,194 @@ public static class AIVsAIBatchRunController
         }
     }
 
+    private readonly struct ScheduledMatch
+    {
+        public readonly int pairingIndex;
+        public readonly int pairingGameIndex;
+        public readonly int logicalVariantAIndex;
+        public readonly int logicalVariantBIndex;
+        public readonly bool seatsWereSwapped;
+
+        public ScheduledMatch(
+            int pairingIndex,
+            int pairingGameIndex,
+            int logicalVariantAIndex,
+            int logicalVariantBIndex,
+            bool seatsWereSwapped)
+        {
+            this.pairingIndex = pairingIndex;
+            this.pairingGameIndex = pairingGameIndex;
+            this.logicalVariantAIndex = logicalVariantAIndex;
+            this.logicalVariantBIndex = logicalVariantBIndex;
+            this.seatsWereSwapped = seatsWereSwapped;
+        }
+
+        public int RuntimeSideAIndex => seatsWereSwapped ? logicalVariantBIndex : logicalVariantAIndex;
+        public int RuntimeSideBIndex => seatsWereSwapped ? logicalVariantAIndex : logicalVariantBIndex;
+    }
+
+    private readonly struct MatchContext
+    {
+        public readonly bool isValid;
+        public readonly bool seatsWereSwapped;
+        public readonly int pairingIndex;
+        public readonly int pairingGameIndex;
+        public readonly int logicalVariantAIndex;
+        public readonly int logicalVariantBIndex;
+        public readonly AIVariant logicalVariantA;
+        public readonly AIVariant logicalVariantB;
+        public readonly AIVariant runtimeSideA;
+        public readonly AIVariant runtimeSideB;
+        public readonly string logicalVariantALabel;
+        public readonly string logicalVariantBLabel;
+        public readonly string runtimeSideALabel;
+        public readonly string runtimeSideBLabel;
+        public readonly string pairingLabel;
+
+        public MatchContext(
+            bool isValid,
+            bool seatsWereSwapped,
+            int pairingIndex,
+            int pairingGameIndex,
+            int logicalVariantAIndex,
+            int logicalVariantBIndex,
+            AIVariant logicalVariantA,
+            AIVariant logicalVariantB,
+            AIVariant runtimeSideA,
+            AIVariant runtimeSideB,
+            string logicalVariantALabel,
+            string logicalVariantBLabel)
+        {
+            this.isValid = isValid;
+            this.seatsWereSwapped = seatsWereSwapped;
+            this.pairingIndex = pairingIndex;
+            this.pairingGameIndex = pairingGameIndex;
+            this.logicalVariantAIndex = logicalVariantAIndex;
+            this.logicalVariantBIndex = logicalVariantBIndex;
+            this.logicalVariantA = logicalVariantA;
+            this.logicalVariantB = logicalVariantB;
+            this.runtimeSideA = runtimeSideA;
+            this.runtimeSideB = runtimeSideB;
+            this.logicalVariantALabel = logicalVariantALabel;
+            this.logicalVariantBLabel = logicalVariantBLabel;
+            runtimeSideALabel = GetVariantLabel(runtimeSideA);
+            runtimeSideBLabel = GetVariantLabel(runtimeSideB);
+            pairingLabel = $"{logicalVariantALabel} vs {logicalVariantBLabel}";
+        }
+    }
+
+    private sealed class TournamentStanding
+    {
+        public string label;
+        public int wins;
+        public int losses;
+        public int draws;
+        public int aborts;
+        public int games;
+        public double scoreSum;
+    }
+
+    private sealed class TournamentPairingAggregate
+    {
+        public string pairingLabel;
+        public string logicalVariantALabel;
+        public string logicalVariantBLabel;
+        public int logicalVariantAWins;
+        public int logicalVariantBWins;
+        public int draws;
+        public int aborts;
+        public int games;
+        public int swappedGames;
+        public double logicalVariantAScoreSum;
+    }
+
     public static bool HasActiveRun => activeRun != null;
+
+    public static bool TryGetActiveSimulationSettings(out SimulationSettings settings)
+    {
+        if (activeRun == null)
+        {
+            settings = default;
+            return false;
+        }
+
+        settings = activeRun.settings;
+        return true;
+    }
+
+    public static int GetGeneratedVariantCount()
+    {
+        return GeneratedVariantPool.Length;
+    }
+
+    public static AIVariant GetGeneratedVariant(int index)
+    {
+        if (index < 0 || index >= GeneratedVariantPool.Length)
+        {
+            return GeneratedVariantPool[0];
+        }
+
+        return GeneratedVariantPool[index];
+    }
+
+    public static string GetGeneratedVariantLabel(int index)
+    {
+        return GetVariantLabel(GetGeneratedVariant(index));
+    }
+
+    public static string GetVariantLabel(AIVariant variant)
+    {
+        string modelLabel = variant.baseModel == TurnManager.AIRecruitVariant.RiderFocus
+            ? "Rider Focus"
+            : "Baseline";
+        string featureLabel = GetFeatureMaskLabel(variant.localFeatures);
+        return $"{modelLabel} [{featureLabel}]";
+    }
+
+    public static int GetDefaultTournamentParticipantMask()
+    {
+        return AllGeneratedVariantsMask;
+    }
+
+    public static int CountTournamentParticipants(int participantMask)
+    {
+        int sanitizedMask = SanitizeTournamentParticipantMask(participantMask);
+        int count = 0;
+        for (int i = 0; i < GeneratedVariantPool.Length; i++)
+        {
+            if ((sanitizedMask & (1 << i)) != 0)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    public static TournamentEstimate EstimateTournament(
+        SimulationSettings settings,
+        TurnManager.AIVsAIBatchSpeedPreset speedPreset)
+    {
+        settings = SanitizeSimulationSettings(settings);
+        List<AIVariant> participants = BuildTournamentParticipants(settings.tournamentParticipantMask);
+        int pairings = GetRoundRobinPairingCount(participants.Count);
+        int gamesPerPairing = Mathf.Max(MinPositiveValue, settings.tournamentGamesPerPairing);
+        int seatMultiplier = settings.tournamentSeatSwap ? 2 : 1;
+        int totalGames = pairings * gamesPerPairing * seatMultiplier;
+        float gamesPerSecond = GetEstimatedGamesPerSecond(speedPreset);
+        float estimatedRuntimeSeconds = gamesPerSecond > 0.0001f
+            ? totalGames / gamesPerSecond
+            : 0f;
+
+        return new TournamentEstimate
+        {
+            participantCount = participants.Count,
+            totalPairings = pairings,
+            totalGames = totalGames,
+            gamesPerSecondUsed = gamesPerSecond,
+            estimatedRuntimeSeconds = estimatedRuntimeSeconds
+        };
+    }
 
     public static SimulationSettings GetDefaultSimulationSettings()
     {
@@ -189,7 +450,12 @@ public static class AIVsAIBatchRunController
                     minimumGames = 50,
                     timeBudgetSeconds = QuickExplorationTimeBudgetSeconds,
                     batchSize = 25,
-                    emergencyHardMaxGames = 5000
+                    emergencyHardMaxGames = 5000,
+                    mode = SimulationMode.HeadToHead,
+                    tournamentType = TournamentType.RoundRobin,
+                    tournamentParticipantMask = GetDefaultTournamentParticipantMask(),
+                    tournamentGamesPerPairing = DefaultTournamentGamesPerPairing,
+                    tournamentSeatSwap = true
                 };
 
             case SimulationPreset.StrictComparison:
@@ -201,7 +467,12 @@ public static class AIVsAIBatchRunController
                     minimumGames = 200,
                     timeBudgetSeconds = StrictComparisonTimeBudgetSeconds,
                     batchSize = 50,
-                    emergencyHardMaxGames = 25000
+                    emergencyHardMaxGames = 25000,
+                    mode = SimulationMode.HeadToHead,
+                    tournamentType = TournamentType.RoundRobin,
+                    tournamentParticipantMask = GetDefaultTournamentParticipantMask(),
+                    tournamentGamesPerPairing = DefaultTournamentGamesPerPairing,
+                    tournamentSeatSwap = true
                 };
 
             case SimulationPreset.StandardComparison:
@@ -214,7 +485,12 @@ public static class AIVsAIBatchRunController
                     minimumGames = 100,
                     timeBudgetSeconds = StandardComparisonTimeBudgetSeconds,
                     batchSize = 50,
-                    emergencyHardMaxGames = 10000
+                    emergencyHardMaxGames = 10000,
+                    mode = SimulationMode.HeadToHead,
+                    tournamentType = TournamentType.RoundRobin,
+                    tournamentParticipantMask = GetDefaultTournamentParticipantMask(),
+                    tournamentGamesPerPairing = DefaultTournamentGamesPerPairing,
+                    tournamentSeatSwap = true
                 };
         }
     }
@@ -232,15 +508,30 @@ public static class AIVsAIBatchRunController
             settings.minimumGames <= 0 &&
             settings.timeBudgetSeconds <= 0f &&
             settings.batchSize <= 0 &&
-            settings.emergencyHardMaxGames <= 0;
+            settings.emergencyHardMaxGames <= 0 &&
+            settings.tournamentGamesPerPairing <= 0;
 
         if (missingAllNumericSettings)
         {
+            fallback.mode = Enum.IsDefined(typeof(SimulationMode), settings.mode)
+                ? settings.mode
+                : fallback.mode;
+            fallback.tournamentParticipantMask = SanitizeTournamentParticipantMask(settings.tournamentParticipantMask);
+            fallback.tournamentGamesPerPairing = Math.Max(MinPositiveValue, settings.tournamentGamesPerPairing <= 0
+                ? fallback.tournamentGamesPerPairing
+                : settings.tournamentGamesPerPairing);
+            fallback.tournamentSeatSwap = settings.tournamentSeatSwap;
             return fallback;
         }
 
         settings.preset = sanitizedPreset;
         settings.evaluationMethod = EvaluationMethod.Bayesian;
+        settings.mode = Enum.IsDefined(typeof(SimulationMode), settings.mode)
+            ? settings.mode
+            : SimulationMode.HeadToHead;
+        settings.tournamentType = Enum.IsDefined(typeof(TournamentType), settings.tournamentType)
+            ? settings.tournamentType
+            : TournamentType.RoundRobin;
         settings.certaintyThreshold = SanitizeFloat(
             settings.certaintyThreshold,
             fallback.certaintyThreshold,
@@ -261,6 +552,10 @@ public static class AIVsAIBatchRunController
             settings.emergencyHardMaxGames,
             MinPositiveValue);
         settings.batchSize = EnsureEvenPairSize(settings.batchSize);
+        settings.tournamentParticipantMask = SanitizeTournamentParticipantMask(settings.tournamentParticipantMask);
+        settings.tournamentGamesPerPairing = SanitizeInt(
+            settings.tournamentGamesPerPairing,
+            MinPositiveValue);
         return settings;
     }
 
@@ -293,6 +588,29 @@ public static class AIVsAIBatchRunController
         }
     }
 
+    public static string GetSimulationModeDisplayName(SimulationMode mode)
+    {
+        switch (mode)
+        {
+            case SimulationMode.Tournament:
+                return "Tournament";
+
+            case SimulationMode.HeadToHead:
+            default:
+                return "Head-to-Head";
+        }
+    }
+
+    public static string GetTournamentTypeDisplayName(TournamentType tournamentType)
+    {
+        switch (tournamentType)
+        {
+            case TournamentType.RoundRobin:
+            default:
+                return "Round Robin";
+        }
+    }
+
     public static void SetPendingSimulationSettings(SimulationSettings settings)
     {
         pendingSimulationSettings = SanitizeSimulationSettings(settings);
@@ -308,6 +626,45 @@ public static class AIVsAIBatchRunController
         return hadPending;
     }
 
+    public static bool TryGetInitialTournamentMatchSettings(
+        SimulationSettings settings,
+        out TurnManager.AIRecruitVariant sideARecruitVariant,
+        out TurnManager.AIRecruitVariant sideBRecruitVariant,
+        out AILocalDecisionFeatures sideAFeatures,
+        out AILocalDecisionFeatures sideBFeatures,
+        out TurnManager.AIDebugProfile sideAProfile,
+        out TurnManager.AIDebugProfile sideBProfile)
+    {
+        sideARecruitVariant = TurnManager.AIRecruitVariant.Default;
+        sideBRecruitVariant = TurnManager.AIRecruitVariant.Default;
+        sideAFeatures = AILocalDecisionFeatures.None;
+        sideBFeatures = AILocalDecisionFeatures.None;
+        sideAProfile = TurnManager.AIDebugProfile.Baseline;
+        sideBProfile = TurnManager.AIDebugProfile.Baseline;
+
+        settings = SanitizeSimulationSettings(settings);
+        if (settings.mode != SimulationMode.Tournament)
+        {
+            return false;
+        }
+
+        List<AIVariant> participants = BuildTournamentParticipants(settings.tournamentParticipantMask);
+        List<ScheduledMatch> schedule = BuildTournamentSchedule(settings, participants);
+        if (schedule.Count <= 0)
+        {
+            return false;
+        }
+
+        ScheduledMatch firstMatch = schedule[0];
+        AIVariant runtimeSideA = participants[firstMatch.RuntimeSideAIndex];
+        AIVariant runtimeSideB = participants[firstMatch.RuntimeSideBIndex];
+        sideARecruitVariant = runtimeSideA.baseModel;
+        sideBRecruitVariant = runtimeSideB.baseModel;
+        sideAFeatures = runtimeSideA.localFeatures;
+        sideBFeatures = runtimeSideB.localFeatures;
+        return true;
+    }
+
     public static void BeginNewRun(
         SimulationSettings settings,
         TurnManager.AIRecruitVariant baseSideARecruitVariant,
@@ -317,10 +674,11 @@ public static class AIVsAIBatchRunController
         TurnManager.AIDebugProfile baseSideAProfile,
         TurnManager.AIDebugProfile baseSideBProfile)
     {
+        SimulationSettings sanitizedSettings = SanitizeSimulationSettings(settings);
         activeRun = new ActiveRun
         {
             runId = Guid.NewGuid().ToString("N"),
-            settings = SanitizeSimulationSettings(settings),
+            settings = sanitizedSettings,
             startedAtUtc = DateTime.UtcNow,
             baseSideARecruitVariant = baseSideARecruitVariant,
             baseSideBRecruitVariant = baseSideBRecruitVariant,
@@ -329,6 +687,23 @@ public static class AIVsAIBatchRunController
             baseSideAProfile = baseSideAProfile,
             baseSideBProfile = baseSideBProfile
         };
+
+        if (sanitizedSettings.mode != SimulationMode.Tournament)
+        {
+            return;
+        }
+
+        activeRun.tournamentParticipants.AddRange(BuildTournamentParticipants(sanitizedSettings.tournamentParticipantMask));
+        activeRun.tournamentSchedule.AddRange(BuildTournamentSchedule(sanitizedSettings, activeRun.tournamentParticipants));
+        if (activeRun.tournamentParticipants.Count >= 2)
+        {
+            activeRun.baseSideARecruitVariant = activeRun.tournamentParticipants[0].baseModel;
+            activeRun.baseSideAFeatures = activeRun.tournamentParticipants[0].localFeatures;
+            activeRun.baseSideAProfile = TurnManager.AIDebugProfile.Baseline;
+            activeRun.baseSideBRecruitVariant = activeRun.tournamentParticipants[1].baseModel;
+            activeRun.baseSideBFeatures = activeRun.tournamentParticipants[1].localFeatures;
+            activeRun.baseSideBProfile = TurnManager.AIDebugProfile.Baseline;
+        }
     }
 
     public static bool TryGetUpcomingMatchSettings(
@@ -351,24 +726,16 @@ public static class AIVsAIBatchRunController
             return false;
         }
 
-        bool shouldSwapSeats = ((activeRun.completedMatchCount + 1) % 2) == 0;
-        if (shouldSwapSeats)
+        MatchContext context = BuildMatchContext(activeRun, activeRun.completedMatchCount);
+        if (!context.isValid)
         {
-            sideARecruitVariant = activeRun.baseSideBRecruitVariant;
-            sideBRecruitVariant = activeRun.baseSideARecruitVariant;
-            sideAFeatures = activeRun.baseSideBFeatures;
-            sideBFeatures = activeRun.baseSideAFeatures;
-            sideAProfile = activeRun.baseSideBProfile;
-            sideBProfile = activeRun.baseSideAProfile;
-            return true;
+            return false;
         }
 
-        sideARecruitVariant = activeRun.baseSideARecruitVariant;
-        sideBRecruitVariant = activeRun.baseSideBRecruitVariant;
-        sideAFeatures = activeRun.baseSideAFeatures;
-        sideBFeatures = activeRun.baseSideBFeatures;
-        sideAProfile = activeRun.baseSideAProfile;
-        sideBProfile = activeRun.baseSideBProfile;
+        sideARecruitVariant = context.runtimeSideA.baseModel;
+        sideBRecruitVariant = context.runtimeSideB.baseModel;
+        sideAFeatures = context.runtimeSideA.localFeatures;
+        sideBFeatures = context.runtimeSideB.localFeatures;
         return true;
     }
 
@@ -387,9 +754,41 @@ public static class AIVsAIBatchRunController
             return false;
         }
 
-        int decisiveGames = Math.Max(0, activeRun.sideAWins + activeRun.sideBWins);
         float elapsedSeconds = Mathf.Max(0f, (float)(DateTime.UtcNow - activeRun.startedAtUtc).TotalSeconds);
         float safeElapsedSeconds = Mathf.Max(0.001f, elapsedSeconds);
+        float gamesPerSecond = activeRun.completedMatchCount / safeElapsedSeconds;
+        UpdateObservedGamesPerSecond(gamesPerSecond);
+
+        if (activeRun.settings.mode == SimulationMode.Tournament)
+        {
+            int scheduledGames = activeRun.tournamentSchedule.Count;
+            float remainingGames = Mathf.Max(0, scheduledGames - activeRun.completedMatchCount);
+            float remainingTime = gamesPerSecond > 0.0001f ? remainingGames / gamesPerSecond : 0f;
+            float estimatedTotal = elapsedSeconds + remainingTime;
+            snapshot = new ActiveRunSnapshot(
+                simulationMode: activeRun.settings.mode,
+                completedGames: activeRun.completedMatchCount,
+                scheduledGames: scheduledGames,
+                scheduledPairings: GetRoundRobinPairingCount(activeRun.tournamentParticipants.Count),
+                participantCount: activeRun.tournamentParticipants.Count,
+                sideAWins: activeRun.sideAWins,
+                sideBWins: activeRun.sideBWins,
+                trueDraws: activeRun.trueDraws,
+                aborts: activeRun.aborts,
+                decisiveGames: Math.Max(0, activeRun.sideAWins + activeRun.sideBWins),
+                batchSize: Math.Max(1, activeRun.settings.tournamentGamesPerPairing * (activeRun.settings.tournamentSeatSwap ? 2 : 1)),
+                elapsedSeconds: elapsedSeconds,
+                timeBudgetSeconds: estimatedTotal,
+                remainingTimeSeconds: remainingTime,
+                gamesPerSecond: gamesPerSecond,
+                bayesianSideABetterProbability: 0.5f,
+                certaintyThreshold: 0f,
+                decisiveEdgePoints: 0f,
+                isWaitingForBatchAfterThreshold: false);
+            return true;
+        }
+
+        int decisiveGames = Math.Max(0, activeRun.sideAWins + activeRun.sideBWins);
         float probability = Mathf.Clamp01((float)ComputeSideABetterProbability(
             activeRun.settings.evaluationMethod,
             activeRun.sideAWins,
@@ -409,21 +808,25 @@ public static class AIVsAIBatchRunController
             IsPairBoundary(activeRun.completedMatchCount) &&
             (activeRun.completedMatchCount % Math.Max(MinPositiveValue, activeRun.settings.batchSize)) == 0;
         snapshot = new ActiveRunSnapshot(
-            activeRun.completedMatchCount,
-            activeRun.sideAWins,
-            activeRun.sideBWins,
-            activeRun.trueDraws,
-            activeRun.aborts,
-            decisiveGames,
-            activeRun.settings.batchSize,
-            elapsedSeconds,
-            activeRun.settings.timeBudgetSeconds,
-            Mathf.Max(0f, activeRun.settings.timeBudgetSeconds - elapsedSeconds),
-            activeRun.completedMatchCount / safeElapsedSeconds,
-            probability,
-            activeRun.settings.certaintyThreshold,
-            decisiveEdgePoints,
-            thresholdReached && !reachedBatchBoundary);
+            simulationMode: activeRun.settings.mode,
+            completedGames: activeRun.completedMatchCount,
+            scheduledGames: 0,
+            scheduledPairings: 0,
+            participantCount: 2,
+            sideAWins: activeRun.sideAWins,
+            sideBWins: activeRun.sideBWins,
+            trueDraws: activeRun.trueDraws,
+            aborts: activeRun.aborts,
+            decisiveGames: decisiveGames,
+            batchSize: activeRun.settings.batchSize,
+            elapsedSeconds: elapsedSeconds,
+            timeBudgetSeconds: activeRun.settings.timeBudgetSeconds,
+            remainingTimeSeconds: Mathf.Max(0f, activeRun.settings.timeBudgetSeconds - elapsedSeconds),
+            gamesPerSecond: gamesPerSecond,
+            bayesianSideABetterProbability: probability,
+            certaintyThreshold: activeRun.settings.certaintyThreshold,
+            decisiveEdgePoints: decisiveEdgePoints,
+            isWaitingForBatchAfterThreshold: thresholdReached && !reachedBatchBoundary);
         return true;
     }
 
@@ -441,8 +844,38 @@ public static class AIVsAIBatchRunController
         }
 
         SimulationSettings settings = SanitizeSimulationSettings(pendingSimulationSettings);
+        if (settings.mode == SimulationMode.Tournament)
+        {
+            TournamentEstimate estimate = EstimateTournament(settings, TurnManager.AIVsAIBatchSpeedPreset.UltraFast);
+            snapshot = new ActiveRunSnapshot(
+                simulationMode: settings.mode,
+                completedGames: 0,
+                scheduledGames: estimate.totalGames,
+                scheduledPairings: estimate.totalPairings,
+                participantCount: estimate.participantCount,
+                sideAWins: 0,
+                sideBWins: 0,
+                trueDraws: 0,
+                aborts: 0,
+                decisiveGames: 0,
+                batchSize: Math.Max(1, settings.tournamentGamesPerPairing * (settings.tournamentSeatSwap ? 2 : 1)),
+                elapsedSeconds: 0f,
+                timeBudgetSeconds: estimate.estimatedRuntimeSeconds,
+                remainingTimeSeconds: estimate.estimatedRuntimeSeconds,
+                gamesPerSecond: estimate.gamesPerSecondUsed,
+                bayesianSideABetterProbability: 0.5f,
+                certaintyThreshold: 0f,
+                decisiveEdgePoints: 0f,
+                isWaitingForBatchAfterThreshold: false);
+            return true;
+        }
+
         snapshot = new ActiveRunSnapshot(
+            simulationMode: settings.mode,
             completedGames: 0,
+            scheduledGames: 0,
+            scheduledPairings: 0,
+            participantCount: 2,
             sideAWins: 0,
             sideBWins: 0,
             trueDraws: 0,
@@ -473,8 +906,13 @@ public static class AIVsAIBatchRunController
             return false;
         }
 
+        MatchContext context = BuildMatchContext(activeRun, activeRun.completedMatchCount);
+        if (!context.isValid)
+        {
+            return false;
+        }
+
         activeRun.completedMatchCount++;
-        bool seatsWereSwapped = IsSeatSwappedForMatchIndex(activeRun.completedMatchCount);
         activeRun.totalTurnCount += Math.Max(0, matchResult.totalTurnCount);
         activeRun.appVersion = matchResult.appVersion;
         activeRun.mapSizePreset = matchResult.mapSizePreset;
@@ -491,19 +929,39 @@ public static class AIVsAIBatchRunController
             activeRun.sideBAIConfig = matchResult.sideBAIConfig;
         }
 
-        switch (MapWinnerToBaseVariant(matchResult.winner, seatsWereSwapped))
+        if (activeRun.settings.mode == SimulationMode.Tournament)
         {
-            case "SideA":
-                activeRun.sideAWins++;
-                break;
+            switch (matchResult.winner)
+            {
+                case "SideA":
+                    activeRun.sideAWins++;
+                    break;
 
-            case "SideB":
-                activeRun.sideBWins++;
-                break;
+                case "SideB":
+                    activeRun.sideBWins++;
+                    break;
 
-            default:
-                activeRun.drawsOrAborts++;
-                break;
+                default:
+                    activeRun.drawsOrAborts++;
+                    break;
+            }
+        }
+        else
+        {
+            switch (MapWinnerToBaseVariant(matchResult.winner, context.seatsWereSwapped))
+            {
+                case "SideA":
+                    activeRun.sideAWins++;
+                    break;
+
+                case "SideB":
+                    activeRun.sideBWins++;
+                    break;
+
+                default:
+                    activeRun.drawsOrAborts++;
+                    break;
+            }
         }
 
         if (string.Equals(matchResult.winner, "Abort", StringComparison.Ordinal))
@@ -516,11 +974,21 @@ public static class AIVsAIBatchRunController
             activeRun.trueDraws++;
         }
 
-        activeRun.completedMatches.Add(BuildCompletedMatchRecord(matchResult, seatsWereSwapped));
+        activeRun.completedMatches.Add(BuildCompletedMatchRecord(matchResult, context));
 
         matchResult.runId = activeRun.runId;
         matchResult.matchIndexInRun = activeRun.completedMatchCount;
         matchResult.runEmergencyHardMaxGames = activeRun.settings.emergencyHardMaxGames;
+        matchResult.simulationMode = activeRun.settings.mode.ToString();
+        matchResult.sideAVariantLabel = context.runtimeSideALabel;
+        matchResult.sideBVariantLabel = context.runtimeSideBLabel;
+        matchResult.pairingLabel = context.pairingLabel;
+        matchResult.pairingIndex = context.pairingIndex;
+        matchResult.pairingGameIndex = context.pairingGameIndex;
+        matchResult.seatsSwapped = context.seatsWereSwapped;
+        matchResult.participantCount = activeRun.settings.mode == SimulationMode.Tournament
+            ? activeRun.tournamentParticipants.Count
+            : 2;
 
         RunStopDecision decision = EvaluateRunStopDecision(activeRun);
         isRunComplete = decision.shouldStop;
@@ -544,7 +1012,8 @@ public static class AIVsAIBatchRunController
         int completedMatches = Math.Max(1, run.completedMatchCount);
         int decisiveGames = Math.Max(0, run.sideAWins + run.sideBWins);
         float elapsedSeconds = Mathf.Max(0.001f, (float)(DateTime.UtcNow - run.startedAtUtc).TotalSeconds);
-        float sideAScoreRate = (float)((run.sideAWins + (0.5d * run.drawsOrAborts)) / completedMatches);
+        float turnsPerSecond = run.totalTurnCount / elapsedSeconds;
+        UpdateObservedGamesPerSecond(run.completedMatchCount / elapsedSeconds);
 
         AIVsAIMatchCsvLogger.RunSummary summary = new AIVsAIMatchCsvLogger.RunSummary
         {
@@ -570,10 +1039,7 @@ public static class AIVsAIBatchRunController
             trueDraws = run.trueDraws,
             aborts = run.aborts,
             elapsedSeconds = elapsedSeconds,
-            turnsPerSecond = run.totalTurnCount / elapsedSeconds,
-            sideAWinRate = run.sideAWins / (float)completedMatches,
-            sideAScoreRate = sideAScoreRate,
-            sideAEffectSize = sideAScoreRate - 0.5f,
+            turnsPerSecond = turnsPerSecond,
             averageTotalTurnCount = run.totalTurnCount / (float)completedMatches,
             simulationPreset = run.settings.preset,
             simulationSettingsLabel = GetPresetDisplayName(run.settings.preset),
@@ -587,18 +1053,47 @@ public static class AIVsAIBatchRunController
             bayesianDecisiveGames = decisiveGames,
             bayesianSideABetterProbability = Mathf.Clamp01((float)decision.sideABetterProbability),
             runEndedNormally = decision.completionKind == RunCompletionKind.NormalCompleted,
-            stopReason = decision.stopReason.ToString()
+            stopReason = decision.stopReason.ToString(),
+            simulationMode = run.settings.mode,
+            tournamentType = run.settings.tournamentType,
+            tournamentParticipantCount = run.tournamentParticipants.Count,
+            tournamentScheduledPairingCount = GetRoundRobinPairingCount(run.tournamentParticipants.Count),
+            tournamentScheduledGameCount = run.tournamentSchedule.Count,
+            tournamentGamesPerPairing = run.settings.tournamentGamesPerPairing,
+            tournamentSeatSwapEnabled = run.settings.tournamentSeatSwap
         };
 
+        if (run.settings.mode == SimulationMode.Tournament)
+        {
+            summary.simulationSettingsLabel = GetTournamentTypeDisplayName(run.settings.tournamentType);
+            summary.evaluationMethodLabel = "Fixed Schedule";
+            PopulateTournamentStats(run, summary);
+            return summary;
+        }
+
+        float sideAScoreRate = (float)((run.sideAWins + (0.5d * run.drawsOrAborts)) / completedMatches);
+        summary.sideAWinRate = run.sideAWins / (float)completedMatches;
+        summary.sideAScoreRate = sideAScoreRate;
+        summary.sideAEffectSize = sideAScoreRate - 0.5f;
         PopulateComparisonStats(run, summary);
         return summary;
     }
 
     private static ActiveRun.CompletedMatchRecord BuildCompletedMatchRecord(
         AIVsAIMatchCsvLogger.MatchResult matchResult,
-        bool seatsWereSwapped)
+        MatchContext context)
     {
-        ActiveRun.CompletedMatchRecord record = new ActiveRun.CompletedMatchRecord();
+        ActiveRun.CompletedMatchRecord record = new ActiveRun.CompletedMatchRecord
+        {
+            pairingIndex = context.pairingIndex,
+            pairingGameIndex = context.pairingGameIndex,
+            seatsWereSwapped = context.seatsWereSwapped,
+            logicalVariantAIndex = context.logicalVariantAIndex,
+            logicalVariantBIndex = context.logicalVariantBIndex,
+            logicalVariantALabel = context.logicalVariantALabel,
+            logicalVariantBLabel = context.logicalVariantBLabel
+        };
+
         if (matchResult == null)
         {
             return record;
@@ -610,8 +1105,72 @@ public static class AIVsAIBatchRunController
                         !string.Equals(matchResult.winner, "SideB", StringComparison.Ordinal);
         record.player1Score = GetSeatScore(matchResult.winner, 0);
         record.player2Score = GetSeatScore(matchResult.winner, 1);
-        record.baseSideAScore = GetBaseSideAScore(matchResult.winner, seatsWereSwapped);
+        record.baseSideAScore = GetBaseSideAScore(matchResult.winner, context.seatsWereSwapped);
+        record.logicalVariantAScore = GetLogicalVariantScore(matchResult.winner, context.seatsWereSwapped, logicalVariantA: true);
+        record.logicalVariantBScore = GetLogicalVariantScore(matchResult.winner, context.seatsWereSwapped, logicalVariantA: false);
         return record;
+    }
+
+    private static MatchContext BuildMatchContext(ActiveRun run, int matchIndex)
+    {
+        if (run == null)
+        {
+            return default;
+        }
+
+        if (run.settings.mode == SimulationMode.Tournament)
+        {
+            if (matchIndex < 0 || matchIndex >= run.tournamentSchedule.Count)
+            {
+                return default;
+            }
+
+            ScheduledMatch scheduledMatch = run.tournamentSchedule[matchIndex];
+            if (scheduledMatch.logicalVariantAIndex < 0 ||
+                scheduledMatch.logicalVariantAIndex >= run.tournamentParticipants.Count ||
+                scheduledMatch.logicalVariantBIndex < 0 ||
+                scheduledMatch.logicalVariantBIndex >= run.tournamentParticipants.Count)
+            {
+                return default;
+            }
+
+            AIVariant logicalVariantA = run.tournamentParticipants[scheduledMatch.logicalVariantAIndex];
+            AIVariant logicalVariantB = run.tournamentParticipants[scheduledMatch.logicalVariantBIndex];
+            AIVariant runtimeSideA = run.tournamentParticipants[scheduledMatch.RuntimeSideAIndex];
+            AIVariant runtimeSideB = run.tournamentParticipants[scheduledMatch.RuntimeSideBIndex];
+            return new MatchContext(
+                isValid: true,
+                seatsWereSwapped: scheduledMatch.seatsWereSwapped,
+                pairingIndex: scheduledMatch.pairingIndex,
+                pairingGameIndex: scheduledMatch.pairingGameIndex,
+                logicalVariantAIndex: scheduledMatch.logicalVariantAIndex,
+                logicalVariantBIndex: scheduledMatch.logicalVariantBIndex,
+                logicalVariantA: logicalVariantA,
+                logicalVariantB: logicalVariantB,
+                runtimeSideA: runtimeSideA,
+                runtimeSideB: runtimeSideB,
+                logicalVariantALabel: GetVariantLabel(logicalVariantA),
+                logicalVariantBLabel: GetVariantLabel(logicalVariantB));
+        }
+
+        bool seatsWereSwapped = IsSeatSwappedForMatchIndex(matchIndex + 1);
+        AIVariant logicalHeadToHeadA = new AIVariant(run.baseSideARecruitVariant, run.baseSideAFeatures);
+        AIVariant logicalHeadToHeadB = new AIVariant(run.baseSideBRecruitVariant, run.baseSideBFeatures);
+        AIVariant runtimeHeadToHeadA = seatsWereSwapped ? logicalHeadToHeadB : logicalHeadToHeadA;
+        AIVariant runtimeHeadToHeadB = seatsWereSwapped ? logicalHeadToHeadA : logicalHeadToHeadB;
+        return new MatchContext(
+            isValid: true,
+            seatsWereSwapped: seatsWereSwapped,
+            pairingIndex: (matchIndex / 2) + 1,
+            pairingGameIndex: seatsWereSwapped ? 2 : 1,
+            logicalVariantAIndex: 0,
+            logicalVariantBIndex: 1,
+            logicalVariantA: logicalHeadToHeadA,
+            logicalVariantB: logicalHeadToHeadB,
+            runtimeSideA: runtimeHeadToHeadA,
+            runtimeSideB: runtimeHeadToHeadB,
+            logicalVariantALabel: GetVariantLabel(logicalHeadToHeadA),
+            logicalVariantBLabel: GetVariantLabel(logicalHeadToHeadB));
     }
 
     private static bool IsSeatSwappedForMatchIndex(int matchIndexInRun)
@@ -670,6 +1229,27 @@ public static class AIVsAIBatchRunController
         return 0.5d;
     }
 
+    private static double GetLogicalVariantScore(string runtimeWinner, bool seatsWereSwapped, bool logicalVariantA)
+    {
+        if (string.Equals(runtimeWinner, "Abort", StringComparison.Ordinal))
+        {
+            return 0.5d;
+        }
+
+        string logicalWinner = MapWinnerToBaseVariant(runtimeWinner, seatsWereSwapped);
+        if (string.Equals(logicalWinner, "SideA", StringComparison.Ordinal))
+        {
+            return logicalVariantA ? 1d : 0d;
+        }
+
+        if (string.Equals(logicalWinner, "SideB", StringComparison.Ordinal))
+        {
+            return logicalVariantA ? 0d : 1d;
+        }
+
+        return 0.5d;
+    }
+
     private static RunStopDecision EvaluateRunStopDecision(ActiveRun run)
     {
         if (run == null)
@@ -677,13 +1257,39 @@ public static class AIVsAIBatchRunController
             return new RunStopDecision(false, RunCompletionKind.None, StopReason.None, 0.5d);
         }
 
+        if (!HasValidRecordedCounts(run))
+        {
+            return new RunStopDecision(
+                shouldStop: true,
+                completionKind: RunCompletionKind.AbnormalAborted,
+                stopReason: StopReason.InvalidStatsDetected,
+                sideABetterProbability: 0.5d);
+        }
+
+        if (run.settings.mode == SimulationMode.Tournament)
+        {
+            if (run.completedMatchCount >= run.tournamentSchedule.Count)
+            {
+                return new RunStopDecision(
+                    shouldStop: true,
+                    completionKind: RunCompletionKind.NormalCompleted,
+                    stopReason: StopReason.TournamentScheduleCompleted,
+                    sideABetterProbability: 0.5d);
+            }
+
+            return new RunStopDecision(
+                shouldStop: false,
+                completionKind: RunCompletionKind.None,
+                stopReason: StopReason.None,
+                sideABetterProbability: 0.5d);
+        }
+
         double sideABetterProbability = ComputeSideABetterProbability(
             run.settings.evaluationMethod,
             run.sideAWins,
             run.sideBWins);
 
-        if (!HasValidRecordedCounts(run) ||
-            double.IsNaN(sideABetterProbability) ||
+        if (double.IsNaN(sideABetterProbability) ||
             double.IsInfinity(sideABetterProbability) ||
             sideABetterProbability < 0d ||
             sideABetterProbability > 1d)
@@ -784,6 +1390,12 @@ public static class AIVsAIBatchRunController
         if (run.completedMatches.Count != run.completedMatchCount)
         {
             return false;
+        }
+
+        if (run.settings.mode == SimulationMode.Tournament)
+        {
+            return run.tournamentParticipants.Count >= MinTournamentParticipantCount &&
+                   run.tournamentSchedule.Count > 0;
         }
 
         return true;
@@ -969,6 +1581,268 @@ public static class AIVsAIBatchRunController
 
         summary.pairedPValue = (float)ComputeTwoSidedOneSampleTTestPValue(pairScoreRates, 0.5d);
         summary.pairedThreshold = GetThresholdLabel(summary.pairedPValue);
+    }
+
+    private static void PopulateTournamentStats(ActiveRun run, AIVsAIMatchCsvLogger.RunSummary summary)
+    {
+        if (run == null || summary == null)
+        {
+            return;
+        }
+
+        summary.comparisonMode = "round_robin_tournament";
+        summary.trackedEntityLabel = "Tournament Variant";
+        summary.seat1Label = "Runtime Side A";
+        summary.seat2Label = "Runtime Side B";
+        summary.pairedStatsApplicable = false;
+
+        List<TournamentStanding> standings = new List<TournamentStanding>(run.tournamentParticipants.Count);
+        for (int i = 0; i < run.tournamentParticipants.Count; i++)
+        {
+            standings.Add(new TournamentStanding
+            {
+                label = GetVariantLabel(run.tournamentParticipants[i])
+            });
+        }
+
+        Dictionary<int, TournamentPairingAggregate> pairings = new Dictionary<int, TournamentPairingAggregate>();
+        int seat1Wins = 0;
+        int seat1Draws = 0;
+        int seat1Losses = 0;
+        int seat2Wins = 0;
+        int seat2Draws = 0;
+        int seat2Losses = 0;
+
+        for (int i = 0; i < run.completedMatches.Count; i++)
+        {
+            ActiveRun.CompletedMatchRecord record = run.completedMatches[i];
+            TournamentStanding standingA = standings[record.logicalVariantAIndex];
+            TournamentStanding standingB = standings[record.logicalVariantBIndex];
+            standingA.games++;
+            standingB.games++;
+            standingA.scoreSum += record.logicalVariantAScore;
+            standingB.scoreSum += record.logicalVariantBScore;
+
+            if (record.isAbort)
+            {
+                standingA.aborts++;
+                standingB.aborts++;
+            }
+            else if (record.isDraw)
+            {
+                standingA.draws++;
+                standingB.draws++;
+            }
+            else if (record.logicalVariantAScore > record.logicalVariantBScore)
+            {
+                standingA.wins++;
+                standingB.losses++;
+            }
+            else
+            {
+                standingA.losses++;
+                standingB.wins++;
+            }
+
+            summary.seat1GameCount++;
+            summary.seat2GameCount++;
+            if (record.player1Score >= 0.999d)
+            {
+                seat1Wins++;
+            }
+            else if (record.player1Score <= 0.001d)
+            {
+                seat1Losses++;
+            }
+            else
+            {
+                seat1Draws++;
+            }
+
+            if (record.player2Score >= 0.999d)
+            {
+                seat2Wins++;
+            }
+            else if (record.player2Score <= 0.001d)
+            {
+                seat2Losses++;
+            }
+            else
+            {
+                seat2Draws++;
+            }
+
+            if (!pairings.TryGetValue(record.pairingIndex, out TournamentPairingAggregate aggregate))
+            {
+                aggregate = new TournamentPairingAggregate
+                {
+                    pairingLabel = $"{record.logicalVariantALabel} vs {record.logicalVariantBLabel}",
+                    logicalVariantALabel = record.logicalVariantALabel,
+                    logicalVariantBLabel = record.logicalVariantBLabel
+                };
+                pairings.Add(record.pairingIndex, aggregate);
+            }
+
+            aggregate.games++;
+            aggregate.logicalVariantAScoreSum += record.logicalVariantAScore;
+            if (record.seatsWereSwapped)
+            {
+                aggregate.swappedGames++;
+            }
+
+            if (record.isAbort)
+            {
+                aggregate.aborts++;
+            }
+            else if (record.isDraw)
+            {
+                aggregate.draws++;
+            }
+            else if (record.logicalVariantAScore > record.logicalVariantBScore)
+            {
+                aggregate.logicalVariantAWins++;
+            }
+            else
+            {
+                aggregate.logicalVariantBWins++;
+            }
+        }
+
+        summary.seat1Wins = seat1Wins;
+        summary.seat1Draws = seat1Draws;
+        summary.seat1Losses = seat1Losses;
+        summary.seat2Wins = seat2Wins;
+        summary.seat2Draws = seat2Draws;
+        summary.seat2Losses = seat2Losses;
+        if (summary.seat1GameCount > 0)
+        {
+            summary.seat1ScoreRate = (float)((seat1Wins + 0.5d * seat1Draws) / summary.seat1GameCount);
+            summary.seat1EffectSize = summary.seat1ScoreRate - 0.5f;
+        }
+
+        if (summary.seat2GameCount > 0)
+        {
+            summary.seat2ScoreRate = (float)((seat2Wins + 0.5d * seat2Draws) / summary.seat2GameCount);
+            summary.seat2EffectSize = summary.seat2ScoreRate - 0.5f;
+        }
+
+        summary.seatEffectSize = summary.seat1ScoreRate - summary.seat2ScoreRate;
+
+        standings.Sort((left, right) =>
+        {
+            double leftScoreRate = left.games > 0 ? left.scoreSum / left.games : 0d;
+            double rightScoreRate = right.games > 0 ? right.scoreSum / right.games : 0d;
+            int comparison = rightScoreRate.CompareTo(leftScoreRate);
+            if (comparison != 0)
+            {
+                return comparison;
+            }
+
+            comparison = right.wins.CompareTo(left.wins);
+            if (comparison != 0)
+            {
+                return comparison;
+            }
+
+            comparison = left.losses.CompareTo(right.losses);
+            if (comparison != 0)
+            {
+                return comparison;
+            }
+
+            return string.Compare(left.label, right.label, StringComparison.Ordinal);
+        });
+
+        if (standings.Count > 0)
+        {
+            TournamentStanding winner = standings[0];
+            summary.tournamentWinnerLabel = winner.label;
+            summary.sideAWinRate = winner.games > 0 ? winner.wins / (float)winner.games : 0f;
+            summary.sideAScoreRate = winner.games > 0 ? (float)(winner.scoreSum / winner.games) : 0f;
+            summary.sideAEffectSize = summary.sideAScoreRate - 0.5f;
+        }
+
+        StringBuilder standingsBuilder = new StringBuilder();
+        for (int i = 0; i < standings.Count; i++)
+        {
+            TournamentStanding standing = standings[i];
+            double scoreRate = standing.games > 0 ? standing.scoreSum / standing.games : 0d;
+            if (i > 0)
+            {
+                standingsBuilder.Append('\n');
+            }
+
+            standingsBuilder.Append(i + 1);
+            standingsBuilder.Append(". ");
+            standingsBuilder.Append(standing.label);
+            standingsBuilder.Append(" | W");
+            standingsBuilder.Append(standing.wins);
+            standingsBuilder.Append(" L");
+            standingsBuilder.Append(standing.losses);
+            standingsBuilder.Append(" D");
+            standingsBuilder.Append(standing.draws);
+            if (standing.aborts > 0)
+            {
+                standingsBuilder.Append(" A");
+                standingsBuilder.Append(standing.aborts);
+            }
+            standingsBuilder.Append(" | Score ");
+            standingsBuilder.Append(scoreRate.ToString("P1"));
+        }
+
+        summary.tournamentStandingsSummary = standingsBuilder.ToString();
+
+        List<int> pairingKeys = new List<int>(pairings.Keys);
+        pairingKeys.Sort();
+        StringBuilder pairingsBuilder = new StringBuilder();
+        for (int i = 0; i < pairingKeys.Count; i++)
+        {
+            TournamentPairingAggregate aggregate = pairings[pairingKeys[i]];
+            if (i > 0)
+            {
+                pairingsBuilder.Append('\n');
+            }
+
+            double scoreRate = aggregate.games > 0 ? aggregate.logicalVariantAScoreSum / aggregate.games : 0d;
+            pairingsBuilder.Append(aggregate.pairingLabel);
+            pairingsBuilder.Append(": ");
+            pairingsBuilder.Append(aggregate.logicalVariantALabel);
+            pairingsBuilder.Append(' ');
+            pairingsBuilder.Append(aggregate.logicalVariantAWins);
+            pairingsBuilder.Append(" | ");
+            pairingsBuilder.Append(aggregate.logicalVariantBLabel);
+            pairingsBuilder.Append(' ');
+            pairingsBuilder.Append(aggregate.logicalVariantBWins);
+            pairingsBuilder.Append(" | D");
+            pairingsBuilder.Append(aggregate.draws);
+            if (aggregate.aborts > 0)
+            {
+                pairingsBuilder.Append(" | A");
+                pairingsBuilder.Append(aggregate.aborts);
+            }
+            pairingsBuilder.Append(" | Score ");
+            pairingsBuilder.Append(scoreRate.ToString("P1"));
+            if (summary.tournamentSeatSwapEnabled)
+            {
+                pairingsBuilder.Append(" | Swapped ");
+                pairingsBuilder.Append(aggregate.swappedGames);
+            }
+        }
+
+        summary.tournamentPairingSummary = pairingsBuilder.ToString();
+
+        StringBuilder participantsBuilder = new StringBuilder();
+        for (int i = 0; i < run.tournamentParticipants.Count; i++)
+        {
+            if (i > 0)
+            {
+                participantsBuilder.Append(" | ");
+            }
+
+            participantsBuilder.Append(GetVariantLabel(run.tournamentParticipants[i]));
+        }
+
+        summary.tournamentParticipantsSummary = participantsBuilder.ToString();
     }
 
     private static double ComputeMean(List<double> values)
@@ -1196,5 +2070,186 @@ public static class AIVsAIBatchRunController
     {
         int sanitized = value <= 0 ? minValue : value;
         return Math.Max(minValue, sanitized);
+    }
+
+    private static int SanitizeTournamentParticipantMask(int participantMask)
+    {
+        return participantMask & AllGeneratedVariantsMask;
+    }
+
+    private static int CountEnabledVariants(int participantMask)
+    {
+        int count = 0;
+        for (int i = 0; i < GeneratedVariantPool.Length; i++)
+        {
+            if ((participantMask & (1 << i)) != 0)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private static float GetEstimatedGamesPerSecond(TurnManager.AIVsAIBatchSpeedPreset speedPreset)
+    {
+        if (lastObservedGamesPerSecond > 0.0001f)
+        {
+            return lastObservedGamesPerSecond;
+        }
+
+        switch (speedPreset)
+        {
+            case TurnManager.AIVsAIBatchSpeedPreset.Normal:
+                return DefaultNormalGamesPerSecond;
+
+            case TurnManager.AIVsAIBatchSpeedPreset.Fast:
+                return DefaultFastGamesPerSecond;
+
+            case TurnManager.AIVsAIBatchSpeedPreset.VeryFast:
+                return DefaultVeryFastGamesPerSecond;
+
+            case TurnManager.AIVsAIBatchSpeedPreset.UltraFast:
+            default:
+                return DefaultUltraFastGamesPerSecond;
+        }
+    }
+
+    private static void UpdateObservedGamesPerSecond(float gamesPerSecond)
+    {
+        if (gamesPerSecond > 0.0001f && !float.IsNaN(gamesPerSecond) && !float.IsInfinity(gamesPerSecond))
+        {
+            lastObservedGamesPerSecond = gamesPerSecond;
+        }
+    }
+
+    private static List<AIVariant> BuildTournamentParticipants(int participantMask)
+    {
+        int sanitizedMask = SanitizeTournamentParticipantMask(participantMask);
+        List<AIVariant> participants = new List<AIVariant>(GeneratedVariantPool.Length);
+        for (int i = 0; i < GeneratedVariantPool.Length; i++)
+        {
+            if ((sanitizedMask & (1 << i)) == 0)
+            {
+                continue;
+            }
+
+            participants.Add(GeneratedVariantPool[i]);
+        }
+
+        return participants;
+    }
+
+    private static List<ScheduledMatch> BuildTournamentSchedule(SimulationSettings settings, List<AIVariant> participants)
+    {
+        List<ScheduledMatch> schedule = new List<ScheduledMatch>();
+        if (participants == null || participants.Count < MinTournamentParticipantCount)
+        {
+            return schedule;
+        }
+
+        int pairingIndex = 0;
+        int gamesPerPairing = Math.Max(MinPositiveValue, settings.tournamentGamesPerPairing);
+        bool seatSwap = settings.tournamentSeatSwap;
+
+        for (int variantAIndex = 0; variantAIndex < participants.Count; variantAIndex++)
+        {
+            for (int variantBIndex = variantAIndex + 1; variantBIndex < participants.Count; variantBIndex++)
+            {
+                pairingIndex++;
+                for (int gameIndex = 1; gameIndex <= gamesPerPairing; gameIndex++)
+                {
+                    schedule.Add(new ScheduledMatch(
+                        pairingIndex,
+                        gameIndex,
+                        variantAIndex,
+                        variantBIndex,
+                        seatsWereSwapped: false));
+                    if (seatSwap)
+                    {
+                        schedule.Add(new ScheduledMatch(
+                            pairingIndex,
+                            gameIndex,
+                            variantAIndex,
+                            variantBIndex,
+                            seatsWereSwapped: true));
+                    }
+                }
+            }
+        }
+
+        return schedule;
+    }
+
+    private static int GetRoundRobinPairingCount(int participantCount)
+    {
+        participantCount = Math.Max(0, participantCount);
+        return participantCount < 2
+            ? 0
+            : (participantCount * (participantCount - 1)) / 2;
+    }
+
+    private static AIVariant[] BuildGeneratedVariantPool()
+    {
+        List<AIVariant> variants = new List<AIVariant>(GeneratedVariantPoolCount);
+        TurnManager.AIRecruitVariant[] baseModels =
+        {
+            TurnManager.AIRecruitVariant.Default,
+            TurnManager.AIRecruitVariant.RiderFocus
+        };
+
+        for (int modelIndex = 0; modelIndex < baseModels.Length; modelIndex++)
+        {
+            for (int featureMask = 0; featureMask < 8; featureMask++)
+            {
+                AILocalDecisionFeatures features = AILocalDecisionFeatures.None;
+                if ((featureMask & 1) != 0)
+                {
+                    features |= AILocalDecisionFeatures.OffensiveObviousWin;
+                }
+
+                if ((featureMask & 2) != 0)
+                {
+                    features |= AILocalDecisionFeatures.ExchangeScoring;
+                }
+
+                if ((featureMask & 4) != 0)
+                {
+                    features |= AILocalDecisionFeatures.DefensiveVeto;
+                }
+
+                variants.Add(new AIVariant(baseModels[modelIndex], features));
+            }
+        }
+
+        return variants.ToArray();
+    }
+
+    private static string GetFeatureMaskLabel(AILocalDecisionFeatures features)
+    {
+        if (features == AILocalDecisionFeatures.None)
+        {
+            return "None";
+        }
+
+        List<string> labels = new List<string>(3);
+        if ((features & AILocalDecisionFeatures.OffensiveObviousWin) != 0)
+        {
+            labels.Add("Offense");
+        }
+
+        if ((features & AILocalDecisionFeatures.ExchangeScoring) != 0)
+        {
+            labels.Add("Exchange");
+        }
+
+        if ((features & AILocalDecisionFeatures.DefensiveVeto) != 0)
+        {
+            labels.Add("Defense");
+        }
+
+        return labels.Count > 0
+            ? string.Join(" + ", labels)
+            : "None";
     }
 }
