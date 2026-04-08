@@ -260,12 +260,19 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
     private bool ShouldShowAIVsAiBatchHud(out AIVsAIBatchRunController.ActiveRunSnapshot snapshot)
     {
         snapshot = default;
-        if (turnManager == null || !turnManager.IsAIVsAIDebugModeEnabledForUi())
+        if (turnManager == null)
         {
             return false;
         }
 
-        return AIVsAIBatchRunController.TryGetActiveRunSnapshot(out snapshot);
+        if (!AIVsAIBatchRunController.TryGetHudSnapshot(out snapshot))
+        {
+            return false;
+        }
+
+        // Treat watched batch simulation as the authoritative HUD mode for both
+        // startup and active-run phases so Turn/Gold never flashes in between.
+        return true;
     }
 
     private void ApplyAIVsAiBatchHud(AIVsAIBatchRunController.ActiveRunSnapshot snapshot)
@@ -273,8 +280,24 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         turnLabel.style.width = 520f;
         goldLabel.style.width = 520f;
 
+        int completedMatches = snapshot.completedGames;
+        int completedPairs = AIVsAIBatchRunController.GetCompletedPairs(completedMatches);
+        string pairProgressLabel = $"Pairs {completedPairs} ({completedMatches} matches)";
+        float sideAProbability = Mathf.Clamp01(snapshot.bayesianSideABetterProbability);
+        bool favorSideA = sideAProbability >= 0.5f;
+        string favoredSideLabel = favorSideA ? "A" : "B";
+        float favoredCertainty = favorSideA ? sideAProbability : 1f - sideAProbability;
+        float favoredEdgePoints = Mathf.Abs(snapshot.decisiveEdgePoints);
+        float pairsPerSecond = snapshot.gamesPerSecond * 0.5f;
+        string edgeLabel = favoredEdgePoints <= 0.0001f
+            ? "Edge 0.0 pts"
+            : $"Edge {favoredSideLabel} +{favoredEdgePoints:0.0} pts";
+        string throughputLabel = $"{pairsPerSecond:0.00} pairs/s";
+        int batchPairs = snapshot.batchSize / 2;
+        string batchLabel = $"batch {batchPairs} pairs";
+
         turnLabel.text =
-            $"Sim {snapshot.completedGames} | W{snapshot.sideAWins} L{snapshot.sideBWins} D{snapshot.trueDraws} A{snapshot.aborts}";
+            $"{pairProgressLabel} | W{snapshot.sideAWins} L{snapshot.sideBWins} D{snapshot.trueDraws} A{snapshot.aborts}";
         goldLabel.text =
             $"{FormatDurationCompact(snapshot.elapsedSeconds)} elapsed | {FormatDurationCompact(snapshot.remainingTimeSeconds)} left";
 
@@ -285,7 +308,9 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
         statusLabel.style.width = 560f;
         statusLabel.text =
-            $"Bayes P(A>B) {snapshot.bayesianSideABetterProbability:P1} | {snapshot.gamesPerSecond:0.00} g/s | batch {snapshot.batchSize}";
+            snapshot.isWaitingForBatchAfterThreshold
+                ? $"Bayes: {favoredSideLabel} {favoredCertainty:P1} / {snapshot.certaintyThreshold:P0} | {edgeLabel} | {batchLabel} | finishing batch"
+                : $"Bayes: {favoredSideLabel} {favoredCertainty:P1} / {snapshot.certaintyThreshold:P0} | {edgeLabel} | {throughputLabel} | {batchLabel}";
         statusLabel.style.display = DisplayStyle.Flex;
     }
 

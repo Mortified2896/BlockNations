@@ -164,10 +164,30 @@
                                 <ui:Button name="GeneralSettingsSideAAiStyleDefaultButton" text="Baseline" class="menu-button general-settings-option-button" />
                                 <ui:Button name="GeneralSettingsSideAAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                             </ui:VisualElement>
+                            <ui:Label text="Side A Local Features" class="general-settings-section-label" />
+                            <ui:VisualElement class="general-settings-option-grid">
+                                <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
+                                    <ui:Button name="GeneralSettingsSideAFeatureOffenseButton" text="Offensive Obvious Win" class="menu-button general-settings-option-button" />
+                                    <ui:Button name="GeneralSettingsSideAFeatureExchangeButton" text="Exchange Scoring" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                                </ui:VisualElement>
+                                <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
+                                    <ui:Button name="GeneralSettingsSideAFeatureDefenseButton" text="Defensive Veto" class="menu-button general-settings-option-button" />
+                                </ui:VisualElement>
+                            </ui:VisualElement>
                             <ui:Label text="Side B AI Model" class="general-settings-section-label" />
                             <ui:VisualElement class="general-settings-option-row">
                                 <ui:Button name="GeneralSettingsSideBAiStyleDefaultButton" text="Baseline" class="menu-button general-settings-option-button" />
                                 <ui:Button name="GeneralSettingsSideBAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                            </ui:VisualElement>
+                            <ui:Label text="Side B Local Features" class="general-settings-section-label" />
+                            <ui:VisualElement class="general-settings-option-grid">
+                                <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
+                                    <ui:Button name="GeneralSettingsSideBFeatureOffenseButton" text="Offensive Obvious Win" class="menu-button general-settings-option-button" />
+                                    <ui:Button name="GeneralSettingsSideBFeatureExchangeButton" text="Exchange Scoring" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                                </ui:VisualElement>
+                                <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
+                                    <ui:Button name="GeneralSettingsSideBFeatureDefenseButton" text="Defensive Veto" class="menu-button general-settings-option-button" />
+                                </ui:VisualElement>
                             </ui:VisualElement>
                             <ui:Label text="Simulation Presets" class="general-settings-section-label" />
                             <ui:VisualElement class="general-settings-option-grid">

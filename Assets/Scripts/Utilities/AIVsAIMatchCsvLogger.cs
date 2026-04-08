@@ -12,7 +12,7 @@ public static class AIVsAIMatchCsvLogger
     private const string MatchHeader =
         "timestampUtc,runId,matchIndexInRun,runEmergencyHardMaxGames,appVersion,mapSizePreset,boardWidth,boardHeight,gameMode,sideAAIConfig,sideBAIConfig,sideAProfile,sideBProfile,winner,totalTurnCount,sideAFinalCityCount,sideBFinalCityCount,sideAFinalUnitCount,sideBFinalUnitCount";
     private const string RunSummaryHeader =
-        "timestampUtc,runId,appVersion,mapSizePreset,boardWidth,boardHeight,gameMode,sideAAIConfig,sideBAIConfig,matchCount,sideAWins,sideBWins,drawsOrAborts,trueDraws,aborts,elapsedSeconds,turnsPerSecond,sideAWinRate,sideAScoreRate,sideAEffectSize,averageTotalTurnCount,simulationPreset,simulationSettingsLabel,evaluationMethod,evaluationMethodLabel,certaintyThreshold,minimumGames,batchSize,timeBudgetSeconds,emergencyHardMaxGames,bayesianDecisiveGames,bayesianSideABetterProbability,runEndedNormally,stopReason,comparisonMode,trackedEntityLabel,seat1Label,seat2Label,pairedStatsApplicable,completePairCount,unmatchedIgnoredGameCount,pairedMeanScoreRate,pairedEffectSize,pairedPValue,pairedThreshold,seatEffectSize,seat1GameCount,seat1Wins,seat1Draws,seat1Losses,seat1ScoreRate,seat1EffectSize,seat2GameCount,seat2Wins,seat2Draws,seat2Losses,seat2ScoreRate,seat2EffectSize";
+        "timestampUtc,runId,appVersion,mapSizePreset,boardWidth,boardHeight,gameMode,sideAAIConfig,sideBAIConfig,matchCount,sideAWins,sideBWins,drawsOrAborts,trueDraws,aborts,elapsedSeconds,turnsPerSecond,sideAWinRate,sideAScoreRate,sideAEffectSize,averageTotalTurnCount,simulationPreset,simulationSettingsLabel,evaluationMethod,evaluationMethodLabel,certaintyThreshold,minimumGames,batchSize,timeBudgetSeconds,emergencyHardMaxGames,bayesianDecisiveGames,bayesianSideABetterProbability,runEndedNormally,stopReason,comparisonMode,trackedEntityLabel,seat1Label,seat2Label,pairedStatsApplicable,completePairCount,unmatchedIgnoredGameCount,pairedAFavoredCount,pairedSplitCount,pairedBFavoredCount,pairedMeanScoreRate,pairedEffectSize,pairedPValue,pairedThreshold,seatEffectSize,seat1GameCount,seat1Wins,seat1Draws,seat1Losses,seat1ScoreRate,seat1EffectSize,seat2GameCount,seat2Wins,seat2Draws,seat2Losses,seat2ScoreRate,seat2EffectSize";
 
     public sealed class MatchResult
     {
@@ -50,6 +50,8 @@ public static class AIVsAIMatchCsvLogger
         public string sideBAIConfig;
         public TurnManager.AIRecruitVariant baseSideARecruitVariant;
         public TurnManager.AIRecruitVariant baseSideBRecruitVariant;
+        public AILocalDecisionFeatures baseSideAFeatures;
+        public AILocalDecisionFeatures baseSideBFeatures;
         public TurnManager.AIDebugProfile baseSideAProfile;
         public TurnManager.AIDebugProfile baseSideBProfile;
         public int matchCount;
@@ -84,6 +86,9 @@ public static class AIVsAIMatchCsvLogger
         public bool pairedStatsApplicable;
         public int completePairCount;
         public int unmatchedIgnoredGameCount;
+        public int pairedAFavoredCount;
+        public int pairedSplitCount;
+        public int pairedBFavoredCount;
         public float pairedMeanScoreRate;
         public float pairedEffectSize;
         public float pairedPValue = -1f;
@@ -223,6 +228,9 @@ public static class AIVsAIMatchCsvLogger
             summary.pairedStatsApplicable ? "true" : "false",
             summary.completePairCount.ToString(),
             summary.unmatchedIgnoredGameCount.ToString(),
+            summary.pairedAFavoredCount.ToString(),
+            summary.pairedSplitCount.ToString(),
+            summary.pairedBFavoredCount.ToString(),
             FormatFloat(summary.pairedMeanScoreRate, 4),
             FormatFloat(summary.pairedEffectSize, 4),
             summary.pairedPValue >= 0f ? FormatFloat(summary.pairedPValue, 4) : string.Empty,

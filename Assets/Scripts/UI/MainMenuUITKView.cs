@@ -95,8 +95,14 @@ public class MainMenuUITKView : MonoBehaviour
     private Button generalSettingsWatchAIVsAIButton;
     private Button generalSettingsSideAAiStyleDefaultButton;
     private Button generalSettingsSideAAiStyleRiderFocusButton;
+    private Button generalSettingsSideAFeatureOffenseButton;
+    private Button generalSettingsSideAFeatureExchangeButton;
+    private Button generalSettingsSideAFeatureDefenseButton;
     private Button generalSettingsSideBAiStyleDefaultButton;
     private Button generalSettingsSideBAiStyleRiderFocusButton;
+    private Button generalSettingsSideBFeatureOffenseButton;
+    private Button generalSettingsSideBFeatureExchangeButton;
+    private Button generalSettingsSideBFeatureDefenseButton;
     private Button generalSettingsAIVsAiPresetQuickButton;
     private Button generalSettingsAIVsAiPresetStandardButton;
     private Button generalSettingsAIVsAiPresetStrictButton;
@@ -156,6 +162,8 @@ public class MainMenuUITKView : MonoBehaviour
     private bool selectedEnableAIVsAIDebugMode;
     private TurnManager.AIRecruitVariant selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
     private TurnManager.AIRecruitVariant selectedSideBAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
+    private AILocalDecisionFeatures selectedSideAFeatures = AILocalDecisionFeatures.None;
+    private AILocalDecisionFeatures selectedSideBFeatures = AILocalDecisionFeatures.None;
     private AIVsAIBatchRunController.SimulationSettings selectedAIVsAISimulationSettings =
         AIVsAIBatchRunController.GetDefaultSimulationSettings();
     private TurnManager.AIVsAIBatchSpeedPreset selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.UltraFast;
@@ -377,6 +385,11 @@ public class MainMenuUITKView : MonoBehaviour
         SubscribeMainMenuEvents();
         RefreshGamesList();
 
+        if (TryOpenPendingAIVsAISettingsReturn())
+        {
+            return;
+        }
+
         if (mainMenuController != null && mainMenuController.IsMultiplayerScreenRequested)
         {
             OpenMultiplayerPanelOrRedirect(requestControllerOpen: false);
@@ -451,8 +464,14 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsWatchAIVsAIButton = root.Q<Button>("GeneralSettingsWatchAIVsAIButton");
         generalSettingsSideAAiStyleDefaultButton = root.Q<Button>("GeneralSettingsSideAAiStyleDefaultButton");
         generalSettingsSideAAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsSideAAiStyleRiderFocusButton");
+        generalSettingsSideAFeatureOffenseButton = root.Q<Button>("GeneralSettingsSideAFeatureOffenseButton");
+        generalSettingsSideAFeatureExchangeButton = root.Q<Button>("GeneralSettingsSideAFeatureExchangeButton");
+        generalSettingsSideAFeatureDefenseButton = root.Q<Button>("GeneralSettingsSideAFeatureDefenseButton");
         generalSettingsSideBAiStyleDefaultButton = root.Q<Button>("GeneralSettingsSideBAiStyleDefaultButton");
         generalSettingsSideBAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsSideBAiStyleRiderFocusButton");
+        generalSettingsSideBFeatureOffenseButton = root.Q<Button>("GeneralSettingsSideBFeatureOffenseButton");
+        generalSettingsSideBFeatureExchangeButton = root.Q<Button>("GeneralSettingsSideBFeatureExchangeButton");
+        generalSettingsSideBFeatureDefenseButton = root.Q<Button>("GeneralSettingsSideBFeatureDefenseButton");
         generalSettingsAIVsAiPresetQuickButton = root.Q<Button>("GeneralSettingsAIVsAiPresetQuickButton");
         generalSettingsAIVsAiPresetStandardButton = root.Q<Button>("GeneralSettingsAIVsAiPresetStandardButton");
         generalSettingsAIVsAiPresetStrictButton = root.Q<Button>("GeneralSettingsAIVsAiPresetStrictButton");
@@ -943,6 +962,21 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsSideAAiStyleRiderFocusButton.clicked += HandleGeneralSettingsSideAAiStyleRiderFocusClicked;
         }
 
+        if (generalSettingsSideAFeatureOffenseButton != null)
+        {
+            generalSettingsSideAFeatureOffenseButton.clicked += HandleGeneralSettingsSideAFeatureOffenseClicked;
+        }
+
+        if (generalSettingsSideAFeatureExchangeButton != null)
+        {
+            generalSettingsSideAFeatureExchangeButton.clicked += HandleGeneralSettingsSideAFeatureExchangeClicked;
+        }
+
+        if (generalSettingsSideAFeatureDefenseButton != null)
+        {
+            generalSettingsSideAFeatureDefenseButton.clicked += HandleGeneralSettingsSideAFeatureDefenseClicked;
+        }
+
         if (generalSettingsSideBAiStyleDefaultButton != null)
         {
             generalSettingsSideBAiStyleDefaultButton.clicked += HandleGeneralSettingsSideBAiStyleDefaultClicked;
@@ -951,6 +985,21 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsSideBAiStyleRiderFocusButton != null)
         {
             generalSettingsSideBAiStyleRiderFocusButton.clicked += HandleGeneralSettingsSideBAiStyleRiderFocusClicked;
+        }
+
+        if (generalSettingsSideBFeatureOffenseButton != null)
+        {
+            generalSettingsSideBFeatureOffenseButton.clicked += HandleGeneralSettingsSideBFeatureOffenseClicked;
+        }
+
+        if (generalSettingsSideBFeatureExchangeButton != null)
+        {
+            generalSettingsSideBFeatureExchangeButton.clicked += HandleGeneralSettingsSideBFeatureExchangeClicked;
+        }
+
+        if (generalSettingsSideBFeatureDefenseButton != null)
+        {
+            generalSettingsSideBFeatureDefenseButton.clicked += HandleGeneralSettingsSideBFeatureDefenseClicked;
         }
 
         if (generalSettingsAIVsAiPresetQuickButton != null)
@@ -1207,6 +1256,21 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsSideAAiStyleRiderFocusButton.clicked -= HandleGeneralSettingsSideAAiStyleRiderFocusClicked;
         }
 
+        if (generalSettingsSideAFeatureOffenseButton != null)
+        {
+            generalSettingsSideAFeatureOffenseButton.clicked -= HandleGeneralSettingsSideAFeatureOffenseClicked;
+        }
+
+        if (generalSettingsSideAFeatureExchangeButton != null)
+        {
+            generalSettingsSideAFeatureExchangeButton.clicked -= HandleGeneralSettingsSideAFeatureExchangeClicked;
+        }
+
+        if (generalSettingsSideAFeatureDefenseButton != null)
+        {
+            generalSettingsSideAFeatureDefenseButton.clicked -= HandleGeneralSettingsSideAFeatureDefenseClicked;
+        }
+
         if (generalSettingsSideBAiStyleDefaultButton != null)
         {
             generalSettingsSideBAiStyleDefaultButton.clicked -= HandleGeneralSettingsSideBAiStyleDefaultClicked;
@@ -1215,6 +1279,21 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsSideBAiStyleRiderFocusButton != null)
         {
             generalSettingsSideBAiStyleRiderFocusButton.clicked -= HandleGeneralSettingsSideBAiStyleRiderFocusClicked;
+        }
+
+        if (generalSettingsSideBFeatureOffenseButton != null)
+        {
+            generalSettingsSideBFeatureOffenseButton.clicked -= HandleGeneralSettingsSideBFeatureOffenseClicked;
+        }
+
+        if (generalSettingsSideBFeatureExchangeButton != null)
+        {
+            generalSettingsSideBFeatureExchangeButton.clicked -= HandleGeneralSettingsSideBFeatureExchangeClicked;
+        }
+
+        if (generalSettingsSideBFeatureDefenseButton != null)
+        {
+            generalSettingsSideBFeatureDefenseButton.clicked -= HandleGeneralSettingsSideBFeatureDefenseClicked;
         }
 
         if (generalSettingsAIVsAiPresetQuickButton != null)
@@ -1426,6 +1505,30 @@ public class MainMenuUITKView : MonoBehaviour
         ShowGeneralSettingsPanel(PendingGeneralSettingsMode.VsAI);
     }
 
+    private bool TryOpenPendingAIVsAISettingsReturn()
+    {
+        if (!MainMenuController.TryConsumePendingAIVsAISettingsReturn(out MainMenuController.PendingAIVsAISettingsReturn pendingSettings))
+        {
+            return false;
+        }
+
+        ShowGeneralSettingsPanel(PendingGeneralSettingsMode.VsAI);
+        selectedMapSizePreset = pendingSettings.mapSizePreset;
+        selectedAIDifficulty = pendingSettings.difficulty;
+        selectedAIRecruitVariant = pendingSettings.recruitVariant;
+        selectedStoreSnapshotHistory = pendingSettings.storeSnapshotHistory;
+        selectedEnableAIVsAIDebugMode = pendingSettings.enableAIVsAIDebugMode;
+        selectedSideAAIRecruitVariant = pendingSettings.sideARecruitVariant;
+        selectedSideBAIRecruitVariant = pendingSettings.sideBRecruitVariant;
+        selectedSideAFeatures = pendingSettings.sideAFeatures;
+        selectedSideBFeatures = pendingSettings.sideBFeatures;
+        selectedAIVsAISimulationSettings =
+            AIVsAIBatchRunController.SanitizeSimulationSettings(pendingSettings.aiVsAiSimulationSettings);
+        selectedAIVsAIBatchSpeedPreset = pendingSettings.aiVsAiBatchSpeedPreset;
+        RefreshGeneralSettingsSelectionState();
+        return true;
+    }
+
     private void HandleMultiplayerClicked()
     {
         OpenMultiplayerPanelOrRedirect(requestControllerOpen: true);
@@ -1504,6 +1607,21 @@ public class MainMenuUITKView : MonoBehaviour
         RefreshGeneralSettingsSelectionState();
     }
 
+    private void HandleGeneralSettingsSideAFeatureOffenseClicked()
+    {
+        ToggleSideAFeature(AILocalDecisionFeatures.OffensiveObviousWin);
+    }
+
+    private void HandleGeneralSettingsSideAFeatureExchangeClicked()
+    {
+        ToggleSideAFeature(AILocalDecisionFeatures.ExchangeScoring);
+    }
+
+    private void HandleGeneralSettingsSideAFeatureDefenseClicked()
+    {
+        ToggleSideAFeature(AILocalDecisionFeatures.DefensiveVeto);
+    }
+
     private void HandleGeneralSettingsSideBAiStyleDefaultClicked()
     {
         selectedSideBAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
@@ -1514,6 +1632,21 @@ public class MainMenuUITKView : MonoBehaviour
     {
         selectedSideBAIRecruitVariant = TurnManager.AIRecruitVariant.RiderFocus;
         RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsSideBFeatureOffenseClicked()
+    {
+        ToggleSideBFeature(AILocalDecisionFeatures.OffensiveObviousWin);
+    }
+
+    private void HandleGeneralSettingsSideBFeatureExchangeClicked()
+    {
+        ToggleSideBFeature(AILocalDecisionFeatures.ExchangeScoring);
+    }
+
+    private void HandleGeneralSettingsSideBFeatureDefenseClicked()
+    {
+        ToggleSideBFeature(AILocalDecisionFeatures.DefensiveVeto);
     }
 
     private void HandleGeneralSettingsAIVsAiPresetQuickClicked()
@@ -1654,6 +1787,18 @@ public class MainMenuUITKView : MonoBehaviour
         RefreshGeneralSettingsSelectionState();
     }
 
+    private void ToggleSideAFeature(AILocalDecisionFeatures feature)
+    {
+        selectedSideAFeatures ^= feature;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void ToggleSideBFeature(AILocalDecisionFeatures feature)
+    {
+        selectedSideBFeatures ^= feature;
+        RefreshGeneralSettingsSelectionState();
+    }
+
     private void HandleGeneralSettingsConfirmClicked()
     {
         if (mainMenuController == null)
@@ -1674,6 +1819,8 @@ public class MainMenuUITKView : MonoBehaviour
                 selectedAIVsAIBatchSpeedPreset,
                 selectedSideAAIRecruitVariant,
                 selectedSideBAIRecruitVariant,
+                selectedSideAFeatures,
+                selectedSideBFeatures,
                 TurnManager.AIDebugProfile.Baseline,
                 TurnManager.AIDebugProfile.Baseline,
                 selectedAIVsAISimulationSettings);
@@ -2374,6 +2521,8 @@ public class MainMenuUITKView : MonoBehaviour
         selectedEnableAIVsAIDebugMode = false;
         selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
         selectedSideBAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
+        selectedSideAFeatures = AILocalDecisionFeatures.None;
+        selectedSideBFeatures = AILocalDecisionFeatures.None;
         selectedAIVsAISimulationSettings = AIVsAIBatchRunController.GetDefaultSimulationSettings();
         selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.UltraFast;
         HideCreateSuccessPanel();
@@ -2540,11 +2689,29 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsSideAAiStyleRiderFocusButton,
             selectedSideAAIRecruitVariant == TurnManager.AIRecruitVariant.RiderFocus);
         UpdateGeneralSettingsSelectionButton(
+            generalSettingsSideAFeatureOffenseButton,
+            (selectedSideAFeatures & AILocalDecisionFeatures.OffensiveObviousWin) != 0);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsSideAFeatureExchangeButton,
+            (selectedSideAFeatures & AILocalDecisionFeatures.ExchangeScoring) != 0);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsSideAFeatureDefenseButton,
+            (selectedSideAFeatures & AILocalDecisionFeatures.DefensiveVeto) != 0);
+        UpdateGeneralSettingsSelectionButton(
             generalSettingsSideBAiStyleDefaultButton,
             selectedSideBAIRecruitVariant == TurnManager.AIRecruitVariant.Default);
         UpdateGeneralSettingsSelectionButton(
             generalSettingsSideBAiStyleRiderFocusButton,
             selectedSideBAIRecruitVariant == TurnManager.AIRecruitVariant.RiderFocus);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsSideBFeatureOffenseButton,
+            (selectedSideBFeatures & AILocalDecisionFeatures.OffensiveObviousWin) != 0);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsSideBFeatureExchangeButton,
+            (selectedSideBFeatures & AILocalDecisionFeatures.ExchangeScoring) != 0);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsSideBFeatureDefenseButton,
+            (selectedSideBFeatures & AILocalDecisionFeatures.DefensiveVeto) != 0);
         selectedAIVsAISimulationSettings =
             AIVsAIBatchRunController.SanitizeSimulationSettings(selectedAIVsAISimulationSettings);
         UpdateGeneralSettingsSelectionButton(
@@ -3233,8 +3400,14 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsWatchAIVsAIButton = null;
         generalSettingsSideAAiStyleDefaultButton = null;
         generalSettingsSideAAiStyleRiderFocusButton = null;
+        generalSettingsSideAFeatureOffenseButton = null;
+        generalSettingsSideAFeatureExchangeButton = null;
+        generalSettingsSideAFeatureDefenseButton = null;
         generalSettingsSideBAiStyleDefaultButton = null;
         generalSettingsSideBAiStyleRiderFocusButton = null;
+        generalSettingsSideBFeatureOffenseButton = null;
+        generalSettingsSideBFeatureExchangeButton = null;
+        generalSettingsSideBFeatureDefenseButton = null;
         generalSettingsAIVsAiPresetQuickButton = null;
         generalSettingsAIVsAiPresetStandardButton = null;
         generalSettingsAIVsAiPresetStrictButton = null;

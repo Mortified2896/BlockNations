@@ -15,6 +15,23 @@ using UnityEngine.UI;
 /// </summary>
 public class MainMenuController : MonoBehaviour
 {
+    public struct PendingAIVsAISettingsReturn
+    {
+        public TurnManager.MapSizePreset mapSizePreset;
+        public TurnManager.AIDifficulty difficulty;
+        public TurnManager.AIRecruitVariant recruitVariant;
+        public bool storeSnapshotHistory;
+        public bool enableAIVsAIDebugMode;
+        public TurnManager.AIVsAIBatchSpeedPreset aiVsAiBatchSpeedPreset;
+        public TurnManager.AIRecruitVariant sideARecruitVariant;
+        public TurnManager.AIRecruitVariant sideBRecruitVariant;
+        public AILocalDecisionFeatures sideAFeatures;
+        public AILocalDecisionFeatures sideBFeatures;
+        public TurnManager.AIDebugProfile sideAProfile;
+        public TurnManager.AIDebugProfile sideBProfile;
+        public AIVsAIBatchRunController.SimulationSettings aiVsAiSimulationSettings;
+    }
+
     [Header("Scenes")]
     [SerializeField] private string gameplaySceneName = "SampleScene";
 
@@ -91,6 +108,8 @@ public class MainMenuController : MonoBehaviour
     }
 
     private static readonly MenuRefreshRuntimeState SharedMenuRefreshState = new MenuRefreshRuntimeState();
+    private static bool hasPendingAIVsAISettingsReturn;
+    private static PendingAIVsAISettingsReturn pendingAIVsAISettingsReturn;
 
     private readonly struct RemoteTurnStatusOverlay
     {
@@ -123,6 +142,20 @@ public class MainMenuController : MonoBehaviour
 
         Debug.Log(message);
 #endif
+    }
+
+    public static void SetPendingAIVsAISettingsReturn(PendingAIVsAISettingsReturn settings)
+    {
+        pendingAIVsAISettingsReturn = settings;
+        hasPendingAIVsAISettingsReturn = true;
+    }
+
+    public static bool TryConsumePendingAIVsAISettingsReturn(out PendingAIVsAISettingsReturn settings)
+    {
+        settings = pendingAIVsAISettingsReturn;
+        bool hadPending = hasPendingAIVsAISettingsReturn;
+        hasPendingAIVsAISettingsReturn = false;
+        return hadPending;
     }
 
     IEnumerator Start()
@@ -244,6 +277,8 @@ public class MainMenuController : MonoBehaviour
         TurnManager.AIVsAIBatchSpeedPreset aiVsAiBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.Normal,
         TurnManager.AIRecruitVariant sideARecruitVariant = TurnManager.AIRecruitVariant.Default,
         TurnManager.AIRecruitVariant sideBRecruitVariant = TurnManager.AIRecruitVariant.Default,
+        AILocalDecisionFeatures sideAFeatures = AILocalDecisionFeatures.None,
+        AILocalDecisionFeatures sideBFeatures = AILocalDecisionFeatures.None,
         TurnManager.AIDebugProfile sideAProfile = TurnManager.AIDebugProfile.Baseline,
         TurnManager.AIDebugProfile sideBProfile = TurnManager.AIDebugProfile.Baseline,
         AIVsAIBatchRunController.SimulationSettings aiVsAiSimulationSettings = default)
@@ -257,6 +292,8 @@ public class MainMenuController : MonoBehaviour
             aiVsAiBatchSpeedPreset,
             sideARecruitVariant,
             sideBRecruitVariant,
+            sideAFeatures,
+            sideBFeatures,
             sideAProfile,
             sideBProfile,
             aiVsAiSimulationSettings);
@@ -271,6 +308,8 @@ public class MainMenuController : MonoBehaviour
         TurnManager.AIVsAIBatchSpeedPreset aiVsAiBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.Normal,
         TurnManager.AIRecruitVariant sideARecruitVariant = TurnManager.AIRecruitVariant.Default,
         TurnManager.AIRecruitVariant sideBRecruitVariant = TurnManager.AIRecruitVariant.Default,
+        AILocalDecisionFeatures sideAFeatures = AILocalDecisionFeatures.None,
+        AILocalDecisionFeatures sideBFeatures = AILocalDecisionFeatures.None,
         TurnManager.AIDebugProfile sideAProfile = TurnManager.AIDebugProfile.Baseline,
         TurnManager.AIDebugProfile sideBProfile = TurnManager.AIDebugProfile.Baseline,
         AIVsAIBatchRunController.SimulationSettings aiVsAiSimulationSettings = default)
@@ -282,6 +321,8 @@ public class MainMenuController : MonoBehaviour
             enableAIVsAIDebugMode,
             sideARecruitVariant,
             sideBRecruitVariant,
+            sideAFeatures,
+            sideBFeatures,
             sideAProfile,
             sideBProfile,
             aiVsAiBatchSpeedPreset);

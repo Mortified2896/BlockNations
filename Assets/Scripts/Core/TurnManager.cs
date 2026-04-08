@@ -98,6 +98,8 @@ public class TurnManager : MonoBehaviour
     public AIDifficulty aiDifficulty = AIDifficulty.Level1;
     [Tooltip("Experimental/dev-only AI recruit override. Default preserves current behavior.")]
     public AIRecruitVariant aiRecruitVariant = AIRecruitVariant.Default;
+    [Tooltip("Experimental/dev-only local AI features. Default preserves current behavior.")]
+    public AILocalDecisionFeatures aiLocalDecisionFeatures = AILocalDecisionFeatures.None;
 
     [Header("UI")]
     [Tooltip("Optional: assign End Turn / Next Turn button to keep interactable state synced with CanAdvanceTurn().")]
@@ -167,6 +169,8 @@ public class TurnManager : MonoBehaviour
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
     private AIRecruitVariant aiVsAiSideARecruitVariant = AIRecruitVariant.Default;
     private AIRecruitVariant aiVsAiSideBRecruitVariant = AIRecruitVariant.Default;
+    private AILocalDecisionFeatures aiVsAiSideAFeatures = AILocalDecisionFeatures.None;
+    private AILocalDecisionFeatures aiVsAiSideBFeatures = AILocalDecisionFeatures.None;
     private AIDebugProfile aiVsAiSideAProfile = AIDebugProfile.Baseline;
     private AIDebugProfile aiVsAiSideBProfile = AIDebugProfile.Baseline;
     private AIVsAIBatchSpeedPreset aiVsAiBatchSpeedPreset = AIVsAIBatchSpeedPreset.Normal;
@@ -320,7 +324,8 @@ public class TurnManager : MonoBehaviour
     private enum GameOverSecondaryAction
     {
         None,
-        MainMenu
+        MainMenu,
+        BackToAIVsAISettings
     }
 
     private enum GameOverTertiaryAction
@@ -365,6 +370,8 @@ public class TurnManager : MonoBehaviour
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
     private AIRecruitVariant gameOverUiRepeatSideARecruitVariant = AIRecruitVariant.Default;
     private AIRecruitVariant gameOverUiRepeatSideBRecruitVariant = AIRecruitVariant.Default;
+    private AILocalDecisionFeatures gameOverUiRepeatSideAFeatures = AILocalDecisionFeatures.None;
+    private AILocalDecisionFeatures gameOverUiRepeatSideBFeatures = AILocalDecisionFeatures.None;
     private AIDebugProfile gameOverUiRepeatSideAProfile = AIDebugProfile.Baseline;
     private AIDebugProfile gameOverUiRepeatSideBProfile = AIDebugProfile.Baseline;
 #endif
@@ -1260,6 +1267,8 @@ public class TurnManager : MonoBehaviour
         gameOverUiRepeatAIVsAISimulationSettings = AIVsAIBatchRunController.GetDefaultSimulationSettings();
         gameOverUiRepeatSideARecruitVariant = AIRecruitVariant.Default;
         gameOverUiRepeatSideBRecruitVariant = AIRecruitVariant.Default;
+        gameOverUiRepeatSideAFeatures = AILocalDecisionFeatures.None;
+        gameOverUiRepeatSideBFeatures = AILocalDecisionFeatures.None;
         gameOverUiRepeatSideAProfile = AIDebugProfile.Baseline;
         gameOverUiRepeatSideBProfile = AIDebugProfile.Baseline;
 #endif
@@ -1428,6 +1437,31 @@ public class TurnManager : MonoBehaviour
             return;
         }
 
+        if (gameOverUiSecondaryAction == GameOverSecondaryAction.BackToAIVsAISettings)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            MainMenuController.SetPendingAIVsAISettingsReturn(new MainMenuController.PendingAIVsAISettingsReturn
+            {
+                mapSizePreset = GetCurrentMapSizePreset(),
+                difficulty = aiDifficulty,
+                recruitVariant = aiRecruitVariant,
+                storeSnapshotHistory = MatchSnapshotHistorySettings.IsEnabled(currentGameId),
+                enableAIVsAIDebugMode = true,
+                aiVsAiBatchSpeedPreset = aiVsAiBatchSpeedPreset,
+                sideARecruitVariant = gameOverUiRepeatSideARecruitVariant,
+                sideBRecruitVariant = gameOverUiRepeatSideBRecruitVariant,
+                sideAFeatures = gameOverUiRepeatSideAFeatures,
+                sideBFeatures = gameOverUiRepeatSideBFeatures,
+                sideAProfile = gameOverUiRepeatSideAProfile,
+                sideBProfile = gameOverUiRepeatSideBProfile,
+                aiVsAiSimulationSettings = gameOverUiRepeatAIVsAISimulationSettings
+            });
+#endif
+            Time.timeScale = 1f;
+            SceneManager.LoadScene(MainMenuSceneName);
+            return;
+        }
+
         if (gameOverUiSecondaryAction != GameOverSecondaryAction.MainMenu)
         {
             return;
@@ -1460,6 +1494,8 @@ public class TurnManager : MonoBehaviour
             enabled: true,
             sideARecruitVariant: gameOverUiRepeatSideARecruitVariant,
             sideBRecruitVariant: gameOverUiRepeatSideBRecruitVariant,
+            sideAFeatures: gameOverUiRepeatSideAFeatures,
+            sideBFeatures: gameOverUiRepeatSideBFeatures,
             sideAProfile: gameOverUiRepeatSideAProfile,
             sideBProfile: gameOverUiRepeatSideBProfile,
             batchSpeedPreset: aiVsAiBatchSpeedPreset);
@@ -3813,6 +3849,8 @@ public class TurnManager : MonoBehaviour
     {
         aiVsAiSideARecruitVariant = aiRecruitVariant;
         aiVsAiSideBRecruitVariant = aiRecruitVariant;
+        aiVsAiSideAFeatures = aiLocalDecisionFeatures;
+        aiVsAiSideBFeatures = aiLocalDecisionFeatures;
         aiVsAiSideAProfile = AIDebugProfile.Baseline;
         aiVsAiSideBProfile = AIDebugProfile.Baseline;
         aiVsAiBatchSpeedPreset = AIVsAIBatchSpeedPreset.Normal;
@@ -3839,6 +3877,8 @@ public class TurnManager : MonoBehaviour
                     enabled = true,
                     sideARecruitVariant = aiVsAiSideARecruitVariant,
                     sideBRecruitVariant = aiVsAiSideBRecruitVariant,
+                    sideAFeatures = aiVsAiSideAFeatures,
+                    sideBFeatures = aiVsAiSideBFeatures,
                     sideAProfile = aiVsAiSideAProfile,
                     sideBProfile = aiVsAiSideBProfile,
                     batchSpeedPreset = aiVsAiBatchSpeedPreset
@@ -3874,6 +3914,8 @@ public class TurnManager : MonoBehaviour
                 simulationSettings,
                 aiVsAiSideARecruitVariant,
                 aiVsAiSideBRecruitVariant,
+                aiVsAiSideAFeatures,
+                aiVsAiSideBFeatures,
                 aiVsAiSideAProfile,
                 aiVsAiSideBProfile);
             return;
@@ -3887,6 +3929,8 @@ public class TurnManager : MonoBehaviour
         enableAIVsAIDebugMode = settings.enabled;
         aiVsAiSideARecruitVariant = settings.sideARecruitVariant;
         aiVsAiSideBRecruitVariant = settings.sideBRecruitVariant;
+        aiVsAiSideAFeatures = settings.sideAFeatures;
+        aiVsAiSideBFeatures = settings.sideBFeatures;
         aiVsAiSideAProfile = settings.sideAProfile;
         aiVsAiSideBProfile = settings.sideBProfile;
         aiVsAiBatchSpeedPreset = settings.batchSpeedPreset;
@@ -3906,6 +3950,17 @@ public class TurnManager : MonoBehaviour
         return aiRecruitVariant;
     }
 
+    private AILocalDecisionFeatures GetAILocalDecisionFeaturesForSide(bool actingSideIsPlayerOwned)
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (IsAIVsAIDebugModeActive())
+        {
+            return actingSideIsPlayerOwned ? aiVsAiSideAFeatures : aiVsAiSideBFeatures;
+        }
+#endif
+        return aiLocalDecisionFeatures;
+    }
+
     private AIDebugProfile GetAIDebugProfileForSide(bool actingSideIsPlayerOwned)
     {
         return AIDebugProfile.Baseline;
@@ -3913,7 +3968,399 @@ public class TurnManager : MonoBehaviour
 
     private string BuildAIConfigLabelForSide(bool actingSideIsPlayerOwned)
     {
-        return $"difficulty={aiDifficulty};recruitVariant={GetAIRecruitVariantForSide(actingSideIsPlayerOwned)};profile={GetAIDebugProfileForSide(actingSideIsPlayerOwned)}";
+        return $"difficulty={aiDifficulty};recruitVariant={GetAIRecruitVariantForSide(actingSideIsPlayerOwned)};localFeatures={AIPostCalculusLocalDecisionHelper.ToConfigValue(GetAILocalDecisionFeaturesForSide(actingSideIsPlayerOwned))};profile={GetAIDebugProfileForSide(actingSideIsPlayerOwned)}";
+    }
+
+    private bool TryExecuteImmediateCityWin(
+        Unit unit,
+        City[] allCities,
+        HashSet<TileVisibility> visibleTiles,
+        bool aiHasPerfectInfo,
+        float tileSize)
+    {
+        if (unit == null ||
+            allCities == null ||
+            gridManager == null ||
+            !AIPostCalculusLocalDecisionHelper.HasFeature(
+                GetAILocalDecisionFeaturesForSide(unit.isPlayerOwned),
+                AILocalDecisionFeatures.OffensiveObviousWin))
+        {
+            return false;
+        }
+
+        if (!gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility unitTile) || unitTile == null)
+        {
+            return false;
+        }
+
+        List<AIPostCalculusLocalDecisionHelper.ImmediateCityWinCandidate> candidates =
+            new List<AIPostCalculusLocalDecisionHelper.ImmediateCityWinCandidate>();
+
+        for (int cityIndex = 0; cityIndex < allCities.Length; cityIndex++)
+        {
+            City city = allCities[cityIndex];
+            if (city == null || city.isPlayerOwned == unit.isPlayerOwned)
+            {
+                continue;
+            }
+
+            if (!IsCityTileVisibleToSide(city, visibleTiles, aiHasPerfectInfo))
+            {
+                continue;
+            }
+
+            int distanceToCity = Mathf.Max(Mathf.Abs(unitTile.gridX - city.x), Mathf.Abs(unitTile.gridY - city.y));
+            if (distanceToCity != 1)
+            {
+                continue;
+            }
+
+            Unit visibleOccupant = GetPerceivedEnemyUnitAtCity(city, unit.isPlayerOwned, visibleTiles, aiHasPerfectInfo);
+            if (visibleOccupant == null)
+            {
+                if (unit.CanMoveThisTurn())
+                {
+                    candidates.Add(new AIPostCalculusLocalDecisionHelper.ImmediateCityWinCandidate(
+                        city.transform.position,
+                        city.x,
+                        city.y,
+                        requiresAttack: false));
+                }
+
+                continue;
+            }
+
+            if (!unit.CanMoveThisTurn() ||
+                !unit.CanAttackThisTurn() ||
+                unit.AttackRange > 1 ||
+                !unit.AdvancesIntoDefenderTileOnKill)
+            {
+                continue;
+            }
+
+            int predictedDamage = Mathf.Max(0, unit.attackUnits - visibleOccupant.defenseUnits);
+            if (predictedDamage < visibleOccupant.currentHealthUnits)
+            {
+                continue;
+            }
+
+            candidates.Add(new AIPostCalculusLocalDecisionHelper.ImmediateCityWinCandidate(
+                city.transform.position,
+                city.x,
+                city.y,
+                requiresAttack: true));
+        }
+
+        if (!AIPostCalculusLocalDecisionHelper.TryChooseImmediateCityWin(
+                GetAILocalDecisionFeaturesForSide(unit.isPlayerOwned),
+                candidates,
+                out AIPostCalculusLocalDecisionHelper.ImmediateCityWinCandidate chosenCandidate))
+        {
+            return false;
+        }
+
+        if (chosenCandidate.requiresAttack)
+        {
+            MoveAIUnitOneStep(unit, chosenCandidate.targetPosition, tileSize);
+            return gameOver;
+        }
+
+        return TryExecuteImmediateEmptyCityCapture(unit, chosenCandidate.targetPosition);
+    }
+
+    private bool TryExecuteImmediateEmptyCityCapture(Unit unit, Vector3 targetPosition)
+    {
+        if (unit == null || !unit.CanMoveThisTurn())
+        {
+            return false;
+        }
+
+        City targetCity = GridUtils.GetCityAtPosition(targetPosition);
+        if (targetCity == null || targetCity.isPlayerOwned == unit.isPlayerOwned)
+        {
+            return false;
+        }
+
+        Unit occupyingUnit = GridUtils.GetUnitAtPosition(targetPosition, unit);
+        if (occupyingUnit != null)
+        {
+            return false;
+        }
+
+        if (unit.currentCity != null)
+        {
+            unit.currentCity.stationedUnit = null;
+            unit.currentCity = null;
+        }
+
+        Vector3 destination = targetPosition;
+        destination.z = unit.transform.position.z;
+        unit.transform.position = destination;
+        unit.RegisterMove();
+
+        if (SoundManager.Instance != null && !ShouldSuppressAIVsAIAudio())
+        {
+            SoundManager.Instance.PlayMove();
+        }
+
+        OnCityCaptured(unit.isPlayerOwned, targetCity);
+        return gameOver;
+    }
+
+    private bool IsCityTileVisibleToSide(City city, HashSet<TileVisibility> visibleTiles, bool aiHasPerfectInfo)
+    {
+        if (city == null)
+        {
+            return false;
+        }
+
+        if (aiHasPerfectInfo)
+        {
+            return true;
+        }
+
+        return gridManager != null &&
+               visibleTiles != null &&
+               gridManager.TryGetTile(city.x, city.y, out TileVisibility cityTile) &&
+               cityTile != null &&
+               visibleTiles.Contains(cityTile);
+    }
+
+    private Unit SelectBestLocalAttackTarget(Unit attacker, IList<Unit> potentialTargets)
+    {
+        if (attacker == null || potentialTargets == null || gridManager == null)
+        {
+            return null;
+        }
+
+        if (!gridManager.TryGetTileAtWorldPosition(attacker.transform.position, out TileVisibility attackerTile) || attackerTile == null)
+        {
+            return null;
+        }
+
+        List<AIPostCalculusLocalDecisionHelper.AttackCandidate> candidates =
+            new List<AIPostCalculusLocalDecisionHelper.AttackCandidate>();
+
+        for (int i = 0; i < potentialTargets.Count; i++)
+        {
+            Unit target = potentialTargets[i];
+            if (target == null || target.isPlayerOwned == attacker.isPlayerOwned || !target.gameObject.activeInHierarchy)
+            {
+                continue;
+            }
+
+            if (!gridManager.TryGetTileAtWorldPosition(target.transform.position, out TileVisibility targetTile) || targetTile == null)
+            {
+                continue;
+            }
+
+            int tileDistance = Mathf.Max(
+                Mathf.Abs(targetTile.gridX - attackerTile.gridX),
+                Mathf.Abs(targetTile.gridY - attackerTile.gridY));
+            if (!attacker.IsTargetInAttackRange(tileDistance))
+            {
+                continue;
+            }
+
+            City targetCity = GridUtils.GetCityAtPosition(target.transform.position);
+            int predictedDamage = Mathf.Max(0, attacker.attackUnits - target.defenseUnits);
+            candidates.Add(new AIPostCalculusLocalDecisionHelper.AttackCandidate(
+                target,
+                canKill: predictedDamage >= target.currentHealthUnits,
+                predictedDamage: predictedDamage,
+                baselineDistance: tileDistance,
+                baselineTargetHealth: target.currentHealthUnits,
+                targetAttackUnits: target.attackUnits,
+                targetOccupiesEnemyCity: targetCity != null && targetCity.isPlayerOwned != attacker.isPlayerOwned));
+        }
+
+        return AIPostCalculusLocalDecisionHelper.ChooseAttackTarget(
+            GetAILocalDecisionFeaturesForSide(attacker.isPlayerOwned),
+            candidates);
+    }
+
+    private bool WouldMoveCandidateExposeVisibleImmediateThreatToKeyCity(
+        Unit unit,
+        Vector3 candidatePosition,
+        City keyCity,
+        Unit[] allUnits,
+        HashSet<TileVisibility> visibleTiles,
+        bool aiHasPerfectInfo)
+    {
+        if (unit == null || keyCity == null || allUnits == null)
+        {
+            return false;
+        }
+
+        Vector3 originalPosition = unit.transform.position;
+        City originCity = unit.currentCity;
+        GameObject originCityStationedUnit = originCity != null ? originCity.stationedUnit : null;
+        City destinationCity = GridUtils.GetCityAtPosition(candidatePosition);
+        GameObject destinationCityStationedUnit = destinationCity != null ? destinationCity.stationedUnit : null;
+
+        try
+        {
+            if (originCity != null && originCity.stationedUnit == unit.gameObject)
+            {
+                originCity.stationedUnit = null;
+            }
+
+            unit.currentCity = null;
+            unit.transform.position = candidatePosition;
+
+            if (destinationCity != null && destinationCity.isPlayerOwned == unit.isPlayerOwned)
+            {
+                destinationCity.stationedUnit = unit.gameObject;
+                unit.currentCity = destinationCity;
+            }
+
+            return CountImmediateThreatSourcesNearCity(
+                       keyCity,
+                       allUnits,
+                       unit.isPlayerOwned,
+                       visibleTiles,
+                       aiHasPerfectInfo) > 0;
+        }
+        finally
+        {
+            unit.transform.position = originalPosition;
+            unit.currentCity = originCity;
+
+            if (destinationCity != null)
+            {
+                destinationCity.stationedUnit = destinationCityStationedUnit;
+            }
+
+            if (originCity != null)
+            {
+                originCity.stationedUnit = originCityStationedUnit;
+            }
+        }
+    }
+
+    private Unit GetPerceivedEnemyUnitAtCity(
+        City city,
+        bool actingSideIsPlayerOwned,
+        HashSet<TileVisibility> visibleTiles,
+        bool aiHasPerfectInfo)
+    {
+        if (city == null)
+        {
+            return null;
+        }
+
+        Unit occupant = GridUtils.GetUnitAtPosition(city.transform.position);
+        if (occupant == null || occupant.isPlayerOwned == actingSideIsPlayerOwned)
+        {
+            return null;
+        }
+
+        if (aiHasPerfectInfo)
+        {
+            return occupant;
+        }
+
+        if (gridManager == null ||
+            visibleTiles == null ||
+            !gridManager.TryGetTile(city.x, city.y, out TileVisibility cityTile) ||
+            cityTile == null ||
+            !visibleTiles.Contains(cityTile))
+        {
+            return null;
+        }
+
+        return occupant;
+    }
+
+    private int CountImmediateThreatSourcesNearCity(
+        City city,
+        Unit[] allUnits,
+        bool actingSideIsPlayerOwned,
+        HashSet<TileVisibility> visibleTiles,
+        bool aiHasPerfectInfo)
+    {
+        if (city == null || allUnits == null || gridManager == null)
+        {
+            return 0;
+        }
+
+        int threatSourceCount = 0;
+        for (int unitIndex = 0; unitIndex < allUnits.Length; unitIndex++)
+        {
+            Unit enemyUnit = allUnits[unitIndex];
+            if (!CanThreatenCityNextTurn(enemyUnit, city, actingSideIsPlayerOwned, visibleTiles, aiHasPerfectInfo))
+            {
+                continue;
+            }
+
+            threatSourceCount++;
+        }
+
+        return threatSourceCount;
+    }
+
+    private bool CanThreatenCityNextTurn(
+        Unit enemyUnit,
+        City city,
+        bool actingSideIsPlayerOwned,
+        HashSet<TileVisibility> visibleTiles,
+        bool aiHasPerfectInfo)
+    {
+        if (enemyUnit == null ||
+            city == null ||
+            enemyUnit.isPlayerOwned == actingSideIsPlayerOwned ||
+            !enemyUnit.gameObject.activeInHierarchy ||
+            gridManager == null)
+        {
+            return false;
+        }
+
+        if (!aiHasPerfectInfo)
+        {
+            if (visibleTiles == null || visibleTiles.Count == 0)
+            {
+                return false;
+            }
+
+            if (!gridManager.TryGetTileAtWorldPosition(enemyUnit.transform.position, out TileVisibility enemyTile) ||
+                enemyTile == null ||
+                !visibleTiles.Contains(enemyTile))
+            {
+                return false;
+            }
+        }
+
+        if (!gridManager.TryGetTileAtWorldPosition(enemyUnit.transform.position, out TileVisibility sourceTile) || sourceTile == null)
+        {
+            return false;
+        }
+
+        int distanceToCity = Mathf.Max(Mathf.Abs(sourceTile.gridX - city.x), Mathf.Abs(sourceTile.gridY - city.y));
+        if (distanceToCity > enemyUnit.maxMovesPerTurn)
+        {
+            return false;
+        }
+
+        Unit defender = GridUtils.GetUnitAtPosition(city.transform.position);
+        if (defender == null || defender.isPlayerOwned != actingSideIsPlayerOwned)
+        {
+            return true;
+        }
+
+        if (enemyUnit.AttackRange > 1)
+        {
+            int predictedDamage = Mathf.Max(0, enemyUnit.attackUnits - defender.defenseUnits);
+            return distanceToCity <= enemyUnit.maxMovesPerTurn + enemyUnit.AttackRange &&
+                   predictedDamage >= defender.currentHealthUnits;
+        }
+
+        if (distanceToCity != 1 && distanceToCity > enemyUnit.maxMovesPerTurn)
+        {
+            return false;
+        }
+
+        int meleeDamage = Mathf.Max(0, enemyUnit.attackUnits - defender.defenseUnits);
+        return meleeDamage >= defender.currentHealthUnits;
     }
 
     private void RunAIForSide(bool actingSideIsPlayerOwned)
@@ -4231,9 +4678,16 @@ public class TurnManager : MonoBehaviour
 
             unit.ResetMovementForTurn();
 
+            if (TryExecuteImmediateCityWin(unit, allCities, aiVisibleTiles, aiHasPerfectInfo, stepSize))
+            {
+                if (gameOver)
+                    return;
+                continue;
+            }
+
             if (combatDefenseAssignments.TryGetValue(unit, out AITurnLogic.CityDefensePlan combatPlan))
             {
-                if (ExecuteAssignedCityDefense(unit, combatPlan, stepSize))
+                if (ExecuteAssignedCityDefense(unit, combatPlan, stepSize, primaryControlledCity, allUnits, aiVisibleTiles, aiHasPerfectInfo))
                 {
                     if (gameOver)
                         return;
@@ -4243,7 +4697,7 @@ public class TurnManager : MonoBehaviour
 
             if (scoutDefenseAssignments.TryGetValue(unit, out AITurnLogic.CityDefensePlan scoutPlan))
             {
-                if (ExecuteAssignedCityDefense(unit, scoutPlan, stepSize))
+                if (ExecuteAssignedCityDefense(unit, scoutPlan, stepSize, primaryControlledCity, allUnits, aiVisibleTiles, aiHasPerfectInfo))
                 {
                     if (gameOver)
                         return;
@@ -4253,7 +4707,7 @@ public class TurnManager : MonoBehaviour
 
             if (useImprovedLevel1Behavior)
             {
-                ExecuteLevel1UnitTurn(unit, visibleEnemyUnits, enemyTargets, enemyCityPositions, stepSize);
+                ExecuteLevel1UnitTurn(unit, visibleEnemyUnits, enemyTargets, enemyCityPositions, stepSize, primaryControlledCity, allUnits, aiVisibleTiles, aiHasPerfectInfo);
                 if (gameOver)
                     return;
                 continue;
@@ -4607,7 +5061,11 @@ public class TurnManager : MonoBehaviour
         List<Unit> visibleEnemyUnits,
         List<Vector3> enemyTargets,
         List<Vector3> enemyCityPositions,
-        float tileSize)
+        float tileSize,
+        City keyCity,
+        Unit[] allUnits,
+        HashSet<TileVisibility> visibleTiles,
+        bool aiHasPerfectInfo)
     {
         if (unit == null)
             return;
@@ -4618,7 +5076,7 @@ public class TurnManager : MonoBehaviour
             Vector3? scoutTarget = FindNearestTargetPosition(unit.transform.position, enemyCityPositions.Count > 0 ? enemyCityPositions : enemyTargets);
             if (scoutTarget.HasValue)
             {
-                MoveAIUnitTowardEmptyTile(unit, scoutTarget.Value, tileSize);
+                MoveAIUnitTowardEmptyTile(unit, scoutTarget.Value, tileSize, keyCity, allUnits, visibleTiles, aiHasPerfectInfo);
             }
             return;
         }
@@ -4638,7 +5096,7 @@ public class TurnManager : MonoBehaviour
 
             if (archerTarget.HasValue)
             {
-                MoveAIUnitTowardEmptyTile(unit, archerTarget.Value, tileSize);
+                MoveAIUnitTowardEmptyTile(unit, archerTarget.Value, tileSize, keyCity, allUnits, visibleTiles, aiHasPerfectInfo);
             }
             return;
         }
@@ -4675,7 +5133,14 @@ public class TurnManager : MonoBehaviour
         }
     }
 
-    private bool ExecuteAssignedCityDefense(Unit unit, AITurnLogic.CityDefensePlan plan, float tileSize)
+    private bool ExecuteAssignedCityDefense(
+        Unit unit,
+        AITurnLogic.CityDefensePlan plan,
+        float tileSize,
+        City keyCity,
+        Unit[] allUnits,
+        HashSet<TileVisibility> visibleTiles,
+        bool aiHasPerfectInfo)
     {
         if (unit == null || plan == null || plan.City == null)
         {
@@ -4685,12 +5150,12 @@ public class TurnManager : MonoBehaviour
         City currentCity = GridUtils.GetCityAtPosition(unit.transform.position);
         bool isOnProtectedCity = currentCity == plan.City;
 
-        if (TryExecuteAssignedCombatDefense(unit, plan.AssignedCombatUnit, plan.PreferredCombatPosition, plan, isOnProtectedCity, tileSize))
+        if (TryExecuteAssignedCombatDefense(unit, plan.AssignedCombatUnit, plan.PreferredCombatPosition, plan, isOnProtectedCity, tileSize, keyCity, allUnits, visibleTiles, aiHasPerfectInfo))
         {
             return true;
         }
 
-        if (TryExecuteAssignedCombatDefense(unit, plan.AssignedSupportCombatUnit, plan.PreferredSupportCombatPosition, plan, isOnProtectedCity, tileSize))
+        if (TryExecuteAssignedCombatDefense(unit, plan.AssignedSupportCombatUnit, plan.PreferredSupportCombatPosition, plan, isOnProtectedCity, tileSize, keyCity, allUnits, visibleTiles, aiHasPerfectInfo))
         {
             return true;
         }
@@ -4702,7 +5167,7 @@ public class TurnManager : MonoBehaviour
                 Vector3 targetPosition = plan.PreferredScoutPosition.Value;
                 if ((unit.transform.position - targetPosition).sqrMagnitude > 0.0001f)
                 {
-                    MoveAIUnitTowardEmptyTile(unit, targetPosition, tileSize);
+                    MoveAIUnitTowardEmptyTile(unit, targetPosition, tileSize, keyCity, allUnits, visibleTiles, aiHasPerfectInfo);
                 }
 
                 return true;
@@ -4720,7 +5185,11 @@ public class TurnManager : MonoBehaviour
         Vector3? preferredCombatPosition,
         AITurnLogic.CityDefensePlan plan,
         bool isOnProtectedCity,
-        float tileSize)
+        float tileSize,
+        City keyCity,
+        Unit[] allUnits,
+        HashSet<TileVisibility> visibleTiles,
+        bool aiHasPerfectInfo)
     {
         if (unit != assignedCombatUnit)
         {
@@ -4746,12 +5215,12 @@ public class TurnManager : MonoBehaviour
                     }
                     else if (occupant.isPlayerOwned == unit.isPlayerOwned)
                     {
-                        MoveAIUnitTowardEmptyTile(unit, targetPosition, tileSize);
+                        MoveAIUnitTowardEmptyTile(unit, targetPosition, tileSize, keyCity, allUnits, visibleTiles, aiHasPerfectInfo);
                     }
                 }
                 else
                 {
-                    MoveAIUnitTowardEmptyTile(unit, targetPosition, tileSize);
+                    MoveAIUnitTowardEmptyTile(unit, targetPosition, tileSize, keyCity, allUnits, visibleTiles, aiHasPerfectInfo);
                 }
             }
 
@@ -4768,45 +5237,7 @@ public class TurnManager : MonoBehaviour
             return false;
         }
 
-        if (!gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility unitTile))
-        {
-            return false;
-        }
-
-        Unit bestEnemy = null;
-        bool bestEnemyCanBeKilled = false;
-        int bestEnemyDistance = int.MaxValue;
-        int bestEnemyHealth = int.MaxValue;
-
-        for (int i = 0; i < visibleEnemyUnits.Count; i++)
-        {
-            Unit enemyUnit = visibleEnemyUnits[i];
-            if (enemyUnit == null || enemyUnit.isPlayerOwned == unit.isPlayerOwned || !enemyUnit.gameObject.activeInHierarchy)
-                continue;
-
-            if (!gridManager.TryGetTileAtWorldPosition(enemyUnit.transform.position, out TileVisibility enemyTile))
-                continue;
-
-            int tileDistance = Mathf.Max(
-                Mathf.Abs(enemyTile.gridX - unitTile.gridX),
-                Mathf.Abs(enemyTile.gridY - unitTile.gridY));
-            if (!unit.IsTargetInAttackRange(tileDistance))
-                continue;
-
-            int predictedDamage = Mathf.Max(0, unit.attackUnits - enemyUnit.defenseUnits);
-            bool canKillEnemy = predictedDamage >= enemyUnit.currentHealthUnits;
-            if (bestEnemy == null ||
-                (canKillEnemy && !bestEnemyCanBeKilled) ||
-                (canKillEnemy == bestEnemyCanBeKilled && tileDistance < bestEnemyDistance) ||
-                (canKillEnemy == bestEnemyCanBeKilled && tileDistance == bestEnemyDistance && enemyUnit.currentHealthUnits < bestEnemyHealth))
-            {
-                bestEnemy = enemyUnit;
-                bestEnemyCanBeKilled = canKillEnemy;
-                bestEnemyDistance = tileDistance;
-                bestEnemyHealth = enemyUnit.currentHealthUnits;
-            }
-        }
-
+        Unit bestEnemy = SelectBestLocalAttackTarget(unit, visibleEnemyUnits);
         if (bestEnemy == null)
         {
             return false;
@@ -4871,7 +5302,14 @@ public class TurnManager : MonoBehaviour
         return bestTarget;
     }
 
-    private void MoveAIUnitTowardEmptyTile(Unit unit, Vector3 targetPosition, float tileSize)
+    private void MoveAIUnitTowardEmptyTile(
+        Unit unit,
+        Vector3 targetPosition,
+        float tileSize,
+        City keyCity,
+        Unit[] allUnits,
+        HashSet<TileVisibility> visibleTiles,
+        bool aiHasPerfectInfo)
     {
         if (unit == null || !unit.CanMoveThisTurn() || gridManager == null)
             return;
@@ -4913,27 +5351,40 @@ public class TurnManager : MonoBehaviour
             }
         }
 
-        Vector3? chosenDestination = null;
-        float bestDistanceToGoal = float.MaxValue;
+        List<AIPostCalculusLocalDecisionHelper.MoveCandidate> candidates =
+            new List<AIPostCalculusLocalDecisionHelper.MoveCandidate>(candidatePositions.Count);
+        AILocalDecisionFeatures enabledFeatures = GetAILocalDecisionFeaturesForSide(unit.isPlayerOwned);
         for (int i = 0; i < candidatePositions.Count; i++)
         {
             Vector3 candidatePosition = candidatePositions[i];
-            if (!gridManager.TryGetTileAtWorldPosition(candidatePosition, out _))
+            if (!gridManager.TryGetTileAtWorldPosition(candidatePosition, out TileVisibility candidateTile) || candidateTile == null)
                 continue;
 
             Unit occupyingUnit = GridUtils.GetUnitAtPosition(candidatePosition, unit);
             if (occupyingUnit != null)
                 continue;
 
-            float candidateDistanceToGoal = (targetPosition - candidatePosition).sqrMagnitude;
-            if (candidateDistanceToGoal < bestDistanceToGoal)
-            {
-                bestDistanceToGoal = candidateDistanceToGoal;
-                chosenDestination = candidatePosition;
-            }
+            bool immediatelyLosesKeyCity =
+                AIPostCalculusLocalDecisionHelper.HasFeature(enabledFeatures, AILocalDecisionFeatures.DefensiveVeto) &&
+                WouldMoveCandidateExposeVisibleImmediateThreatToKeyCity(
+                    unit,
+                    candidatePosition,
+                    keyCity,
+                    allUnits,
+                    visibleTiles,
+                    aiHasPerfectInfo);
+            candidates.Add(new AIPostCalculusLocalDecisionHelper.MoveCandidate(
+                candidatePosition,
+                candidateTile.gridX,
+                candidateTile.gridY,
+                (targetPosition - candidatePosition).sqrMagnitude,
+                immediatelyLosesKeyCity));
         }
 
-        if (!chosenDestination.HasValue)
+        if (!AIPostCalculusLocalDecisionHelper.TryChooseMoveDestination(
+                enabledFeatures,
+                candidates,
+                out Vector3 chosenDestination))
             return;
 
         if (unit.currentCity != null)
@@ -4942,7 +5393,7 @@ public class TurnManager : MonoBehaviour
             unit.currentCity = null;
         }
 
-        unit.transform.position = chosenDestination.Value;
+        unit.transform.position = chosenDestination;
         unit.RegisterMove();
 
         if (SoundManager.Instance != null && !ShouldSuppressAIVsAIAudio())
@@ -5042,24 +5493,8 @@ public class TurnManager : MonoBehaviour
         // look for an enemy within attack range (move-then-attack).
         if (unit.CanAttackThisTurn())
         {
-            float maxDist = (Mathf.Max(1, unit.AttackRange) + 0.5f) * tileSize;
-            float minDist = 0.1f * tileSize;
             Unit[] allUnits = Object.FindObjectsByType<Unit>();
-            Unit bestEnemy = null;
-            float bestDistSq = float.MaxValue;
-
-            foreach (Unit other in allUnits)
-            {
-                if (other == null || other.isPlayerOwned == unit.isPlayerOwned)
-                    continue;
-
-                float dSq = (other.transform.position - unit.transform.position).sqrMagnitude;
-                if (dSq < bestDistSq && dSq >= minDist * minDist && dSq <= maxDist * maxDist)
-                {
-                    bestDistSq = dSq;
-                    bestEnemy = other;
-                }
-            }
+            Unit bestEnemy = SelectBestLocalAttackTarget(unit, allUnits);
 
             if (bestEnemy != null)
             {
@@ -5220,10 +5655,10 @@ public class TurnManager : MonoBehaviour
             SetGameOverUiTitle(runSummary.runEndedNormally ? AIVsAISimulationCompleteTitle : AIVsAISimulationAbortedTitle);
             SetGameOverPrimaryCopyTextButtonState("Copy Text", true);
             SetGameOverSecondaryButtonState(
-                "Menu",
+                "Back",
                 visible: true,
                 interactable: true,
-                action: GameOverSecondaryAction.MainMenu);
+                action: GameOverSecondaryAction.BackToAIVsAISettings);
             SetGameOverTertiaryButtonState(
                 "Run Again",
                 visible: true,
@@ -5243,6 +5678,8 @@ public class TurnManager : MonoBehaviour
                 });
             gameOverUiRepeatSideARecruitVariant = runSummary.baseSideARecruitVariant;
             gameOverUiRepeatSideBRecruitVariant = runSummary.baseSideBRecruitVariant;
+            gameOverUiRepeatSideAFeatures = runSummary.baseSideAFeatures;
+            gameOverUiRepeatSideBFeatures = runSummary.baseSideBFeatures;
             gameOverUiRepeatSideAProfile = runSummary.baseSideAProfile;
             gameOverUiRepeatSideBProfile = runSummary.baseSideBProfile;
 #endif
@@ -5294,12 +5731,18 @@ public class TurnManager : MonoBehaviour
     {
         string profile = ExtractAIVsAiConfigValue(aiConfig, "profile");
         string recruitVariant = ExtractAIVsAiConfigValue(aiConfig, "recruitVariant");
+        string localFeatures = ExtractAIVsAiConfigValue(aiConfig, "localFeatures");
 
-        if (!string.IsNullOrWhiteSpace(profile) &&
-            !string.IsNullOrWhiteSpace(recruitVariant) &&
-            !string.Equals(recruitVariant, AIRecruitVariant.Default.ToString(), System.StringComparison.Ordinal))
+        string modelLabel = BuildAIVariantModelLabel(profile, recruitVariant, fallbackLabel);
+        string featureLabel = BuildAIVariantFeatureLabel(localFeatures);
+        return $"{modelLabel} [{featureLabel}]";
+    }
+
+    private static string BuildAIVariantModelLabel(string profile, string recruitVariant, string fallbackLabel)
+    {
+        if (string.Equals(recruitVariant, AIRecruitVariant.RiderFocus.ToString(), System.StringComparison.Ordinal))
         {
-            return $"{profile} ({recruitVariant})";
+            return "Rider Focus";
         }
 
         if (!string.IsNullOrWhiteSpace(profile))
@@ -5307,13 +5750,55 @@ public class TurnManager : MonoBehaviour
             return profile;
         }
 
-        if (!string.IsNullOrWhiteSpace(recruitVariant) &&
-            !string.Equals(recruitVariant, AIRecruitVariant.Default.ToString(), System.StringComparison.Ordinal))
+        if (string.Equals(recruitVariant, AIRecruitVariant.Default.ToString(), System.StringComparison.Ordinal))
         {
-            return $"{fallbackLabel} ({recruitVariant})";
+            return "Baseline";
         }
 
         return fallbackLabel;
+    }
+
+    private static string BuildAIVariantFeatureLabel(string localFeatures)
+    {
+        if (string.IsNullOrWhiteSpace(localFeatures) ||
+            string.Equals(localFeatures, "none", System.StringComparison.OrdinalIgnoreCase))
+        {
+            return "None";
+        }
+
+        string[] tokens = localFeatures.Split('+');
+        List<string> labels = new List<string>(tokens.Length);
+        for (int i = 0; i < tokens.Length; i++)
+        {
+            string token = tokens[i].Trim();
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                continue;
+            }
+
+            switch (token)
+            {
+                case "offense":
+                    labels.Add("Offense");
+                    break;
+
+                case "exchange":
+                    labels.Add("Exchange");
+                    break;
+
+                case "defense":
+                    labels.Add("Defense");
+                    break;
+
+                default:
+                    labels.Add(token);
+                    break;
+            }
+        }
+
+        return labels.Count > 0
+            ? string.Join(" + ", labels)
+            : "None";
     }
 
     private static string BuildSecondaryAIVsAISideLabel(string primaryLabel, string sideName)
@@ -5353,24 +5838,57 @@ public class TurnManager : MonoBehaviour
         string primarySideBLabel = BuildPrimaryAIVsAIDisplayLabel(summary.sideBAIConfig, "Side B");
         string secondarySideALabel = BuildSecondaryAIVsAISideLabel(primarySideALabel, "Side A");
         string secondarySideBLabel = BuildSecondaryAIVsAISideLabel(primarySideBLabel, "Side B");
+        bool variantsAppearIdentical =
+            string.Equals(summary.sideAAIConfig, summary.sideBAIConfig, System.StringComparison.Ordinal) ||
+            string.Equals(primarySideALabel, primarySideBLabel, System.StringComparison.Ordinal);
+        float favoredProbability = summary.bayesianSideABetterProbability >= 0.5f
+            ? summary.bayesianSideABetterProbability
+            : 1f - summary.bayesianSideABetterProbability;
+        float severityPoints = Mathf.Abs(summary.sideAEffectSize) * 100f;
+        string severityText = $"{severityPoints:0.0} pts";
+        string headline;
         string conclusion;
-        if (summary.bayesianSideABetterProbability >= summary.certaintyThreshold)
+        if (variantsAppearIdentical)
         {
+            headline = $"Current result: no variant difference established yet ({favoredProbability:P1}, {severityText})";
+            conclusion = "No variant difference established yet";
+        }
+        else if (summary.bayesianSideABetterProbability >= summary.certaintyThreshold)
+        {
+            headline = $"Result: {primarySideALabel} is likely stronger than {primarySideBLabel} ({summary.bayesianSideABetterProbability:P1}, +{severityPoints:0.0} pts)";
             conclusion = $"{primarySideALabel} is likely stronger than {primarySideBLabel}";
         }
         else if (summary.bayesianSideABetterProbability <= (1f - summary.certaintyThreshold))
         {
+            headline = $"Result: {primarySideBLabel} is likely stronger than {primarySideALabel} ({(1f - summary.bayesianSideABetterProbability):P1}, +{severityPoints:0.0} pts)";
             conclusion = $"{primarySideBLabel} is likely stronger than {primarySideALabel}";
         }
         else
         {
+            bool currentlyFavorSideA = summary.bayesianSideABetterProbability > 0.5f;
+            bool effectivelyTied = Mathf.Abs(summary.sideAEffectSize) < 0.0005f;
+            if (effectivelyTied)
+            {
+                headline = $"Current result: no variant clearly favored yet ({favoredProbability:P1}, {severityText})";
+            }
+            else
+            {
+                string favoredLabel = currentlyFavorSideA ? primarySideALabel : primarySideBLabel;
+                string otherLabel = currentlyFavorSideA ? primarySideBLabel : primarySideALabel;
+                headline = $"Current result: {favoredLabel} currently favored over {otherLabel} ({favoredProbability:P1}, +{severityPoints:0.0} pts)";
+            }
             conclusion = $"No clear winner yet between {primarySideALabel} and {primarySideBLabel}";
         }
 
         string statusText = summary.runEndedNormally
             ? "Normal"
             : "Abnormal (result may be unreliable)";
+        string pairSummaryText = summary.completePairCount > 0
+            ? $"Completed swap pairs: {summary.completePairCount}\n" +
+              $"Pair record: {primarySideALabel}-favored {summary.pairedAFavoredCount} | Split {summary.pairedSplitCount} | {primarySideBLabel}-favored {summary.pairedBFavoredCount}"
+            : "Completed swap pairs: 0\nPair record: no completed swap pairs yet";
         string message =
+            $"{headline}\n" +
             $"Run status: {statusText}\n" +
             $"Stop reason: {summary.stopReason}\n" +
             $"Preset: {summary.simulationSettingsLabel}\n" +
@@ -5391,6 +5909,7 @@ public class TurnManager : MonoBehaviour
             $"Elapsed time: {FormatDuration(summary.elapsedSeconds)}\n" +
             $"Time budget: {FormatDuration(summary.timeBudgetSeconds)}\n" +
             $"Emergency hard max games: {summary.emergencyHardMaxGames}\n" +
+            $"{pairSummaryText}\n" +
             $"Average turns: {summary.averageTotalTurnCount:0.00}\n" +
             $"Turns/sec: {summary.turnsPerSecond:0.00}\n" +
             $"{secondarySideALabel}\n" +
@@ -5469,6 +5988,8 @@ public class TurnManager : MonoBehaviour
         SnapshotHistorySelection.SetPending(MatchSnapshotHistorySettings.IsEnabled(currentGameId));
         AIRecruitVariant nextSideARecruitVariant = aiVsAiSideARecruitVariant;
         AIRecruitVariant nextSideBRecruitVariant = aiVsAiSideBRecruitVariant;
+        AILocalDecisionFeatures nextSideAFeatures = aiVsAiSideAFeatures;
+        AILocalDecisionFeatures nextSideBFeatures = aiVsAiSideBFeatures;
         AIDebugProfile nextSideAProfile = aiVsAiSideAProfile;
         AIDebugProfile nextSideBProfile = aiVsAiSideBProfile;
         if (IsAIVsAIBatchModeActive())
@@ -5476,6 +5997,8 @@ public class TurnManager : MonoBehaviour
             AIVsAIBatchRunController.TryGetUpcomingMatchSettings(
                 out nextSideARecruitVariant,
                 out nextSideBRecruitVariant,
+                out nextSideAFeatures,
+                out nextSideBFeatures,
                 out nextSideAProfile,
                 out nextSideBProfile);
         }
@@ -5484,6 +6007,8 @@ public class TurnManager : MonoBehaviour
             enabled: true,
             sideARecruitVariant: nextSideARecruitVariant,
             sideBRecruitVariant: nextSideBRecruitVariant,
+            sideAFeatures: nextSideAFeatures,
+            sideBFeatures: nextSideBFeatures,
             sideAProfile: nextSideAProfile,
             sideBProfile: nextSideBProfile,
             batchSpeedPreset: aiVsAiBatchSpeedPreset);

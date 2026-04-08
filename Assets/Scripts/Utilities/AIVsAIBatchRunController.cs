@@ -60,6 +60,9 @@ public static class AIVsAIBatchRunController
         public readonly float remainingTimeSeconds;
         public readonly float gamesPerSecond;
         public readonly float bayesianSideABetterProbability;
+        public readonly float certaintyThreshold;
+        public readonly float decisiveEdgePoints;
+        public readonly bool isWaitingForBatchAfterThreshold;
 
         public ActiveRunSnapshot(
             int completedGames,
@@ -73,7 +76,10 @@ public static class AIVsAIBatchRunController
             float timeBudgetSeconds,
             float remainingTimeSeconds,
             float gamesPerSecond,
-            float bayesianSideABetterProbability)
+            float bayesianSideABetterProbability,
+            float certaintyThreshold,
+            float decisiveEdgePoints,
+            bool isWaitingForBatchAfterThreshold)
         {
             this.completedGames = completedGames;
             this.sideAWins = sideAWins;
@@ -87,6 +93,9 @@ public static class AIVsAIBatchRunController
             this.remainingTimeSeconds = remainingTimeSeconds;
             this.gamesPerSecond = gamesPerSecond;
             this.bayesianSideABetterProbability = bayesianSideABetterProbability;
+            this.certaintyThreshold = certaintyThreshold;
+            this.decisiveEdgePoints = decisiveEdgePoints;
+            this.isWaitingForBatchAfterThreshold = isWaitingForBatchAfterThreshold;
         }
     }
 
@@ -109,6 +118,7 @@ public static class AIVsAIBatchRunController
         {
             public double player1Score;
             public double player2Score;
+            public double baseSideAScore;
             public bool isDraw;
             public bool isAbort;
         }
@@ -132,6 +142,8 @@ public static class AIVsAIBatchRunController
         public string sideBAIConfig;
         public TurnManager.AIRecruitVariant baseSideARecruitVariant;
         public TurnManager.AIRecruitVariant baseSideBRecruitVariant;
+        public AILocalDecisionFeatures baseSideAFeatures;
+        public AILocalDecisionFeatures baseSideBFeatures;
         public TurnManager.AIDebugProfile baseSideAProfile;
         public TurnManager.AIDebugProfile baseSideBProfile;
         public readonly List<CompletedMatchRecord> completedMatches = new List<CompletedMatchRecord>();
@@ -248,6 +260,7 @@ public static class AIVsAIBatchRunController
         settings.emergencyHardMaxGames = SanitizeInt(
             settings.emergencyHardMaxGames,
             MinPositiveValue);
+        settings.batchSize = EnsureEvenPairSize(settings.batchSize);
         return settings;
     }
 
@@ -299,6 +312,8 @@ public static class AIVsAIBatchRunController
         SimulationSettings settings,
         TurnManager.AIRecruitVariant baseSideARecruitVariant,
         TurnManager.AIRecruitVariant baseSideBRecruitVariant,
+        AILocalDecisionFeatures baseSideAFeatures,
+        AILocalDecisionFeatures baseSideBFeatures,
         TurnManager.AIDebugProfile baseSideAProfile,
         TurnManager.AIDebugProfile baseSideBProfile)
     {
@@ -309,6 +324,8 @@ public static class AIVsAIBatchRunController
             startedAtUtc = DateTime.UtcNow,
             baseSideARecruitVariant = baseSideARecruitVariant,
             baseSideBRecruitVariant = baseSideBRecruitVariant,
+            baseSideAFeatures = baseSideAFeatures,
+            baseSideBFeatures = baseSideBFeatures,
             baseSideAProfile = baseSideAProfile,
             baseSideBProfile = baseSideBProfile
         };
@@ -317,11 +334,15 @@ public static class AIVsAIBatchRunController
     public static bool TryGetUpcomingMatchSettings(
         out TurnManager.AIRecruitVariant sideARecruitVariant,
         out TurnManager.AIRecruitVariant sideBRecruitVariant,
+        out AILocalDecisionFeatures sideAFeatures,
+        out AILocalDecisionFeatures sideBFeatures,
         out TurnManager.AIDebugProfile sideAProfile,
         out TurnManager.AIDebugProfile sideBProfile)
     {
         sideARecruitVariant = TurnManager.AIRecruitVariant.Default;
         sideBRecruitVariant = TurnManager.AIRecruitVariant.Default;
+        sideAFeatures = AILocalDecisionFeatures.None;
+        sideBFeatures = AILocalDecisionFeatures.None;
         sideAProfile = TurnManager.AIDebugProfile.Baseline;
         sideBProfile = TurnManager.AIDebugProfile.Baseline;
 
@@ -335,6 +356,8 @@ public static class AIVsAIBatchRunController
         {
             sideARecruitVariant = activeRun.baseSideBRecruitVariant;
             sideBRecruitVariant = activeRun.baseSideARecruitVariant;
+            sideAFeatures = activeRun.baseSideBFeatures;
+            sideBFeatures = activeRun.baseSideAFeatures;
             sideAProfile = activeRun.baseSideBProfile;
             sideBProfile = activeRun.baseSideAProfile;
             return true;
@@ -342,6 +365,8 @@ public static class AIVsAIBatchRunController
 
         sideARecruitVariant = activeRun.baseSideARecruitVariant;
         sideBRecruitVariant = activeRun.baseSideBRecruitVariant;
+        sideAFeatures = activeRun.baseSideAFeatures;
+        sideBFeatures = activeRun.baseSideBFeatures;
         sideAProfile = activeRun.baseSideAProfile;
         sideBProfile = activeRun.baseSideBProfile;
         return true;
@@ -369,6 +394,20 @@ public static class AIVsAIBatchRunController
             activeRun.settings.evaluationMethod,
             activeRun.sideAWins,
             activeRun.sideBWins));
+        float decisiveEdgePoints = 0f;
+        if (decisiveGames > 0)
+        {
+            float winRateA = activeRun.sideAWins / (float)decisiveGames;
+            decisiveEdgePoints = (winRateA - 0.5f) * 100f;
+        }
+
+        bool thresholdReached =
+            activeRun.completedMatchCount >= activeRun.settings.minimumGames &&
+            (probability >= activeRun.settings.certaintyThreshold ||
+             probability <= (1f - activeRun.settings.certaintyThreshold));
+        bool reachedBatchBoundary =
+            IsPairBoundary(activeRun.completedMatchCount) &&
+            (activeRun.completedMatchCount % Math.Max(MinPositiveValue, activeRun.settings.batchSize)) == 0;
         snapshot = new ActiveRunSnapshot(
             activeRun.completedMatchCount,
             activeRun.sideAWins,
@@ -381,7 +420,43 @@ public static class AIVsAIBatchRunController
             activeRun.settings.timeBudgetSeconds,
             Mathf.Max(0f, activeRun.settings.timeBudgetSeconds - elapsedSeconds),
             activeRun.completedMatchCount / safeElapsedSeconds,
-            probability);
+            probability,
+            activeRun.settings.certaintyThreshold,
+            decisiveEdgePoints,
+            thresholdReached && !reachedBatchBoundary);
+        return true;
+    }
+
+    public static bool TryGetHudSnapshot(out ActiveRunSnapshot snapshot)
+    {
+        if (TryGetActiveRunSnapshot(out snapshot))
+        {
+            return true;
+        }
+
+        if (!hasPendingSimulationSettings)
+        {
+            snapshot = default;
+            return false;
+        }
+
+        SimulationSettings settings = SanitizeSimulationSettings(pendingSimulationSettings);
+        snapshot = new ActiveRunSnapshot(
+            completedGames: 0,
+            sideAWins: 0,
+            sideBWins: 0,
+            trueDraws: 0,
+            aborts: 0,
+            decisiveGames: 0,
+            batchSize: settings.batchSize,
+            elapsedSeconds: 0f,
+            timeBudgetSeconds: settings.timeBudgetSeconds,
+            remainingTimeSeconds: settings.timeBudgetSeconds,
+            gamesPerSecond: 0f,
+            bayesianSideABetterProbability: 0.5f,
+            certaintyThreshold: settings.certaintyThreshold,
+            decisiveEdgePoints: 0f,
+            isWaitingForBatchAfterThreshold: false);
         return true;
     }
 
@@ -399,6 +474,7 @@ public static class AIVsAIBatchRunController
         }
 
         activeRun.completedMatchCount++;
+        bool seatsWereSwapped = IsSeatSwappedForMatchIndex(activeRun.completedMatchCount);
         activeRun.totalTurnCount += Math.Max(0, matchResult.totalTurnCount);
         activeRun.appVersion = matchResult.appVersion;
         activeRun.mapSizePreset = matchResult.mapSizePreset;
@@ -415,7 +491,7 @@ public static class AIVsAIBatchRunController
             activeRun.sideBAIConfig = matchResult.sideBAIConfig;
         }
 
-        switch (matchResult.winner)
+        switch (MapWinnerToBaseVariant(matchResult.winner, seatsWereSwapped))
         {
             case "SideA":
                 activeRun.sideAWins++;
@@ -440,7 +516,7 @@ public static class AIVsAIBatchRunController
             activeRun.trueDraws++;
         }
 
-        activeRun.completedMatches.Add(BuildCompletedMatchRecord(matchResult));
+        activeRun.completedMatches.Add(BuildCompletedMatchRecord(matchResult, seatsWereSwapped));
 
         matchResult.runId = activeRun.runId;
         matchResult.matchIndexInRun = activeRun.completedMatchCount;
@@ -483,6 +559,8 @@ public static class AIVsAIBatchRunController
             sideBAIConfig = run.sideBAIConfig,
             baseSideARecruitVariant = run.baseSideARecruitVariant,
             baseSideBRecruitVariant = run.baseSideBRecruitVariant,
+            baseSideAFeatures = run.baseSideAFeatures,
+            baseSideBFeatures = run.baseSideBFeatures,
             baseSideAProfile = run.baseSideAProfile,
             baseSideBProfile = run.baseSideBProfile,
             matchCount = run.completedMatchCount,
@@ -516,7 +594,9 @@ public static class AIVsAIBatchRunController
         return summary;
     }
 
-    private static ActiveRun.CompletedMatchRecord BuildCompletedMatchRecord(AIVsAIMatchCsvLogger.MatchResult matchResult)
+    private static ActiveRun.CompletedMatchRecord BuildCompletedMatchRecord(
+        AIVsAIMatchCsvLogger.MatchResult matchResult,
+        bool seatsWereSwapped)
     {
         ActiveRun.CompletedMatchRecord record = new ActiveRun.CompletedMatchRecord();
         if (matchResult == null)
@@ -530,7 +610,64 @@ public static class AIVsAIBatchRunController
                         !string.Equals(matchResult.winner, "SideB", StringComparison.Ordinal);
         record.player1Score = GetSeatScore(matchResult.winner, 0);
         record.player2Score = GetSeatScore(matchResult.winner, 1);
+        record.baseSideAScore = GetBaseSideAScore(matchResult.winner, seatsWereSwapped);
         return record;
+    }
+
+    private static bool IsSeatSwappedForMatchIndex(int matchIndexInRun)
+    {
+        return matchIndexInRun > 0 && (matchIndexInRun % 2) == 0;
+    }
+
+    public static bool IsPairBoundary(int completedMatches)
+    {
+        return completedMatches > 0 && (completedMatches % 2) == 0;
+    }
+
+    public static int GetCompletedPairs(int completedMatches)
+    {
+        return Math.Max(0, completedMatches / 2);
+    }
+
+    private static string MapWinnerToBaseVariant(string runtimeWinner, bool seatsWereSwapped)
+    {
+        if (!seatsWereSwapped)
+        {
+            return runtimeWinner;
+        }
+
+        if (string.Equals(runtimeWinner, "SideA", StringComparison.Ordinal))
+        {
+            return "SideB";
+        }
+
+        if (string.Equals(runtimeWinner, "SideB", StringComparison.Ordinal))
+        {
+            return "SideA";
+        }
+
+        return runtimeWinner;
+    }
+
+    private static double GetBaseSideAScore(string runtimeWinner, bool seatsWereSwapped)
+    {
+        if (string.Equals(runtimeWinner, "Abort", StringComparison.Ordinal))
+        {
+            return 0.5d;
+        }
+
+        string baseVariantWinner = MapWinnerToBaseVariant(runtimeWinner, seatsWereSwapped);
+        if (string.Equals(baseVariantWinner, "SideA", StringComparison.Ordinal))
+        {
+            return 1d;
+        }
+
+        if (string.Equals(baseVariantWinner, "SideB", StringComparison.Ordinal))
+        {
+            return 0d;
+        }
+
+        return 0.5d;
     }
 
     private static RunStopDecision EvaluateRunStopDecision(ActiveRun run)
@@ -558,12 +695,22 @@ public static class AIVsAIBatchRunController
                 sideABetterProbability: sideABetterProbability);
         }
 
-        if (run.completedMatchCount >= run.settings.emergencyHardMaxGames)
+        bool reachedPairBoundary = IsPairBoundary(run.completedMatchCount);
+        if (run.completedMatchCount >= run.settings.emergencyHardMaxGames && reachedPairBoundary)
         {
             return new RunStopDecision(
                 shouldStop: true,
                 completionKind: RunCompletionKind.AbnormalAborted,
                 stopReason: StopReason.EmergencySafetyFuseTriggered,
+                sideABetterProbability: sideABetterProbability);
+        }
+
+        if (!reachedPairBoundary)
+        {
+            return new RunStopDecision(
+                shouldStop: false,
+                completionKind: RunCompletionKind.None,
+                stopReason: StopReason.None,
                 sideABetterProbability: sideABetterProbability);
         }
 
@@ -642,6 +789,14 @@ public static class AIVsAIBatchRunController
         return true;
     }
 
+    private static int EnsureEvenPairSize(int value)
+    {
+        int sanitizedValue = Math.Max(MinPositiveValue, value);
+        return (sanitizedValue % 2) == 0
+            ? sanitizedValue
+            : sanitizedValue + 1;
+    }
+
     private static double ComputeSideABetterProbability(
         EvaluationMethod evaluationMethod,
         int sideAWins,
@@ -699,21 +854,6 @@ public static class AIVsAIBatchRunController
             return;
         }
 
-        bool isSameProfileControl = run.baseSideAProfile == run.baseSideBProfile;
-
-        if (!isSameProfileControl)
-        {
-            summary.comparisonMode = "not_applicable";
-            summary.pairedThreshold = "n/a";
-            return;
-        }
-
-        summary.pairedStatsApplicable = true;
-        summary.comparisonMode = "seat_bias_control";
-        summary.trackedEntityLabel = "Player 1";
-        summary.seat1Label = "Player 1";
-        summary.seat2Label = "Player 2";
-
         List<double> pairScoreRates = new List<double>();
         int seat1Wins = 0;
         int seat1Draws = 0;
@@ -721,6 +861,16 @@ public static class AIVsAIBatchRunController
         int seat2Wins = 0;
         int seat2Draws = 0;
         int seat2Losses = 0;
+        bool isSeatBiasControl =
+            run.baseSideAProfile == run.baseSideBProfile &&
+            run.baseSideARecruitVariant == run.baseSideBRecruitVariant &&
+            run.baseSideAFeatures == run.baseSideBFeatures;
+
+        summary.pairedStatsApplicable = true;
+        summary.comparisonMode = isSeatBiasControl ? "seat_bias_control" : "paired_head_to_head";
+        summary.trackedEntityLabel = isSeatBiasControl ? "Runtime Side A" : "Side A Variant";
+        summary.seat1Label = "Runtime Side A";
+        summary.seat2Label = "Runtime Side B";
 
         for (int i = 0; i < run.completedMatches.Count; i++)
         {
@@ -779,7 +929,23 @@ public static class AIVsAIBatchRunController
         {
             ActiveRun.CompletedMatchRecord first = run.completedMatches[pairStart];
             ActiveRun.CompletedMatchRecord second = run.completedMatches[pairStart + 1];
-            pairScoreRates.Add((first.player1Score + second.player1Score) * 0.5d);
+            double firstTrackedScore = isSeatBiasControl ? first.player1Score : first.baseSideAScore;
+            double secondTrackedScore = isSeatBiasControl ? second.player1Score : second.baseSideAScore;
+            double pairScoreRate = (firstTrackedScore + secondTrackedScore) * 0.5d;
+            pairScoreRates.Add(pairScoreRate);
+
+            if (pairScoreRate >= 0.999d)
+            {
+                summary.pairedAFavoredCount++;
+            }
+            else if (pairScoreRate <= 0.001d)
+            {
+                summary.pairedBFavoredCount++;
+            }
+            else
+            {
+                summary.pairedSplitCount++;
+            }
         }
 
         summary.completePairCount = pairScoreRates.Count;
