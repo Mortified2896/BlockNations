@@ -20,6 +20,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private const string NextButtonDefaultText = "Next";
     private const string AIVsAIPauseButtonText = "Pause";
     private const string AIVsAIResumeButtonText = "Resume";
+    private const string AIVsAIStopButtonText = "Stop";
 
     [Header("Spike Toggle")]
     [SerializeField] private bool enableGameplayBottomHudUITK = true;
@@ -464,6 +465,12 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     {
         if (turnManager != null)
         {
+            if (turnManager.IsAIVsAICompletedTournamentAutoRestartPendingForUi())
+            {
+                turnManager.CancelAIVsAICompletedTournamentAutoRestartForUi();
+                return;
+            }
+
             if (IsAIVsAiBatchSimulationActive())
             {
                 turnManager.ToggleAIVsAIDebugPause();
@@ -590,12 +597,23 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         if (nextButton != null)
         {
             bool isAIVsAiBatchSimulation = IsAIVsAiBatchSimulationActive();
+            bool isCompletedTournamentRestartPending = turnManager != null &&
+                                                       turnManager.IsAIVsAICompletedTournamentAutoRestartPendingForUi();
             bool canUseAIVsAiToggle = turnManager != null && turnManager.CanToggleAIVsAIDebugPauseForUi();
+            bool canCancelCompletedTournamentRestart = turnManager != null &&
+                                                       turnManager.CanCancelAIVsAICompletedTournamentAutoRestartForUi();
             bool canAdvance = turnManager != null && turnManager.CanAdvanceTurn();
-            nextButton.text = isAIVsAiBatchSimulation
+            nextButton.text = isCompletedTournamentRestartPending
+                ? AIVsAIStopButtonText
+                : isAIVsAiBatchSimulation
                 ? (turnManager.IsAIVsAIDebugPausedForUi() ? AIVsAIResumeButtonText : AIVsAIPauseButtonText)
                 : NextButtonDefaultText;
-            nextButton.SetEnabled(showDefaultBottom && (isAIVsAiBatchSimulation ? canUseAIVsAiToggle : canAdvance));
+            nextButton.SetEnabled(showDefaultBottom &&
+                                  (isCompletedTournamentRestartPending
+                                      ? canCancelCompletedTournamentRestart
+                                      : isAIVsAiBatchSimulation
+                                          ? canUseAIVsAiToggle
+                                          : canAdvance));
         }
 
         RefreshGameOverOverlayState();

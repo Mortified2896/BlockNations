@@ -76,6 +76,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Label generalSettingsSubtitleLabel;
     private Label generalSettingsStoreSnapshotHistoryHelperLabel;
     private Label generalSettingsAIVsAiTournamentEstimateLabel;
+    private Label generalSettingsAIVsAiTournamentMatchesPerPairingLabel;
 
     private Button continueButton;
     private Button playVsAiButton;
@@ -90,9 +91,6 @@ public class MainMenuUITKView : MonoBehaviour
     private Button createSuccessCloseButton;
     private Button generalSettingsMapSmallButton;
     private Button generalSettingsMapLargeButton;
-    private Button generalSettingsAiLevel1Button;
-    private Button generalSettingsAiLevel2Button;
-    private Button generalSettingsAiLevel3Button;
     private Button generalSettingsAiStyleDefaultButton;
     private Button generalSettingsAiStyleRiderFocusButton;
     private Button generalSettingsStoreSnapshotHistoryButton;
@@ -118,6 +116,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Button generalSettingsAIVsAiBatchSpeedVeryFastButton;
     private Button generalSettingsAIVsAiBatchSpeedUltraFastButton;
     private Button generalSettingsAIVsAiTournamentTypeRoundRobinButton;
+    private Button generalSettingsAIVsAiTournamentRunContinuouslyButton;
     private Button generalSettingsAIVsAiTournamentSeatSwapButton;
     private Button generalSettingsAIVsAiTournamentSelectFullPoolButton;
     private Button generalSettingsConfirmButton;
@@ -167,7 +166,6 @@ public class MainMenuUITKView : MonoBehaviour
     private PendingGeneralSettingsMode pendingGeneralSettingsMode = PendingGeneralSettingsMode.None;
     private GeneralSettingsBackgroundPane generalSettingsBackgroundPane = GeneralSettingsBackgroundPane.None;
     private TurnManager.MapSizePreset selectedMapSizePreset = TurnManager.GetDefaultMapSizePreset();
-    private TurnManager.AIDifficulty selectedAIDifficulty = TurnManager.AIDifficulty.Level1;
     private TurnManager.AIRecruitVariant selectedAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
     private bool selectedStoreSnapshotHistory;
     private bool selectedEnableAIVsAIDebugMode;
@@ -454,6 +452,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsSubtitleLabel = root.Q<Label>("GeneralSettingsSubtitleLabel");
         generalSettingsStoreSnapshotHistoryHelperLabel = root.Q<Label>("GeneralSettingsStoreSnapshotHistoryHelperLabel");
         generalSettingsAIVsAiTournamentEstimateLabel = root.Q<Label>("GeneralSettingsAIVsAiTournamentEstimateLabel");
+        generalSettingsAIVsAiTournamentMatchesPerPairingLabel = root.Q<Label>("GeneralSettingsAIVsAiTournamentMatchesPerPairingLabel");
 
         continueButton = root.Q<Button>("ContinueButton");
         playVsAiButton = root.Q<Button>("PlayVsAIButton");
@@ -470,9 +469,6 @@ public class MainMenuUITKView : MonoBehaviour
         createSuccessCloseButton = root.Q<Button>("CreateSuccessCloseButton");
         generalSettingsMapSmallButton = root.Q<Button>("GeneralSettingsMapSmallButton");
         generalSettingsMapLargeButton = root.Q<Button>("GeneralSettingsMapLargeButton");
-        generalSettingsAiLevel1Button = root.Q<Button>("GeneralSettingsAiLevel1Button");
-        generalSettingsAiLevel2Button = root.Q<Button>("GeneralSettingsAiLevel2Button");
-        generalSettingsAiLevel3Button = root.Q<Button>("GeneralSettingsAiLevel3Button");
         generalSettingsAiStyleDefaultButton = root.Q<Button>("GeneralSettingsAiStyleDefaultButton");
         generalSettingsAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsAiStyleRiderFocusButton");
         generalSettingsStoreSnapshotHistoryButton = root.Q<Button>("GeneralSettingsStoreSnapshotHistoryButton");
@@ -498,6 +494,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAIVsAiBatchSpeedVeryFastButton = root.Q<Button>("GeneralSettingsAIVsAiBatchSpeedVeryFastButton");
         generalSettingsAIVsAiBatchSpeedUltraFastButton = root.Q<Button>("GeneralSettingsAIVsAiBatchSpeedUltraFastButton");
         generalSettingsAIVsAiTournamentTypeRoundRobinButton = root.Q<Button>("GeneralSettingsAIVsAiTournamentTypeRoundRobinButton");
+        generalSettingsAIVsAiTournamentRunContinuouslyButton = root.Q<Button>("GeneralSettingsAIVsAiTournamentRunContinuouslyButton");
         generalSettingsAIVsAiTournamentSeatSwapButton = root.Q<Button>("GeneralSettingsAIVsAiTournamentSeatSwapButton");
         generalSettingsAIVsAiTournamentSelectFullPoolButton = root.Q<Button>("GeneralSettingsAIVsAiTournamentSelectFullPoolButton");
         generalSettingsConfirmButton = root.Q<Button>("GeneralSettingsConfirmButton");
@@ -980,21 +977,6 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsMapLargeButton.clicked += HandleGeneralSettingsMapLargeClicked;
         }
 
-        if (generalSettingsAiLevel1Button != null)
-        {
-            generalSettingsAiLevel1Button.clicked += HandleGeneralSettingsAiLevel1Clicked;
-        }
-
-        if (generalSettingsAiLevel2Button != null)
-        {
-            generalSettingsAiLevel2Button.clicked += HandleGeneralSettingsAiLevel2Clicked;
-        }
-
-        if (generalSettingsAiLevel3Button != null)
-        {
-            generalSettingsAiLevel3Button.clicked += HandleGeneralSettingsAiLevel3Clicked;
-        }
-
         if (generalSettingsAiStyleDefaultButton != null)
         {
             generalSettingsAiStyleDefaultButton.clicked += HandleGeneralSettingsAiStyleDefaultClicked;
@@ -1143,6 +1125,11 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsAIVsAiTournamentTypeRoundRobinButton != null)
         {
             generalSettingsAIVsAiTournamentTypeRoundRobinButton.clicked += HandleGeneralSettingsAIVsAiTournamentTypeRoundRobinClicked;
+        }
+
+        if (generalSettingsAIVsAiTournamentRunContinuouslyButton != null)
+        {
+            generalSettingsAIVsAiTournamentRunContinuouslyButton.clicked += HandleGeneralSettingsAIVsAiTournamentRunContinuouslyClicked;
         }
 
         if (generalSettingsAIVsAiTournamentSeatSwapButton != null)
@@ -1304,21 +1291,6 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsMapLargeButton.clicked -= HandleGeneralSettingsMapLargeClicked;
         }
 
-        if (generalSettingsAiLevel1Button != null)
-        {
-            generalSettingsAiLevel1Button.clicked -= HandleGeneralSettingsAiLevel1Clicked;
-        }
-
-        if (generalSettingsAiLevel2Button != null)
-        {
-            generalSettingsAiLevel2Button.clicked -= HandleGeneralSettingsAiLevel2Clicked;
-        }
-
-        if (generalSettingsAiLevel3Button != null)
-        {
-            generalSettingsAiLevel3Button.clicked -= HandleGeneralSettingsAiLevel3Clicked;
-        }
-
         if (generalSettingsAiStyleDefaultButton != null)
         {
             generalSettingsAiStyleDefaultButton.clicked -= HandleGeneralSettingsAiStyleDefaultClicked;
@@ -1467,6 +1439,11 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsAIVsAiTournamentTypeRoundRobinButton != null)
         {
             generalSettingsAIVsAiTournamentTypeRoundRobinButton.clicked -= HandleGeneralSettingsAIVsAiTournamentTypeRoundRobinClicked;
+        }
+
+        if (generalSettingsAIVsAiTournamentRunContinuouslyButton != null)
+        {
+            generalSettingsAIVsAiTournamentRunContinuouslyButton.clicked -= HandleGeneralSettingsAIVsAiTournamentRunContinuouslyClicked;
         }
 
         if (generalSettingsAIVsAiTournamentSeatSwapButton != null)
@@ -1627,7 +1604,6 @@ public class MainMenuUITKView : MonoBehaviour
 
         ShowGeneralSettingsPanel(PendingGeneralSettingsMode.VsAI);
         selectedMapSizePreset = pendingSettings.mapSizePreset;
-        selectedAIDifficulty = pendingSettings.difficulty;
         selectedAIRecruitVariant = pendingSettings.recruitVariant;
         selectedStoreSnapshotHistory = pendingSettings.storeSnapshotHistory;
         selectedEnableAIVsAIDebugMode = pendingSettings.enableAIVsAIDebugMode;
@@ -1675,24 +1651,6 @@ public class MainMenuUITKView : MonoBehaviour
     private void HandleGeneralSettingsMapLargeClicked()
     {
         selectedMapSizePreset = TurnManager.MapSizePreset.Large;
-        RefreshGeneralSettingsSelectionState();
-    }
-
-    private void HandleGeneralSettingsAiLevel1Clicked()
-    {
-        selectedAIDifficulty = TurnManager.AIDifficulty.Level1;
-        RefreshGeneralSettingsSelectionState();
-    }
-
-    private void HandleGeneralSettingsAiLevel2Clicked()
-    {
-        selectedAIDifficulty = TurnManager.AIDifficulty.Level2;
-        RefreshGeneralSettingsSelectionState();
-    }
-
-    private void HandleGeneralSettingsAiLevel3Clicked()
-    {
-        selectedAIDifficulty = TurnManager.AIDifficulty.Level3;
         RefreshGeneralSettingsSelectionState();
     }
 
@@ -1930,6 +1888,12 @@ public class MainMenuUITKView : MonoBehaviour
         RefreshGeneralSettingsSelectionState();
     }
 
+    private void HandleGeneralSettingsAIVsAiTournamentRunContinuouslyClicked()
+    {
+        selectedAIVsAISimulationSettings.tournamentRunContinuously = !selectedAIVsAISimulationSettings.tournamentRunContinuously;
+        RefreshGeneralSettingsSelectionState();
+    }
+
     private void HandleGeneralSettingsAIVsAiTournamentSeatSwapClicked()
     {
         selectedAIVsAISimulationSettings.tournamentSeatSwap = !selectedAIVsAISimulationSettings.tournamentSeatSwap;
@@ -1979,7 +1943,6 @@ public class MainMenuUITKView : MonoBehaviour
         {
             CommitAIVsAiSimulationTextInputs();
             mainMenuController.StartVsAIGameWithSettings(
-                selectedAIDifficulty,
                 selectedMapSizePreset,
                 selectedAIRecruitVariant,
                 selectedStoreSnapshotHistory,
@@ -2683,7 +2646,6 @@ public class MainMenuUITKView : MonoBehaviour
             ? GeneralSettingsBackgroundPane.Multiplayer
             : GeneralSettingsBackgroundPane.Main;
         selectedMapSizePreset = TurnManager.GetDefaultMapSizePreset();
-        selectedAIDifficulty = TurnManager.AIDifficulty.Level1;
         selectedAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
         selectedStoreSnapshotHistory = false;
         selectedEnableAIVsAIDebugMode = false;
@@ -2841,15 +2803,6 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsMapLargeButton,
             selectedMapSizePreset == TurnManager.MapSizePreset.Large);
         UpdateGeneralSettingsSelectionButton(
-            generalSettingsAiLevel1Button,
-            selectedAIDifficulty == TurnManager.AIDifficulty.Level1);
-        UpdateGeneralSettingsSelectionButton(
-            generalSettingsAiLevel2Button,
-            selectedAIDifficulty == TurnManager.AIDifficulty.Level2);
-        UpdateGeneralSettingsSelectionButton(
-            generalSettingsAiLevel3Button,
-            selectedAIDifficulty == TurnManager.AIDifficulty.Level3);
-        UpdateGeneralSettingsSelectionButton(
             generalSettingsAiStyleDefaultButton,
             selectedAIRecruitVariant == TurnManager.AIRecruitVariant.Default);
         UpdateGeneralSettingsSelectionButton(
@@ -2948,11 +2901,21 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsAIVsAiTournamentTypeRoundRobinButton,
             selectedAIVsAISimulationSettings.tournamentType == AIVsAIBatchRunController.TournamentType.RoundRobin);
         UpdateGeneralSettingsSelectionButton(
+            generalSettingsAIVsAiTournamentRunContinuouslyButton,
+            selectedAIVsAISimulationSettings.tournamentRunContinuously);
+        UpdateGeneralSettingsSelectionButton(
             generalSettingsAIVsAiTournamentSeatSwapButton,
             selectedAIVsAISimulationSettings.tournamentSeatSwap);
         SetTextFieldValue(
             generalSettingsAIVsAiTournamentGamesPerPairingInput,
             selectedAIVsAISimulationSettings.tournamentGamesPerPairing.ToString(CultureInfo.InvariantCulture));
+
+        bool usingFullTournamentPool =
+            selectedAIVsAISimulationSettings.tournamentParticipantMask ==
+            AIVsAIBatchRunController.GetDefaultTournamentParticipantMask();
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsAIVsAiTournamentSelectFullPoolButton,
+            usingFullTournamentPool);
 
         int selectedTournamentParticipants = AIVsAIBatchRunController.CountTournamentParticipants(
             selectedAIVsAISimulationSettings.tournamentParticipantMask);
@@ -2964,12 +2927,24 @@ public class MainMenuUITKView : MonoBehaviour
 
         if (generalSettingsAIVsAiTournamentEstimateLabel != null)
         {
+            int actualMatchesPerPairing = selectedAIVsAISimulationSettings.tournamentGamesPerPairing *
+                                          (selectedAIVsAISimulationSettings.tournamentSeatSwap ? 2 : 1);
             AIVsAIBatchRunController.TournamentEstimate estimate =
                 AIVsAIBatchRunController.EstimateTournament(
                     selectedAIVsAISimulationSettings,
                     selectedAIVsAIBatchSpeedPreset);
             generalSettingsAIVsAiTournamentEstimateLabel.text =
-                $"Estimate only: {estimate.participantCount} variants | {estimate.totalPairings} pairings | {estimate.totalGames} games | approx {FormatDurationEstimate(estimate.estimatedRuntimeSeconds)}";
+                $"Estimate only: {estimate.participantCount} variants | {estimate.totalPairings} pairings | {actualMatchesPerPairing} matches/pairing | {estimate.totalGames} games | approx {FormatDurationEstimate(estimate.estimatedRuntimeSeconds)}";
+        }
+
+        if (generalSettingsAIVsAiTournamentMatchesPerPairingLabel != null)
+        {
+            int scheduledGamesPerPairing = selectedAIVsAISimulationSettings.tournamentGamesPerPairing;
+            int actualMatchesPerPairing = scheduledGamesPerPairing *
+                                          (selectedAIVsAISimulationSettings.tournamentSeatSwap ? 2 : 1);
+            string seatSwapState = selectedAIVsAISimulationSettings.tournamentSeatSwap ? "ON" : "OFF";
+            generalSettingsAIVsAiTournamentMatchesPerPairingLabel.text =
+                $"Actual Matches Per Pairing: {actualMatchesPerPairing} (Seat Swap {seatSwapState}; {scheduledGamesPerPairing} scheduled game{(scheduledGamesPerPairing == 1 ? string.Empty : "s")} before mirroring)";
         }
 
         bool tournamentReady = !isTournamentMode || selectedTournamentParticipants >= 2;
@@ -3635,6 +3610,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsSubtitleLabel = null;
         generalSettingsStoreSnapshotHistoryHelperLabel = null;
         generalSettingsAIVsAiTournamentEstimateLabel = null;
+        generalSettingsAIVsAiTournamentMatchesPerPairingLabel = null;
         continueButton = null;
         playVsAiButton = null;
         multiplayerButton = null;
@@ -3648,9 +3624,6 @@ public class MainMenuUITKView : MonoBehaviour
         createSuccessCloseButton = null;
         generalSettingsMapSmallButton = null;
         generalSettingsMapLargeButton = null;
-        generalSettingsAiLevel1Button = null;
-        generalSettingsAiLevel2Button = null;
-        generalSettingsAiLevel3Button = null;
         generalSettingsAiStyleDefaultButton = null;
         generalSettingsAiStyleRiderFocusButton = null;
         generalSettingsStoreSnapshotHistoryButton = null;
@@ -3676,6 +3649,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAIVsAiBatchSpeedVeryFastButton = null;
         generalSettingsAIVsAiBatchSpeedUltraFastButton = null;
         generalSettingsAIVsAiTournamentTypeRoundRobinButton = null;
+        generalSettingsAIVsAiTournamentRunContinuouslyButton = null;
         generalSettingsAIVsAiTournamentSeatSwapButton = null;
         generalSettingsAIVsAiTournamentSelectFullPoolButton = null;
         generalSettingsConfirmButton = null;

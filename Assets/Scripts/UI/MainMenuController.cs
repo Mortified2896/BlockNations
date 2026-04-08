@@ -18,7 +18,6 @@ public class MainMenuController : MonoBehaviour
     public struct PendingAIVsAISettingsReturn
     {
         public TurnManager.MapSizePreset mapSizePreset;
-        public TurnManager.AIDifficulty difficulty;
         public TurnManager.AIRecruitVariant recruitVariant;
         public bool storeSnapshotHistory;
         public bool enableAIVsAIDebugMode;
@@ -230,46 +229,31 @@ public class MainMenuController : MonoBehaviour
 
     public void PlayVsAI()
     {
-        // Open difficulty selection instead of starting immediately.
-        if (aiDifficultyPanel != null)
-        {
-            aiDifficultyPanel.SetActive(true);
-
-            if (modeSelectionPanel != null)
-            {
-                modeSelectionPanel.SetActive(false);
-            }
-        }
-        else
-        {
-            // Fallback if no difficulty panel is wired.
-            StartVsAIGame(TurnManager.AIDifficulty.Level1, TurnManager.GetDefaultMapSizePreset());
-        }
+        StartVsAIGame(TurnManager.GetDefaultMapSizePreset());
     }
 
-    // Optional: hook dedicated buttons to these for different difficulties.
+    // Legacy button hooks retained so older scene wiring still launches the baseline AI.
     public void PlayVsAI_Level1()
     {
-        StartVsAIGame(TurnManager.AIDifficulty.Level1, TurnManager.GetDefaultMapSizePreset());
+        StartVsAIGame(TurnManager.GetDefaultMapSizePreset());
     }
 
     public void PlayVsAI_Level2()
     {
-        StartVsAIGame(TurnManager.AIDifficulty.Level2, TurnManager.GetDefaultMapSizePreset());
+        StartVsAIGame(TurnManager.GetDefaultMapSizePreset());
     }
 
     public void PlayVsAI_Level3()
     {
-        StartVsAIGame(TurnManager.AIDifficulty.Level3, TurnManager.GetDefaultMapSizePreset());
+        StartVsAIGame(TurnManager.GetDefaultMapSizePreset());
     }
 
     public void PlayVsAI_Unfair()
     {
-        StartVsAIGame(TurnManager.AIDifficulty.Level3, TurnManager.GetDefaultMapSizePreset());
+        StartVsAIGame(TurnManager.GetDefaultMapSizePreset());
     }
 
     public void StartVsAIGameWithSettings(
-        TurnManager.AIDifficulty difficulty,
         TurnManager.MapSizePreset mapSizePreset,
         TurnManager.AIRecruitVariant recruitVariant = TurnManager.AIRecruitVariant.Default,
         bool storeSnapshotHistory = false,
@@ -284,7 +268,6 @@ public class MainMenuController : MonoBehaviour
         AIVsAIBatchRunController.SimulationSettings aiVsAiSimulationSettings = default)
     {
         StartVsAIGame(
-            difficulty,
             mapSizePreset,
             recruitVariant,
             storeSnapshotHistory,
@@ -300,7 +283,6 @@ public class MainMenuController : MonoBehaviour
     }
 
     private void StartVsAIGame(
-        TurnManager.AIDifficulty difficulty,
         TurnManager.MapSizePreset mapSizePreset,
         TurnManager.AIRecruitVariant recruitVariant = TurnManager.AIRecruitVariant.Default,
         bool storeSnapshotHistory = false,
@@ -329,7 +311,6 @@ public class MainMenuController : MonoBehaviour
         }
 
         GameModeSelection.SetPendingMode(TurnManager.GameMode.VsAI);
-        AIDifficultySelection.SetPending(difficulty);
         AIRecruitVariantSelection.SetPending(recruitVariant);
         AIVsAIDebugSelection.SetPending(
             enableAIVsAIDebugMode,

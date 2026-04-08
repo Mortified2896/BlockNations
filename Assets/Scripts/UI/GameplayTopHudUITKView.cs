@@ -297,7 +297,9 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             {
                 statusLabel.style.width = 560f;
                 statusLabel.text =
-                    $"{snapshot.gamesPerSecond:0.00} games/s | Seat A W{snapshot.sideAWins} L{snapshot.sideBWins} D{snapshot.trueDraws} A{snapshot.aborts}";
+                    snapshot.simulationMode == AIVsAIBatchRunController.SimulationMode.Tournament
+                        ? $"{snapshot.gamesPerSecond:0.00} games/s | {snapshot.tournamentStandingsPreview}"
+                        : $"{snapshot.gamesPerSecond:0.00} games/s | Seat A W{snapshot.sideAWins} L{snapshot.sideBWins} D{snapshot.trueDraws} A{snapshot.aborts}";
                 statusLabel.style.display = DisplayStyle.Flex;
             }
 

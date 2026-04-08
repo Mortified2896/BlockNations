@@ -126,16 +126,7 @@
                     </ui:VisualElement>
 
                     <ui:VisualElement name="GeneralSettingsAiSection" class="general-settings-section">
-                        <ui:Label text="AI Level" class="general-settings-section-label" />
-                        <ui:VisualElement class="general-settings-option-grid">
-                            <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
-                                <ui:Button name="GeneralSettingsAiLevel1Button" text="Easy" class="menu-button general-settings-option-button" />
-                                <ui:Button name="GeneralSettingsAiLevel2Button" text="Standard" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
-                            </ui:VisualElement>
-                            <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
-                                <ui:Button name="GeneralSettingsAiLevel3Button" text="Hard" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
-                            </ui:VisualElement>
-                        </ui:VisualElement>
+                        <ui:Label text="AI" class="general-settings-section-label" />
                         <ui:VisualElement name="GeneralSettingsAiStyleSection">
                             <ui:Label text="AI Style" class="general-settings-section-label" />
                             <ui:VisualElement class="general-settings-option-row">
@@ -230,10 +221,13 @@
                                 <ui:VisualElement class="general-settings-option-row">
                                     <ui:Button name="GeneralSettingsAIVsAiTournamentTypeRoundRobinButton" text="Round Robin" class="menu-button general-settings-option-button" />
                                 </ui:VisualElement>
-                                <ui:TextField name="GeneralSettingsAIVsAiTournamentGamesPerPairingInput" label="Games Per Pairing" class="general-settings-input-field" />
-                                <ui:Label text="Fixed schedule per variant pairing. Seat swap adds one mirrored game per scheduled game." class="general-settings-help-text" />
+                                <ui:TextField name="GeneralSettingsAIVsAiTournamentGamesPerPairingInput" label="Scheduled Games Per Pairing" class="general-settings-input-field" />
+                                <ui:Label name="GeneralSettingsAIVsAiTournamentMatchesPerPairingLabel" text="" class="general-settings-help-text" />
                                 <ui:VisualElement class="general-settings-option-row">
+                                    <ui:Button name="GeneralSettingsAIVsAiTournamentRunContinuouslyButton" text="Run Continuously" class="menu-button general-settings-option-button" />
                                     <ui:Button name="GeneralSettingsAIVsAiTournamentSeatSwapButton" text="Seat Swap" class="menu-button general-settings-option-button" />
+                                </ui:VisualElement>
+                                <ui:VisualElement class="general-settings-option-row">
                                     <ui:Button name="GeneralSettingsAIVsAiTournamentSelectFullPoolButton" text="Use Full 16-Variant Pool" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                                 </ui:VisualElement>
                                 <ui:Label text="Participants" class="general-settings-section-label" />

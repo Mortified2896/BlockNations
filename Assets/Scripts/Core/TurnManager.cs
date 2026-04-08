@@ -29,15 +29,6 @@ public class TurnManager : MonoBehaviour
         PlayByPost
     }
 
-    public enum AIDifficulty
-    {
-        None,
-        Level1,
-        Level2,
-        Level3,
-        Unfair
-    }
-
     public enum AIRecruitVariant
     {
         Default,
@@ -95,7 +86,6 @@ public class TurnManager : MonoBehaviour
 
     [Header("AI Settings")]
     public float aiTurnDelay = 1f; // seconds the AI "thinks" before ending its turn
-    public AIDifficulty aiDifficulty = AIDifficulty.Level1;
     [Tooltip("Experimental/dev-only AI recruit override. Default preserves current behavior.")]
     public AIRecruitVariant aiRecruitVariant = AIRecruitVariant.Default;
     [Tooltip("Experimental/dev-only local AI features. Default preserves current behavior.")]
@@ -176,6 +166,8 @@ public class TurnManager : MonoBehaviour
     private AIVsAIBatchSpeedPreset aiVsAiBatchSpeedPreset = AIVsAIBatchSpeedPreset.Normal;
     private bool aiVsAiDebugPaused = false;
     private bool aiVsAiDebugRestartPending = false;
+    private bool aiVsAiCompletedTournamentAutoRestartPending = false;
+    private string aiVsAiCompletedTournamentAutoRestartMessage = string.Empty;
     private const string AIVsAISimulationCompleteTitle = "AI Simulation Complete";
     private const string AIVsAISimulationAbortedTitle = "AI Simulation Aborted";
     private const string AIVsAIDebugAbortWinner = "Abort";
@@ -418,7 +410,6 @@ public class TurnManager : MonoBehaviour
         public string appVersion;
         public string gameId;
         public string mode;
-        public string aiDifficulty;
         public string aiRecruitVariant;
         public string mapSizePreset;
         public int boardWidth;
@@ -451,6 +442,14 @@ public class TurnManager : MonoBehaviour
         !aiVsAiDebugRestartPending;
 #else
         true;
+#endif
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    public bool IsAIVsAICompletedTournamentAutoRestartPendingForUi() =>
+        IsAIVsAIDebugModeActive() &&
+        aiVsAiDebugRestartPending &&
+        aiVsAiCompletedTournamentAutoRestartPending;
+#else
+    public bool IsAIVsAICompletedTournamentAutoRestartPendingForUi() => false;
 #endif
     public string GameOverUiTitle =>
         string.IsNullOrWhiteSpace(gameOverUiTitle) ? DefaultGameOverTitle : gameOverUiTitle;
@@ -1271,6 +1270,8 @@ public class TurnManager : MonoBehaviour
         gameOverUiRepeatSideBFeatures = AILocalDecisionFeatures.None;
         gameOverUiRepeatSideAProfile = AIDebugProfile.Baseline;
         gameOverUiRepeatSideBProfile = AIDebugProfile.Baseline;
+        aiVsAiCompletedTournamentAutoRestartPending = false;
+        aiVsAiCompletedTournamentAutoRestartMessage = string.Empty;
 #endif
     }
 
@@ -1443,7 +1444,6 @@ public class TurnManager : MonoBehaviour
             MainMenuController.SetPendingAIVsAISettingsReturn(new MainMenuController.PendingAIVsAISettingsReturn
             {
                 mapSizePreset = GetCurrentMapSizePreset(),
-                difficulty = aiDifficulty,
                 recruitVariant = aiRecruitVariant,
                 storeSnapshotHistory = MatchSnapshotHistorySettings.IsEnabled(currentGameId),
                 enableAIVsAIDebugMode = true,
@@ -1487,7 +1487,6 @@ public class TurnManager : MonoBehaviour
         SaveLoadRequest.ClearPending();
         GameModeSelection.SetPendingMode(GameMode.VsAI);
         MapSizeSelection.SetPending(GetCurrentMapSizePreset());
-        AIDifficultySelection.SetPending(aiDifficulty);
         AIRecruitVariantSelection.SetPending(aiRecruitVariant);
         SnapshotHistorySelection.SetPending(MatchSnapshotHistorySettings.IsEnabled(currentGameId));
         AIVsAIBatchRunController.SetPendingSimulationSettings(gameOverUiRepeatAIVsAISimulationSettings);
@@ -2647,7 +2646,6 @@ public class TurnManager : MonoBehaviour
         isPlayerTurn = true;
         playerGold = startingGold;
         aiGold = startingGold;
-        aiDifficulty = AIDifficulty.Level1;
         aiRecruitVariant = AIRecruitVariant.Default;
 
         if (GameModeSelection.TryConsume(out GameMode pendingMode))
@@ -2682,11 +2680,6 @@ public class TurnManager : MonoBehaviour
         else if (string.IsNullOrEmpty(currentGameId))
         {
             SetCurrentGameId(System.Guid.NewGuid().ToString());
-        }
-
-        if (AIDifficultySelection.TryConsume(out AIDifficulty pendingDifficulty))
-        {
-            aiDifficulty = pendingDifficulty;
         }
 
         if (AIRecruitVariantSelection.TryConsume(out AIRecruitVariant pendingRecruitVariant))
@@ -3036,510 +3029,7 @@ public class TurnManager : MonoBehaviour
 
     void RunAI()
     {
-        // 1) Recruit from each AI city (one unit per city per AI turn, if the city is empty)
-        City[] allCities = Object.FindObjectsByType<City>();
-        City primaryAICity = null;
-        foreach (City city in allCities)
-        {
-            if (!city.isPlayerOwned && city.CanRecruit())
-            {
-                city.SpawnWarrior();
-            }
-
-            if (!city.isPlayerOwned && primaryAICity == null)
-            {
-                primaryAICity = city;
-            }
-        }
-
-        // 2) Move AI units toward the nearest player unit or city.
-        bool aiHasPerfectInfo = aiDifficulty == AIDifficulty.Unfair;
-        Unit[] allUnits = Object.FindObjectsByType<Unit>();
-
-        HashSet<TileVisibility> aiVisibleTiles = aiHasPerfectInfo ? null : ComputeVisibilityForSide(false);
-
-        // Collect player targets: visible units + known player cities.
-        List<Vector3> playerTargets = new List<Vector3>();
-        List<Vector3> playerCityPositions = new List<Vector3>();
-        List<TileVisibility> playerUnitTiles = new List<TileVisibility>();
-        bool anyVisiblePlayerUnit = false;
-        bool enemyNearAICity = false;
-
-        foreach (Unit unit in allUnits)
-        {
-            if (!unit.isPlayerOwned)
-                continue;
-
-            // Unfair AI: always knows all player unit positions. Otherwise, respect visibility.
-            bool unitIsVisible = aiHasPerfectInfo;
-
-            // If we could not determine visibility, fall back to the old behavior.
-            if (!unitIsVisible && (aiVisibleTiles == null || aiVisibleTiles.Count == 0 || gridManager == null))
-            {
-                playerTargets.Add(unit.transform.position);
-                anyVisiblePlayerUnit = true;
-                continue;
-            }
-
-            if (gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility tile))
-            {
-                if (aiHasPerfectInfo || aiVisibleTiles.Contains(tile))
-                {
-                    playerTargets.Add(unit.transform.position);
-                    playerUnitTiles.Add(tile);
-                    anyVisiblePlayerUnit = true;
-
-                    // Track whether any enemy unit is near the AI city.
-                    if (primaryAICity != null)
-                    {
-                        int dxCity = Mathf.Abs(tile.gridX - primaryAICity.x);
-                        int dyCity = Mathf.Abs(tile.gridY - primaryAICity.y);
-                        int distToAICityTilesForEnemy = Mathf.Max(dxCity, dyCity);
-                        if (distToAICityTilesForEnemy <= 2)
-                        {
-                            enemyNearAICity = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        foreach (City city in allCities)
-        {
-            if (!city.isPlayerOwned)
-                continue;
-
-            // Cities are at fixed positions in this map, so
-            // allow the AI to always know their locations.
-            Vector3 cityPos = city.transform.position;
-            playerTargets.Add(cityPos);
-            playerCityPositions.Add(cityPos);
-        }
-
-        if (playerTargets.Count == 0)
-        {
-            // Nothing visible to move toward this turn (AI does not cheat).
-            return;
-        }
-
-        // Determine grid step size from the GridManager (fallback to 1)
-        float stepSize = gridManager != null ? Mathf.Max(0.01f, gridManager.tileSize) : 1f;
-
-        // For threat checks: a player can move one tile then attack adjacent, so staying
-        // beyond Chebyshev distance 2 avoids being attacked next turn by a fresh unit.
-        const int playerThreatRadiusTiles = 2;
-
-        // Level 2 behavior: if no enemy units are currently visible, units that
-        // are closest to the enemy city have a small chance to hold position
-        // instead of always advancing, to make behavior less predictable.
-        bool applyLevel2HoldBehavior = (aiDifficulty == AIDifficulty.Level2) &&
-                                       !anyVisiblePlayerUnit &&
-                                       playerCityPositions.Count > 0;
-
-        // Unfair skips the Level 3 defender anchor logic since it has perfect info and prefers full offense.
-        bool applyLevel3DefenderBehavior = (aiDifficulty == AIDifficulty.Level3) &&
-                                           (primaryAICity != null);
-
-        // For Level 2 we compute distances in grid coordinates rather than world
-        // space so the logic is stable regardless of tile size.
-        Dictionary<Unit, int> distToEnemyCityTiles = null;
-        int nearestEnemyCityDistTiles = int.MaxValue;
-
-        Dictionary<Unit, int> distToAICityTiles = null;
-        int nearestAICityDistTiles = int.MaxValue;
-        Unit defenderCandidate = null;
-
-        int GetThreatDistanceTiles(Vector3 pos)
-        {
-            if (gridManager == null || playerUnitTiles.Count == 0)
-                return int.MaxValue;
-
-            if (!gridManager.TryGetTileAtWorldPosition(pos, out TileVisibility posTile))
-                return int.MaxValue;
-
-            int minDist = int.MaxValue;
-            foreach (var enemyTile in playerUnitTiles)
-            {
-                int dx = Mathf.Abs(enemyTile.gridX - posTile.gridX);
-                int dy = Mathf.Abs(enemyTile.gridY - posTile.gridY);
-                int dist = Mathf.Max(dx, dy);
-                if (dist < minDist)
-                {
-                    minDist = dist;
-                }
-            }
-            return minDist;
-        }
-
-        Vector3 PredictOneStep(Vector3 from, Vector3 target)
-        {
-            Vector3 delta = target - from;
-            delta.z = 0f;
-
-            float stepX = 0f;
-            float stepY = 0f;
-            if (Mathf.Abs(delta.x) > 0.1f)
-            {
-                stepX = Mathf.Sign(delta.x) * stepSize;
-            }
-            if (Mathf.Abs(delta.y) > 0.1f)
-            {
-                stepY = Mathf.Sign(delta.y) * stepSize;
-            }
-
-            return new Vector3(from.x + stepX, from.y + stepY, from.z);
-        }
-
-        if (applyLevel2HoldBehavior || applyLevel3DefenderBehavior)
-        {
-            distToEnemyCityTiles = applyLevel2HoldBehavior ? new Dictionary<Unit, int>() : null;
-            distToAICityTiles = applyLevel3DefenderBehavior ? new Dictionary<Unit, int>() : null;
-
-            foreach (Unit unit in allUnits)
-            {
-                if (unit == null || unit.isPlayerOwned)
-                    continue;
-
-                if (!gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility originTile))
-                    continue;
-
-                if (applyLevel2HoldBehavior)
-                {
-                    int bestEnemyCityDistTiles = int.MaxValue;
-
-                    foreach (City city in allCities)
-                    {
-                        if (!city.isPlayerOwned)
-                            continue;
-
-                        int dx = Mathf.Abs(originTile.gridX - city.x);
-                        int dy = Mathf.Abs(originTile.gridY - city.y);
-                        int distTiles = Mathf.Max(dx, dy); // Chebyshev distance (diagonal moves allowed)
-
-                        if (distTiles < bestEnemyCityDistTiles)
-                        {
-                            bestEnemyCityDistTiles = distTiles;
-                        }
-                    }
-
-                    if (bestEnemyCityDistTiles < int.MaxValue)
-                    {
-                        distToEnemyCityTiles[unit] = bestEnemyCityDistTiles;
-                        if (bestEnemyCityDistTiles < nearestEnemyCityDistTiles)
-                        {
-                            nearestEnemyCityDistTiles = bestEnemyCityDistTiles;
-                        }
-                    }
-                }
-
-                if (applyLevel3DefenderBehavior && primaryAICity != null)
-                {
-                    int dxAi = Mathf.Abs(originTile.gridX - primaryAICity.x);
-                    int dyAi = Mathf.Abs(originTile.gridY - primaryAICity.y);
-                    int distToAiTiles = Mathf.Max(dxAi, dyAi);
-
-                    distToAICityTiles[unit] = distToAiTiles;
-                    if (distToAiTiles < nearestAICityDistTiles)
-                    {
-                        nearestAICityDistTiles = distToAiTiles;
-                        defenderCandidate = unit;
-                    }
-                    else if (distToAiTiles == nearestAICityDistTiles && defenderCandidate == null)
-                    {
-                        defenderCandidate = unit;
-                    }
-                }
-            }
-        }
-
-        // === Level 3: recruit vs recall defender when city is under visible threat ===
-        if (applyLevel3DefenderBehavior && enemyNearAICity && primaryAICity != null)
-        {
-            // Enemy distance to AI city in tiles (Chebyshev)
-            int enemyTurnsToCity = int.MaxValue;
-            foreach (Unit unit in allUnits)
-            {
-                if (unit == null || !unit.isPlayerOwned)
-                    continue;
-
-                if (!gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility enemyTile))
-                    continue;
-
-                int dxE = Mathf.Abs(enemyTile.gridX - primaryAICity.x);
-                int dyE = Mathf.Abs(enemyTile.gridY - primaryAICity.y);
-                int distEnemy = Mathf.Max(dxE, dyE);
-                if (distEnemy < enemyTurnsToCity)
-                {
-                    enemyTurnsToCity = distEnemy;
-                }
-            }
-
-            // Closest AI unit distance to own city (from distToAICityTiles)
-            int aiTurnsFromFront = nearestAICityDistTiles;
-
-            // Estimate income per turn for AI from owned cities
-            int aiIncomePerTurn = 0;
-            foreach (City city in allCities)
-            {
-                if (!city.isPlayerOwned)
-                {
-                    aiIncomePerTurn += goldPerCity;
-                }
-            }
-
-            int aiGoldNow = aiGold;
-            int turnsUntilCanRecruit;
-            int warriorRecruitCost = GetRecruitCost(UnitRegistry.WarriorTypeId);
-            if (aiGoldNow >= warriorRecruitCost)
-            {
-                turnsUntilCanRecruit = 0;
-            }
-            else if (aiIncomePerTurn > 0)
-            {
-                turnsUntilCanRecruit = Mathf.CeilToInt((warriorRecruitCost - aiGoldNow) / (float)aiIncomePerTurn);
-            }
-            else
-            {
-                turnsUntilCanRecruit = int.MaxValue;
-            }
-
-            bool shouldRecruitDefender =
-                enemyTurnsToCity < int.MaxValue &&
-                turnsUntilCanRecruit <= enemyTurnsToCity;
-
-            if (shouldRecruitDefender)
-            {
-                // Spawn defender at the AI city if the tile is free.
-                Vector3 spawnPosition = primaryAICity.transform.position;
-                GameObject warriorPrefab = GetUnitPrefabForType(UnitRegistry.WarriorTypeId);
-                if (!GridUtils.IsTileOccupied(spawnPosition, null) && warriorPrefab != null)
-                {
-                    // TrySpendGold(false, ...) will also update AI gold and UI when appropriate.
-                    if (TrySpendGold(false, warriorRecruitCost))
-                    {
-                        GameObject defender = InstantiateConfiguredUnit(
-                            UnitRegistry.WarriorTypeId,
-                            warriorPrefab,
-                            spawnPosition,
-                            isPlayerOwned: false,
-                            currentCity: primaryAICity,
-                            resetTurnState: true);
-                        if (defender == null)
-                        {
-                            return;
-                        }
-                        primaryAICity.stationedUnit = defender;
-                    }
-                }
-            }
-        }
-
-        foreach (Unit unit in allUnits)
-        {
-            if (unit.isPlayerOwned)
-                continue;
-
-            // Reset AI unit movement for this AI turn
-            unit.ResetMovementForTurn();
-
-            // Level 3: never idle on our own city tile; step off toward the defensive anchor
-            // (or any free/attackable adjacent tile) before making other decisions.
-            if (applyLevel3DefenderBehavior && primaryAICity != null && gridManager != null)
-            {
-                if (gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility unitTile) &&
-                    unitTile.gridX == primaryAICity.x && unitTile.gridY == primaryAICity.y)
-                {
-                    Vector2Int[] offsets = new Vector2Int[]
-                    {
-                        new Vector2Int(1, 1),  // preferred anchor
-                        new Vector2Int(1, 0),
-                        new Vector2Int(0, 1),
-                        new Vector2Int(-1, 0),
-                        new Vector2Int(0, -1),
-                        new Vector2Int(-1, -1),
-                        new Vector2Int(1, -1),
-                        new Vector2Int(-1, 1),
-                    };
-
-                    bool steppedOffCity = false;
-                    foreach (var off in offsets)
-                    {
-                        int tx = primaryAICity.x + off.x;
-                        int ty = primaryAICity.y + off.y;
-                        if (!gridManager.TryGetTile(tx, ty, out TileVisibility anchorTile))
-                            continue;
-
-                        Vector3 targetPos = anchorTile.transform.position;
-                        Unit occupant = GridUtils.GetUnitAtPosition(targetPos, unit);
-                        // Skip if a friendly unit already occupies the tile; allow moving onto enemies.
-                        if (occupant != null && occupant.isPlayerOwned == unit.isPlayerOwned)
-                            continue;
-
-                        MoveAIUnitOneStep(unit, targetPos, stepSize, aiHasPerfectInfo);
-                        steppedOffCity = true;
-                        break;
-                    }
-
-                    if (steppedOffCity)
-                    {
-                        // This unit already used its action to reposition off the city tile.
-                        continue;
-                    }
-                }
-            }
-
-            // Optional Level 2 randomness: closest units to the enemy city
-            // sometimes hold position when no enemies are currently visible.
-            if (applyLevel2HoldBehavior &&
-                distToEnemyCityTiles != null &&
-                distToEnemyCityTiles.TryGetValue(unit, out int unitCityDistTiles))
-            {
-                // Treat as "closest group" if it has the minimum distance in tiles.
-                if (unitCityDistTiles == nearestEnemyCityDistTiles)
-                {
-                    // Do not skip if this unit could capture the enemy city
-                    // in a single tile move (axial or diagonal).
-                    // Chebyshev distance 1 => within one move, 0 => already on the city.
-                    if (unitCityDistTiles > 1 && Random.value < 0.5f)
-                    {
-                        // Skip moving this turn to keep behavior varied.
-                        continue;
-                    }
-                }
-            }
-
-            // Optional Level 3 behavior: always try to keep the closest AI unit
-            // near its own city as a defender when the city is not under visible
-            // threat.
-            if (applyLevel3DefenderBehavior &&
-                !enemyNearAICity &&
-                primaryAICity != null &&
-                unit == defenderCandidate &&
-                distToAICityTiles != null &&
-                distToAICityTiles.TryGetValue(unit, out int unitDistToAiTiles))
-            {
-                // The closest AI unit to its own city acts as the defender.
-                if (unitDistToAiTiles == nearestAICityDistTiles)
-                {
-                    // Prefer to hold one tile "behind" the city toward the corner,
-                    // e.g., at (city.x + 1, city.y + 1) for the default top-right AI city.
-                    if (gridManager != null)
-                    {
-                        int anchorX = primaryAICity.x + 1;
-                        int anchorY = primaryAICity.y + 1;
-
-                        if (gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility unitTile) &&
-                            gridManager.TryGetTile(anchorX, anchorY, out TileVisibility anchorTile))
-                        {
-                            int distToAnchor = Mathf.Max(Mathf.Abs(unitTile.gridX - anchorX), Mathf.Abs(unitTile.gridY - anchorY));
-
-                            // If already on the anchor tile, hold position.
-                            if (distToAnchor == 0)
-                            {
-                                continue;
-                            }
-
-                            // Move toward the defensive anchor tile rather than the city center.
-                            MoveAIUnitOneStep(unit, anchorTile.transform.position, stepSize, aiHasPerfectInfo);
-                            continue;
-                        }
-                    }
-
-                    // Fallback: if we cannot compute an anchor, keep the previous behavior
-                    // of staying within 1 tile of the city.
-                    if (unitDistToAiTiles <= 1)
-                    {
-                        continue;
-                    }
-
-                    MoveAIUnitOneStep(unit, primaryAICity.transform.position, stepSize, aiHasPerfectInfo);
-                    continue;
-                }
-            }
-
-            // Find nearest target
-            Vector3 from = unit.transform.position;
-            Vector3? bestTarget = null;
-            float bestDistSq = float.MaxValue;
-
-            foreach (Vector3 targetPos in playerTargets)
-            {
-                float dSq = (targetPos - from).sqrMagnitude;
-                if (dSq < bestDistSq)
-                {
-                    bestDistSq = dSq;
-                    bestTarget = targetPos;
-                }
-            }
-
-            if (bestTarget.HasValue)
-            {
-                Vector3 chosenTarget = bestTarget.Value;
-
-                // Unfair AI: if the preferred step would end inside the player's move+attack radius,
-                // try to choose a safer adjacent step that still heads toward the goal.
-                // If no safe step exists, only retreat if we are not about to kill an adjacent player unit
-                // by moving onto it.
-                if (aiHasPerfectInfo && playerUnitTiles.Count > 0)
-                {
-                    Vector3 predictedPos = PredictOneStep(from, chosenTarget);
-                    int threatDist = GetThreatDistanceTiles(predictedPos);
-
-                    bool predictedKillsEnemy = false;
-                    if (GridUtils.GetUnitAtPosition(predictedPos, unit) is Unit enemyAtPos &&
-                        enemyAtPos.isPlayerOwned)
-                    {
-                        // If we step onto an enemy tile, treat as a kill attempt; allow it even in danger.
-                        predictedKillsEnemy = true;
-                    }
-
-                    // Also allow entering danger if we will be adjacent and can attack after moving.
-                    bool predictedCanAttackAdjacent = threatDist <= 1;
-
-                    if (!predictedKillsEnemy && !predictedCanAttackAdjacent && threatDist <= playerThreatRadiusTiles)
-                    {
-                        Vector3 bestSafeTarget = chosenTarget;
-                        float bestSafeDistToGoal = float.MaxValue;
-                        bool foundSafe = false;
-
-                        for (int ox = -1; ox <= 1; ox++)
-                        {
-                            for (int oy = -1; oy <= 1; oy++)
-                            {
-                                if (ox == 0 && oy == 0)
-                                    continue;
-
-                                Vector3 altTarget = from + new Vector3(ox * stepSize, oy * stepSize, 0f);
-
-                                // Stay on the board.
-                                if (gridManager != null && !gridManager.TryGetTileAtWorldPosition(altTarget, out _))
-                                    continue;
-
-                                int altThreat = GetThreatDistanceTiles(altTarget);
-                                if (altThreat <= playerThreatRadiusTiles)
-                                    continue;
-
-                                float distToGoal = (chosenTarget - altTarget).sqrMagnitude;
-                                if (distToGoal < bestSafeDistToGoal)
-                                {
-                                    bestSafeDistToGoal = distToGoal;
-                                    bestSafeTarget = altTarget;
-                                    foundSafe = true;
-                                }
-                            }
-                        }
-
-                        if (foundSafe)
-                        {
-                            chosenTarget = bestSafeTarget;
-                        }
-                        // else: no safe tile and not an immediate kill -> fall back to original move (risk it)
-                    }
-                }
-
-                MoveAIUnitOneStep(unit, chosenTarget, stepSize, aiHasPerfectInfo);
-            }
-        }
+        RunAIForSide(false);
     }
 
     private void RunAITurnForSide(bool actingSideIsPlayerOwned)
@@ -3642,6 +3132,11 @@ public class TurnManager : MonoBehaviour
         return IsAIVsAIDebugModeActive() && !aiVsAiDebugRestartPending;
     }
 
+    public bool CanCancelAIVsAICompletedTournamentAutoRestartForUi()
+    {
+        return IsAIVsAICompletedTournamentAutoRestartPendingForUi();
+    }
+
     public void ToggleAIVsAIDebugPause()
     {
         if (!IsAIVsAIDebugModeActive() || aiVsAiDebugRestartPending)
@@ -3652,11 +3147,27 @@ public class TurnManager : MonoBehaviour
         aiVsAiDebugPaused = !aiVsAiDebugPaused;
         RefreshEndTurnButtonInteractable(force: true);
     }
+
+    public void CancelAIVsAICompletedTournamentAutoRestartForUi()
+    {
+        if (!IsAIVsAICompletedTournamentAutoRestartPendingForUi())
+        {
+            return;
+        }
+
+        aiVsAiCompletedTournamentAutoRestartPending = false;
+        aiVsAiDebugRestartPending = false;
+        ShowGameOverPopup(aiVsAiCompletedTournamentAutoRestartMessage, writeLog: false);
+        aiVsAiCompletedTournamentAutoRestartMessage = string.Empty;
+        RefreshEndTurnButtonInteractable(force: true);
+    }
 #else
     public bool IsAIVsAIDebugModeEnabledForUi() => false;
     public bool IsAIVsAIDebugPausedForUi() => false;
     public bool CanToggleAIVsAIDebugPauseForUi() => false;
+    public bool CanCancelAIVsAICompletedTournamentAutoRestartForUi() => false;
     public void ToggleAIVsAIDebugPause() { }
+    public void CancelAIVsAICompletedTournamentAutoRestartForUi() { }
 #endif
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -3788,7 +3299,7 @@ public class TurnManager : MonoBehaviour
                 {
                     Debug.LogError(
                         $"[AIVsAI] Turn execution failed. actingSideIsPlayerOwned={actingSideIsPlayerOwned} " +
-                        $"turnNumber={turnNumber} aiDifficulty={aiDifficulty} " +
+                        $"turnNumber={turnNumber} aiConfig={BuildAIConfigLabelForSide(actingSideIsPlayerOwned)} " +
                         $"sideARecruitVariant={aiVsAiSideARecruitVariant} sideBRecruitVariant={aiVsAiSideBRecruitVariant}");
                     Debug.LogException(ex);
                     if (TryHandleAbortedAIVsAIDebugMatch($"Exception: {ex.GetType().Name}"))
@@ -3967,7 +3478,7 @@ public class TurnManager : MonoBehaviour
 
     private string BuildAIConfigLabelForSide(bool actingSideIsPlayerOwned)
     {
-        return $"difficulty={aiDifficulty};recruitVariant={GetAIRecruitVariantForSide(actingSideIsPlayerOwned)};localFeatures={AIPostCalculusLocalDecisionHelper.ToConfigValue(GetAILocalDecisionFeaturesForSide(actingSideIsPlayerOwned))};profile={GetAIDebugProfileForSide(actingSideIsPlayerOwned)}";
+        return $"recruitVariant={GetAIRecruitVariantForSide(actingSideIsPlayerOwned)};localFeatures={AIPostCalculusLocalDecisionHelper.ToConfigValue(GetAILocalDecisionFeaturesForSide(actingSideIsPlayerOwned))};profile={GetAIDebugProfileForSide(actingSideIsPlayerOwned)}";
     }
 
     private bool TryExecuteImmediateCityWin(
@@ -4403,11 +3914,10 @@ public class TurnManager : MonoBehaviour
     private void RunAIForSide(bool actingSideIsPlayerOwned)
     {
         bool enemyIsPlayerOwned = !actingSideIsPlayerOwned;
-        bool useImprovedLevel1Behavior = aiDifficulty == AIDifficulty.Level1;
         City[] allCities = Object.FindObjectsByType<City>();
         Unit[] unitsBeforeRecruitment = Object.FindObjectsByType<Unit>();
-        bool aiHasPerfectInfo = aiDifficulty == AIDifficulty.Unfair;
-        HashSet<TileVisibility> aiVisibleTiles = aiHasPerfectInfo ? null : ComputeVisibilityForSide(actingSideIsPlayerOwned);
+        const bool aiHasPerfectInfo = false;
+        HashSet<TileVisibility> aiVisibleTiles = ComputeVisibilityForSide(actingSideIsPlayerOwned);
         City primaryControlledCity = FindPrimaryControlledCity(allCities, actingSideIsPlayerOwned);
 
         // 1) Recruit from each controlled city (one unit per city per turn, if the city is empty)
@@ -4421,13 +3931,9 @@ public class TurnManager : MonoBehaviour
                 if (TryRecruitVariantOverride(city))
                 {
                 }
-                else if (useImprovedLevel1Behavior)
-                {
-                    TryRecruitLevel1Unit(city, actingSideIsPlayerOwned, allCities, unitsBeforeRecruitment, aiVisibleTiles, aiHasPerfectInfo);
-                }
                 else
                 {
-                    city.SpawnWarrior();
+                    TryRecruitBaselineUnit(city, actingSideIsPlayerOwned, allCities, unitsBeforeRecruitment, aiVisibleTiles);
                 }
             }
         }
@@ -4437,44 +3943,19 @@ public class TurnManager : MonoBehaviour
 
         List<Vector3> enemyTargets = new List<Vector3>();
         List<Vector3> enemyCityPositions = new List<Vector3>();
-        List<TileVisibility> enemyUnitTiles = new List<TileVisibility>();
         List<Unit> visibleEnemyUnits = new List<Unit>();
-        bool anyVisibleEnemyUnit = false;
-        bool enemyNearControlledCity = false;
 
         foreach (Unit unit in allUnits)
         {
             if (unit == null || unit.isPlayerOwned != enemyIsPlayerOwned)
                 continue;
 
-            bool unitIsVisible = aiHasPerfectInfo;
-            if (!unitIsVisible && (aiVisibleTiles == null || aiVisibleTiles.Count == 0 || gridManager == null))
+            if (gridManager != null &&
+                gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility tile) &&
+                aiVisibleTiles.Contains(tile))
             {
                 enemyTargets.Add(unit.transform.position);
-                anyVisibleEnemyUnit = true;
-                continue;
-            }
-
-            if (gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility tile))
-            {
-                if (aiHasPerfectInfo || aiVisibleTiles.Contains(tile))
-                {
-                    enemyTargets.Add(unit.transform.position);
-                    enemyUnitTiles.Add(tile);
-                    visibleEnemyUnits.Add(unit);
-                    anyVisibleEnemyUnit = true;
-
-                    if (primaryControlledCity != null)
-                    {
-                        int dxCity = Mathf.Abs(tile.gridX - primaryControlledCity.x);
-                        int dyCity = Mathf.Abs(tile.gridY - primaryControlledCity.y);
-                        int enemyUnitDistanceToControlledCity = Mathf.Max(dxCity, dyCity);
-                        if (enemyUnitDistanceToControlledCity <= 2)
-                        {
-                            enemyNearControlledCity = true;
-                        }
-                    }
-                }
+                visibleEnemyUnits.Add(unit);
             }
         }
 
@@ -4494,14 +3975,6 @@ public class TurnManager : MonoBehaviour
         }
 
         float stepSize = gridManager != null ? Mathf.Max(0.01f, gridManager.tileSize) : 1f;
-        const int enemyThreatRadiusTiles = 2;
-
-        bool applyLevel2HoldBehavior = (aiDifficulty == AIDifficulty.Level2) &&
-                                       !anyVisibleEnemyUnit &&
-                                       enemyCityPositions.Count > 0;
-
-        bool applyLevel3DefenderBehavior = (aiDifficulty == AIDifficulty.Level3) &&
-                                           (primaryControlledCity != null);
 
         Dictionary<City, AITurnLogic.CityDefensePlan> cityDefensePlans = AITurnLogic.BuildCityDefensePlans(
             gridManager,
@@ -4517,195 +3990,6 @@ public class TurnManager : MonoBehaviour
         {
             AITurnLogic.CityDefensePlan plan = entry.Value;
             AddDefenseAssignmentsForPlan(plan, combatDefenseAssignments, scoutDefenseAssignments);
-        }
-
-        bool primaryCityProtectedByPlan = primaryControlledCity != null &&
-                                          cityDefensePlans.TryGetValue(primaryControlledCity, out AITurnLogic.CityDefensePlan primaryCityDefensePlan) &&
-                                          primaryCityDefensePlan != null &&
-                                          primaryCityDefensePlan.IsAtRisk;
-
-        Dictionary<Unit, int> distToEnemyCityTiles = null;
-        int nearestEnemyCityDistTiles = int.MaxValue;
-
-        Dictionary<Unit, int> distToControlledCityTiles = null;
-        int nearestControlledCityDistTiles = int.MaxValue;
-        Unit defenderCandidate = null;
-
-        int GetThreatDistanceTiles(Vector3 pos)
-        {
-            if (gridManager == null || enemyUnitTiles.Count == 0)
-                return int.MaxValue;
-
-            if (!gridManager.TryGetTileAtWorldPosition(pos, out TileVisibility posTile))
-                return int.MaxValue;
-
-            int minDist = int.MaxValue;
-            foreach (var enemyTile in enemyUnitTiles)
-            {
-                int dx = Mathf.Abs(enemyTile.gridX - posTile.gridX);
-                int dy = Mathf.Abs(enemyTile.gridY - posTile.gridY);
-                int dist = Mathf.Max(dx, dy);
-                if (dist < minDist)
-                {
-                    minDist = dist;
-                }
-            }
-            return minDist;
-        }
-
-        Vector3 PredictOneStep(Vector3 from, Vector3 target)
-        {
-            Vector3 delta = target - from;
-            delta.z = 0f;
-
-            float stepX = 0f;
-            float stepY = 0f;
-            if (Mathf.Abs(delta.x) > 0.1f)
-            {
-                stepX = Mathf.Sign(delta.x) * stepSize;
-            }
-            if (Mathf.Abs(delta.y) > 0.1f)
-            {
-                stepY = Mathf.Sign(delta.y) * stepSize;
-            }
-
-            return new Vector3(from.x + stepX, from.y + stepY, from.z);
-        }
-
-        if (applyLevel2HoldBehavior || applyLevel3DefenderBehavior)
-        {
-            distToEnemyCityTiles = applyLevel2HoldBehavior ? new Dictionary<Unit, int>() : null;
-            distToControlledCityTiles = applyLevel3DefenderBehavior ? new Dictionary<Unit, int>() : null;
-
-            foreach (Unit unit in allUnits)
-            {
-                if (unit == null || unit.isPlayerOwned != actingSideIsPlayerOwned)
-                    continue;
-
-                if (!gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility originTile))
-                    continue;
-
-                if (applyLevel2HoldBehavior)
-                {
-                    int bestEnemyCityDistTiles = int.MaxValue;
-
-                    foreach (City city in allCities)
-                    {
-                        if (city == null || city.isPlayerOwned != enemyIsPlayerOwned)
-                            continue;
-
-                        int dx = Mathf.Abs(originTile.gridX - city.x);
-                        int dy = Mathf.Abs(originTile.gridY - city.y);
-                        int distTiles = Mathf.Max(dx, dy);
-
-                        if (distTiles < bestEnemyCityDistTiles)
-                        {
-                            bestEnemyCityDistTiles = distTiles;
-                        }
-                    }
-
-                    if (bestEnemyCityDistTiles < int.MaxValue)
-                    {
-                        distToEnemyCityTiles[unit] = bestEnemyCityDistTiles;
-                        if (bestEnemyCityDistTiles < nearestEnemyCityDistTiles)
-                        {
-                            nearestEnemyCityDistTiles = bestEnemyCityDistTiles;
-                        }
-                    }
-                }
-
-                if (applyLevel3DefenderBehavior)
-                {
-                    int dxControlled = Mathf.Abs(originTile.gridX - primaryControlledCity.x);
-                    int dyControlled = Mathf.Abs(originTile.gridY - primaryControlledCity.y);
-                    int distToCityTiles = Mathf.Max(dxControlled, dyControlled);
-
-                    distToControlledCityTiles[unit] = distToCityTiles;
-                    if (distToCityTiles < nearestControlledCityDistTiles)
-                    {
-                        nearestControlledCityDistTiles = distToCityTiles;
-                        defenderCandidate = unit;
-                    }
-                    else if (distToCityTiles == nearestControlledCityDistTiles && defenderCandidate == null)
-                    {
-                        defenderCandidate = unit;
-                    }
-                }
-            }
-        }
-
-        if (applyLevel3DefenderBehavior && enemyNearControlledCity && primaryControlledCity != null)
-        {
-            int enemyTurnsToCity = int.MaxValue;
-            foreach (Unit unit in allUnits)
-            {
-                if (unit == null || unit.isPlayerOwned != enemyIsPlayerOwned)
-                    continue;
-
-                if (!gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility enemyTile))
-                    continue;
-
-                int dxE = Mathf.Abs(enemyTile.gridX - primaryControlledCity.x);
-                int dyE = Mathf.Abs(enemyTile.gridY - primaryControlledCity.y);
-                int distEnemy = Mathf.Max(dxE, dyE);
-                if (distEnemy < enemyTurnsToCity)
-                {
-                    enemyTurnsToCity = distEnemy;
-                }
-            }
-
-            int controlledIncomePerTurn = 0;
-            foreach (City city in allCities)
-            {
-                if (city != null && city.isPlayerOwned == actingSideIsPlayerOwned)
-                {
-                    controlledIncomePerTurn += goldPerCity;
-                }
-            }
-
-            int controlledGoldNow = actingSideIsPlayerOwned ? playerGold : aiGold;
-            int turnsUntilCanRecruit;
-            int warriorRecruitCost = GetRecruitCost(UnitRegistry.WarriorTypeId);
-            if (controlledGoldNow >= warriorRecruitCost)
-            {
-                turnsUntilCanRecruit = 0;
-            }
-            else if (controlledIncomePerTurn > 0)
-            {
-                turnsUntilCanRecruit = Mathf.CeilToInt((warriorRecruitCost - controlledGoldNow) / (float)controlledIncomePerTurn);
-            }
-            else
-            {
-                turnsUntilCanRecruit = int.MaxValue;
-            }
-
-            bool shouldRecruitDefender =
-                enemyTurnsToCity < int.MaxValue &&
-                turnsUntilCanRecruit <= enemyTurnsToCity;
-
-            if (shouldRecruitDefender)
-            {
-                Vector3 spawnPosition = primaryControlledCity.transform.position;
-                GameObject warriorPrefab = GetUnitPrefabForType(UnitRegistry.WarriorTypeId);
-                if (!GridUtils.IsTileOccupied(spawnPosition, null) && warriorPrefab != null)
-                {
-                    if (TrySpendGold(actingSideIsPlayerOwned, warriorRecruitCost))
-                    {
-                        GameObject defender = InstantiateConfiguredUnit(
-                            UnitRegistry.WarriorTypeId,
-                            warriorPrefab,
-                            spawnPosition,
-                            isPlayerOwned: actingSideIsPlayerOwned,
-                            currentCity: primaryControlledCity,
-                            resetTurnState: true);
-                        if (defender == null)
-                        {
-                            return;
-                        }
-                        primaryControlledCity.stationedUnit = defender;
-                    }
-                }
-            }
         }
 
         foreach (Unit unit in allUnits)
@@ -4742,200 +4026,18 @@ public class TurnManager : MonoBehaviour
                 }
             }
 
-            if (useImprovedLevel1Behavior)
-            {
-                ExecuteLevel1UnitTurn(unit, visibleEnemyUnits, enemyTargets, enemyCityPositions, stepSize, primaryControlledCity, allUnits, aiVisibleTiles, aiHasPerfectInfo);
-                if (gameOver)
-                    return;
-                continue;
-            }
-
-            if (applyLevel3DefenderBehavior && !primaryCityProtectedByPlan && primaryControlledCity != null && gridManager != null)
-            {
-                if (gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility unitTile) &&
-                    unitTile.gridX == primaryControlledCity.x && unitTile.gridY == primaryControlledCity.y)
-                {
-                    Vector2Int[] offsets = new Vector2Int[]
-                    {
-                        new Vector2Int(1, 1),
-                        new Vector2Int(1, 0),
-                        new Vector2Int(0, 1),
-                        new Vector2Int(-1, 0),
-                        new Vector2Int(0, -1),
-                        new Vector2Int(-1, -1),
-                        new Vector2Int(1, -1),
-                        new Vector2Int(-1, 1),
-                    };
-
-                    bool steppedOffCity = false;
-                    foreach (var off in offsets)
-                    {
-                        int tx = primaryControlledCity.x + off.x;
-                        int ty = primaryControlledCity.y + off.y;
-                        if (!gridManager.TryGetTile(tx, ty, out TileVisibility anchorTile))
-                            continue;
-
-                        Vector3 targetPos = anchorTile.transform.position;
-                        Unit occupant = GridUtils.GetUnitAtPosition(targetPos, unit);
-                        if (occupant != null && occupant.isPlayerOwned == unit.isPlayerOwned)
-                            continue;
-
-                        MoveAIUnitOneStep(unit, targetPos, stepSize, aiHasPerfectInfo);
-                        steppedOffCity = true;
-                        if (gameOver)
-                            return;
-                        break;
-                    }
-
-                    if (steppedOffCity)
-                    {
-                        continue;
-                    }
-                }
-            }
-
-            if (applyLevel2HoldBehavior &&
-                distToEnemyCityTiles != null &&
-                distToEnemyCityTiles.TryGetValue(unit, out int unitCityDistTiles))
-            {
-                if (unitCityDistTiles == nearestEnemyCityDistTiles)
-                {
-                    if (unitCityDistTiles > 1 && Random.value < 0.5f)
-                    {
-                        continue;
-                    }
-                }
-            }
-
-            if (applyLevel3DefenderBehavior &&
-                !primaryCityProtectedByPlan &&
-                !enemyNearControlledCity &&
-                primaryControlledCity != null &&
-                unit == defenderCandidate &&
-                distToControlledCityTiles != null &&
-                distToControlledCityTiles.TryGetValue(unit, out int unitDistToControlledTiles))
-            {
-                if (unitDistToControlledTiles == nearestControlledCityDistTiles)
-                {
-                    if (gridManager != null)
-                    {
-                        int anchorX = primaryControlledCity.x + 1;
-                        int anchorY = primaryControlledCity.y + 1;
-
-                        if (gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility unitTile) &&
-                            gridManager.TryGetTile(anchorX, anchorY, out TileVisibility anchorTile))
-                        {
-                            int distToAnchor = Mathf.Max(Mathf.Abs(unitTile.gridX - anchorX), Mathf.Abs(unitTile.gridY - anchorY));
-
-                            if (distToAnchor == 0)
-                            {
-                                continue;
-                            }
-
-                            MoveAIUnitOneStep(unit, anchorTile.transform.position, stepSize, aiHasPerfectInfo);
-                            if (gameOver)
-                                return;
-                            continue;
-                        }
-                    }
-
-                    if (unitDistToControlledTiles <= 1)
-                    {
-                        continue;
-                    }
-
-                    MoveAIUnitOneStep(unit, primaryControlledCity.transform.position, stepSize, aiHasPerfectInfo);
-                    if (gameOver)
-                        return;
-                    continue;
-                }
-            }
-
-            Vector3 from = unit.transform.position;
-            Vector3? bestTarget = null;
-            float bestDistSq = float.MaxValue;
-
-            foreach (Vector3 targetPos in enemyTargets)
-            {
-                float dSq = (targetPos - from).sqrMagnitude;
-                if (dSq < bestDistSq)
-                {
-                    bestDistSq = dSq;
-                    bestTarget = targetPos;
-                }
-            }
-
-            if (bestTarget.HasValue)
-            {
-                Vector3 chosenTarget = bestTarget.Value;
-
-                if (aiHasPerfectInfo && enemyUnitTiles.Count > 0)
-                {
-                    Vector3 predictedPos = PredictOneStep(from, chosenTarget);
-                    int threatDist = GetThreatDistanceTiles(predictedPos);
-
-                    bool predictedKillsEnemy = false;
-                    if (GridUtils.GetUnitAtPosition(predictedPos, unit) is Unit enemyAtPos &&
-                        enemyAtPos.isPlayerOwned == enemyIsPlayerOwned)
-                    {
-                        predictedKillsEnemy = true;
-                    }
-
-                    bool predictedCanAttackAdjacent = threatDist <= 1;
-
-                    if (!predictedKillsEnemy && !predictedCanAttackAdjacent && threatDist <= enemyThreatRadiusTiles)
-                    {
-                        Vector3 bestSafeTarget = chosenTarget;
-                        float bestSafeDistToGoal = float.MaxValue;
-                        bool foundSafe = false;
-
-                        for (int ox = -1; ox <= 1; ox++)
-                        {
-                            for (int oy = -1; oy <= 1; oy++)
-                            {
-                                if (ox == 0 && oy == 0)
-                                    continue;
-
-                                Vector3 altTarget = from + new Vector3(ox * stepSize, oy * stepSize, 0f);
-
-                                if (gridManager != null && !gridManager.TryGetTileAtWorldPosition(altTarget, out _))
-                                    continue;
-
-                                int altThreat = GetThreatDistanceTiles(altTarget);
-                                if (altThreat <= enemyThreatRadiusTiles)
-                                    continue;
-
-                                float distToGoal = (chosenTarget - altTarget).sqrMagnitude;
-                                if (distToGoal < bestSafeDistToGoal)
-                                {
-                                    bestSafeDistToGoal = distToGoal;
-                                    bestSafeTarget = altTarget;
-                                    foundSafe = true;
-                                }
-                            }
-                        }
-
-                        if (foundSafe)
-                        {
-                            chosenTarget = bestSafeTarget;
-                        }
-                    }
-                }
-
-                MoveAIUnitOneStep(unit, chosenTarget, stepSize, aiHasPerfectInfo);
-                if (gameOver)
-                    return;
-            }
+            ExecuteBaselineUnitTurn(unit, visibleEnemyUnits, enemyTargets, enemyCityPositions, stepSize, primaryControlledCity, allUnits, aiVisibleTiles, aiHasPerfectInfo);
+            if (gameOver)
+                return;
         }
     }
 
-    private void TryRecruitLevel1Unit(
+    private void TryRecruitBaselineUnit(
         City city,
         bool actingSideIsPlayerOwned,
         City[] allCities,
         Unit[] existingUnits,
-        HashSet<TileVisibility> aiVisibleTiles,
-        bool aiHasPerfectInfo)
+        HashSet<TileVisibility> aiVisibleTiles)
     {
         if (city == null)
             return;
@@ -4987,16 +4089,15 @@ public class TurnManager : MonoBehaviour
                 if (enemyUnit == null || enemyUnit.isPlayerOwned == actingSideIsPlayerOwned)
                     continue;
 
-                if (!aiHasPerfectInfo)
+                if (aiVisibleTiles == null || aiVisibleTiles.Count == 0)
                 {
-                    if (aiVisibleTiles == null || aiVisibleTiles.Count == 0)
-                        continue;
+                    continue;
+                }
 
-                    if (!gridManager.TryGetTileAtWorldPosition(enemyUnit.transform.position, out TileVisibility enemyTile) ||
-                        !aiVisibleTiles.Contains(enemyTile))
-                    {
-                        continue;
-                    }
+                if (!gridManager.TryGetTileAtWorldPosition(enemyUnit.transform.position, out TileVisibility enemyTile) ||
+                    !aiVisibleTiles.Contains(enemyTile))
+                {
+                    continue;
                 }
 
                 if (!gridManager.TryGetTileAtWorldPosition(enemyUnit.transform.position, out TileVisibility enemyPositionTile))
@@ -5093,7 +4194,7 @@ public class TurnManager : MonoBehaviour
         return city.TrySpawnUnit(UnitRegistry.RiderTypeId);
     }
 
-    private void ExecuteLevel1UnitTurn(
+    private void ExecuteBaselineUnitTurn(
         Unit unit,
         List<Unit> visibleEnemyUnits,
         List<Vector3> enemyTargets,
@@ -5138,8 +4239,8 @@ public class TurnManager : MonoBehaviour
             return;
         }
 
-        int maxLevel1MoveActions = unitTypeId == UnitRegistry.RiderTypeId ? Mathf.Max(1, unit.GetRemainingMoveRangeThisTurn()) : 1;
-        for (int moveIndex = 0; moveIndex < maxLevel1MoveActions && unit.CanMoveThisTurn(); moveIndex++)
+        int maxBaselineMoveActions = unitTypeId == UnitRegistry.RiderTypeId ? Mathf.Max(1, unit.GetRemainingMoveRangeThisTurn()) : 1;
+        for (int moveIndex = 0; moveIndex < maxBaselineMoveActions && unit.CanMoveThisTurn(); moveIndex++)
         {
             if (TryAttackVisibleEnemyFromCurrentPosition(unit, visibleEnemyUnits))
             {
@@ -5669,6 +4770,9 @@ public class TurnManager : MonoBehaviour
             return false;
         }
 
+        AIVsAIBatchRunController.SimulationSettings completedRunSettings = default;
+        bool hadCompletedRunSettings = IsAIVsAIBatchModeActive() &&
+                                       AIVsAIBatchRunController.TryGetActiveSimulationSettings(out completedRunSettings);
         AIVsAIMatchCsvLogger.MatchResult matchResult = BuildAIVsAIDebugMatchResult(winner);
         if (matchResult == null)
         {
@@ -5707,17 +4811,19 @@ public class TurnManager : MonoBehaviour
                 interactable: true,
                 action: GameOverTertiaryAction.RestartAIVsAIBatch);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            gameOverUiRepeatAIVsAISimulationSettings = AIVsAIBatchRunController.SanitizeSimulationSettings(
-                new AIVsAIBatchRunController.SimulationSettings
-                {
-                    preset = runSummary.simulationPreset,
-                    evaluationMethod = runSummary.evaluationMethod,
-                    certaintyThreshold = runSummary.certaintyThreshold,
-                    minimumGames = runSummary.minimumGames,
-                    timeBudgetSeconds = runSummary.timeBudgetSeconds,
-                    batchSize = runSummary.batchSize,
-                    emergencyHardMaxGames = runSummary.emergencyHardMaxGames
-                });
+            gameOverUiRepeatAIVsAISimulationSettings = hadCompletedRunSettings
+                ? AIVsAIBatchRunController.SanitizeSimulationSettings(completedRunSettings)
+                : AIVsAIBatchRunController.SanitizeSimulationSettings(
+                    new AIVsAIBatchRunController.SimulationSettings
+                    {
+                        preset = runSummary.simulationPreset,
+                        evaluationMethod = runSummary.evaluationMethod,
+                        certaintyThreshold = runSummary.certaintyThreshold,
+                        minimumGames = runSummary.minimumGames,
+                        timeBudgetSeconds = runSummary.timeBudgetSeconds,
+                        batchSize = runSummary.batchSize,
+                        emergencyHardMaxGames = runSummary.emergencyHardMaxGames
+                    });
             gameOverUiRepeatSideARecruitVariant = runSummary.baseSideARecruitVariant;
             gameOverUiRepeatSideBRecruitVariant = runSummary.baseSideBRecruitVariant;
             gameOverUiRepeatSideAFeatures = runSummary.baseSideAFeatures;
@@ -5725,7 +4831,28 @@ public class TurnManager : MonoBehaviour
             gameOverUiRepeatSideAProfile = runSummary.baseSideAProfile;
             gameOverUiRepeatSideBProfile = runSummary.baseSideBProfile;
 #endif
-            ShowGameOverPopup(BuildAIVsAISimulationCompletionMessage(runSummary));
+            string completionMessage = BuildAIVsAISimulationCompletionMessage(runSummary);
+            bool shouldAutoRestartCompletedTournament =
+                ShouldAutoRestartCompletedTournament(runSummary, gameOverUiRepeatAIVsAISimulationSettings);
+            if (shouldAutoRestartCompletedTournament && aiVsAiDebugPaused)
+            {
+                Debug.Log(
+                    $"[AIVsAIBatch] Suppressing continuous tournament auto-restart because pause was active for runId={runSummary.runId}.");
+                shouldAutoRestartCompletedTournament = false;
+            }
+
+            if (shouldAutoRestartCompletedTournament)
+            {
+                Debug.Log(
+                    $"[AIVsAIBatch] Auto-restarting tournament after completed runId={runSummary.runId} " +
+                    $"matches={runSummary.matchCount}/{runSummary.tournamentScheduledGameCount} " +
+                    $"participants={runSummary.tournamentParticipantCount} " +
+                    $"continuous={gameOverUiRepeatAIVsAISimulationSettings.tournamentRunContinuously}");
+                QueueCompletedTournamentAutoRestart(completionMessage);
+                return true;
+            }
+
+            ShowGameOverPopup(completionMessage);
             if (runSummary.simulationMode == AIVsAIBatchRunController.SimulationMode.Tournament)
             {
                 Debug.Log(
@@ -5751,6 +4878,28 @@ public class TurnManager : MonoBehaviour
 
         QueueAIVsAIDebugMatchRestart();
         return true;
+    }
+
+    private void QueueCompletedTournamentAutoRestart(string completionMessage)
+    {
+        aiVsAiCompletedTournamentAutoRestartPending = true;
+        aiVsAiCompletedTournamentAutoRestartMessage = completionMessage ?? string.Empty;
+        QueueAIVsAIDebugMatchRestart();
+    }
+
+    private static bool ShouldAutoRestartCompletedTournament(
+        AIVsAIMatchCsvLogger.RunSummary runSummary,
+        AIVsAIBatchRunController.SimulationSettings simulationSettings)
+    {
+        return runSummary != null &&
+               runSummary.runEndedNormally &&
+               runSummary.simulationMode == AIVsAIBatchRunController.SimulationMode.Tournament &&
+               string.Equals(
+                   runSummary.stopReason,
+                   AIVsAIBatchRunController.StopReason.TournamentScheduleCompleted.ToString(),
+                   System.StringComparison.Ordinal) &&
+               simulationSettings.mode == AIVsAIBatchRunController.SimulationMode.Tournament &&
+               simulationSettings.tournamentRunContinuously;
     }
 
     private bool TryHandleAbortedAIVsAIDebugMatch(string abortReason)
@@ -6067,16 +5216,22 @@ public class TurnManager : MonoBehaviour
     {
         yield return new WaitForSecondsRealtime(GetAIVsAIDebugRestartDelaySeconds());
 
+        if (!aiVsAiDebugRestartPending)
+        {
+            yield break;
+        }
+
         if (currentMode != GameMode.VsAI || !enableAIVsAIDebugMode)
         {
             aiVsAiDebugRestartPending = false;
+            aiVsAiCompletedTournamentAutoRestartPending = false;
+            aiVsAiCompletedTournamentAutoRestartMessage = string.Empty;
             yield break;
         }
 
         SaveLoadRequest.ClearPending();
         GameModeSelection.SetPendingMode(GameMode.VsAI);
         MapSizeSelection.SetPending(GetCurrentMapSizePreset());
-        AIDifficultySelection.SetPending(aiDifficulty);
         AIRecruitVariantSelection.SetPending(aiRecruitVariant);
         SnapshotHistorySelection.SetPending(MatchSnapshotHistorySettings.IsEnabled(currentGameId));
         AIRecruitVariant nextSideARecruitVariant = aiVsAiSideARecruitVariant;
@@ -6111,6 +5266,8 @@ public class TurnManager : MonoBehaviour
             nextSideAProfile,
             nextSideBProfile);
 
+        aiVsAiCompletedTournamentAutoRestartPending = false;
+        aiVsAiCompletedTournamentAutoRestartMessage = string.Empty;
         Time.timeScale = 1f;
         CameraController.ClearPendingRestoreState();
         Scene currentScene = SceneManager.GetActiveScene();
@@ -6938,7 +6095,6 @@ public class TurnManager : MonoBehaviour
             protocolVersion = SupportedPbpProtocolVersion,
             appVersion = CurrentAppVersion,
             mode = currentMode.ToString(),
-            aiDifficulty = aiDifficulty.ToString(),
             aiRecruitVariant = aiRecruitVariant.ToString(),
             mapSizePreset = GetCurrentMapSizePreset().ToString(),
             boardWidth = gridManager.width,
@@ -7089,34 +6245,7 @@ public class TurnManager : MonoBehaviour
 
     private int ResolveAIGoldIncome(int baseIncome, int roundTurnNumber)
     {
-        if (baseIncome <= 0)
-        {
-            return 0;
-        }
-
-        switch (aiDifficulty)
-        {
-            case AIDifficulty.Level2:
-            {
-                int bonusIncome = baseIncome / 2;
-                bool shouldRoundUpHalf = (roundTurnNumber & 1) == 1 && (baseIncome & 1) == 1;
-                if (shouldRoundUpHalf)
-                {
-                    bonusIncome += 1;
-                }
-
-                return baseIncome + bonusIncome;
-            }
-
-            case AIDifficulty.Level3:
-            case AIDifficulty.Unfair:
-                return baseIncome * 2;
-
-            case AIDifficulty.Level1:
-            case AIDifficulty.None:
-            default:
-                return baseIncome;
-        }
+        return Mathf.Max(0, baseIncome);
     }
 
     private MapSizePreset GetCurrentMapSizePreset()
@@ -7386,14 +6515,6 @@ private void PBpDebugSyncNow_Context()
             }
 
             currentMode = loadedMode;
-
-            // AI difficulty (optional for older saves)
-            aiDifficulty = AIDifficulty.Level1;
-            if (!string.IsNullOrEmpty(save.aiDifficulty) &&
-                System.Enum.TryParse(save.aiDifficulty, out AIDifficulty loadedDifficulty))
-            {
-                aiDifficulty = loadedDifficulty;
-            }
 
             aiRecruitVariant = AIRecruitVariant.Default;
             if (!string.IsNullOrEmpty(save.aiRecruitVariant) &&

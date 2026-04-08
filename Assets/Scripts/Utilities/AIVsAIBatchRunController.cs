@@ -85,6 +85,7 @@ public static class AIVsAIBatchRunController
         public int tournamentParticipantMask;
         public int tournamentGamesPerPairing;
         public bool tournamentSeatSwap;
+        public bool tournamentRunContinuously;
     }
 
     public readonly struct ActiveRunSnapshot
@@ -108,6 +109,7 @@ public static class AIVsAIBatchRunController
         public readonly float certaintyThreshold;
         public readonly float decisiveEdgePoints;
         public readonly bool isWaitingForBatchAfterThreshold;
+        public readonly string tournamentStandingsPreview;
 
         public ActiveRunSnapshot(
             SimulationMode simulationMode,
@@ -128,7 +130,8 @@ public static class AIVsAIBatchRunController
             float bayesianSideABetterProbability,
             float certaintyThreshold,
             float decisiveEdgePoints,
-            bool isWaitingForBatchAfterThreshold)
+            bool isWaitingForBatchAfterThreshold,
+            string tournamentStandingsPreview)
         {
             this.simulationMode = simulationMode;
             this.completedGames = completedGames;
@@ -149,6 +152,7 @@ public static class AIVsAIBatchRunController
             this.certaintyThreshold = certaintyThreshold;
             this.decisiveEdgePoints = decisiveEdgePoints;
             this.isWaitingForBatchAfterThreshold = isWaitingForBatchAfterThreshold;
+            this.tournamentStandingsPreview = tournamentStandingsPreview ?? string.Empty;
         }
     }
 
@@ -455,7 +459,8 @@ public static class AIVsAIBatchRunController
                     tournamentType = TournamentType.RoundRobin,
                     tournamentParticipantMask = GetDefaultTournamentParticipantMask(),
                     tournamentGamesPerPairing = DefaultTournamentGamesPerPairing,
-                    tournamentSeatSwap = true
+                    tournamentSeatSwap = true,
+                    tournamentRunContinuously = false
                 };
 
             case SimulationPreset.StrictComparison:
@@ -472,7 +477,8 @@ public static class AIVsAIBatchRunController
                     tournamentType = TournamentType.RoundRobin,
                     tournamentParticipantMask = GetDefaultTournamentParticipantMask(),
                     tournamentGamesPerPairing = DefaultTournamentGamesPerPairing,
-                    tournamentSeatSwap = true
+                    tournamentSeatSwap = true,
+                    tournamentRunContinuously = false
                 };
 
             case SimulationPreset.StandardComparison:
@@ -490,7 +496,8 @@ public static class AIVsAIBatchRunController
                     tournamentType = TournamentType.RoundRobin,
                     tournamentParticipantMask = GetDefaultTournamentParticipantMask(),
                     tournamentGamesPerPairing = DefaultTournamentGamesPerPairing,
-                    tournamentSeatSwap = true
+                    tournamentSeatSwap = true,
+                    tournamentRunContinuously = false
                 };
         }
     }
@@ -521,6 +528,7 @@ public static class AIVsAIBatchRunController
                 ? fallback.tournamentGamesPerPairing
                 : settings.tournamentGamesPerPairing);
             fallback.tournamentSeatSwap = settings.tournamentSeatSwap;
+            fallback.tournamentRunContinuously = settings.tournamentRunContinuously;
             return fallback;
         }
 
@@ -784,7 +792,8 @@ public static class AIVsAIBatchRunController
                 bayesianSideABetterProbability: 0.5f,
                 certaintyThreshold: 0f,
                 decisiveEdgePoints: 0f,
-                isWaitingForBatchAfterThreshold: false);
+                isWaitingForBatchAfterThreshold: false,
+                tournamentStandingsPreview: BuildTournamentStandingsPreview(activeRun, 2));
             return true;
         }
 
@@ -826,7 +835,8 @@ public static class AIVsAIBatchRunController
             bayesianSideABetterProbability: probability,
             certaintyThreshold: activeRun.settings.certaintyThreshold,
             decisiveEdgePoints: decisiveEdgePoints,
-            isWaitingForBatchAfterThreshold: thresholdReached && !reachedBatchBoundary);
+            isWaitingForBatchAfterThreshold: thresholdReached && !reachedBatchBoundary,
+            tournamentStandingsPreview: string.Empty);
         return true;
     }
 
@@ -866,7 +876,8 @@ public static class AIVsAIBatchRunController
                 bayesianSideABetterProbability: 0.5f,
                 certaintyThreshold: 0f,
                 decisiveEdgePoints: 0f,
-                isWaitingForBatchAfterThreshold: false);
+                isWaitingForBatchAfterThreshold: false,
+                tournamentStandingsPreview: "Standings pending");
             return true;
         }
 
@@ -889,7 +900,8 @@ public static class AIVsAIBatchRunController
             bayesianSideABetterProbability: 0.5f,
             certaintyThreshold: settings.certaintyThreshold,
             decisiveEdgePoints: 0f,
-            isWaitingForBatchAfterThreshold: false);
+            isWaitingForBatchAfterThreshold: false,
+            tournamentStandingsPreview: string.Empty);
         return true;
     }
 
@@ -1596,14 +1608,7 @@ public static class AIVsAIBatchRunController
         summary.seat2Label = "Runtime Side B";
         summary.pairedStatsApplicable = false;
 
-        List<TournamentStanding> standings = new List<TournamentStanding>(run.tournamentParticipants.Count);
-        for (int i = 0; i < run.tournamentParticipants.Count; i++)
-        {
-            standings.Add(new TournamentStanding
-            {
-                label = GetVariantLabel(run.tournamentParticipants[i])
-            });
-        }
+        List<TournamentStanding> standings = BuildSortedTournamentStandings(run);
 
         Dictionary<int, TournamentPairingAggregate> pairings = new Dictionary<int, TournamentPairingAggregate>();
         int seat1Wins = 0;
@@ -1616,34 +1621,6 @@ public static class AIVsAIBatchRunController
         for (int i = 0; i < run.completedMatches.Count; i++)
         {
             ActiveRun.CompletedMatchRecord record = run.completedMatches[i];
-            TournamentStanding standingA = standings[record.logicalVariantAIndex];
-            TournamentStanding standingB = standings[record.logicalVariantBIndex];
-            standingA.games++;
-            standingB.games++;
-            standingA.scoreSum += record.logicalVariantAScore;
-            standingB.scoreSum += record.logicalVariantBScore;
-
-            if (record.isAbort)
-            {
-                standingA.aborts++;
-                standingB.aborts++;
-            }
-            else if (record.isDraw)
-            {
-                standingA.draws++;
-                standingB.draws++;
-            }
-            else if (record.logicalVariantAScore > record.logicalVariantBScore)
-            {
-                standingA.wins++;
-                standingB.losses++;
-            }
-            else
-            {
-                standingA.losses++;
-                standingB.wins++;
-            }
-
             summary.seat1GameCount++;
             summary.seat2GameCount++;
             if (record.player1Score >= 0.999d)
@@ -1727,31 +1704,6 @@ public static class AIVsAIBatchRunController
         }
 
         summary.seatEffectSize = summary.seat1ScoreRate - summary.seat2ScoreRate;
-
-        standings.Sort((left, right) =>
-        {
-            double leftScoreRate = left.games > 0 ? left.scoreSum / left.games : 0d;
-            double rightScoreRate = right.games > 0 ? right.scoreSum / right.games : 0d;
-            int comparison = rightScoreRate.CompareTo(leftScoreRate);
-            if (comparison != 0)
-            {
-                return comparison;
-            }
-
-            comparison = right.wins.CompareTo(left.wins);
-            if (comparison != 0)
-            {
-                return comparison;
-            }
-
-            comparison = left.losses.CompareTo(right.losses);
-            if (comparison != 0)
-            {
-                return comparison;
-            }
-
-            return string.Compare(left.label, right.label, StringComparison.Ordinal);
-        });
 
         if (standings.Count > 0)
         {
@@ -1843,6 +1795,114 @@ public static class AIVsAIBatchRunController
         }
 
         summary.tournamentParticipantsSummary = participantsBuilder.ToString();
+    }
+
+    private static List<TournamentStanding> BuildSortedTournamentStandings(ActiveRun run)
+    {
+        List<TournamentStanding> standings = new List<TournamentStanding>();
+        if (run == null)
+        {
+            return standings;
+        }
+
+        standings = new List<TournamentStanding>(run.tournamentParticipants.Count);
+        for (int i = 0; i < run.tournamentParticipants.Count; i++)
+        {
+            standings.Add(new TournamentStanding
+            {
+                label = GetVariantLabel(run.tournamentParticipants[i])
+            });
+        }
+
+        for (int i = 0; i < run.completedMatches.Count; i++)
+        {
+            ActiveRun.CompletedMatchRecord record = run.completedMatches[i];
+            TournamentStanding standingA = standings[record.logicalVariantAIndex];
+            TournamentStanding standingB = standings[record.logicalVariantBIndex];
+            standingA.games++;
+            standingB.games++;
+            standingA.scoreSum += record.logicalVariantAScore;
+            standingB.scoreSum += record.logicalVariantBScore;
+
+            if (record.isAbort)
+            {
+                standingA.aborts++;
+                standingB.aborts++;
+            }
+            else if (record.isDraw)
+            {
+                standingA.draws++;
+                standingB.draws++;
+            }
+            else if (record.logicalVariantAScore > record.logicalVariantBScore)
+            {
+                standingA.wins++;
+                standingB.losses++;
+            }
+            else
+            {
+                standingA.losses++;
+                standingB.wins++;
+            }
+        }
+
+        standings.Sort((left, right) =>
+        {
+            double leftScoreRate = left.games > 0 ? left.scoreSum / left.games : 0d;
+            double rightScoreRate = right.games > 0 ? right.scoreSum / right.games : 0d;
+            int comparison = rightScoreRate.CompareTo(leftScoreRate);
+            if (comparison != 0)
+            {
+                return comparison;
+            }
+
+            comparison = right.wins.CompareTo(left.wins);
+            if (comparison != 0)
+            {
+                return comparison;
+            }
+
+            comparison = left.losses.CompareTo(right.losses);
+            if (comparison != 0)
+            {
+                return comparison;
+            }
+
+            return string.Compare(left.label, right.label, StringComparison.Ordinal);
+        });
+
+        return standings;
+    }
+
+    private static string BuildTournamentStandingsPreview(ActiveRun run, int maxEntries)
+    {
+        List<TournamentStanding> standings = BuildSortedTournamentStandings(run);
+        if (standings.Count <= 0)
+        {
+            return "Standings pending";
+        }
+
+        int previewCount = Math.Max(1, Math.Min(maxEntries, standings.Count));
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < previewCount; i++)
+        {
+            TournamentStanding standing = standings[i];
+            double scoreRate = standing.games > 0 ? standing.scoreSum / standing.games : 0d;
+            if (i > 0)
+            {
+                builder.Append(" | ");
+            }
+
+            builder.Append(i + 1);
+            builder.Append(". ");
+            builder.Append(standing.label);
+            builder.Append(' ');
+            builder.Append(scoreRate.ToString("P0"));
+            builder.Append(" W");
+            builder.Append(standing.wins);
+        }
+
+        return builder.ToString();
     }
 
     private static double ComputeMean(List<double> values)
