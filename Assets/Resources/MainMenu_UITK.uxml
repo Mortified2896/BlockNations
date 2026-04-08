@@ -136,10 +136,12 @@
                                 <ui:Button name="GeneralSettingsAiLevel3Button" text="Hard" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                             </ui:VisualElement>
                         </ui:VisualElement>
-                        <ui:Label text="AI Style" class="general-settings-section-label" />
-                        <ui:VisualElement class="general-settings-option-row">
-                            <ui:Button name="GeneralSettingsAiStyleDefaultButton" text="Default" class="menu-button general-settings-option-button" />
-                            <ui:Button name="GeneralSettingsAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                        <ui:VisualElement name="GeneralSettingsAiStyleSection">
+                            <ui:Label text="AI Style" class="general-settings-section-label" />
+                            <ui:VisualElement class="general-settings-option-row">
+                                <ui:Button name="GeneralSettingsAiStyleDefaultButton" text="Default" class="menu-button general-settings-option-button" />
+                                <ui:Button name="GeneralSettingsAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                            </ui:VisualElement>
                         </ui:VisualElement>
                     </ui:VisualElement>
 
@@ -157,25 +159,15 @@
                             <ui:Button name="GeneralSettingsWatchAIVsAIButton" text="Watch AI vs AI" class="menu-button general-settings-option-button general-settings-dev-option-button" />
                         </ui:VisualElement>
                         <ui:VisualElement name="GeneralSettingsAIVsAIOptionsSection" style="display: none;">
-                            <ui:Label text="Side A AI Style" class="general-settings-section-label" />
+                            <ui:Label text="Side A AI Model" class="general-settings-section-label" />
                             <ui:VisualElement class="general-settings-option-row">
-                                <ui:Button name="GeneralSettingsSideAAiStyleDefaultButton" text="Default" class="menu-button general-settings-option-button" />
+                                <ui:Button name="GeneralSettingsSideAAiStyleDefaultButton" text="Baseline" class="menu-button general-settings-option-button" />
                                 <ui:Button name="GeneralSettingsSideAAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                             </ui:VisualElement>
-                            <ui:Label text="Side A AI Profile" class="general-settings-section-label" />
+                            <ui:Label text="Side B AI Model" class="general-settings-section-label" />
                             <ui:VisualElement class="general-settings-option-row">
-                                <ui:Button name="GeneralSettingsSideAAiProfileBaselineButton" text="Baseline" class="menu-button general-settings-option-button" />
-                                <ui:Button name="GeneralSettingsSideAAiProfileCalculusButton" text="Calculus AI" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
-                            </ui:VisualElement>
-                            <ui:Label text="Side B AI Style" class="general-settings-section-label" />
-                            <ui:VisualElement class="general-settings-option-row">
-                                <ui:Button name="GeneralSettingsSideBAiStyleDefaultButton" text="Default" class="menu-button general-settings-option-button" />
+                                <ui:Button name="GeneralSettingsSideBAiStyleDefaultButton" text="Baseline" class="menu-button general-settings-option-button" />
                                 <ui:Button name="GeneralSettingsSideBAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
-                            </ui:VisualElement>
-                            <ui:Label text="Side B AI Profile" class="general-settings-section-label" />
-                            <ui:VisualElement class="general-settings-option-row">
-                                <ui:Button name="GeneralSettingsSideBAiProfileBaselineButton" text="Baseline" class="menu-button general-settings-option-button" />
-                                <ui:Button name="GeneralSettingsSideBAiProfileCalculusButton" text="Calculus AI" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                             </ui:VisualElement>
                             <ui:Label text="Simulation Presets" class="general-settings-section-label" />
                             <ui:VisualElement class="general-settings-option-grid">

@@ -53,6 +53,7 @@ public class MainMenuUITKView : MonoBehaviour
     private VisualElement generalSettingsPanel;
     private VisualElement generalSettingsCard;
     private VisualElement generalSettingsAiSection;
+    private VisualElement generalSettingsAiStyleSection;
     private VisualElement generalSettingsDevSection;
     private VisualElement generalSettingsAIVsAIOptionsSection;
     private ScrollView activeGamesList;
@@ -96,10 +97,6 @@ public class MainMenuUITKView : MonoBehaviour
     private Button generalSettingsSideAAiStyleRiderFocusButton;
     private Button generalSettingsSideBAiStyleDefaultButton;
     private Button generalSettingsSideBAiStyleRiderFocusButton;
-    private Button generalSettingsSideAAiProfileBaselineButton;
-    private Button generalSettingsSideAAiProfileCalculusButton;
-    private Button generalSettingsSideBAiProfileBaselineButton;
-    private Button generalSettingsSideBAiProfileCalculusButton;
     private Button generalSettingsAIVsAiPresetQuickButton;
     private Button generalSettingsAIVsAiPresetStandardButton;
     private Button generalSettingsAIVsAiPresetStrictButton;
@@ -159,8 +156,6 @@ public class MainMenuUITKView : MonoBehaviour
     private bool selectedEnableAIVsAIDebugMode;
     private TurnManager.AIRecruitVariant selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
     private TurnManager.AIRecruitVariant selectedSideBAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
-    private TurnManager.AIDebugProfile selectedSideAAIProfile = TurnManager.AIDebugProfile.Baseline;
-    private TurnManager.AIDebugProfile selectedSideBAIProfile = TurnManager.AIDebugProfile.Baseline;
     private AIVsAIBatchRunController.SimulationSettings selectedAIVsAISimulationSettings =
         AIVsAIBatchRunController.GetDefaultSimulationSettings();
     private TurnManager.AIVsAIBatchSpeedPreset selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.UltraFast;
@@ -405,6 +400,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsPanel = root.Q<VisualElement>("GeneralSettingsPanel");
         generalSettingsCard = root.Q<VisualElement>("GeneralSettingsCard");
         generalSettingsAiSection = root.Q<VisualElement>("GeneralSettingsAiSection");
+        generalSettingsAiStyleSection = root.Q<VisualElement>("GeneralSettingsAiStyleSection");
         generalSettingsDevSection = root.Q<VisualElement>("GeneralSettingsDevSection");
         generalSettingsAIVsAIOptionsSection = root.Q<VisualElement>("GeneralSettingsAIVsAIOptionsSection");
         activeGamesList = root.Q<ScrollView>("ActiveGamesList");
@@ -457,10 +453,6 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsSideAAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsSideAAiStyleRiderFocusButton");
         generalSettingsSideBAiStyleDefaultButton = root.Q<Button>("GeneralSettingsSideBAiStyleDefaultButton");
         generalSettingsSideBAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsSideBAiStyleRiderFocusButton");
-        generalSettingsSideAAiProfileBaselineButton = root.Q<Button>("GeneralSettingsSideAAiProfileBaselineButton");
-        generalSettingsSideAAiProfileCalculusButton = root.Q<Button>("GeneralSettingsSideAAiProfileCalculusButton");
-        generalSettingsSideBAiProfileBaselineButton = root.Q<Button>("GeneralSettingsSideBAiProfileBaselineButton");
-        generalSettingsSideBAiProfileCalculusButton = root.Q<Button>("GeneralSettingsSideBAiProfileCalculusButton");
         generalSettingsAIVsAiPresetQuickButton = root.Q<Button>("GeneralSettingsAIVsAiPresetQuickButton");
         generalSettingsAIVsAiPresetStandardButton = root.Q<Button>("GeneralSettingsAIVsAiPresetStandardButton");
         generalSettingsAIVsAiPresetStrictButton = root.Q<Button>("GeneralSettingsAIVsAiPresetStrictButton");
@@ -961,26 +953,6 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsSideBAiStyleRiderFocusButton.clicked += HandleGeneralSettingsSideBAiStyleRiderFocusClicked;
         }
 
-        if (generalSettingsSideAAiProfileBaselineButton != null)
-        {
-            generalSettingsSideAAiProfileBaselineButton.clicked += HandleGeneralSettingsSideAAiProfileBaselineClicked;
-        }
-
-        if (generalSettingsSideAAiProfileCalculusButton != null)
-        {
-            generalSettingsSideAAiProfileCalculusButton.clicked += HandleGeneralSettingsSideAAiProfileCalculusClicked;
-        }
-
-        if (generalSettingsSideBAiProfileBaselineButton != null)
-        {
-            generalSettingsSideBAiProfileBaselineButton.clicked += HandleGeneralSettingsSideBAiProfileBaselineClicked;
-        }
-
-        if (generalSettingsSideBAiProfileCalculusButton != null)
-        {
-            generalSettingsSideBAiProfileCalculusButton.clicked += HandleGeneralSettingsSideBAiProfileCalculusClicked;
-        }
-
         if (generalSettingsAIVsAiPresetQuickButton != null)
         {
             generalSettingsAIVsAiPresetQuickButton.clicked += HandleGeneralSettingsAIVsAiPresetQuickClicked;
@@ -1243,26 +1215,6 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsSideBAiStyleRiderFocusButton != null)
         {
             generalSettingsSideBAiStyleRiderFocusButton.clicked -= HandleGeneralSettingsSideBAiStyleRiderFocusClicked;
-        }
-
-        if (generalSettingsSideAAiProfileBaselineButton != null)
-        {
-            generalSettingsSideAAiProfileBaselineButton.clicked -= HandleGeneralSettingsSideAAiProfileBaselineClicked;
-        }
-
-        if (generalSettingsSideAAiProfileCalculusButton != null)
-        {
-            generalSettingsSideAAiProfileCalculusButton.clicked -= HandleGeneralSettingsSideAAiProfileCalculusClicked;
-        }
-
-        if (generalSettingsSideBAiProfileBaselineButton != null)
-        {
-            generalSettingsSideBAiProfileBaselineButton.clicked -= HandleGeneralSettingsSideBAiProfileBaselineClicked;
-        }
-
-        if (generalSettingsSideBAiProfileCalculusButton != null)
-        {
-            generalSettingsSideBAiProfileCalculusButton.clicked -= HandleGeneralSettingsSideBAiProfileCalculusClicked;
         }
 
         if (generalSettingsAIVsAiPresetQuickButton != null)
@@ -1564,30 +1516,6 @@ public class MainMenuUITKView : MonoBehaviour
         RefreshGeneralSettingsSelectionState();
     }
 
-    private void HandleGeneralSettingsSideAAiProfileBaselineClicked()
-    {
-        selectedSideAAIProfile = TurnManager.AIDebugProfile.Baseline;
-        RefreshGeneralSettingsSelectionState();
-    }
-
-    private void HandleGeneralSettingsSideAAiProfileCalculusClicked()
-    {
-        selectedSideAAIProfile = TurnManager.AIDebugProfile.Baseline;
-        RefreshGeneralSettingsSelectionState();
-    }
-
-    private void HandleGeneralSettingsSideBAiProfileBaselineClicked()
-    {
-        selectedSideBAIProfile = TurnManager.AIDebugProfile.Baseline;
-        RefreshGeneralSettingsSelectionState();
-    }
-
-    private void HandleGeneralSettingsSideBAiProfileCalculusClicked()
-    {
-        selectedSideBAIProfile = TurnManager.AIDebugProfile.Baseline;
-        RefreshGeneralSettingsSelectionState();
-    }
-
     private void HandleGeneralSettingsAIVsAiPresetQuickClicked()
     {
         ApplyAIVsAiSimulationPreset(AIVsAIBatchRunController.SimulationPreset.QuickExploration);
@@ -1746,8 +1674,8 @@ public class MainMenuUITKView : MonoBehaviour
                 selectedAIVsAIBatchSpeedPreset,
                 selectedSideAAIRecruitVariant,
                 selectedSideBAIRecruitVariant,
-                selectedSideAAIProfile,
-                selectedSideBAIProfile,
+                TurnManager.AIDebugProfile.Baseline,
+                TurnManager.AIDebugProfile.Baseline,
                 selectedAIVsAISimulationSettings);
             started = true;
         }
@@ -2446,8 +2374,6 @@ public class MainMenuUITKView : MonoBehaviour
         selectedEnableAIVsAIDebugMode = false;
         selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
         selectedSideBAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
-        selectedSideAAIProfile = TurnManager.AIDebugProfile.Baseline;
-        selectedSideBAIProfile = TurnManager.AIDebugProfile.Baseline;
         selectedAIVsAISimulationSettings = AIVsAIBatchRunController.GetDefaultSimulationSettings();
         selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.UltraFast;
         HideCreateSuccessPanel();
@@ -2544,15 +2470,13 @@ public class MainMenuUITKView : MonoBehaviour
     {
         bool isVsAi = pendingGeneralSettingsMode == PendingGeneralSettingsMode.VsAI;
         bool disableSnapshotHistory = isVsAi && selectedEnableAIVsAIDebugMode;
+        bool hideGlobalAiStyle = isVsAi && selectedEnableAIVsAIDebugMode;
 
-        if (selectedSideAAIProfile == TurnManager.AIDebugProfile.Calculus)
+        if (generalSettingsAiStyleSection != null)
         {
-            selectedSideAAIProfile = TurnManager.AIDebugProfile.Baseline;
-        }
-
-        if (selectedSideBAIProfile == TurnManager.AIDebugProfile.Calculus)
-        {
-            selectedSideBAIProfile = TurnManager.AIDebugProfile.Baseline;
+            generalSettingsAiStyleSection.style.display = hideGlobalAiStyle
+                ? DisplayStyle.None
+                : DisplayStyle.Flex;
         }
 
         if (generalSettingsStoreSnapshotHistoryButton != null)
@@ -2621,26 +2545,6 @@ public class MainMenuUITKView : MonoBehaviour
         UpdateGeneralSettingsSelectionButton(
             generalSettingsSideBAiStyleRiderFocusButton,
             selectedSideBAIRecruitVariant == TurnManager.AIRecruitVariant.RiderFocus);
-        UpdateGeneralSettingsSelectionButton(
-            generalSettingsSideAAiProfileBaselineButton,
-            selectedSideAAIProfile == TurnManager.AIDebugProfile.Baseline);
-        if (generalSettingsSideAAiProfileCalculusButton != null)
-        {
-            generalSettingsSideAAiProfileCalculusButton.style.display = DisplayStyle.None;
-        }
-        UpdateGeneralSettingsSelectionButton(
-            generalSettingsSideAAiProfileCalculusButton,
-            false);
-        UpdateGeneralSettingsSelectionButton(
-            generalSettingsSideBAiProfileBaselineButton,
-            selectedSideBAIProfile == TurnManager.AIDebugProfile.Baseline);
-        if (generalSettingsSideBAiProfileCalculusButton != null)
-        {
-            generalSettingsSideBAiProfileCalculusButton.style.display = DisplayStyle.None;
-        }
-        UpdateGeneralSettingsSelectionButton(
-            generalSettingsSideBAiProfileCalculusButton,
-            false);
         selectedAIVsAISimulationSettings =
             AIVsAIBatchRunController.SanitizeSimulationSettings(selectedAIVsAISimulationSettings);
         UpdateGeneralSettingsSelectionButton(
@@ -3287,6 +3191,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsPanel = null;
         generalSettingsCard = null;
         generalSettingsAiSection = null;
+        generalSettingsAiStyleSection = null;
         generalSettingsDevSection = null;
         generalSettingsAIVsAIOptionsSection = null;
         activeGamesList = null;
@@ -3330,10 +3235,6 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsSideAAiStyleRiderFocusButton = null;
         generalSettingsSideBAiStyleDefaultButton = null;
         generalSettingsSideBAiStyleRiderFocusButton = null;
-        generalSettingsSideAAiProfileBaselineButton = null;
-        generalSettingsSideAAiProfileCalculusButton = null;
-        generalSettingsSideBAiProfileBaselineButton = null;
-        generalSettingsSideBAiProfileCalculusButton = null;
         generalSettingsAIVsAiPresetQuickButton = null;
         generalSettingsAIVsAiPresetStandardButton = null;
         generalSettingsAIVsAiPresetStrictButton = null;

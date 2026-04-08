@@ -107,9 +107,6 @@ public static class AIVsAIBatchRunController
     {
         public sealed class CompletedMatchRecord
         {
-            public bool hasTrackedPerspective;
-            public int trackedSeatIndex;
-            public double trackedScore;
             public double player1Score;
             public double player2Score;
             public bool isDraw;
@@ -527,17 +524,6 @@ public static class AIVsAIBatchRunController
             return record;
         }
 
-        bool sideAIsCalculus = string.Equals(matchResult.sideAProfile, TurnManager.AIDebugProfile.Calculus.ToString(), StringComparison.Ordinal);
-        bool sideBIsCalculus = string.Equals(matchResult.sideBProfile, TurnManager.AIDebugProfile.Calculus.ToString(), StringComparison.Ordinal);
-        bool sideAIsBaseline = string.Equals(matchResult.sideAProfile, TurnManager.AIDebugProfile.Baseline.ToString(), StringComparison.Ordinal);
-        bool sideBIsBaseline = string.Equals(matchResult.sideBProfile, TurnManager.AIDebugProfile.Baseline.ToString(), StringComparison.Ordinal);
-        if ((sideAIsCalculus && sideBIsBaseline) || (sideBIsCalculus && sideAIsBaseline))
-        {
-            record.hasTrackedPerspective = true;
-            record.trackedSeatIndex = sideAIsCalculus ? 0 : 1;
-            record.trackedScore = GetSeatScore(matchResult.winner, record.trackedSeatIndex);
-        }
-
         record.isAbort = string.Equals(matchResult.winner, "Abort", StringComparison.Ordinal);
         record.isDraw = !record.isAbort &&
                         !string.Equals(matchResult.winner, "SideA", StringComparison.Ordinal) &&
@@ -713,13 +699,9 @@ public static class AIVsAIBatchRunController
             return;
         }
 
-        bool isCalculusVsBaseline =
-            run.baseSideAProfile != run.baseSideBProfile &&
-            ((run.baseSideAProfile == TurnManager.AIDebugProfile.Calculus && run.baseSideBProfile == TurnManager.AIDebugProfile.Baseline) ||
-             (run.baseSideBProfile == TurnManager.AIDebugProfile.Calculus && run.baseSideAProfile == TurnManager.AIDebugProfile.Baseline));
         bool isSameProfileControl = run.baseSideAProfile == run.baseSideBProfile;
 
-        if (!isCalculusVsBaseline && !isSameProfileControl)
+        if (!isSameProfileControl)
         {
             summary.comparisonMode = "not_applicable";
             summary.pairedThreshold = "n/a";
@@ -727,10 +709,10 @@ public static class AIVsAIBatchRunController
         }
 
         summary.pairedStatsApplicable = true;
-        summary.comparisonMode = isCalculusVsBaseline ? "profile_comparison" : "seat_bias_control";
-        summary.trackedEntityLabel = isCalculusVsBaseline ? TurnManager.AIDebugProfile.Calculus.ToString() : "Player 1";
-        summary.seat1Label = isCalculusVsBaseline ? "Calculus as Player 1" : "Player 1";
-        summary.seat2Label = isCalculusVsBaseline ? "Calculus as Player 2" : "Player 2";
+        summary.comparisonMode = "seat_bias_control";
+        summary.trackedEntityLabel = "Player 1";
+        summary.seat1Label = "Player 1";
+        summary.seat2Label = "Player 2";
 
         List<double> pairScoreRates = new List<double>();
         int seat1Wins = 0;
@@ -743,48 +725,6 @@ public static class AIVsAIBatchRunController
         for (int i = 0; i < run.completedMatches.Count; i++)
         {
             ActiveRun.CompletedMatchRecord record = run.completedMatches[i];
-            if (isCalculusVsBaseline && !record.hasTrackedPerspective)
-            {
-                continue;
-            }
-
-            if (isCalculusVsBaseline)
-            {
-                if (record.trackedSeatIndex == 0)
-                {
-                    summary.seat1GameCount++;
-                    if (record.trackedScore >= 0.999d)
-                    {
-                        seat1Wins++;
-                    }
-                    else if (record.trackedScore <= 0.001d)
-                    {
-                        seat1Losses++;
-                    }
-                    else
-                    {
-                        seat1Draws++;
-                    }
-                }
-                else
-                {
-                    summary.seat2GameCount++;
-                    if (record.trackedScore >= 0.999d)
-                    {
-                        seat2Wins++;
-                    }
-                    else if (record.trackedScore <= 0.001d)
-                    {
-                        seat2Losses++;
-                    }
-                    else
-                    {
-                        seat2Draws++;
-                    }
-                }
-                continue;
-            }
-
             summary.seat1GameCount++;
             summary.seat2GameCount++;
             if (record.player1Score >= 0.999d)
@@ -839,24 +779,7 @@ public static class AIVsAIBatchRunController
         {
             ActiveRun.CompletedMatchRecord first = run.completedMatches[pairStart];
             ActiveRun.CompletedMatchRecord second = run.completedMatches[pairStart + 1];
-            if (isCalculusVsBaseline)
-            {
-                if (!first.hasTrackedPerspective || !second.hasTrackedPerspective)
-                {
-                    continue;
-                }
-
-                if (first.trackedSeatIndex == second.trackedSeatIndex)
-                {
-                    continue;
-                }
-
-                pairScoreRates.Add((first.trackedScore + second.trackedScore) * 0.5d);
-            }
-            else
-            {
-                pairScoreRates.Add((first.player1Score + second.player1Score) * 0.5d);
-            }
+            pairScoreRates.Add((first.player1Score + second.player1Score) * 0.5d);
         }
 
         summary.completePairCount = pairScoreRates.Count;
