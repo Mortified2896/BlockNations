@@ -39,6 +39,7 @@ public class CameraController : MonoBehaviour
 
     private Camera cam;
     private bool initialFocusApplied;
+    private bool manualCameraInputObservedBeforeInitialFocus;
     private static PendingCameraRestoreState pendingRestoreState;
 
     public static void CaptureCurrentStateForNextSceneLoad()
@@ -94,6 +95,14 @@ public class CameraController : MonoBehaviour
 
         if (cam == null)
             return;
+
+        if (!initialFocusApplied &&
+            (input.DragActive ||
+             input.PinchActive ||
+             Mathf.Abs(input.ScrollDelta) > 0.0001f))
+        {
+            manualCameraInputObservedBeforeInitialFocus = true;
+        }
 
         if (enablePinchZoom && input.PinchActive)
         {
@@ -197,6 +206,15 @@ public class CameraController : MonoBehaviour
             !SaveLoadRequest.HasPendingRequest &&
             GameModeSelection.TryPeek(out TurnManager.GameMode pendingMode) &&
             pendingMode == TurnManager.GameMode.VsAI;
+
+        if (!pendingRestoreState.hasPendingState &&
+            manualCameraInputObservedBeforeInitialFocus &&
+            (turnManager.currentMode == TurnManager.GameMode.VsAI || allowPendingVsAiFocus) &&
+            !ShouldUseAIVsAIDebugOverviewCamera(turnManager))
+        {
+            initialFocusApplied = true;
+            return true;
+        }
 
         if (!allowModeNoneFallback &&
             turnManager.currentMode == TurnManager.GameMode.None &&

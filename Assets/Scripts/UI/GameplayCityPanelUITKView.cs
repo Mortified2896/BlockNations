@@ -301,6 +301,14 @@ public sealed class GameplayCityPanelUITKView : MonoBehaviour
             Button recruitButton = new Button(() => HandleRecruitUnitClicked(unitTypeId));
             recruitButton.name = $"Recruit{unitDefinition.TypeId}Button";
             recruitButton.AddToClassList("gameplay-city-recruit-button");
+            recruitButton.style.flexBasis = 0f;
+            recruitButton.style.minWidth = 0f;
+            recruitButton.style.height = 108f;
+            recruitButton.style.paddingTop = 0f;
+            recruitButton.style.paddingBottom = 0f;
+            recruitButton.style.flexShrink = 1f;
+            recruitButton.style.overflow = Overflow.Visible;
+            recruitButton.style.marginLeft = i > 0 ? 12f : 0f;
             recruitButton.pickingMode = PickingMode.Position;
             cityRecruitRow.Add(recruitButton);
 

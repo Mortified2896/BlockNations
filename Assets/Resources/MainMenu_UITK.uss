@@ -29,6 +29,8 @@
     max-width: none;
     min-height: 68%;
     justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
     padding-top: 116px;
     padding-bottom: 10px;
     background-color: rgba(0, 0, 0, 0);
@@ -62,10 +64,10 @@
     border-right-color: rgba(25, 29, 36, 0.2);
     border-bottom-color: rgba(25, 29, 36, 0.28);
     border-left-color: rgba(25, 29, 36, 0.2);
-    border-top-left-radius: 12px;
-    border-top-right-radius: 12px;
-    border-bottom-left-radius: 12px;
-    border-bottom-right-radius: 12px;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
 }
 
 #MainPanel #MultiplayerButton {
@@ -827,8 +829,8 @@
     min-width: 140px;
     margin-top: 12px;
     margin-bottom: 12px;
-    padding-left: 18px;
-    padding-right: 18px;
+    padding-left: 54px;
+    padding-right: 54px;
     padding-top: 10px;
     padding-bottom: 10px;
     align-self: flex-end;
@@ -954,8 +956,8 @@
 .ui-responsive-root #MainPanel {
     width: 100%;
     max-width: none;
-    padding-left: 10px;
-    padding-right: 10px;
+    padding-left: 0;
+    padding-right: 0;
 }
 
 .ui-responsive-root #MultiplayerPanel .multiplayer-game-card,
@@ -1561,8 +1563,8 @@
 }
 
 .ui-responsive-root.menu-phone-wide #MainPanel {
-    padding-left: 6px;
-    padding-right: 6px;
+    padding-left: 0;
+    padding-right: 0;
     padding-top: 76px;
     padding-bottom: 18px;
 }
@@ -1683,7 +1685,15 @@
     height: 100%;
 }
 
-.general-settings-scroll > .unity-scroll-view__content-container {
+.general-settings-scroll .unity-scroll-view__content-viewport,
+.general-settings-scroll .unity-scroll-view__viewport {
+    flex-grow: 1;
+    min-height: 0;
+}
+
+.general-settings-scroll .unity-scroll-view__content-container {
+    flex-grow: 1;
+    min-height: 100%;
     align-items: center;
     justify-content: center;
     padding-top: 10px;
