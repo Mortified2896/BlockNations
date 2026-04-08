@@ -16,6 +16,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private const string ShareOverlayCloseButtonText = "Close";
     private const string PlayByPostFetchOkResult = "OK";
     private const string PlayByPostEndgameShareText = "Well played! Want to play again?";
+    private const bool EnableAutomaticPostTurnReminderShare = false;
     private const string GameOverOverlayDefaultTitleText = "Game Over";
     private const string NextButtonDefaultText = "Next";
 
@@ -537,6 +538,13 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         if (shouldShowSharePrompt)
         {
             TryPresentPlayByPostSharePrompt(gameId);
+            return;
+        }
+
+        if (!EnableAutomaticPostTurnReminderShare)
+        {
+            // Intentionally disabled for now. Longer term, this should come back
+            // as an explicit player setting instead of always firing after submit.
             return;
         }
 

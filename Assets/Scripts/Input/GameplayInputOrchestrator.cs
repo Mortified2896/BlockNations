@@ -40,6 +40,7 @@ public sealed class GameplayInputOrchestrator : MonoBehaviour
     private FrameSnapshot currentSnapshot;
 
     private bool primaryGestureStarted;
+    private bool primaryGestureStartedFromCurrentPress;
     private bool primaryGestureBlockedByUi;
     private bool dragActive;
     private Vector2 primaryStartPosition;
@@ -231,13 +232,13 @@ public sealed class GameplayInputOrchestrator : MonoBehaviour
         {
             if (primaryDown)
             {
-                primaryGestureStarted = true;
-                primaryGestureBlockedByUi = pointerOverUiNow;
-                dragActive = false;
-                primaryPointerId = pointerId;
-                primaryStartPosition = pointerPosition;
-                lastPrimaryPosition = pointerPosition;
-                primaryStartTime = Time.unscaledTime;
+                BeginPrimaryGesture(pointerId, pointerPosition, pointerOverUiNow, startedFromCurrentPress: true);
+            }
+            else if (!primaryGestureStarted && primaryHeld)
+            {
+                // Scene transitions can reset our transient state while a touch/mouse hold is still active.
+                // Adopt the held pointer so the first drag after entering gameplay is not ignored until release.
+                BeginPrimaryGesture(pointerId, pointerPosition, pointerOverUiNow, startedFromCurrentPress: false);
             }
 
             if (primaryGestureStarted && primaryHeld)
@@ -262,7 +263,10 @@ public sealed class GameplayInputOrchestrator : MonoBehaviour
                 {
                     float movement = (pointerPosition - primaryStartPosition).magnitude;
                     float duration = Time.unscaledTime - primaryStartTime;
-                    bool tapAllowed = !dragActive && !primaryGestureBlockedByUi && !pointerOverUiNow;
+                    bool tapAllowed = primaryGestureStartedFromCurrentPress &&
+                                      !dragActive &&
+                                      !primaryGestureBlockedByUi &&
+                                      !pointerOverUiNow;
                     if (tapAllowed && movement < dragStartThresholdPixels && duration <= tapMaxDurationSeconds)
                     {
                         snapshot.TapThisFrame = true;
@@ -466,9 +470,22 @@ public sealed class GameplayInputOrchestrator : MonoBehaviour
         currentSnapshot = default;
     }
 
+    private void BeginPrimaryGesture(int pointerId, Vector2 pointerPosition, bool blockedByUi, bool startedFromCurrentPress)
+    {
+        primaryGestureStarted = true;
+        primaryGestureStartedFromCurrentPress = startedFromCurrentPress;
+        primaryGestureBlockedByUi = blockedByUi;
+        dragActive = false;
+        primaryPointerId = pointerId;
+        primaryStartPosition = pointerPosition;
+        lastPrimaryPosition = pointerPosition;
+        primaryStartTime = Time.unscaledTime;
+    }
+
     private void ClearPrimaryGestureState()
     {
         primaryGestureStarted = false;
+        primaryGestureStartedFromCurrentPress = false;
         primaryGestureBlockedByUi = false;
         dragActive = false;
         primaryPointerId = -1;

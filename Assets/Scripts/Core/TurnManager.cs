@@ -3804,6 +3804,21 @@ public class TurnManager : MonoBehaviour
         return aiRecruitVariant;
     }
 
+    private static AILocalDecisionFeatures GetPlayVsAIPresetFeatures(AIRecruitVariant recruitVariant)
+    {
+        switch (recruitVariant)
+        {
+            case AIRecruitVariant.RiderFocus:
+                return AILocalDecisionFeatures.OffensiveObviousWin;
+
+            case AIRecruitVariant.Default:
+            default:
+                return AILocalDecisionFeatures.OffensiveObviousWin |
+                       AILocalDecisionFeatures.ExchangeScoring |
+                       AILocalDecisionFeatures.DefensiveVeto;
+        }
+    }
+
     private AILocalDecisionFeatures GetAILocalDecisionFeaturesForSide(bool actingSideIsPlayerOwned)
     {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -3812,6 +3827,11 @@ public class TurnManager : MonoBehaviour
             return actingSideIsPlayerOwned ? aiVsAiSideAFeatures : aiVsAiSideBFeatures;
         }
 #endif
+        if (currentMode == GameMode.VsAI)
+        {
+            return GetPlayVsAIPresetFeatures(aiRecruitVariant);
+        }
+
         return aiLocalDecisionFeatures;
     }
 
