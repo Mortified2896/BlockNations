@@ -3117,6 +3117,12 @@ public class TurnManager : MonoBehaviour
     }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private void ClearAIVsAICompletedTournamentAutoRestartState()
+    {
+        aiVsAiCompletedTournamentAutoRestartPending = false;
+        aiVsAiCompletedTournamentAutoRestartMessage = string.Empty;
+    }
+
     public bool IsAIVsAIDebugModeEnabledForUi()
     {
         return IsAIVsAIDebugModeActive();
@@ -3158,7 +3164,7 @@ public class TurnManager : MonoBehaviour
         aiVsAiCompletedTournamentAutoRestartPending = false;
         aiVsAiDebugRestartPending = false;
         ShowGameOverPopup(aiVsAiCompletedTournamentAutoRestartMessage, writeLog: false);
-        aiVsAiCompletedTournamentAutoRestartMessage = string.Empty;
+        ClearAIVsAICompletedTournamentAutoRestartState();
         RefreshEndTurnButtonInteractable(force: true);
     }
 #else
@@ -3368,6 +3374,8 @@ public class TurnManager : MonoBehaviour
         if (currentMode != GameMode.VsAI || string.IsNullOrWhiteSpace(currentGameId))
         {
             enableAIVsAIDebugMode = false;
+            aiVsAiDebugRestartPending = false;
+            ClearAIVsAICompletedTournamentAutoRestartState();
             return;
         }
 
@@ -3446,6 +3454,7 @@ public class TurnManager : MonoBehaviour
         aiVsAiBatchSpeedPreset = settings.batchSpeedPreset;
         aiVsAiDebugPaused = false;
         aiVsAiDebugRestartPending = false;
+        ClearAIVsAICompletedTournamentAutoRestartState();
     }
 #endif
 
@@ -5224,8 +5233,7 @@ public class TurnManager : MonoBehaviour
         if (currentMode != GameMode.VsAI || !enableAIVsAIDebugMode)
         {
             aiVsAiDebugRestartPending = false;
-            aiVsAiCompletedTournamentAutoRestartPending = false;
-            aiVsAiCompletedTournamentAutoRestartMessage = string.Empty;
+            ClearAIVsAICompletedTournamentAutoRestartState();
             yield break;
         }
 
@@ -5266,8 +5274,7 @@ public class TurnManager : MonoBehaviour
             nextSideAProfile,
             nextSideBProfile);
 
-        aiVsAiCompletedTournamentAutoRestartPending = false;
-        aiVsAiCompletedTournamentAutoRestartMessage = string.Empty;
+        ClearAIVsAICompletedTournamentAutoRestartState();
         Time.timeScale = 1f;
         CameraController.ClearPendingRestoreState();
         Scene currentScene = SceneManager.GetActiveScene();
