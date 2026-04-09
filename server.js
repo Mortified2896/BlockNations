@@ -118,21 +118,39 @@ function sendUnauthorized(res) {
   return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
 }
 
+function logTurnStage(stage, details) {
+  const suffix = details ? ` ${details}` : "";
+  console.log(`[pbp-turn] ${new Date().toISOString()} ${stage}${suffix}`);
+}
+
 function requirePbpApiKey(req, res, next) {
+  const shouldLogTurnAuth = req.path === "/pbp/turn";
   const expectedSecret = getConfiguredPbpSharedSecret();
   if (!expectedSecret) {
+    if (shouldLogTurnAuth) {
+      logTurnStage("auth_deny", "reason=missing_server_secret");
+    }
     return sendUnauthorized(res);
   }
 
   const providedHeaderValue = req.get(PBP_API_KEY_HEADER_NAME);
   if (typeof providedHeaderValue !== "string" || providedHeaderValue.length === 0) {
+    if (shouldLogTurnAuth) {
+      logTurnStage("auth_deny", "reason=missing_header");
+    }
     return sendUnauthorized(res);
   }
 
   if (!timingSafeEqualUtf8(providedHeaderValue, expectedSecret)) {
+    if (shouldLogTurnAuth) {
+      logTurnStage("auth_deny", "reason=secret_mismatch");
+    }
     return sendUnauthorized(res);
   }
 
+  if (shouldLogTurnAuth) {
+    logTurnStage("auth_allow");
+  }
   next();
 }
 
@@ -217,12 +235,18 @@ function enforceRateLimit(req, res, routeKey, maxRequests) {
 
 function validateSubmitInput(body) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return { ok: false };
+    return { ok: false, reason: "body_not_object" };
   }
 
   const { gameId, seq, json } = body;
-  if (!isValidGameId(gameId) || !isValidSeq(seq) || !isValidTurnJson(json)) {
-    return { ok: false };
+  if (!isValidGameId(gameId)) {
+    return { ok: false, reason: "invalid_game_id" };
+  }
+  if (!isValidSeq(seq)) {
+    return { ok: false, reason: "invalid_seq" };
+  }
+  if (!isValidTurnJson(json)) {
+    return { ok: false, reason: "invalid_json_payload" };
   }
 
   return { ok: true, value: { gameId, seq, json } };
@@ -573,22 +597,29 @@ async function withClaimLock(gameHash, operation) {
 }
 
 app.post("/pbp/turn", requirePbpApiKey, async (req, res) => {
+  logTurnStage("request_accepted");
+
   if (enforceRateLimit(req, res, "POST /pbp/turn", RATE_LIMIT_POST_TURN_MAX)) {
+    logTurnStage("rate_limited", `route=POST_/pbp/turn`);
     return;
   }
 
   const validated = validateSubmitInput(req.body);
   if (!validated.ok) {
+    logTurnStage("invalid_input", `reason=${validated.reason || "unknown"}`);
     return sendInvalidInput(res);
   }
   const { gameId, seq, json } = validated.value;
 
   const byteLength = Buffer.byteLength(json, "utf8");
+  const gameHash = sha256Hex(gameId);
+  logTurnStage("validated", `game=${gameHash} seq=${seq} bytes=${byteLength}`);
+
   if (byteLength > JSON_BYTE_CAP) {
+    logTurnStage("body_too_large", `game=${gameHash} seq=${seq} bytes=${byteLength} cap=${JSON_BYTE_CAP}`);
     return sendInvalidInput(res);
   }
 
-  const gameHash = sha256Hex(gameId);
   const gameDir = path.join(DATA_ROOT, gameHash);
   const destFile = path.join(gameDir, `turn_${seq}.json`);
   const incomingBytes = Buffer.from(json, "utf8");
@@ -626,6 +657,7 @@ app.post("/pbp/turn", requirePbpApiKey, async (req, res) => {
   );
 
   try {
+    logTurnStage("write_start", `game=${gameHash} seq=${seq} bytes=${byteLength}`);
     await fsp.writeFile(tmpPath, incomingBytes, { flag: "wx" });
 
     try {
@@ -878,6 +910,16 @@ app.get("/health", (req, res) => {
 });
 
 app.use((err, req, res, _next) => {
+  if (req && req.path === "/pbp/turn") {
+    if (err && err.type === "entity.too.large") {
+      logTurnStage("body_parse_error", `reason=entity_too_large limit=${JSON_BODY_LIMIT}`);
+    } else if (err instanceof SyntaxError) {
+      logTurnStage("body_parse_error", "reason=invalid_json");
+    } else if (err && err.status === 400) {
+      logTurnStage("body_parse_error", `reason=http_400 type=${err.type || "unknown"}`);
+    }
+  }
+
   if (err && (err.type === "entity.too.large" || err instanceof SyntaxError)) {
     return res.status(400).json({ ok: false, error: "INVALID_INPUT" });
   }
