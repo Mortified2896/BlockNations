@@ -16,7 +16,10 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private const string ShareOverlayCloseButtonText = "Close";
     private const string PlayByPostFetchOkResult = "OK";
     private const string PlayByPostEndgameShareText = "Well played! Want to play again?";
-    private const bool EnableAutomaticPostTurnReminderShare = false;
+    private const string SettingsButtonText = "Settings";
+    private const string PbpSettingsTitleText = "Settings";
+    private const string PbpSettingsCloseButtonText = "Close";
+    private const string MessageAfterTurnEndToggleLabel = "Message after Turn End";
     private const string GameOverOverlayDefaultTitleText = "Game Over";
     private const string NextButtonDefaultText = "Next";
 
@@ -42,11 +45,15 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private VisualElement hudRoot;
     private VisualElement defaultBottomPanel;
     private UnityEngine.UIElements.Button menuButton;
+    private UnityEngine.UIElements.Button settingsButton;
     private UnityEngine.UIElements.Button nextButton;
     private VisualElement pbpShareOverlay;
     private Label pbpShareCodeLabel;
     private UnityEngine.UIElements.Button pbpShareCopyButton;
     private UnityEngine.UIElements.Button pbpShareCloseButton;
+    private VisualElement pbpSettingsOverlay;
+    private Toggle pbpMessageAfterTurnEndToggle;
+    private UnityEngine.UIElements.Button pbpSettingsCloseButton;
     private VisualElement gameOverOverlay;
     private Label gameOverTitleLabel;
     private Label gameOverMessageLabel;
@@ -98,6 +105,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     {
         RefreshTurnManagerSubscription(forceClear: true);
         HidePlayByPostShareOverlay();
+        HidePlayByPostSettingsOverlay();
         ClearUiCache();
     }
 
@@ -279,14 +287,15 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         hudRoot = root.Q<VisualElement>("GameplayBottomHudRoot") ?? root;
         defaultBottomPanel = root.Q<VisualElement>("DefaultBottomPanel");
         menuButton = root.Q<UnityEngine.UIElements.Button>("MenuButton");
+        settingsButton = root.Q<UnityEngine.UIElements.Button>("SettingsButton");
         nextButton = root.Q<UnityEngine.UIElements.Button>("NextButton");
 
-        if (defaultBottomPanel == null || menuButton == null || nextButton == null)
+        if (defaultBottomPanel == null || menuButton == null || settingsButton == null || nextButton == null)
         {
             if (!warnedMissingControls)
             {
                 warnedMissingControls = true;
-                Debug.LogWarning("GameplayBottomHudUITKView: DefaultBottomPanel/MenuButton/NextButton not found in UIDocument source asset.", this);
+                Debug.LogWarning("GameplayBottomHudUITKView: DefaultBottomPanel/MenuButton/SettingsButton/NextButton not found in UIDocument source asset.", this);
             }
 
             uiReady = false;
@@ -294,7 +303,9 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         }
 
         warnedMissingControls = false;
+        settingsButton.text = SettingsButtonText;
         EnsurePlayByPostShareOverlay();
+        EnsurePlayByPostSettingsOverlay();
         EnsureGameOverOverlay();
         ConfigurePickingModes();
         BindButtons();
@@ -359,6 +370,11 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             menuButton.pickingMode = PickingMode.Position;
         }
 
+        if (settingsButton != null)
+        {
+            settingsButton.pickingMode = PickingMode.Position;
+        }
+
         if (nextButton != null)
         {
             nextButton.pickingMode = PickingMode.Position;
@@ -367,6 +383,9 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         bool overlayVisible = pbpShareOverlay != null &&
                               pbpShareOverlay.resolvedStyle.display != DisplayStyle.None;
         SetShareOverlayInteractionEnabled(overlayVisible);
+        bool settingsOverlayVisible = pbpSettingsOverlay != null &&
+                                      pbpSettingsOverlay.resolvedStyle.display != DisplayStyle.None;
+        SetPbpSettingsOverlayInteractionEnabled(settingsOverlayVisible);
     }
 
     private void BindButtons()
@@ -379,6 +398,11 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         if (menuButton != null)
         {
             menuButton.clicked += HandleMenuClicked;
+        }
+
+        if (settingsButton != null)
+        {
+            settingsButton.clicked += HandleSettingsClicked;
         }
 
         if (nextButton != null)
@@ -394,6 +418,16 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         if (pbpShareCloseButton != null)
         {
             pbpShareCloseButton.clicked += HandlePbpShareCloseClicked;
+        }
+
+        if (pbpSettingsCloseButton != null)
+        {
+            pbpSettingsCloseButton.clicked += HandlePbpSettingsCloseClicked;
+        }
+
+        if (pbpMessageAfterTurnEndToggle != null)
+        {
+            pbpMessageAfterTurnEndToggle.RegisterValueChangedCallback(HandleMessageAfterTurnEndToggleChanged);
         }
 
         if (gameOverPrimaryButton != null)
@@ -426,6 +460,11 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             menuButton.clicked -= HandleMenuClicked;
         }
 
+        if (settingsButton != null)
+        {
+            settingsButton.clicked -= HandleSettingsClicked;
+        }
+
         if (nextButton != null)
         {
             nextButton.clicked -= HandleNextClicked;
@@ -439,6 +478,16 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         if (pbpShareCloseButton != null)
         {
             pbpShareCloseButton.clicked -= HandlePbpShareCloseClicked;
+        }
+
+        if (pbpSettingsCloseButton != null)
+        {
+            pbpSettingsCloseButton.clicked -= HandlePbpSettingsCloseClicked;
+        }
+
+        if (pbpMessageAfterTurnEndToggle != null)
+        {
+            pbpMessageAfterTurnEndToggle.UnregisterValueChangedCallback(HandleMessageAfterTurnEndToggleChanged);
         }
 
         if (gameOverPrimaryButton != null)
@@ -475,6 +524,23 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         }
     }
 
+    private void HandleSettingsClicked()
+    {
+        if (turnManager == null || turnManager.currentMode != TurnManager.GameMode.PlayByPost)
+        {
+            return;
+        }
+
+        if (pbpSettingsOverlay != null &&
+            pbpSettingsOverlay.resolvedStyle.display != DisplayStyle.None)
+        {
+            HidePlayByPostSettingsOverlay();
+            return;
+        }
+
+        ShowPlayByPostSettingsOverlay();
+    }
+
     private void HandlePbpShareCopyClicked()
     {
         string gameId = visibleSharePromptGameId;
@@ -492,6 +558,16 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private void HandlePbpShareCloseClicked()
     {
         HidePlayByPostShareOverlay();
+    }
+
+    private void HandlePbpSettingsCloseClicked()
+    {
+        HidePlayByPostSettingsOverlay();
+    }
+
+    private void HandleMessageAfterTurnEndToggleChanged(ChangeEvent<bool> evt)
+    {
+        PlayByPostUserSettings.SetMessageAfterTurnEndEnabled(evt.newValue);
     }
 
     private void HandleGameOverPrimaryClicked()
@@ -541,10 +617,10 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             return;
         }
 
-        if (!EnableAutomaticPostTurnReminderShare)
+        if (!PlayByPostUserSettings.IsMessageAfterTurnEndEnabled())
         {
-            // Intentionally disabled for now. Longer term, this should come back
-            // as an explicit player setting instead of always firing after submit.
+            // This is player-configurable in the PbP settings panel instead of
+            // always firing automatically after a successful submit.
             return;
         }
 
@@ -611,9 +687,17 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
 
         defaultBottomPanel.style.display = showDefaultBottom ? DisplayStyle.Flex : DisplayStyle.None;
 
+        bool isPlayByPost = turnManager != null && turnManager.currentMode == TurnManager.GameMode.PlayByPost;
+
         if (menuButton != null)
         {
             menuButton.SetEnabled(showDefaultBottom);
+        }
+
+        if (settingsButton != null)
+        {
+            settingsButton.style.display = isPlayByPost ? DisplayStyle.Flex : DisplayStyle.None;
+            settingsButton.SetEnabled(showDefaultBottom && isPlayByPost);
         }
 
         if (nextButton != null)
@@ -638,6 +722,11 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
                 cachedNextButtonEnabled = resolvedNextButtonEnabled;
                 hasCachedNextButtonState = true;
             }
+        }
+
+        if (!isPlayByPost || !showDefaultBottom)
+        {
+            HidePlayByPostSettingsOverlay();
         }
 
         RefreshGameOverOverlayState();
@@ -783,6 +872,106 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         pbpShareOverlay.Add(card);
         hudRoot.Add(pbpShareOverlay);
         SetShareOverlayInteractionEnabled(false);
+    }
+
+    private void EnsurePlayByPostSettingsOverlay()
+    {
+        if (hudRoot == null || root == null)
+        {
+            return;
+        }
+
+        pbpSettingsOverlay = root.Q<VisualElement>("PbpSettingsOverlay");
+        pbpMessageAfterTurnEndToggle = root.Q<Toggle>("PbpMessageAfterTurnEndToggle");
+        pbpSettingsCloseButton = root.Q<UnityEngine.UIElements.Button>("PbpSettingsCloseButton");
+        if (pbpSettingsOverlay != null &&
+            pbpMessageAfterTurnEndToggle != null &&
+            pbpSettingsCloseButton != null)
+        {
+            pbpMessageAfterTurnEndToggle.SetValueWithoutNotify(PlayByPostUserSettings.IsMessageAfterTurnEndEnabled());
+            return;
+        }
+
+        if (pbpSettingsOverlay == null)
+        {
+            pbpSettingsOverlay = new VisualElement
+            {
+                name = "PbpSettingsOverlay",
+                pickingMode = PickingMode.Position
+            };
+            hudRoot.Add(pbpSettingsOverlay);
+        }
+        else
+        {
+            pbpSettingsOverlay.Clear();
+        }
+
+        pbpSettingsOverlay.style.position = Position.Absolute;
+        pbpSettingsOverlay.style.left = 0f;
+        pbpSettingsOverlay.style.right = 0f;
+        pbpSettingsOverlay.style.top = 0f;
+        pbpSettingsOverlay.style.bottom = 0f;
+        pbpSettingsOverlay.style.alignItems = Align.Center;
+        pbpSettingsOverlay.style.justifyContent = Justify.FlexEnd;
+        pbpSettingsOverlay.style.backgroundColor = new Color(0f, 0f, 0f, 0.52f);
+        pbpSettingsOverlay.style.display = DisplayStyle.None;
+        pbpSettingsOverlay.style.visibility = Visibility.Hidden;
+
+        VisualElement card = new VisualElement
+        {
+            name = "PbpSettingsCard",
+            pickingMode = PickingMode.Ignore
+        };
+        card.style.width = 680f;
+        card.style.maxWidth = new Length(92f, LengthUnit.Percent);
+        card.style.marginBottom = 168f;
+        card.style.paddingLeft = 28f;
+        card.style.paddingRight = 28f;
+        card.style.paddingTop = 28f;
+        card.style.paddingBottom = 28f;
+        card.style.backgroundColor = new Color(0.08f, 0.10f, 0.14f, 0.96f);
+        card.style.borderTopLeftRadius = 16f;
+        card.style.borderTopRightRadius = 16f;
+        card.style.borderBottomLeftRadius = 16f;
+        card.style.borderBottomRightRadius = 16f;
+
+        Label title = new Label(PbpSettingsTitleText)
+        {
+            name = "PbpSettingsTitleLabel",
+            pickingMode = PickingMode.Ignore
+        };
+        title.style.fontSize = 38f;
+        title.style.unityFontStyleAndWeight = FontStyle.Bold;
+        title.style.color = Color.white;
+
+        pbpMessageAfterTurnEndToggle = new Toggle(MessageAfterTurnEndToggleLabel)
+        {
+            name = "PbpMessageAfterTurnEndToggle",
+            pickingMode = PickingMode.Position
+        };
+        pbpMessageAfterTurnEndToggle.style.marginTop = 22f;
+        pbpMessageAfterTurnEndToggle.style.marginBottom = 26f;
+        pbpMessageAfterTurnEndToggle.style.minHeight = 70f;
+        pbpMessageAfterTurnEndToggle.style.fontSize = 28f;
+        pbpMessageAfterTurnEndToggle.style.color = new Color(0.94f, 0.95f, 0.98f, 1f);
+        pbpMessageAfterTurnEndToggle.SetValueWithoutNotify(PlayByPostUserSettings.IsMessageAfterTurnEndEnabled());
+
+        pbpSettingsCloseButton = new UnityEngine.UIElements.Button
+        {
+            name = "PbpSettingsCloseButton",
+            text = PbpSettingsCloseButtonText,
+            pickingMode = PickingMode.Position
+        };
+        pbpSettingsCloseButton.style.height = 78f;
+        pbpSettingsCloseButton.style.fontSize = 28f;
+        pbpSettingsCloseButton.style.color = Color.white;
+        pbpSettingsCloseButton.style.backgroundColor = new Color(0.28f, 0.32f, 0.40f, 0.95f);
+
+        card.Add(title);
+        card.Add(pbpMessageAfterTurnEndToggle);
+        card.Add(pbpSettingsCloseButton);
+        pbpSettingsOverlay.Add(card);
+        SetPbpSettingsOverlayInteractionEnabled(false);
     }
 
     private void EnsureGameOverOverlay()
@@ -975,6 +1164,40 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         visibleSharePromptGameId = string.Empty;
     }
 
+    private void ShowPlayByPostSettingsOverlay()
+    {
+        if (!EnsureUiReady())
+        {
+            return;
+        }
+
+        EnsurePlayByPostSettingsOverlay();
+        if (pbpSettingsOverlay == null)
+        {
+            return;
+        }
+
+        if (pbpMessageAfterTurnEndToggle != null)
+        {
+            pbpMessageAfterTurnEndToggle.SetValueWithoutNotify(PlayByPostUserSettings.IsMessageAfterTurnEndEnabled());
+        }
+
+        pbpSettingsOverlay.style.display = DisplayStyle.Flex;
+        pbpSettingsOverlay.style.visibility = Visibility.Visible;
+        SetPbpSettingsOverlayInteractionEnabled(true);
+    }
+
+    private void HidePlayByPostSettingsOverlay()
+    {
+        if (pbpSettingsOverlay != null)
+        {
+            pbpSettingsOverlay.style.display = DisplayStyle.None;
+            pbpSettingsOverlay.style.visibility = Visibility.Hidden;
+        }
+
+        SetPbpSettingsOverlayInteractionEnabled(false);
+    }
+
     private void SetShareOverlayInteractionEnabled(bool enabled)
     {
         if (pbpShareOverlay != null)
@@ -993,6 +1216,27 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         {
             pbpShareCloseButton.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
             pbpShareCloseButton.SetEnabled(enabled);
+        }
+    }
+
+    private void SetPbpSettingsOverlayInteractionEnabled(bool enabled)
+    {
+        if (pbpSettingsOverlay != null)
+        {
+            pbpSettingsOverlay.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
+            pbpSettingsOverlay.SetEnabled(enabled);
+        }
+
+        if (pbpMessageAfterTurnEndToggle != null)
+        {
+            pbpMessageAfterTurnEndToggle.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
+            pbpMessageAfterTurnEndToggle.SetEnabled(enabled);
+        }
+
+        if (pbpSettingsCloseButton != null)
+        {
+            pbpSettingsCloseButton.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
+            pbpSettingsCloseButton.SetEnabled(enabled);
         }
     }
 
@@ -1216,6 +1460,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     {
         RefreshTurnManagerSubscription(forceClear: true);
         HidePlayByPostShareOverlay();
+        HidePlayByPostSettingsOverlay();
 
         if (uiDocument != null)
         {
@@ -1237,11 +1482,15 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         hudRoot = null;
         defaultBottomPanel = null;
         menuButton = null;
+        settingsButton = null;
         nextButton = null;
         pbpShareOverlay = null;
         pbpShareCodeLabel = null;
         pbpShareCopyButton = null;
         pbpShareCloseButton = null;
+        pbpSettingsOverlay = null;
+        pbpMessageAfterTurnEndToggle = null;
+        pbpSettingsCloseButton = null;
         gameOverOverlay = null;
         gameOverTitleLabel = null;
         gameOverMessageLabel = null;

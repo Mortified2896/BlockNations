@@ -14,6 +14,8 @@ public class MainMenuUITKView : MonoBehaviour
     private const int VisiblePlayerIdSuffixLength = 5;
     private const int ProfileStatusHideDelayMs = 1800;
     private const int InvalidPointerId = -1;
+    private const string ProfileBackButtonLabel = "Back";
+    private const string ProfileContinueButtonLabel = "Continue";
     private const string WidePhoneMenuClass = "menu-phone-wide";
     private const float WidePhoneShortestSideMin = 428f;
     private const float WidePhoneHeightMin = 900f;
@@ -1626,6 +1628,7 @@ public class MainMenuUITKView : MonoBehaviour
     private void HandleProfileClicked()
     {
         profileOpenedFromMultiplayerRedirect = false;
+        RefreshProfileBackButtonLabel();
         ShowProfilePanel();
     }
 
@@ -2044,6 +2047,7 @@ public class MainMenuUITKView : MonoBehaviour
         bool returnToMultiplayer = profileOpenedFromMultiplayerRedirect &&
             LocalPlayerProfileStore.HasRecognizableTypedDisplayName(profileData.TypedDisplayName);
         profileOpenedFromMultiplayerRedirect = false;
+        RefreshProfileBackButtonLabel();
 
         if (returnToMultiplayer)
         {
@@ -2505,6 +2509,7 @@ public class MainMenuUITKView : MonoBehaviour
         if (!LocalPlayerProfileStore.HasRecognizableTypedDisplayName(profileData.TypedDisplayName))
         {
             profileOpenedFromMultiplayerRedirect = true;
+            RefreshProfileBackButtonLabel();
             ShowProfilePanel();
             return;
         }
@@ -2534,6 +2539,7 @@ public class MainMenuUITKView : MonoBehaviour
         StopRefreshCountdownTimer();
         profileData = LocalPlayerProfileStore.GetOrCreateProfile();
         RefreshProfileLabels();
+        RefreshProfileBackButtonLabel();
         ClearProfileStatus();
         HideGeneralSettingsPanel();
         HideJoinPanel();
@@ -2557,6 +2563,18 @@ public class MainMenuUITKView : MonoBehaviour
         {
             profilePanel.schedule.Execute(LogProfileResponsiveDebugInfo).ExecuteLater(0);
         }
+    }
+
+    private void RefreshProfileBackButtonLabel()
+    {
+        if (profileBackButton == null)
+        {
+            return;
+        }
+
+        profileBackButton.text = profileOpenedFromMultiplayerRedirect
+            ? ProfileContinueButtonLabel
+            : ProfileBackButtonLabel;
     }
 
     private void LogProfileResponsiveDebugInfo()

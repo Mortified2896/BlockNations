@@ -3,6 +3,7 @@
     <ui:VisualElement name="GameplayBottomHudRoot" class="gameplay-bottom-hud-root">
         <ui:VisualElement name="DefaultBottomPanel" class="gameplay-bottom-panel">
             <ui:Button name="MenuButton" text="Menu" class="gameplay-bottom-button gameplay-bottom-menu" />
+            <ui:Button name="SettingsButton" text="Settings" class="gameplay-bottom-button gameplay-bottom-settings" />
             <ui:Button name="NextButton" text="Next" class="gameplay-bottom-button gameplay-bottom-next" />
         </ui:VisualElement>
     </ui:VisualElement>

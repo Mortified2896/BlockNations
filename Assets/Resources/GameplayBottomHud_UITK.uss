@@ -23,6 +23,8 @@
 
 .gameplay-bottom-button {
     min-width: 220px;
+    flex-grow: 1;
+    flex-basis: 0;
     height: 120px;
     font-size: 52px;
     color: rgb(255, 255, 255);
