@@ -18,6 +18,9 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
     private bool initialized;
     private bool isAvailable;
     private string normalizedBaseUrl;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private static bool hasLoggedApiKeySource;
+#endif
 
     public string TransportName => "Http";
     public bool IsAvailable => isAvailable;
@@ -537,16 +540,41 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         string fromEnv = Environment.GetEnvironmentVariable(ApiKeyEnvVarName);
         if (!string.IsNullOrEmpty(fromEnv))
         {
+            LogApiKeySourceOnce("env var");
             return fromEnv;
         }
 
-        string fromPrefs = PlayerPrefs.GetString(DevClientInstanceScope.ScopePlayerPrefsKey(ApiKeyPlayerPrefsKeyRaw), string.Empty);
-        if (!string.IsNullOrEmpty(fromPrefs))
+        string scopedPrefsKey = DevClientInstanceScope.ScopePlayerPrefsKey(ApiKeyPlayerPrefsKeyRaw);
+        string fromScopedPrefs = PlayerPrefs.GetString(scopedPrefsKey, string.Empty);
+        if (!string.IsNullOrEmpty(fromScopedPrefs))
         {
-            return fromPrefs;
+            LogApiKeySourceOnce($"scoped PlayerPrefs ({scopedPrefsKey})");
+            return fromScopedPrefs;
         }
 
+        string fromLegacyPrefs = PlayerPrefs.GetString(ApiKeyPlayerPrefsKeyRaw, string.Empty);
+        if (!string.IsNullOrEmpty(fromLegacyPrefs))
+        {
+            LogApiKeySourceOnce($"legacy PlayerPrefs ({ApiKeyPlayerPrefsKeyRaw})");
+            return fromLegacyPrefs;
+        }
+
+        LogApiKeySourceOnce("hardcoded fallback");
         return DefaultPbpApiKey;
+    }
+
+    [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+    private static void LogApiKeySourceOnce(string source)
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (hasLoggedApiKeySource || !PbpDebugSettingsLoader.EnableTransportLogs)
+        {
+            return;
+        }
+
+        hasLoggedApiKeySource = true;
+        Debug.Log($"PBp API key source: {source}");
+#endif
     }
 
     private static void ApplyPbpApiKeyHeader(UnityWebRequest req)
