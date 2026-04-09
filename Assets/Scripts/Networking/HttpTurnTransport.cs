@@ -10,7 +10,8 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
     private const string ApiKeyHeaderName = "X-BlockNations-Api-Key";
     private const string ApiKeyPlayerPrefsKeyRaw = "pbp_api_key";
     private const string ApiKeyEnvVarName = "PBP_SHARED_SECRET";
-    private const string ApiKeyLocalSecretRelativePath = "UserSettings/pbp-api-key.local";
+    private const string ApiKeyStagingSecretRelativePath = "UserSettings/pbp-api-key.staging";
+    private const string ApiKeyDefaultSecretRelativePath = "UserSettings/pbp-api-key.default";
 
     [SerializeField]
     [Tooltip("UnityWebRequest timeout in seconds (0 = no timeout).")]
@@ -573,27 +574,42 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
     private static string GetConfiguredPbpApiKey()
     {
         string fromEnv = NormalizeApiKeyCandidate(Environment.GetEnvironmentVariable(ApiKeyEnvVarName));
-        string fromLocalSecretFile = TryReadLocalSecretFileApiKey();
+        string fromStagingSecretFile = TryReadStagingSecretFileApiKey();
+        string fromDefaultSecretFile = TryReadApiKeyFromProjectRelativePath(ApiKeyDefaultSecretRelativePath);
         string scopedPrefsKey = DevClientInstanceScope.ScopePlayerPrefsKey(ApiKeyPlayerPrefsKeyRaw);
         string fromScopedPrefs = NormalizeApiKeyCandidate(PlayerPrefs.GetString(scopedPrefsKey, string.Empty));
         string fromLegacyPrefs = NormalizeApiKeyCandidate(PlayerPrefs.GetString(ApiKeyPlayerPrefsKeyRaw, string.Empty));
 
         if (!string.IsNullOrEmpty(fromEnv))
         {
-            LogApiKeyResolutionOnce("env var", scopedPrefsKey, fromEnv, fromLocalSecretFile, fromScopedPrefs, fromLegacyPrefs);
+            LogApiKeyResolutionOnce("env var", scopedPrefsKey, fromEnv, fromStagingSecretFile, fromDefaultSecretFile, fromScopedPrefs, fromLegacyPrefs);
             return fromEnv;
         }
 
-        if (!string.IsNullOrEmpty(fromLocalSecretFile))
+        if (!string.IsNullOrEmpty(fromStagingSecretFile))
         {
             LogApiKeyResolutionOnce(
-                $"local secret file ({ApiKeyLocalSecretRelativePath})",
+                $"staging secret file ({ApiKeyStagingSecretRelativePath})",
                 scopedPrefsKey,
                 fromEnv,
-                fromLocalSecretFile,
+                fromStagingSecretFile,
+                fromDefaultSecretFile,
                 fromScopedPrefs,
                 fromLegacyPrefs);
-            return fromLocalSecretFile;
+            return fromStagingSecretFile;
+        }
+
+        if (!string.IsNullOrEmpty(fromDefaultSecretFile))
+        {
+            LogApiKeyResolutionOnce(
+                $"default secret file ({ApiKeyDefaultSecretRelativePath})",
+                scopedPrefsKey,
+                fromEnv,
+                fromStagingSecretFile,
+                fromDefaultSecretFile,
+                fromScopedPrefs,
+                fromLegacyPrefs);
+            return fromDefaultSecretFile;
         }
 
         if (!string.IsNullOrEmpty(fromScopedPrefs))
@@ -602,7 +618,8 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
                 $"scoped PlayerPrefs ({scopedPrefsKey})",
                 scopedPrefsKey,
                 fromEnv,
-                fromLocalSecretFile,
+                fromStagingSecretFile,
+                fromDefaultSecretFile,
                 fromScopedPrefs,
                 fromLegacyPrefs);
             return fromScopedPrefs;
@@ -614,19 +631,28 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
                 $"legacy PlayerPrefs ({ApiKeyPlayerPrefsKeyRaw})",
                 scopedPrefsKey,
                 fromEnv,
-                fromLocalSecretFile,
+                fromStagingSecretFile,
+                fromDefaultSecretFile,
                 fromScopedPrefs,
                 fromLegacyPrefs);
             return fromLegacyPrefs;
         }
 
-        LogApiKeyResolutionOnce("missing", scopedPrefsKey, fromEnv, fromLocalSecretFile, fromScopedPrefs, fromLegacyPrefs);
+        LogApiKeyResolutionOnce("missing", scopedPrefsKey, fromEnv, fromStagingSecretFile, fromDefaultSecretFile, fromScopedPrefs, fromLegacyPrefs);
         return string.Empty;
     }
 
-    private static string TryReadLocalSecretFileApiKey()
+    private static string TryReadStagingSecretFileApiKey()
     {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
+        return TryReadApiKeyFromProjectRelativePath(ApiKeyStagingSecretRelativePath);
+#else
+        return string.Empty;
+#endif
+    }
+
+    private static string TryReadApiKeyFromProjectRelativePath(string relativePath)
+    {
         try
         {
             string projectRoot = Path.GetDirectoryName(Application.dataPath);
@@ -635,7 +661,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
                 return string.Empty;
             }
 
-            string secretPath = Path.Combine(projectRoot, ApiKeyLocalSecretRelativePath);
+            string secretPath = Path.Combine(projectRoot, relativePath);
             if (!File.Exists(secretPath))
             {
                 return string.Empty;
@@ -648,9 +674,6 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
             // Best-effort only. Fall through to the next configured source.
             return string.Empty;
         }
-#else
-        return string.Empty;
-#endif
     }
 
     private static string NormalizeApiKeyCandidate(string candidate)
@@ -663,7 +686,8 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         string source,
         string scopedPrefsKey,
         string fromEnv,
-        string fromLocalSecretFile,
+        string fromStagingSecretFile,
+        string fromDefaultSecretFile,
         string fromScopedPrefs,
         string fromLegacyPrefs)
     {
@@ -677,7 +701,8 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         Debug.Log(
             $"PBp API key resolution: source={source} namespace={DevClientInstanceScope.StorageNamespace} " +
             $"scopedKey={scopedPrefsKey} env={DescribeApiKeyCandidate(fromEnv)} " +
-            $"file={DescribeApiKeyCandidate(fromLocalSecretFile)} " +
+            $"stagingFile={DescribeApiKeyCandidate(fromStagingSecretFile)} " +
+            $"defaultFile={DescribeApiKeyCandidate(fromDefaultSecretFile)} " +
             $"scoped={DescribeApiKeyCandidate(fromScopedPrefs)} legacy={DescribeApiKeyCandidate(fromLegacyPrefs)}");
 #endif
     }
@@ -731,7 +756,8 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
         hasLoggedMissingApiKeyWarning = true;
         Debug.LogWarning(
-            $"PBp API key is missing. Checked env var {ApiKeyEnvVarName}, local file {ApiKeyLocalSecretRelativePath}, " +
+            $"PBp API key is missing. Checked env var {ApiKeyEnvVarName}, staging file {ApiKeyStagingSecretRelativePath}, " +
+            $"default file {ApiKeyDefaultSecretRelativePath}, " +
             $"scoped PlayerPrefs, and legacy PlayerPrefs.");
 #endif
     }
