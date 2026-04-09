@@ -619,12 +619,6 @@ public class MainMenuController : MonoBehaviour
             return false;
         }
 
-        if (!isServerOnline)
-        {
-            SetImportStatus(BuildConnectivityWarningStatus());
-            return false;
-        }
-
         if (!TryNormalizeJoinGameId(rawGameId, out normalizedGameId, out string validationError))
         {
             SetImportStatus(validationError);
@@ -1244,6 +1238,10 @@ public class MainMenuController : MonoBehaviour
                 probeJson = fetchedJson;
             }));
 
+            bool serverReachableForJoin = probeOk || !PbpConnectivityStateModel.IsConnectivityFailure(probeError);
+            isServerOnline = serverReachableForJoin;
+            PbpConnectivityStateModel.ObserveServerProbeResult(serverReachableForJoin);
+
             if (probeOk)
             {
                 if (TryGetPbpPreflightBlockWarningFromJson(probeJson, out string joinVersionWarning))
@@ -1266,6 +1264,10 @@ public class MainMenuController : MonoBehaviour
                         claimError = error;
                         claimedSeatIndex = seatIndex;
                     }));
+
+                bool claimReachable = claimOk || !PbpConnectivityStateModel.IsConnectivityFailure(claimError);
+                isServerOnline = claimReachable;
+                PbpConnectivityStateModel.ObserveServerProbeResult(claimReachable);
 
                 if (!claimOk)
                 {

@@ -183,7 +183,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             }
         }
 
-        return uiDocument != null && turnManager != null && gameMenuActions != null;
+        return uiDocument != null && turnManager != null;
     }
 
     private void RefreshTurnManagerSubscription(bool forceClear = false)
@@ -613,8 +613,9 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         }
 
         string gameId = GetCurrentPlayByPostGameId();
+        bool isCreatorGame = turnManager != null && turnManager.IsCurrentPlayByPostCreatorGameForUi(gameId);
         bool isLocalHost = !string.IsNullOrWhiteSpace(gameId) && IsLocalHostForGame(gameId);
-        bool shouldShowSharePrompt = isLocalHost &&
+        bool shouldShowSharePrompt = (isCreatorGame || isLocalHost) &&
                                      PlayerPrefs.GetInt(GetShareShownKey(gameId), 0) == 0;
         if (shouldShowSharePrompt)
         {
@@ -654,6 +655,8 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         {
             return;
         }
+
+        TryPresentPlayByPostSharePromptFromCurrentState();
 
         if (unitUIManager == null)
         {
@@ -696,7 +699,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
 
         if (menuButton != null)
         {
-            menuButton.SetEnabled(showDefaultBottom);
+            menuButton.SetEnabled(showDefaultBottom && gameMenuActions != null);
         }
 
         if (settingsButton != null)
@@ -1207,6 +1210,24 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         MarkSharePromptAsShown(gameId);
     }
 
+    private void TryPresentPlayByPostSharePromptFromCurrentState()
+    {
+        if (turnManager == null || turnManager.currentMode != TurnManager.GameMode.PlayByPost)
+        {
+            return;
+        }
+
+        string gameId = GetCurrentPlayByPostGameId();
+        if (string.IsNullOrWhiteSpace(gameId) ||
+            PlayerPrefs.GetInt(GetShareShownKey(gameId), 0) != 0 ||
+            !turnManager.ShouldShowPlayByPostSharePromptForUi(gameId))
+        {
+            return;
+        }
+
+        TryPresentPlayByPostSharePrompt(gameId);
+    }
+
     private void HidePlayByPostShareOverlay()
     {
         if (pbpShareOverlay != null)
@@ -1381,9 +1402,11 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         }
     }
 
-    private static string GetCurrentPlayByPostGameId()
+    private string GetCurrentPlayByPostGameId()
     {
-        string gameId = PlayerPrefs.GetString(GetPlayByPostGameIdKey(), string.Empty);
+        string gameId = turnManager != null
+            ? turnManager.GetCurrentPlayByPostGameIdForUi()
+            : PlayerPrefs.GetString(GetPlayByPostGameIdKey(), string.Empty);
         return string.IsNullOrWhiteSpace(gameId) ? string.Empty : gameId.Trim();
     }
 

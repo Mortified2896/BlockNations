@@ -257,6 +257,36 @@ public class TurnManager : MonoBehaviour
         return MapSizePreset.Small;
     }
 
+    public string GetCurrentPlayByPostGameIdForUi()
+    {
+        return GetPbpGameIdFromPrefsOrCurrent();
+    }
+
+    public bool IsCurrentPlayByPostCreatorGameForUi(string gameId)
+    {
+        if (currentMode != GameMode.PlayByPost || string.IsNullOrWhiteSpace(gameId))
+        {
+            return false;
+        }
+
+        return !string.IsNullOrWhiteSpace(pbpCreatorBootstrapGameId) &&
+               string.Equals(gameId, pbpCreatorBootstrapGameId, System.StringComparison.Ordinal);
+    }
+
+    public bool ShouldShowPlayByPostSharePromptForUi(string gameId)
+    {
+        if (currentMode != GameMode.PlayByPost ||
+            gameOver ||
+            string.IsNullOrWhiteSpace(gameId) ||
+            !string.Equals(gameId, currentGameId, System.StringComparison.Ordinal) ||
+            !isPlayByPostWaitingForExport)
+        {
+            return false;
+        }
+
+        return IsCurrentPlayByPostCreatorGameForUi(gameId) || GetLocalIsPlayerOneForGame(gameId, out _, out _);
+    }
+
     public static void GetBoardDimensionsForPreset(MapSizePreset preset, out int boardWidth, out int boardHeight)
     {
         switch (preset)
