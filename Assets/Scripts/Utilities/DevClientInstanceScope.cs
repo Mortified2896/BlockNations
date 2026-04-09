@@ -6,6 +6,7 @@ using UnityEngine;
 public static class DevClientInstanceScope
 {
     private const string DevPersistentRootFolderName = "dev_clients";
+    private const string DefaultAppStorageNamespace = "app";
 
     private static bool resolved;
     private static string storageNamespace;
@@ -96,6 +97,11 @@ public static class DevClientInstanceScope
         initialTypedProfileName = "Mac";
 #endif
 #endif
+
+        if (string.IsNullOrWhiteSpace(storageNamespace))
+        {
+            storageNamespace = DefaultAppStorageNamespace;
+        }
     }
 
     private static string TryGetCurrentAppBundleName()

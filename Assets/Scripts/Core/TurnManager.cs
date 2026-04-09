@@ -201,6 +201,7 @@ public class TurnManager : MonoBehaviour
 #endif
     private bool pbpControlReadinessReady = false;
     private string pbpCreatorBootstrapGameId;
+    private bool pbpCreatorFirstRemoteSubmitPending;
     private const float PlayByPostNoTurnLogCooldownSeconds = 5f;
     private const string PlayByPostGameIdKeyRaw = "pbp_gameId";
     private const string PlayByPostForceNewKeyRaw = "pbp_forceNew";
@@ -285,6 +286,15 @@ public class TurnManager : MonoBehaviour
         }
 
         return IsCurrentPlayByPostCreatorGameForUi(gameId) || GetLocalIsPlayerOneForGame(gameId, out _, out _);
+    }
+
+    public bool IsCurrentPlayByPostFirstRemoteSubmitPendingForUi()
+    {
+        return currentMode == GameMode.PlayByPost &&
+               !string.IsNullOrWhiteSpace(currentGameId) &&
+               !string.IsNullOrWhiteSpace(pbpCreatorBootstrapGameId) &&
+               string.Equals(currentGameId, pbpCreatorBootstrapGameId, System.StringComparison.Ordinal) &&
+               pbpCreatorFirstRemoteSubmitPending;
     }
 
     public static void GetBoardDimensionsForPreset(MapSizePreset preset, out int boardWidth, out int boardHeight)
@@ -1404,6 +1414,7 @@ public class TurnManager : MonoBehaviour
         isPlayByPostFetchInProgress = false;
         playByPostLastFetchWasNoTurn = false;
         pbpControlReadinessReady = false;
+        pbpCreatorFirstRemoteSubmitPending = false;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         lastPbpControlReadinessBlockKey = null;
         lastPbpSeatAdoptionLogKey = null;
@@ -2418,6 +2429,11 @@ public class TurnManager : MonoBehaviour
 
         if (submitOk)
         {
+            if (IsCurrentPlayByPostFirstRemoteSubmitPendingForUi())
+            {
+                pbpCreatorFirstRemoteSubmitPending = false;
+            }
+
             Debug.Log($"PBp submit ok via {turnTransport.TransportName} (gameId={currentGameId}, turn={transportSeq}).");
         }
         else
@@ -2721,6 +2737,7 @@ public class TurnManager : MonoBehaviour
         if (TryConsumeForceNewPlayByPostRequest(out string forcedNewGameId))
         {
             pbpCreatorBootstrapGameId = forcedNewGameId;
+            pbpCreatorFirstRemoteSubmitPending = true;
             SetGameMode(GameMode.PlayByPost);
             SetCurrentGameId(forcedNewGameId);
             if (!LocalPlayerSeatStore.TryGetSeat(forcedNewGameId, out _))
@@ -2980,6 +2997,7 @@ public class TurnManager : MonoBehaviour
         {
             LocalPlayerSeatStore.SetSeat(gameId, 0);
             pbpCreatorBootstrapGameId = gameId;
+            pbpCreatorFirstRemoteSubmitPending = true;
         }
 
         bool readinessOk = EnsurePlayByPostControlReadiness();

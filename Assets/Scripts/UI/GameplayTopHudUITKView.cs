@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -8,6 +9,8 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 {
     private const string ThemeResourceName = "GameplayTopHud_UITK_Theme";
     private const float TournamentStandingsDesktopWidthThreshold = 1200f;
+    private const string FirstTurnSubmitFailedMessage = "First turn was not submitted. This game was not created on the server yet.";
+    private const string FirstTurnSubmitUnauthorizedMessage = "First turn was not submitted because PBp server authentication is missing or invalid.";
 
     [Header("Spike Toggle")]
     [SerializeField] private bool enableGameplayTopHudUITK = true;
@@ -36,6 +39,8 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
     private StyleLength defaultTurnLabelWidth;
     private StyleLength defaultGoldLabelWidth;
     private StyleLength defaultStatusLabelWidth;
+    private string pbpSubmitStatusOverrideMessage;
+    private string pbpSubmitStatusOverrideGameId;
 
     private Rect lastSafeArea = Rect.zero;
     private Vector2Int lastScreenSize = Vector2Int.zero;
@@ -245,6 +250,19 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
         if (statusLabel == null)
         {
+            return;
+        }
+
+        string currentPbpGameId = turnManager.GetCurrentPlayByPostGameIdForUi();
+        if (!ShouldKeepPbpSubmitStatusOverride(currentPbpGameId))
+        {
+            ClearPbpSubmitStatusOverride();
+        }
+
+        if (!string.IsNullOrWhiteSpace(pbpSubmitStatusOverrideMessage))
+        {
+            statusLabel.text = pbpSubmitStatusOverrideMessage;
+            statusLabel.style.display = DisplayStyle.Flex;
             return;
         }
 
@@ -579,6 +597,25 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         }
 
         PbpConnectivityStateModel.ObserveSubmitResult(ok, err);
+        if (ok)
+        {
+            ClearPbpSubmitStatusOverride();
+            return;
+        }
+
+        if (!turnManager.IsCurrentPlayByPostFirstRemoteSubmitPendingForUi())
+        {
+            return;
+        }
+
+        string gameId = turnManager.GetCurrentPlayByPostGameIdForUi();
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            return;
+        }
+
+        pbpSubmitStatusOverrideGameId = gameId;
+        pbpSubmitStatusOverrideMessage = BuildFirstTurnSubmitFailureMessage(err);
     }
 
     private void HandlePlayByPostFetchResult(bool reachable, string resultOrError)
@@ -589,6 +626,35 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         }
 
         PbpConnectivityStateModel.ObserveFetchResult(reachable, resultOrError);
+        if (reachable && string.Equals(resultOrError, "OK", StringComparison.OrdinalIgnoreCase))
+        {
+            ClearPbpSubmitStatusOverride();
+        }
+    }
+
+    private bool ShouldKeepPbpSubmitStatusOverride(string currentPbpGameId)
+    {
+        return !string.IsNullOrWhiteSpace(pbpSubmitStatusOverrideMessage) &&
+               !string.IsNullOrWhiteSpace(pbpSubmitStatusOverrideGameId) &&
+               string.Equals(currentPbpGameId, pbpSubmitStatusOverrideGameId, StringComparison.Ordinal) &&
+               turnManager != null &&
+               turnManager.IsCurrentPlayByPostFirstRemoteSubmitPendingForUi();
+    }
+
+    private void ClearPbpSubmitStatusOverride()
+    {
+        pbpSubmitStatusOverrideMessage = null;
+        pbpSubmitStatusOverrideGameId = null;
+    }
+
+    private static string BuildFirstTurnSubmitFailureMessage(string err)
+    {
+        if (string.Equals(err, "UNAUTHORIZED", StringComparison.Ordinal))
+        {
+            return FirstTurnSubmitUnauthorizedMessage;
+        }
+
+        return FirstTurnSubmitFailedMessage;
     }
 
     private void DisableOverlay()
@@ -617,6 +683,8 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         defaultTurnLabelWidth = default;
         defaultGoldLabelWidth = default;
         defaultStatusLabelWidth = default;
+        pbpSubmitStatusOverrideMessage = null;
+        pbpSubmitStatusOverrideGameId = null;
         uiReady = false;
         lastSafeArea = Rect.zero;
         lastScreenSize = Vector2Int.zero;

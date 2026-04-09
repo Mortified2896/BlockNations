@@ -768,12 +768,38 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         if (string.IsNullOrEmpty(apiKey))
         {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
+            LogApiKeyHeaderApplication(req, attached: false);
             LogMissingApiKeyWarningOnce();
 #endif
             return;
         }
 
         req.SetRequestHeader(ApiKeyHeaderName, apiKey);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        LogApiKeyHeaderApplication(req, attached: true);
+#endif
+    }
+
+    [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+    private static void LogApiKeyHeaderApplication(UnityWebRequest req, bool attached)
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (!PbpDebugSettingsLoader.EnableTransportLogs || req == null)
+        {
+            return;
+        }
+
+        string url = req.url;
+        string requestPath = url;
+        if (Uri.TryCreate(url, UriKind.Absolute, out Uri parsedUri))
+        {
+            requestPath = parsedUri.PathAndQuery;
+        }
+
+        Debug.Log(
+            $"PBp API key header apply: path={requestPath} attached={attached} " +
+            $"header={ApiKeyHeaderName}");
+#endif
     }
 
     [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
