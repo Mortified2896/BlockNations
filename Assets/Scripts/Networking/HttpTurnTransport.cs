@@ -652,11 +652,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
     private static string TryReadStagingSecretFileApiKey()
     {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
         return TryReadApiKeyFromProjectRelativePath(ApiKeyStagingSecretRelativePath);
-#else
-        return string.Empty;
-#endif
     }
 
     private static string TryReadApiKeyFromProjectRelativePath(string relativePath)
