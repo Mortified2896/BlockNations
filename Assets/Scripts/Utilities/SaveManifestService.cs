@@ -444,7 +444,7 @@ public static class SaveManifestService
                 entry.lastKnownCurrentTurnSeatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(currentTurnSeatIndex, normalizedSeatCount);
                 entry.lastKnownSeatCount = normalizedSeatCount;
                 entry.lastKnownTransportSeq = lastKnownTransportSeq.GetValueOrDefault(
-                    ComputePlayByPostTransportSeq(clampedRoundTurn, knownIsPlayerTurn));
+                    ComputePlayByPostTransportSeq(clampedRoundTurn, entry.lastKnownCurrentTurnSeatIndex, normalizedSeatCount));
             }
 
             WriteManifest(cachedManifest);
@@ -579,16 +579,25 @@ public static class SaveManifestService
         if (mode == TurnManager.GameMode.PlayByPost)
         {
             int clampedRoundTurn = Math.Max(0, header.turnNumber);
+            int derivedCurrentTurnSeatIndex = header.currentTurnSeatIndex;
+            if (derivedCurrentTurnSeatIndex <= 0 && !header.isPlayerTurn)
+            {
+                derivedCurrentTurnSeatIndex = 1;
+            }
+
             entry.hasLastKnownTurnState = true;
             entry.lastKnownRoundTurn = clampedRoundTurn;
             entry.lastKnownIsPlayerTurn = header.isPlayerTurn;
             entry.lastKnownCurrentTurnSeatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(
-                header.currentTurnSeatIndex,
+                derivedCurrentTurnSeatIndex,
                 header.seatCount);
             entry.lastKnownSeatCount = PlayByPostSeatUtility.NormalizeSeatCount(header.seatCount);
             entry.lastKnownTransportSeq = header.transportSeq > 0
                 ? header.transportSeq
-                : ComputePlayByPostTransportSeq(clampedRoundTurn, header.isPlayerTurn);
+                : ComputePlayByPostTransportSeq(
+                    clampedRoundTurn,
+                    entry.lastKnownCurrentTurnSeatIndex,
+                    entry.lastKnownSeatCount);
         }
         manifest.entries.Add(entry);
     }
@@ -640,16 +649,25 @@ public static class SaveManifestService
             if (header != null)
             {
                 int clampedRoundTurn = Math.Max(0, header.turnNumber);
+                int derivedCurrentTurnSeatIndex = header.currentTurnSeatIndex;
+                if (derivedCurrentTurnSeatIndex <= 0 && !header.isPlayerTurn)
+                {
+                    derivedCurrentTurnSeatIndex = 1;
+                }
+
                 entry.hasLastKnownTurnState = true;
                 entry.lastKnownRoundTurn = clampedRoundTurn;
                 entry.lastKnownIsPlayerTurn = header.isPlayerTurn;
                 entry.lastKnownCurrentTurnSeatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(
-                    header.currentTurnSeatIndex,
+                    derivedCurrentTurnSeatIndex,
                     header.seatCount);
                 entry.lastKnownSeatCount = PlayByPostSeatUtility.NormalizeSeatCount(header.seatCount);
                 entry.lastKnownTransportSeq = header.transportSeq > 0
                     ? header.transportSeq
-                    : ComputePlayByPostTransportSeq(clampedRoundTurn, header.isPlayerTurn);
+                    : ComputePlayByPostTransportSeq(
+                        clampedRoundTurn,
+                        entry.lastKnownCurrentTurnSeatIndex,
+                        entry.lastKnownSeatCount);
             }
 
             manifest.entries.Add(entry);
@@ -841,8 +859,15 @@ public static class SaveManifestService
 
     public static int ComputePlayByPostTransportSeq(int roundTurn, bool isPlayerTurn)
     {
+        return ComputePlayByPostTransportSeq(roundTurn, isPlayerTurn ? 0 : 1, PlayByPostSeatUtility.MinSeatCount);
+    }
+
+    public static int ComputePlayByPostTransportSeq(int roundTurn, int currentTurnSeatIndex, int seatCount)
+    {
         int clampedRoundTurn = Math.Max(0, roundTurn);
-        return clampedRoundTurn * 2 + (isPlayerTurn ? 0 : 1);
+        int normalizedSeatCount = PlayByPostSeatUtility.NormalizeSeatCount(seatCount);
+        int normalizedSeatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(currentTurnSeatIndex, normalizedSeatCount);
+        return clampedRoundTurn * normalizedSeatCount + normalizedSeatIndex;
     }
 
     private static void MigrateLocalPlayByPostEntry(string gameId)

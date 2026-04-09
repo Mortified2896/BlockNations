@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -17,15 +18,13 @@ public class TileVisibility : MonoBehaviour
 
     // Visibility for the currently active side
     public bool isVisibleNow { get; private set; }
-    public bool hasBeenSeen => currentSideIsPlayer ? hasBeenSeenPlayer : hasBeenSeenOpponent;
+    public bool hasBeenSeen => seenBySeats.Contains(currentViewerSeatIndex);
 
     private Color fogBaseColor = Color.black;
     private Color exploredBaseColor = new Color(0f, 0f, 0f, 0.5f);
 
-    // Per-side exploration memory (Player1 = isPlayerOwned=true, Player2/AI = false)
-    private bool hasBeenSeenPlayer = false;
-    private bool hasBeenSeenOpponent = false;
-    private bool currentSideIsPlayer = true;
+    private readonly HashSet<int> seenBySeats = new HashSet<int>();
+    private int currentViewerSeatIndex = 0;
 
     void Awake()
     {
@@ -44,41 +43,91 @@ public class TileVisibility : MonoBehaviour
         UpdateVisuals();
     }
 
-    public void SetVisibleForSide(bool visible, bool sideIsPlayer)
+    public void SetVisibleForSeat(bool visible, int viewerSeatIndex)
     {
-        currentSideIsPlayer = sideIsPlayer;
+        currentViewerSeatIndex = Mathf.Max(0, viewerSeatIndex);
         isVisibleNow = visible;
 
         if (visible)
         {
-            if (sideIsPlayer)
-                hasBeenSeenPlayer = true;
-            else
-                hasBeenSeenOpponent = true;
+            seenBySeats.Add(currentViewerSeatIndex);
         }
 
         UpdateVisuals();
     }
 
-    public void SetCurrentSide(bool sideIsPlayer)
+    public void SetCurrentViewerSeat(int viewerSeatIndex)
     {
-        currentSideIsPlayer = sideIsPlayer;
+        currentViewerSeatIndex = Mathf.Max(0, viewerSeatIndex);
         UpdateVisuals();
     }
 
-    public void SetSeenState(bool playerSeen, bool opponentSeen, bool activeSideIsPlayer)
+    public void SetSeenSeatIndices(IEnumerable<int> seenSeatIndices, int activeViewerSeatIndex)
     {
-        hasBeenSeenPlayer = playerSeen;
-        hasBeenSeenOpponent = opponentSeen;
-        currentSideIsPlayer = activeSideIsPlayer;
+        seenBySeats.Clear();
+        if (seenSeatIndices != null)
+        {
+            foreach (int seatIndex in seenSeatIndices)
+            {
+                if (seatIndex >= 0)
+                {
+                    seenBySeats.Add(seatIndex);
+                }
+            }
+        }
+
+        currentViewerSeatIndex = Mathf.Max(0, activeViewerSeatIndex);
         isVisibleNow = false;
         UpdateVisuals();
     }
 
+    public void GetSeenSeatIndices(List<int> target)
+    {
+        if (target == null)
+        {
+            return;
+        }
+
+        target.Clear();
+        foreach (int seatIndex in seenBySeats)
+        {
+            target.Add(seatIndex);
+        }
+
+        target.Sort();
+    }
+
+    public void SetVisibleForSide(bool visible, bool sideIsPlayer)
+    {
+        SetVisibleForSeat(visible, sideIsPlayer ? 0 : 1);
+    }
+
+    public void SetCurrentSide(bool sideIsPlayer)
+    {
+        SetCurrentViewerSeat(sideIsPlayer ? 0 : 1);
+    }
+
+    public void SetSeenState(bool playerSeen, bool opponentSeen, bool activeSideIsPlayer)
+    {
+        List<int> seenSeatIndices = ListPool.Get();
+        if (playerSeen)
+        {
+            seenSeatIndices.Add(0);
+        }
+
+        if (opponentSeen)
+        {
+            seenSeatIndices.Add(1);
+        }
+
+        SetSeenSeatIndices(seenSeatIndices, activeSideIsPlayer ? 0 : 1);
+        ListPool.Release(seenSeatIndices);
+    }
+
     public void GetSeenState(out bool playerSeen, out bool opponentSeen)
     {
-        playerSeen = hasBeenSeenPlayer;
-        opponentSeen = hasBeenSeenOpponent;
+        playerSeen = seenBySeats.Contains(0);
+        opponentSeen = seenBySeats.Contains(1);
     }
 
     public void ForceUpdate()
@@ -92,8 +141,7 @@ public class TileVisibility : MonoBehaviour
     public void ResetVisibilityState()
     {
         isVisibleNow = false;
-        hasBeenSeenPlayer = false;
-        hasBeenSeenOpponent = false;
+        seenBySeats.Clear();
         UpdateVisuals();
     }
 
@@ -117,6 +165,27 @@ public class TileVisibility : MonoBehaviour
             c.a = showExplored ? ExploredFogAlpha : 0f;
             exploredRenderer.color = c;
             exploredRenderer.enabled = showExplored;
+        }
+    }
+
+    private static class ListPool
+    {
+        private static readonly Stack<List<int>> Pool = new Stack<List<int>>();
+
+        public static List<int> Get()
+        {
+            return Pool.Count > 0 ? Pool.Pop() : new List<int>(4);
+        }
+
+        public static void Release(List<int> list)
+        {
+            if (list == null)
+            {
+                return;
+            }
+
+            list.Clear();
+            Pool.Push(list);
         }
     }
 }

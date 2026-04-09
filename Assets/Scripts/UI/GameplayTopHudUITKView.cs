@@ -404,14 +404,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             return string.Empty;
         }
 
-        int displayGold = turnManager.playerGold;
-        if (turnManager.currentMode == TurnManager.GameMode.PlayByPost &&
-            !turnManager.isPlayerTurn)
-        {
-            displayGold = turnManager.aiGold;
-        }
-
-        return $"Gold {displayGold}";
+        return $"Gold {turnManager.GetDisplayedGoldForUi()}";
     }
 
     private static string FormatDurationCompact(float totalSeconds)

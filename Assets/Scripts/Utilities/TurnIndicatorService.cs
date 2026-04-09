@@ -23,6 +23,8 @@ public static class TurnIndicatorService
         public string gameId;
         public string mode;
         public bool isPlayerTurn;
+        public int seatCount = PlayByPostSeatUtility.MinSeatCount;
+        public int currentTurnSeatIndex;
         public int turnNumber;
     }
 
@@ -58,8 +60,16 @@ public static class TurnIndicatorService
             return false;
         }
 
-        bool amPlayer1 = seatOrPlayerIndex == 0;
-        isMyTurn = state.isPlayerTurn == amPlayer1;
+        int currentTurnSeatIndex = state.currentTurnSeatIndex;
+        if (currentTurnSeatIndex <= 0 && !state.isPlayerTurn)
+        {
+            currentTurnSeatIndex = 1;
+        }
+
+        currentTurnSeatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(
+            currentTurnSeatIndex,
+            state.seatCount);
+        isMyTurn = seatOrPlayerIndex == currentTurnSeatIndex;
         debugReason = "OK";
         SetCached(gameId, success: true, isMyTurn: isMyTurn, debugReason: debugReason);
         return true;

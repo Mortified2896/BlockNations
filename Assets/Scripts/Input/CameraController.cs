@@ -325,14 +325,14 @@ public class CameraController : MonoBehaviour
             return false;
         }
 
-        bool viewerIsPlayerOwned = GetViewerIsPlayerOwned(turnManager);
+        int viewerSeatIndex = GetViewerSeatIndex(turnManager);
         Vector3 mapCenter = GetBoardCenter(turnManager.gridManager);
         City bestCity = null;
         float bestDistance = float.MaxValue;
 
         foreach (City city in cities)
         {
-            if (city == null || city.isPlayerOwned != viewerIsPlayerOwned)
+            if (city == null || city.ownerSeatIndex != viewerSeatIndex)
             {
                 continue;
             }
@@ -363,14 +363,14 @@ public class CameraController : MonoBehaviour
             return false;
         }
 
-        bool viewerIsPlayerOwned = GetViewerIsPlayerOwned(turnManager);
+        int viewerSeatIndex = GetViewerSeatIndex(turnManager);
         Vector3 mapCenter = GetBoardCenter(turnManager.gridManager);
         Unit bestUnit = null;
         float bestDistance = float.MaxValue;
 
         foreach (Unit unit in units)
         {
-            if (unit == null || !unit.gameObject.activeInHierarchy || unit.isPlayerOwned != viewerIsPlayerOwned)
+            if (unit == null || !unit.gameObject.activeInHierarchy || unit.ownerSeatIndex != viewerSeatIndex)
             {
                 continue;
             }
@@ -392,25 +392,25 @@ public class CameraController : MonoBehaviour
         return true;
     }
 
-    private bool GetViewerIsPlayerOwned(TurnManager turnManager)
+    private int GetViewerSeatIndex(TurnManager turnManager)
     {
         if (turnManager == null || turnManager.currentMode != TurnManager.GameMode.PlayByPost)
         {
-            return true;
+            return 0;
         }
 
         string gameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
         if (string.IsNullOrWhiteSpace(gameId))
         {
-            return true;
+            return 0;
         }
 
         if (!LocalPlayerSeatStore.TryGetSeat(gameId, out int seat))
         {
-            return true;
+            return 0;
         }
 
-        return seat == 0;
+        return Mathf.Max(0, seat);
     }
 
     private static Vector3 GetBoardCenter(GridManager gridManager)

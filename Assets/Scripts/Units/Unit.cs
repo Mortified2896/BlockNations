@@ -7,6 +7,7 @@ public class Unit : MonoBehaviour
     [SerializeField] private string unitTypeId = UnitRegistry.WarriorTypeId;
 
     [Header("Owner")]
+    public int ownerSeatIndex = -1;
     public bool isPlayerOwned = true;
 
     [Header("Turn State")]
@@ -127,6 +128,7 @@ public class Unit : MonoBehaviour
 
     void Awake()
     {
+        EnsureOwnerSeatInitialized();
         CacheMoveOutlineBaseLocalScale();
 
         if (presentationRenderer == null)
@@ -141,6 +143,27 @@ public class Unit : MonoBehaviour
         }
         ApplyDefinition(UnitTypeId, preserveCurrentHealth: currentHealthUnits > 0);
         RefreshHealthPresentation();
+    }
+
+    public void EnsureOwnerSeatInitialized()
+    {
+        if (ownerSeatIndex < 0)
+        {
+            ownerSeatIndex = isPlayerOwned ? 0 : 1;
+        }
+
+        SyncLegacyOwnershipBridge();
+    }
+
+    public void SetOwnerSeatIndex(int seatIndex)
+    {
+        ownerSeatIndex = Mathf.Max(0, seatIndex);
+        SyncLegacyOwnershipBridge();
+    }
+
+    public void SyncLegacyOwnershipBridge()
+    {
+        isPlayerOwned = ownerSeatIndex == 0;
     }
 
     public bool ApplyDefinition(string requestedUnitTypeId, bool preserveCurrentHealth)

@@ -2010,7 +2010,10 @@ public class MainMenuController : MonoBehaviour
 
         computedTransportSeq = summary.lastKnownTransportSeq > 0
             ? summary.lastKnownTransportSeq
-            : SaveManifestService.ComputePlayByPostTransportSeq(summary.lastKnownRoundTurn, summary.lastKnownIsPlayerTurn);
+            : SaveManifestService.ComputePlayByPostTransportSeq(
+                summary.lastKnownRoundTurn,
+                summary.lastKnownCurrentTurnSeatIndex,
+                summary.lastKnownSeatCount);
 
         if (!LocalPlayerSeatStore.TryGetSeat(summary.gameId, out int seatOrPlayerIndex))
         {
@@ -2264,7 +2267,10 @@ public class MainMenuController : MonoBehaviour
 
         if (summary.hasLastKnownTurnState)
         {
-            return SaveManifestService.ComputePlayByPostTransportSeq(summary.lastKnownRoundTurn, summary.lastKnownIsPlayerTurn);
+            return SaveManifestService.ComputePlayByPostTransportSeq(
+                summary.lastKnownRoundTurn,
+                summary.lastKnownCurrentTurnSeatIndex,
+                summary.lastKnownSeatCount);
         }
 
         return -1;

@@ -76,7 +76,7 @@ public class UnitSelectionManager : MonoBehaviour
             int stepDistance = GetChebyshevDistance(originTile, targetTile);
             bool hasVisibleOccupant = occupant != null && targetTile.isVisibleNow;
             if (hasVisibleOccupant &&
-                occupant.isPlayerOwned != unit.isPlayerOwned &&
+                occupant.ownerSeatIndex != unit.ownerSeatIndex &&
                 canAttack &&
                 unit.IsTargetInAttackRange(stepDistance))
             {
@@ -139,7 +139,7 @@ public class UnitSelectionManager : MonoBehaviour
             }
 
             Unit occupant = GridUtils.GetUnitAtPosition(targetTile.transform.position, unit);
-            if (occupant != null && targetTile.isVisibleNow && occupant.isPlayerOwned != unit.isPlayerOwned)
+            if (occupant != null && targetTile.isVisibleNow && occupant.ownerSeatIndex != unit.ownerSeatIndex)
             {
                 return true;
             }
@@ -228,7 +228,7 @@ public class UnitSelectionManager : MonoBehaviour
 
             Unit occupant = GridUtils.GetUnitAtPosition(targetTile.transform.position, unit);
             bool hasVisibleOccupant = occupant != null && targetTile.isVisibleNow;
-            if (hasVisibleOccupant && occupant.isPlayerOwned != unit.isPlayerOwned && canAttack)
+            if (hasVisibleOccupant && occupant.ownerSeatIndex != unit.ownerSeatIndex && canAttack)
             {
                 if (unit.IsTargetInAttackRange(stepDistance))
                 {
@@ -446,7 +446,7 @@ public class UnitSelectionManager : MonoBehaviour
             }
         }
 
-        bool isActiveTurnForUnit = turnManager == null || turnManager.IsCurrentSideOwner(selectedUnit.isPlayerOwned);
+        bool isActiveTurnForUnit = turnManager == null || turnManager.IsCurrentSideOwner(selectedUnit.ownerSeatIndex);
 
         Vector3 from = selectedUnit.transform.position;
         GridManager grid = turnManager != null ? turnManager.gridManager : null;
@@ -478,7 +478,7 @@ public class UnitSelectionManager : MonoBehaviour
         bool hasPlannedPath = reachablePaths.TryGetValue(targetTile, out List<TileVisibility> plannedPath);
 
         bool canAttackTarget = targetTileHasVisibleOccupant &&
-                               targetUnit.isPlayerOwned != selectedUnit.isPlayerOwned &&
+                               targetUnit.ownerSeatIndex != selectedUnit.ownerSeatIndex &&
                                selectedUnit.IsTargetInAttackRange(stepDistance) &&
                                selectedUnit.CanAttackThisTurn();
         bool canMoveToEmpty = !targetTileHasVisibleOccupant &&
@@ -496,7 +496,7 @@ public class UnitSelectionManager : MonoBehaviour
         if (targetUnit != null && !targetTileHasHiddenOccupant)
         {
             // Friendly unit: cannot move onto the same tile
-            if (targetUnit.isPlayerOwned == selectedUnit.isPlayerOwned)
+            if (targetUnit.ownerSeatIndex == selectedUnit.ownerSeatIndex)
             {
                 ClearSelection();
                 return;
@@ -567,9 +567,9 @@ public class UnitSelectionManager : MonoBehaviour
                 return;
 
             City city = GridUtils.GetCityAtPosition(selectedUnit.transform.position);
-            if (city != null && city.isPlayerOwned != selectedUnit.isPlayerOwned)
+            if (city != null && city.ownerSeatIndex != selectedUnit.ownerSeatIndex)
             {
-                turnManager.OnCityCaptured(selectedUnit.isPlayerOwned, city);
+                turnManager.OnCityCaptured(selectedUnit.ownerSeatIndex, city);
                 return;
             }
         }
@@ -645,7 +645,7 @@ public class UnitSelectionManager : MonoBehaviour
             bool isActiveTurn = false;
             if (turnManager != null)
             {
-                isActiveTurn = turnManager.IsCurrentSideOwner(unit.isPlayerOwned) && turnManager.IsHumanTurn();
+                isActiveTurn = turnManager.IsCurrentSideOwner(unit.ownerSeatIndex) && turnManager.IsHumanTurn();
             }
             else
             {

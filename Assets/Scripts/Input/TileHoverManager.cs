@@ -182,7 +182,7 @@ public class TileHoverManager : MonoBehaviour
                 if (selected != null &&
                     TurnManager.Instance != null &&
                     TurnManager.Instance.CanControlUnit(selected) &&
-                    selected.isPlayerOwned != clickedUnit.isPlayerOwned)
+                    selected.ownerSeatIndex != clickedUnit.ownerSeatIndex)
                 {
                     UnitSelectionManager.Instance.TryMoveOrAttackAtPosition(clickedUnit.transform.position);
                     return;
@@ -190,13 +190,16 @@ public class TileHoverManager : MonoBehaviour
             }
 
             // 2b) Enemy city clicked while a friendly unit is selected: try to move/attack onto that city tile
-            if (hasCity && UnitSelectionManager.Instance != null && clickedCity != null && clickedCity.isPlayerOwned != (UnitSelectionManager.Instance.SelectedUnit?.isPlayerOwned ?? clickedCity.isPlayerOwned))
+            if (hasCity &&
+                UnitSelectionManager.Instance != null &&
+                clickedCity != null &&
+                clickedCity.ownerSeatIndex != (UnitSelectionManager.Instance.SelectedUnit?.ownerSeatIndex ?? clickedCity.ownerSeatIndex))
             {
                 Unit selected = UnitSelectionManager.Instance.SelectedUnit;
                 if (selected != null &&
                     TurnManager.Instance != null &&
                     TurnManager.Instance.CanControlUnit(selected) &&
-                    selected.isPlayerOwned != clickedCity.isPlayerOwned)
+                    selected.ownerSeatIndex != clickedCity.ownerSeatIndex)
                 {
                     UnitSelectionManager.Instance.TryMoveOrAttackAtPosition(clickedCity.transform.position);
                     return;

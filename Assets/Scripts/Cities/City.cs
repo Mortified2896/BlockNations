@@ -3,6 +3,7 @@ using UnityEngine;
 public class City : MonoBehaviour
 {
     [Header("Owner")]
+    public int ownerSeatIndex = -1;
     public bool isPlayerOwned = false;
 
     [Header("Grid Position")]
@@ -13,6 +14,32 @@ public class City : MonoBehaviour
     public GameObject warriorPrefab;
     public GameObject stationedUnit;          // unit currently in this city (if any)
     public bool hasRecruitedThisTurn = false; // to limit recruitment per turn
+
+    void Awake()
+    {
+        EnsureOwnerSeatInitialized();
+    }
+
+    public void EnsureOwnerSeatInitialized()
+    {
+        if (ownerSeatIndex < 0)
+        {
+            ownerSeatIndex = isPlayerOwned ? 0 : 1;
+        }
+
+        SyncLegacyOwnershipBridge();
+    }
+
+    public void SetOwnerSeatIndex(int seatIndex)
+    {
+        ownerSeatIndex = Mathf.Max(0, seatIndex);
+        SyncLegacyOwnershipBridge();
+    }
+
+    public void SyncLegacyOwnershipBridge()
+    {
+        isPlayerOwned = ownerSeatIndex == 0;
+    }
 
     public bool CanRecruit()
     {
@@ -118,7 +145,7 @@ public class City : MonoBehaviour
             return false;
         }
 
-        if (!TurnManager.Instance.TrySpendGold(isPlayerOwned, definition.RecruitCost))
+        if (!TurnManager.Instance.TrySpendGoldForSeat(ownerSeatIndex, definition.RecruitCost))
         {
             if (isPlayerOwned)
             {
@@ -144,7 +171,7 @@ public class City : MonoBehaviour
             resolvedUnitTypeId,
             prefab,
             spawnPosition,
-            isPlayerOwned,
+            ownerSeatIndex,
             this,
             resetTurnState: true);
         if (spawnedUnit == null)
@@ -167,15 +194,17 @@ public class City : MonoBehaviour
             Debug.Log($"Spawned {definition.DisplayName} from city {name} at world position {spawnPosition}.");
         }
 
-        if (isPlayerOwned && TurnManager.Instance != null)
+        if (TurnManager.Instance != null &&
+            TurnManager.Instance.GetViewerSeatIndexForRuntime() == ownerSeatIndex)
         {
             TurnManager.Instance.RecalculatePlayerVisibility();
             TurnManager.Instance.AutoSaveIfEnabled();
             TurnManager.Instance.ScheduleAutoEndTurnCheck();
         }
-        else if (!isPlayerOwned && TurnManager.Instance != null)
+        else if (TurnManager.Instance != null)
         {
-            bool isCurrentSideUnit = TurnManager.Instance.currentMode != TurnManager.GameMode.PlayByPost || (TurnManager.Instance.isPlayerTurn == isPlayerOwned);
+            bool isCurrentSideUnit = TurnManager.Instance.currentMode != TurnManager.GameMode.PlayByPost ||
+                                     TurnManager.Instance.GetViewerSeatIndexForRuntime() == ownerSeatIndex;
             Unit spawned = spawnedUnit.GetComponent<Unit>();
             if (spawned != null)
             {

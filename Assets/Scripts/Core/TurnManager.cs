@@ -73,6 +73,7 @@ public class TurnManager : MonoBehaviour
 
     [Header("Turn State")]
     public bool isPlayerTurn = true;
+    public int currentTurnSeatIndex = 0;
     public int turnNumber = 1;
     public bool gameOver = false;
 
@@ -83,6 +84,7 @@ public class TurnManager : MonoBehaviour
     public int aiGold = 0;
     public int goldPerCity = 1;
     public int warriorCost => GetRecruitCost(UnitRegistry.WarriorTypeId);
+    private readonly List<int> seatGold = new List<int>();
 
     [Header("AI Settings")]
     public float aiTurnDelay = 1f; // seconds the AI "thinks" before ending its turn
@@ -230,8 +232,8 @@ public class TurnManager : MonoBehaviour
     // - Bump protocolVersion only when serialized PbP payload meaning changes and older payloads
     //   cannot be read safely as-is.
     // - Keep at most one explicit migration source at a time: the immediately previous protocol.
-    private const int SupportedPbpMigrationProtocolVersion = 3;
-    private const int SupportedPbpProtocolVersion = 4;
+    private const int SupportedPbpMigrationProtocolVersion = 4;
+    private const int SupportedPbpProtocolVersion = 5;
     public const int SmallBoardWidth = 10;
     public const int SmallBoardHeight = 10;
     public const int LargeBoardWidth = 15;
@@ -452,6 +454,7 @@ public class TurnManager : MonoBehaviour
     {
         public int x;
         public int y;
+        public int ownerSeatIndex = -1;
         public bool isPlayerOwned;
         public bool hasRecruitedThisTurn;
     }
@@ -460,6 +463,7 @@ public class TurnManager : MonoBehaviour
     private class SavedUnit
     {
         public string unitTypeId;
+        public int ownerSeatIndex = -1;
         public bool isPlayerOwned;
         public float x;
         public float y;
@@ -478,6 +482,7 @@ public class TurnManager : MonoBehaviour
     {
         public int x;
         public int y;
+        public List<int> seenSeatIndices = new List<int>();
         public bool playerSeen;
         public bool opponentSeen;
     }
@@ -501,6 +506,7 @@ public class TurnManager : MonoBehaviour
         public int boardWidth;
         public int boardHeight;
         public bool isPlayerTurn;
+        public List<int> seatGold = new List<int>();
         public int turnNumber;
         public int playerGold;
         public int aiGold;
@@ -763,7 +769,7 @@ public class TurnManager : MonoBehaviour
         string unitTypeId,
         GameObject prefab,
         Vector3 position,
-        bool isPlayerOwned,
+        int ownerSeatIndex,
         City currentCity,
         bool resetTurnState)
     {
@@ -787,21 +793,21 @@ public class TurnManager : MonoBehaviour
                 return null;
             }
 
-            unit.isPlayerOwned = isPlayerOwned;
+            unit.SetOwnerSeatIndex(ownerSeatIndex);
             unit.currentCity = currentCity;
             if (resetTurnState)
             {
                 unit.ResetMovementForTurn();
             }
 
-            bool isActiveTurn = IsCurrentSideOwner(isPlayerOwned);
+            bool isActiveTurn = IsCurrentSideOwner(ownerSeatIndex);
             unit.UpdateMoveOutline(resetTurnState && isActiveTurn);
         }
 
         OwnedSprite owned = spawnedObject.GetComponent<OwnedSprite>();
         if (owned != null)
         {
-            owned.SetOwner(isPlayerOwned);
+            owned.SetOwner(ownerSeatIndex == 0);
         }
 
         return spawnedObject;
@@ -1026,9 +1032,236 @@ public class TurnManager : MonoBehaviour
         return PlayByPostSeatUtility.NormalizeSeatCount(configuredPlayByPostSeatCount);
     }
 
-    private int ResolveCurrentTurnSeatIndex(bool turnIsPlayer)
+    private int GetRuntimeSeatCount()
     {
-        return turnIsPlayer ? 0 : 1;
+        return currentMode == GameMode.PlayByPost
+            ? GetConfiguredPlayByPostSeatCount()
+            : PlayByPostSeatUtility.MinSeatCount;
+    }
+
+    private void EnsureSeatGoldCapacity(int seatCount)
+    {
+        int normalizedSeatCount = Mathf.Max(PlayByPostSeatUtility.MinSeatCount, seatCount);
+        while (seatGold.Count < normalizedSeatCount)
+        {
+            seatGold.Add(0);
+        }
+
+        if (seatGold.Count > normalizedSeatCount)
+        {
+            seatGold.RemoveRange(normalizedSeatCount, seatGold.Count - normalizedSeatCount);
+        }
+    }
+
+    private void InitializeSeatGoldForNewGame(int seatCount)
+    {
+        EnsureSeatGoldCapacity(seatCount);
+        for (int seatIndex = 0; seatIndex < seatGold.Count; seatIndex++)
+        {
+            seatGold[seatIndex] = startingGold;
+        }
+
+        SyncLegacyGoldBridge();
+    }
+
+    private void SetSeatGoldFromLegacyBridges(int seatCount, int legacyPlayerGold, int legacyAiGold)
+    {
+        EnsureSeatGoldCapacity(seatCount);
+        for (int seatIndex = 0; seatIndex < seatGold.Count; seatIndex++)
+        {
+            seatGold[seatIndex] = 0;
+        }
+
+        if (seatGold.Count > 0)
+        {
+            seatGold[0] = Mathf.Max(0, legacyPlayerGold);
+        }
+
+        if (seatGold.Count > 1)
+        {
+            seatGold[1] = Mathf.Max(0, legacyAiGold);
+        }
+
+        SyncLegacyGoldBridge();
+    }
+
+    private void SetSeatGoldStateFromList(List<int> values, int seatCount)
+    {
+        EnsureSeatGoldCapacity(seatCount);
+        for (int seatIndex = 0; seatIndex < seatGold.Count; seatIndex++)
+        {
+            int value = values != null && seatIndex < values.Count ? values[seatIndex] : 0;
+            seatGold[seatIndex] = Mathf.Max(0, value);
+        }
+
+        SyncLegacyGoldBridge();
+    }
+
+    private List<int> BuildSeatGoldSnapshot(int seatCount)
+    {
+        int normalizedSeatCount = Mathf.Max(PlayByPostSeatUtility.MinSeatCount, seatCount);
+        List<int> snapshot = new List<int>(normalizedSeatCount);
+        for (int seatIndex = 0; seatIndex < normalizedSeatCount; seatIndex++)
+        {
+            snapshot.Add(GetGoldForSeat(seatIndex));
+        }
+
+        return snapshot;
+    }
+
+    private void SyncLegacyGoldBridge()
+    {
+        playerGold = seatGold.Count > 0 ? seatGold[0] : 0;
+        aiGold = seatGold.Count > 1 ? seatGold[1] : 0;
+    }
+
+    private void SyncLegacyTurnOwnerBridge()
+    {
+        isPlayerTurn = currentTurnSeatIndex == 0;
+    }
+
+    private void SetCurrentTurnSeatIndexForRuntime(int seatIndex, int seatCount)
+    {
+        currentTurnSeatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(seatIndex, seatCount);
+        SyncLegacyTurnOwnerBridge();
+    }
+
+    private int GetAuthoritativeCurrentTurnSeatIndex()
+    {
+        return currentMode == GameMode.PlayByPost
+            ? PlayByPostSeatUtility.NormalizeSeatIndex(currentTurnSeatIndex, GetConfiguredPlayByPostSeatCount())
+            : (isPlayerTurn ? 0 : 1);
+    }
+
+    public int GetViewerSeatIndexForRuntime()
+    {
+        if (currentMode == GameMode.PlayByPost)
+        {
+            if (string.IsNullOrWhiteSpace(currentGameId))
+            {
+                return 0;
+            }
+
+            if (TryGetLocalSeatIndexForPbp(currentGameId, out int localSeat))
+            {
+                return localSeat;
+            }
+
+            return 0;
+        }
+
+        return 0;
+    }
+
+    private int ResolveCurrentTurnSeatIndex(GameSave save, int seatCount)
+    {
+        if (save == null)
+        {
+            return 0;
+        }
+
+        if (save.protocolVersion >= SupportedPbpProtocolVersion && save.currentTurnSeatIndex >= 0)
+        {
+            return PlayByPostSeatUtility.NormalizeSeatIndex(save.currentTurnSeatIndex, seatCount);
+        }
+
+        return save.isPlayerTurn ? 0 : 1;
+    }
+
+    private static int ResolveOwnerSeatIndex(int serializedSeatIndex, bool legacyIsPlayerOwned, int seatCount)
+    {
+        if (serializedSeatIndex >= 0)
+        {
+            return PlayByPostSeatUtility.NormalizeSeatIndex(serializedSeatIndex, seatCount);
+        }
+
+        return legacyIsPlayerOwned ? 0 : 1;
+    }
+
+    private static List<int> ResolveSeenSeatIndices(SavedTile tile)
+    {
+        List<int> resolved = new List<int>();
+        if (tile == null)
+        {
+            return resolved;
+        }
+
+        if (tile.seenSeatIndices != null && tile.seenSeatIndices.Count > 0)
+        {
+            for (int i = 0; i < tile.seenSeatIndices.Count; i++)
+            {
+                int seatIndex = tile.seenSeatIndices[i];
+                if (seatIndex >= 0 && !resolved.Contains(seatIndex))
+                {
+                    resolved.Add(seatIndex);
+                }
+            }
+
+            resolved.Sort();
+            return resolved;
+        }
+
+        if (tile.playerSeen)
+        {
+            resolved.Add(0);
+        }
+
+        if (tile.opponentSeen)
+        {
+            resolved.Add(1);
+        }
+
+        return resolved;
+    }
+
+    private static List<int> ResolveSeatGold(GameSave save, int seatCount)
+    {
+        List<int> resolved = new List<int>(Mathf.Max(PlayByPostSeatUtility.MinSeatCount, seatCount));
+        for (int seatIndex = 0; seatIndex < Mathf.Max(PlayByPostSeatUtility.MinSeatCount, seatCount); seatIndex++)
+        {
+            int value = 0;
+            if (save != null && save.seatGold != null && seatIndex < save.seatGold.Count)
+            {
+                value = save.seatGold[seatIndex];
+            }
+            else if (seatIndex == 0 && save != null)
+            {
+                value = save.playerGold;
+            }
+            else if (seatIndex == 1 && save != null)
+            {
+                value = save.aiGold;
+            }
+
+            resolved.Add(Mathf.Max(0, value));
+        }
+
+        return resolved;
+    }
+
+    public bool IsCurrentSideOwner(int ownerSeatIndex)
+    {
+        if (currentMode == GameMode.PlayByPost)
+        {
+            return CanLocalPlayerIssueCommands() &&
+                   currentTurnSeatIndex == PlayByPostSeatUtility.NormalizeSeatIndex(ownerSeatIndex, GetConfiguredPlayByPostSeatCount());
+        }
+
+        return isPlayerTurn && ownerSeatIndex == 0;
+    }
+
+    public int GetGoldForSeat(int seatIndex)
+    {
+        int normalizedSeatIndex = Mathf.Max(0, seatIndex);
+        EnsureSeatGoldCapacity(Mathf.Max(GetRuntimeSeatCount(), normalizedSeatIndex + 1));
+        return seatGold[normalizedSeatIndex];
+    }
+
+    public int GetDisplayedGoldForUi()
+    {
+        return currentMode == GameMode.PlayByPost
+            ? GetGoldForSeat(GetAuthoritativeCurrentTurnSeatIndex())
+            : (isPlayerTurn ? playerGold : aiGold);
     }
 
     private void ApplyPlayByPostSeatMetadata(GameSave save)
@@ -1041,10 +1274,11 @@ public class TurnManager : MonoBehaviour
         int seatCount = currentMode == GameMode.PlayByPost
             ? GetConfiguredPlayByPostSeatCount()
             : PlayByPostSeatUtility.MinSeatCount;
-        int currentTurnSeatIndex = ResolveCurrentTurnSeatIndex(save.isPlayerTurn);
+        int currentTurnSeatIndex = ResolveCurrentTurnSeatIndex(save, seatCount);
         save.seatCount = seatCount;
         save.currentTurnSeatIndex = currentTurnSeatIndex;
-        save.transportSeq = ComputeTransportSeq(save.turnNumber, save.isPlayerTurn);
+        save.isPlayerTurn = currentTurnSeatIndex == 0;
+        save.transportSeq = ComputeTransportSeq(save.turnNumber, currentTurnSeatIndex, seatCount);
 
         save.seats ??= new List<PlayByPostSeatMetadata>();
         save.seats.Clear();
@@ -1214,39 +1448,18 @@ public class TurnManager : MonoBehaviour
 
     private bool GetViewerIsPlayerOwned()
     {
-        if (currentMode == GameMode.PlayByPost)
-        {
-            if (string.IsNullOrWhiteSpace(currentGameId))
-            {
-                // Startup transient: gameId not assigned yet; seat lookup not possible;
-                // defer correctness until SetCurrentGameId.
-                return true;
-            }
-
-            if (TryGetLocalSeatIndexForPbp(currentGameId, out int localSeat))
-            {
-                return localSeat == 0;
-            }
-
-            // Visual-only fallback when seat data is unavailable; control gating
-            // remains locked by EnsurePlayByPostControlReadiness/CanLocalPlayerIssueCommands.
-            return true;
-        }
-
-        // VsAI mode currently treats the local viewer as the player-owned side.
-        // If future modes support non-player-owned local viewpoints, update this helper.
-        return true;
+        return GetViewerSeatIndexForRuntime() == 0;
     }
 
     public bool IsCurrentSideOwner(bool isPlayerOwned)
     {
         if (currentMode == GameMode.PlayByPost)
         {
-            bool me = GetLocalIsPlayerOneForGame(currentGameId, out bool hasSeat, out _);
-            if (!hasSeat)
+            if (!TryGetLocalSeatIndexForPbp(currentGameId, out int localSeat))
                 return false;
 
-            return (isPlayerTurn == me) && (isPlayerOwned == me);
+            int bridgedSeatIndex = isPlayerOwned ? 0 : 1;
+            return currentTurnSeatIndex == localSeat && bridgedSeatIndex == localSeat;
         }
 
         // Vs AI: only player-owned units/cities are controllable during the player turn
@@ -1291,8 +1504,7 @@ public class TurnManager : MonoBehaviour
         if (!TryGetLocalSeatIndexForPbp(currentGameId, out int seat))
             return false;
 
-        bool localIsPlayerOne = seat == 0;
-        return isPlayerTurn == localIsPlayerOne;
+        return currentTurnSeatIndex == seat;
     }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -1350,7 +1562,7 @@ public class TurnManager : MonoBehaviour
         if (currentMode == GameMode.PlayByPost && !CanLocalPlayerIssueCommands())
             return false;
 
-        return IsHumanTurn() && IsCurrentSideOwner(unit.isPlayerOwned);
+        return IsHumanTurn() && IsCurrentSideOwner(unit.ownerSeatIndex);
     }
 
     public bool CanControlCity(City city)
@@ -1366,14 +1578,14 @@ public class TurnManager : MonoBehaviour
         if (currentMode == GameMode.PlayByPost && !CanLocalPlayerIssueCommands())
             return false;
 
-        return IsHumanTurn() && IsCurrentSideOwner(city.isPlayerOwned);
+        return IsHumanTurn() && IsCurrentSideOwner(city.ownerSeatIndex);
     }
 
     public string GetCurrentSideName()
     {
         if (currentMode == GameMode.PlayByPost)
         {
-            return isPlayerTurn ? "Player 1" : "Player 2";
+            return PlayByPostSeatUtility.BuildPlayerLabel(GetAuthoritativeCurrentTurnSeatIndex());
         }
 
         return isPlayerTurn ? "Player" : "AI";
@@ -2350,8 +2562,8 @@ public class TurnManager : MonoBehaviour
     private string GetPlayByPostStateSummary()
     {
         string gameIdForLog = string.IsNullOrWhiteSpace(currentGameId) ? "<none>" : currentGameId;
-        int transportSeq = turnNumber * 2 + (isPlayerTurn ? 0 : 1);
-        return $"mode={currentMode},gameId={gameIdForLog},roundTurn={turnNumber},isPlayerTurn={isPlayerTurn},isWaitingForExport={isPlayByPostWaitingForExport},transportSeq={transportSeq},lastAppliedTransportSeq={lastAppliedTurnNumberForPolling}";
+        int transportSeq = ComputeTransportSeq(turnNumber, GetAuthoritativeCurrentTurnSeatIndex(), GetRuntimeSeatCount());
+        return $"mode={currentMode},gameId={gameIdForLog},roundTurn={turnNumber},isPlayerTurn={isPlayerTurn},currentTurnSeatIndex={GetAuthoritativeCurrentTurnSeatIndex()},isWaitingForExport={isPlayByPostWaitingForExport},transportSeq={transportSeq},lastAppliedTransportSeq={lastAppliedTurnNumberForPolling}";
     }
 
     private string GetPlayByPostLoadRelationToLastSubmit()
@@ -2456,7 +2668,9 @@ public class TurnManager : MonoBehaviour
                 turnTransport != null ? turnTransport.TransportName : null,
                 lastKnownRoundTurn: exportTurnNumber,
                 lastKnownIsPlayerTurn: exportIsPlayerTurn,
-                lastKnownCurrentTurnSeatIndex: ResolveCurrentTurnSeatIndex(exportIsPlayerTurn),
+                lastKnownCurrentTurnSeatIndex: exportSave != null
+                    ? ResolveCurrentTurnSeatIndex(exportSave, GetConfiguredPlayByPostSeatCount())
+                    : (exportIsPlayerTurn ? 0 : 1),
                 lastKnownTransportSeq: transportSeq,
                 lastKnownSeatCount: GetConfiguredPlayByPostSeatCount());
             StartPlayByPostPolling(transportSeq);
@@ -2868,9 +3082,11 @@ public class TurnManager : MonoBehaviour
         gameOver = false;
         ResetGameOverUiState();
         turnNumber = 1;
-        isPlayerTurn = true;
+        currentTurnSeatIndex = 0;
+        SyncLegacyTurnOwnerBridge();
         playerGold = startingGold;
         aiGold = startingGold;
+        InitializeSeatGoldForNewGame(PlayByPostSeatUtility.MinSeatCount);
         aiRecruitVariant = AIRecruitVariant.Default;
 
         if (GameModeSelection.TryConsume(out GameMode pendingMode))
@@ -2901,6 +3117,13 @@ public class TurnManager : MonoBehaviour
         {
             configuredPlayByPostSeatCount = PlayByPostSeatUtility.NormalizeSeatCount(pendingPlayByPostSeatCount);
         }
+
+        InitializeSeatGoldForNewGame(currentMode == GameMode.PlayByPost
+            ? configuredPlayByPostSeatCount
+            : PlayByPostSeatUtility.MinSeatCount);
+        SetCurrentTurnSeatIndexForRuntime(0, currentMode == GameMode.PlayByPost
+            ? configuredPlayByPostSeatCount
+            : PlayByPostSeatUtility.MinSeatCount);
 
         GetBoardDimensionsForPreset(selectedMapSize, out int boardWidth, out int boardHeight);
         EnsureBoardDimensions(boardWidth, boardHeight);
@@ -2937,7 +3160,14 @@ public class TurnManager : MonoBehaviour
         // Give income only to the side whose turn it is.
         // The other side receives income at the start of
         // its first turn (via Begin*Turn / AITurn).
-        CollectPlayerIncome();
+        if (currentMode == GameMode.PlayByPost)
+        {
+            CollectIncomeForSeat(currentTurnSeatIndex);
+        }
+        else
+        {
+            CollectPlayerIncome();
+        }
         RecalculatePlayerVisibility();
 
         ScheduleAutoEndTurnCheck();
@@ -3238,26 +3468,12 @@ public class TurnManager : MonoBehaviour
 
     void ResetRecruitmentForPlayerCities()
     {
-        City[] cities = Object.FindObjectsByType<City>();
-        foreach (City city in cities)
-        {
-            if (city.isPlayerOwned)
-            {
-                city.hasRecruitedThisTurn = false;
-            }
-        }
+        ResetRecruitmentForSeat(0);
     }
 
     void ResetRecruitmentForAICities()
     {
-        City[] cities = Object.FindObjectsByType<City>();
-        foreach (City city in cities)
-        {
-            if (!city.isPlayerOwned)
-            {
-                city.hasRecruitedThisTurn = false;
-            }
-        }
+        ResetRecruitmentForSeat(1);
     }
 
     void RunAI()
@@ -3270,19 +3486,24 @@ public class TurnManager : MonoBehaviour
         RunAIForSide(actingSideIsPlayerOwned);
     }
 
-    private void ResetRecruitmentForSide(bool sideIsPlayerOwned)
+    private void ResetRecruitmentForSeat(int ownerSeatIndex)
     {
         City[] cities = Object.FindObjectsByType<City>();
         foreach (City city in cities)
         {
-            if (city != null && city.isPlayerOwned == sideIsPlayerOwned)
+            if (city != null && city.ownerSeatIndex == ownerSeatIndex)
             {
                 city.hasRecruitedThisTurn = false;
             }
         }
     }
 
-    private void CollectIncomeForSide(bool sideIsPlayerOwned)
+    private void ResetRecruitmentForSide(bool sideIsPlayerOwned)
+    {
+        ResetRecruitmentForSeat(sideIsPlayerOwned ? 0 : 1);
+    }
+
+    private void CollectIncomeForSeat(int ownerSeatIndex)
     {
         if (gameOver)
             return;
@@ -3291,19 +3512,24 @@ public class TurnManager : MonoBehaviour
         City[] cities = Object.FindObjectsByType<City>();
         foreach (City city in cities)
         {
-            if (city != null && city.isPlayerOwned == sideIsPlayerOwned)
+            if (city != null && city.ownerSeatIndex == ownerSeatIndex)
             {
                 baseIncome += goldPerCity;
             }
         }
 
-        int income = sideIsPlayerOwned
-            ? baseIncome
-            : ResolveAIGoldIncome(baseIncome, turnNumber);
+        int income = ownerSeatIndex == 1 && currentMode != GameMode.PlayByPost
+            ? ResolveAIGoldIncome(baseIncome, turnNumber)
+            : baseIncome;
         if (income > 0)
         {
-            AddGold(sideIsPlayerOwned, income);
+            AddGoldForSeat(ownerSeatIndex, income);
         }
+    }
+
+    private void CollectIncomeForSide(bool sideIsPlayerOwned)
+    {
+        CollectIncomeForSeat(sideIsPlayerOwned ? 0 : 1);
     }
 
     private void BeginSideTurn(bool sideIsPlayerOwned, bool playTurnStartSound)
@@ -3313,6 +3539,7 @@ public class TurnManager : MonoBehaviour
 
         autoEndTurnDisabledLoggedThisTurn = false;
         isPlayerTurn = sideIsPlayerOwned;
+        currentTurnSeatIndex = sideIsPlayerOwned ? 0 : 1;
 
         if (playTurnStartSound && SoundManager.Instance != null && !ShouldSuppressAIVsAIAudio())
         {
@@ -4115,7 +4342,7 @@ public class TurnManager : MonoBehaviour
             SoundManager.Instance.PlayMove();
         }
 
-        OnCityCaptured(unit.isPlayerOwned, targetCity);
+        OnCityCaptured(unit.ownerSeatIndex, targetCity);
         return gameOver;
     }
 
@@ -4853,7 +5080,7 @@ public class TurnManager : MonoBehaviour
                     {
                         MoveAIUnitOneStep(unit, targetPosition, tileSize, aiHasPerfectInfo);
                     }
-                    else if (occupant.isPlayerOwned == unit.isPlayerOwned)
+                    else if (occupant.ownerSeatIndex == unit.ownerSeatIndex)
                     {
                         MoveAIUnitTowardEmptyTile(unit, targetPosition, tileSize, keyCity, allUnits, visibleTiles, aiHasPerfectInfo);
                     }
@@ -4895,9 +5122,9 @@ public class TurnManager : MonoBehaviour
         }
 
         City city = GridUtils.GetCityAtPosition(unit.transform.position);
-        if (city != null && city.isPlayerOwned != unit.isPlayerOwned)
+        if (city != null && city.ownerSeatIndex != unit.ownerSeatIndex)
         {
-            OnCityCaptured(unit.isPlayerOwned, city);
+            OnCityCaptured(unit.ownerSeatIndex, city);
         }
 
         return true;
@@ -5042,9 +5269,9 @@ public class TurnManager : MonoBehaviour
         }
 
         City city = GridUtils.GetCityAtPosition(unit.transform.position);
-        if (city != null && city.isPlayerOwned != unit.isPlayerOwned)
+        if (city != null && city.ownerSeatIndex != unit.ownerSeatIndex)
         {
-            OnCityCaptured(unit.isPlayerOwned, city);
+            OnCityCaptured(unit.ownerSeatIndex, city);
         }
     }
 
@@ -5092,7 +5319,7 @@ public class TurnManager : MonoBehaviour
         if (targetUnit != null)
         {
             // Same owner: do not move onto this tile
-            if (targetUnit.isPlayerOwned == unit.isPlayerOwned)
+            if (targetUnit.ownerSeatIndex == unit.ownerSeatIndex)
             {
                 return;
             }
@@ -5156,24 +5383,24 @@ public class TurnManager : MonoBehaviour
 
         // Check for city capture after moving or killing
         City city = GridUtils.GetCityAtPosition(unit.transform.position);
-        if (city != null && city.isPlayerOwned != unit.isPlayerOwned)
+        if (city != null && city.ownerSeatIndex != unit.ownerSeatIndex)
         {
-            OnCityCaptured(unit.isPlayerOwned, city);
+            OnCityCaptured(unit.ownerSeatIndex, city);
         }
     }
 
-    public void OnCityCaptured(bool capturedByPlayer, City capturedCity = null)
+    public void OnCityCaptured(int capturedBySeatIndex, City capturedCity = null)
     {
         if (gameOver)
             return;
 
-        if (capturedCity != null && capturedCity.isPlayerOwned != capturedByPlayer)
+        if (capturedCity != null && capturedCity.ownerSeatIndex != capturedBySeatIndex)
         {
-            capturedCity.isPlayerOwned = capturedByPlayer;
+            capturedCity.SetOwnerSeatIndex(capturedBySeatIndex);
             OwnedSprite cityOwnerVisual = capturedCity.GetComponent<OwnedSprite>();
             if (cityOwnerVisual != null)
             {
-                cityOwnerVisual.SetOwner(capturedByPlayer);
+                cityOwnerVisual.SetOwner(capturedBySeatIndex == 0);
             }
         }
 
@@ -5885,7 +6112,7 @@ public class TurnManager : MonoBehaviour
     /// radius rules as the fog-of-war visuals.
     /// This does not mutate any TileVisibility state.
     /// </summary>
-    HashSet<TileVisibility> ComputeVisibilityForSide(bool sideIsPlayerOwned)
+    HashSet<TileVisibility> ComputeVisibilityForSeat(int ownerSeatIndex)
     {
         HashSet<TileVisibility> visibleTiles = new HashSet<TileVisibility>();
 
@@ -5896,7 +6123,7 @@ public class TurnManager : MonoBehaviour
         City[] cities = Object.FindObjectsByType<City>();
         foreach (City city in cities)
         {
-            if (city.isPlayerOwned != sideIsPlayerOwned)
+            if (city.ownerSeatIndex != ownerSeatIndex)
                 continue;
 
             for (int dx = -visibilityRadius; dx <= visibilityRadius; dx++)
@@ -5917,7 +6144,7 @@ public class TurnManager : MonoBehaviour
         Unit[] units = Object.FindObjectsByType<Unit>();
         foreach (Unit unit in units)
         {
-            if (unit.isPlayerOwned != sideIsPlayerOwned)
+            if (unit.ownerSeatIndex != ownerSeatIndex)
                 continue;
 
             if (!gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility originTile))
@@ -5941,31 +6168,36 @@ public class TurnManager : MonoBehaviour
         return visibleTiles;
     }
 
+    HashSet<TileVisibility> ComputeVisibilityForSide(bool sideIsPlayerOwned)
+    {
+        return ComputeVisibilityForSeat(sideIsPlayerOwned ? 0 : 1);
+    }
+
     public void RecalculatePlayerVisibility()
     {
         if (gridManager == null)
             return;
 
-        bool currentSideIsPlayerOwned = GetViewerIsPlayerOwned();
+        int viewerSeatIndex = GetViewerSeatIndexForRuntime();
 
         // Reset current visibility for this side (keep per-side explored memory)
         foreach (TileVisibility tile in gridManager.GetAllTiles())
         {
-            tile.SetVisibleForSide(false, currentSideIsPlayerOwned);
+            tile.SetVisibleForSeat(false, viewerSeatIndex);
         }
 
         // Compute which tiles should be visible for this side
-        HashSet<TileVisibility> visibleTiles = ComputeVisibilityForSide(currentSideIsPlayerOwned);
+        HashSet<TileVisibility> visibleTiles = ComputeVisibilityForSeat(viewerSeatIndex);
         foreach (TileVisibility tile in visibleTiles)
         {
-            tile.SetVisibleForSide(true, currentSideIsPlayerOwned);
+            tile.SetVisibleForSeat(true, viewerSeatIndex);
         }
 
         // Hide enemy units that are not in visible tiles
         Unit[] units = Object.FindObjectsByType<Unit>();
         foreach (Unit unit in units)
         {
-            bool isCurrentSideUnit = unit.isPlayerOwned == currentSideIsPlayerOwned;
+            bool isCurrentSideUnit = unit.ownerSeatIndex == viewerSeatIndex;
             bool isVisible = isCurrentSideUnit;
             if (!isVisible)
             {
@@ -6277,8 +6509,8 @@ public class TurnManager : MonoBehaviour
                 gameOver,
                 lastKnownRoundTurn: turnNumber,
                 lastKnownIsPlayerTurn: isPlayerTurn,
-                lastKnownCurrentTurnSeatIndex: ResolveCurrentTurnSeatIndex(isPlayerTurn),
-                lastKnownTransportSeq: ComputeTransportSeq(turnNumber, isPlayerTurn),
+                lastKnownCurrentTurnSeatIndex: GetAuthoritativeCurrentTurnSeatIndex(),
+                lastKnownTransportSeq: ComputeTransportSeq(turnNumber, GetAuthoritativeCurrentTurnSeatIndex(), GetRuntimeSeatCount()),
                 lastKnownSeatCount: GetConfiguredPlayByPostSeatCount());
         }
         catch (IOException ex)
@@ -6725,7 +6957,9 @@ public class TurnManager : MonoBehaviour
             mapSizePreset = GetCurrentMapSizePreset().ToString(),
             boardWidth = gridManager.width,
             boardHeight = gridManager.height,
-            isPlayerTurn = isPlayerTurn,
+            currentTurnSeatIndex = GetAuthoritativeCurrentTurnSeatIndex(),
+            isPlayerTurn = GetAuthoritativeCurrentTurnSeatIndex() == 0,
+            seatGold = BuildSeatGoldSnapshot(GetRuntimeSeatCount()),
             turnNumber = turnNumber,
             playerGold = playerGold,
             aiGold = aiGold,
@@ -6744,6 +6978,7 @@ public class TurnManager : MonoBehaviour
             {
                 x = city.x,
                 y = city.y,
+                ownerSeatIndex = city.ownerSeatIndex,
                 isPlayerOwned = city.isPlayerOwned,
                 hasRecruitedThisTurn = city.hasRecruitedThisTurn
             });
@@ -6757,6 +6992,7 @@ public class TurnManager : MonoBehaviour
             save.units.Add(new SavedUnit
             {
                 unitTypeId = unit.UnitTypeId,
+                ownerSeatIndex = unit.ownerSeatIndex,
                 isPlayerOwned = unit.isPlayerOwned,
                 x = pos.x,
                 y = pos.y,
@@ -6771,13 +7007,15 @@ public class TurnManager : MonoBehaviour
         // Tiles (seen state per side)
         foreach (TileVisibility tile in gridManager.GetAllTiles())
         {
-            tile.GetSeenState(out bool playerSeen, out bool opponentSeen);
+            List<int> seenSeatIndices = new List<int>();
+            tile.GetSeenSeatIndices(seenSeatIndices);
             save.tiles.Add(new SavedTile
             {
                 x = tile.gridX,
                 y = tile.gridY,
-                playerSeen = playerSeen,
-                opponentSeen = opponentSeen
+                seenSeatIndices = seenSeatIndices,
+                playerSeen = seenSeatIndices.Contains(0),
+                opponentSeen = seenSeatIndices.Contains(1)
             });
         }
 
@@ -6869,13 +7107,37 @@ public class TurnManager : MonoBehaviour
             return s.transportSeq;
         }
 
-        return ComputeTransportSeq(s.turnNumber, s.isPlayerTurn);
+        int seatCount = s != null ? s.seatCount : PlayByPostSeatUtility.MinSeatCount;
+        int currentSeatIndex = 0;
+        if (s != null)
+        {
+            if (s.protocolVersion >= SupportedPbpProtocolVersion)
+            {
+                currentSeatIndex = s.currentTurnSeatIndex;
+            }
+            else
+            {
+                currentSeatIndex = s.isPlayerTurn ? 0 : 1;
+            }
+        }
+
+        return ComputeTransportSeq(
+            s.turnNumber,
+            currentSeatIndex,
+            seatCount);
     }
 
     private static int ComputeTransportSeq(int roundTurn, bool turnIsPlayer)
     {
+        return ComputeTransportSeq(roundTurn, turnIsPlayer ? 0 : 1, PlayByPostSeatUtility.MinSeatCount);
+    }
+
+    private static int ComputeTransportSeq(int roundTurn, int turnSeatIndex, int seatCount)
+    {
         int clampedRoundTurn = System.Math.Max(0, roundTurn);
-        return clampedRoundTurn * 2 + (turnIsPlayer ? 0 : 1);
+        int normalizedSeatCount = PlayByPostSeatUtility.NormalizeSeatCount(seatCount);
+        int normalizedSeatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(turnSeatIndex, normalizedSeatCount);
+        return clampedRoundTurn * normalizedSeatCount + normalizedSeatIndex;
     }
 
     private int ResolveAIGoldIncome(int baseIncome, int roundTurnNumber)
@@ -7171,10 +7433,16 @@ private void PBpDebugSyncNow_Context()
                 PersistCurrentPbpGameIdIfNeeded();
             }
             UpdateKnownTypedDisplayNames(save);
-            isPlayerTurn = save.isPlayerTurn;
+            int runtimeSeatCount = currentMode == GameMode.PlayByPost
+                ? configuredPlayByPostSeatCount
+                : PlayByPostSeatUtility.MinSeatCount;
+            SetCurrentTurnSeatIndexForRuntime(
+                currentMode == GameMode.PlayByPost
+                    ? ResolveCurrentTurnSeatIndex(save, runtimeSeatCount)
+                    : (save.isPlayerTurn ? 0 : 1),
+                runtimeSeatCount);
             turnNumber = save.turnNumber;
-            playerGold = save.playerGold;
-            aiGold = save.aiGold;
+            SetSeatGoldStateFromList(ResolveSeatGold(save, runtimeSeatCount), runtimeSeatCount);
             gameOver = save.gameOver;
             if (!gameOver)
             {
@@ -7197,7 +7465,7 @@ private void PBpDebugSyncNow_Context()
             visibilityRadius = save.visibilityRadius;
             isPlayByPostWaitingForExport = false;
             Time.timeScale = 1f;
-            bool viewerIsPlayerOwnedForLoad = GetViewerIsPlayerOwned();
+            int viewerSeatIndexForLoad = GetViewerSeatIndexForRuntime();
             int unitCountBeforeClear = 0;
             int unitCountAfterSpawn = 0;
             int duplicateOwnerTileSlots = 0;
@@ -7245,7 +7513,7 @@ private void PBpDebugSyncNow_Context()
                 {
                     if (city.x == c.x && city.y == c.y)
                     {
-                        city.isPlayerOwned = c.isPlayerOwned;
+                        city.SetOwnerSeatIndex(ResolveOwnerSeatIndex(c.ownerSeatIndex, c.isPlayerOwned, runtimeSeatCount));
                         city.hasRecruitedThisTurn = c.hasRecruitedThisTurn;
                     }
                 }
@@ -7271,7 +7539,7 @@ private void PBpDebugSyncNow_Context()
                     resolvedUnitTypeId,
                     prefab,
                     pos,
-                    u.isPlayerOwned,
+                    ResolveOwnerSeatIndex(u.ownerSeatIndex, u.isPlayerOwned, runtimeSeatCount),
                     currentCity: null,
                     resetTurnState: false);
                 if (go == null)
@@ -7293,7 +7561,7 @@ private void PBpDebugSyncNow_Context()
                     bool isCurrentSideUnit = true;
                     if (currentMode == GameMode.PlayByPost)
                     {
-                        isCurrentSideUnit = unit.isPlayerOwned == viewerIsPlayerOwnedForLoad;
+                        isCurrentSideUnit = unit.ownerSeatIndex == viewerSeatIndexForLoad;
                     }
                     unit.SetFogVisibility(true, isCurrentSideUnit); // will be updated after visibility recalculation
                 }
@@ -7346,7 +7614,7 @@ private void PBpDebugSyncNow_Context()
                 {
                     if (gridManager.TryGetTile(t.x, t.y, out TileVisibility tile))
                     {
-                        tile.SetSeenState(t.playerSeen, t.opponentSeen, true);
+                        tile.SetSeenSeatIndices(ResolveSeenSeatIndices(t), 0);
                     }
                 }
             }
@@ -7365,16 +7633,14 @@ private void PBpDebugSyncNow_Context()
                 lastAppliedTurnNumberForPolling = ComputeTransportSeq(save);
                 EnsurePlayByPostControlReadiness();
                 pbpHasSeat = TryGetLocalSeatIndexForPbp(currentGameId, out pbpSeat);
-                bool localIsPlayerOne = pbpSeat == 0;
-                bool currentSideIsPlayerOne = isPlayerTurn;
-                bool localTurn = pbpHasSeat && (localIsPlayerOne == currentSideIsPlayerOne);
+                bool localTurn = pbpHasSeat && pbpSeat == currentTurnSeatIndex;
                 pbpSeatTextForLog = pbpHasSeat ? pbpSeat.ToString() : "<none>";
                 isPlayByPostWaitingForExport = !localTurn;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 if (PbpDebugSettingsLoader.EnableSaveLoadLogs)
                 {
                     Debug.Log(
-                        $"[PBpLoadSeat] loadedGameId={save.gameId} seat={pbpSeatTextForLog} hasSeat={pbpHasSeat} viewerIsPlayerOwned={viewerIsPlayerOwnedForLoad} loadedIsPlayerTurn={isPlayerTurn} isWaitingForExport={isPlayByPostWaitingForExport} canAdvance={CanAdvanceTurn()}");
+                        $"[PBpLoadSeat] loadedGameId={save.gameId} seat={pbpSeatTextForLog} hasSeat={pbpHasSeat} viewerSeatIndex={viewerSeatIndexForLoad} currentTurnSeatIndex={currentTurnSeatIndex} loadedIsPlayerTurn={isPlayerTurn} isWaitingForExport={isPlayByPostWaitingForExport} canAdvance={CanAdvanceTurn()}");
                 }
 #endif
                 if (!localTurn)
@@ -7463,8 +7729,8 @@ private void PBpDebugSyncNow_Context()
                 gameOver,
                 lastKnownRoundTurn: turnNumber,
                 lastKnownIsPlayerTurn: isPlayerTurn,
-                lastKnownCurrentTurnSeatIndex: ResolveCurrentTurnSeatIndex(isPlayerTurn),
-                lastKnownTransportSeq: ComputeTransportSeq(turnNumber, isPlayerTurn),
+                lastKnownCurrentTurnSeatIndex: GetAuthoritativeCurrentTurnSeatIndex(),
+                lastKnownTransportSeq: ComputeTransportSeq(turnNumber, GetAuthoritativeCurrentTurnSeatIndex(), GetRuntimeSeatCount()),
                 lastKnownSeatCount: GetConfiguredPlayByPostSeatCount());
             GameplayInputOrchestrator.ResetTransientInputState();
 
@@ -7548,7 +7814,7 @@ private void PBpDebugSyncNow_Context()
     }
 #endif
 
-    public bool TrySpendGold(bool forPlayer, int amount)
+    public bool TrySpendGoldForSeat(int ownerSeatIndex, int amount)
     {
         if (amount <= 0)
             return true;
@@ -7559,64 +7825,55 @@ private void PBpDebugSyncNow_Context()
             if (currentMode == GameMode.VsAI)
             {
                 // Only play invalid for the human player's gold in Vs AI.
-                shouldPlayInvalid = forPlayer && isPlayerTurn;
+                shouldPlayInvalid = ownerSeatIndex == 0 && isPlayerTurn;
             }
             else if (currentMode == GameMode.PlayByPost)
             {
-                // In Play-by-Post, both banks can be human-controlled depending on whose turn it is.
-                bool spendingSideIsActive = isPlayerTurn == forPlayer;
+                bool spendingSideIsActive = currentTurnSeatIndex == ownerSeatIndex;
                 shouldPlayInvalid = spendingSideIsActive && IsHumanTurn();
             }
             else
             {
-                // Fallback: treat "forPlayer" as human.
-                shouldPlayInvalid = forPlayer;
+                shouldPlayInvalid = ownerSeatIndex == 0;
             }
         }
 
-        if (forPlayer)
+        int normalizedSeatIndex = Mathf.Max(0, ownerSeatIndex);
+        EnsureSeatGoldCapacity(Mathf.Max(GetRuntimeSeatCount(), normalizedSeatIndex + 1));
+        if (seatGold[normalizedSeatIndex] < amount)
         {
-            if (playerGold < amount)
+            if (shouldPlayInvalid)
             {
-                if (shouldPlayInvalid)
-                {
-                    SoundManager.Instance.PlayInvalid();
-                }
-                return false;
+                SoundManager.Instance.PlayInvalid();
             }
 
-            playerGold -= amount;
-            return true;
+            return false;
         }
-        else
-        {
-            if (aiGold < amount)
-            {
-                if (shouldPlayInvalid)
-                {
-                    SoundManager.Instance.PlayInvalid();
-                }
-                return false;
-            }
 
-            aiGold -= amount;
-            return true;
-        }
+        seatGold[normalizedSeatIndex] -= amount;
+        SyncLegacyGoldBridge();
+        return true;
     }
 
-    public void AddGold(bool forPlayer, int amount)
+    public bool TrySpendGold(bool forPlayer, int amount)
+    {
+        return TrySpendGoldForSeat(forPlayer ? 0 : 1, amount);
+    }
+
+    public void AddGoldForSeat(int ownerSeatIndex, int amount)
     {
         if (amount <= 0)
             return;
 
-        if (forPlayer)
-        {
-            playerGold += amount;
-        }
-        else
-        {
-            aiGold += amount;
-        }
+        int normalizedSeatIndex = Mathf.Max(0, ownerSeatIndex);
+        EnsureSeatGoldCapacity(Mathf.Max(GetRuntimeSeatCount(), normalizedSeatIndex + 1));
+        seatGold[normalizedSeatIndex] += amount;
+        SyncLegacyGoldBridge();
+    }
+
+    public void AddGold(bool forPlayer, int amount)
+    {
+        AddGoldForSeat(forPlayer ? 0 : 1, amount);
     }
 
     /// <summary>
@@ -7625,24 +7882,28 @@ private void PBpDebugSyncNow_Context()
     /// </summary>
     private void PreparePlayByPostNextTurnSnapshot(GameSave save)
     {
-        // Determine which side will act next.
-        bool nextIsPlayer = !isPlayerTurn; // Player 1 -> Player 2, Player 2 -> Player 1
-        save.isPlayerTurn = nextIsPlayer;
+        int seatCount = PlayByPostSeatUtility.NormalizeSeatCount(save.seatCount);
+        int activeSeatIndex = ResolveCurrentTurnSeatIndex(save, seatCount);
+        int nextSeatIndex = (activeSeatIndex + 1) % seatCount;
+        save.currentTurnSeatIndex = nextSeatIndex;
+        save.isPlayerTurn = nextSeatIndex == 0;
 
-        // Advance the turn counter only when we wrap back to Player 1.
         save.turnNumber = turnNumber;
-        if (!isPlayerTurn && nextIsPlayer)
+        if (nextSeatIndex == 0 && activeSeatIndex != nextSeatIndex)
         {
-            // We just finished Player 2 locally; next save is Player 1, new round.
             save.turnNumber = turnNumber + 1;
         }
 
-        // Reset recruitment flags for the side whose turn is starting
-        // and compute their income from owned cities.
+        List<int> resolvedSeatGold = ResolveSeatGold(save, seatCount);
+        save.seatGold = new List<int>(resolvedSeatGold);
+
         int income = 0;
         foreach (SavedCity city in save.cities)
         {
-            if (city.isPlayerOwned == nextIsPlayer)
+            int ownerSeatIndex = ResolveOwnerSeatIndex(city.ownerSeatIndex, city.isPlayerOwned, seatCount);
+            city.ownerSeatIndex = ownerSeatIndex;
+            city.isPlayerOwned = ownerSeatIndex == 0;
+            if (ownerSeatIndex == nextSeatIndex)
             {
                 city.hasRecruitedThisTurn = false;
                 income += goldPerCity;
@@ -7651,21 +7912,23 @@ private void PBpDebugSyncNow_Context()
 
         if (income > 0)
         {
-            if (nextIsPlayer)
+            int appliedIncome = nextSeatIndex == 1
+                ? ResolveAIGoldIncome(income, save.turnNumber)
+                : income;
+            while (save.seatGold.Count <= nextSeatIndex)
             {
-                save.playerGold += income;
+                save.seatGold.Add(0);
             }
-            else
-            {
-                save.aiGold += ResolveAIGoldIncome(income, save.turnNumber);
-            }
+
+            save.seatGold[nextSeatIndex] += appliedIncome;
         }
 
-        // Reset movement for units belonging to the side
-        // that will act next so they have fresh moves.
         foreach (SavedUnit unit in save.units)
         {
-            if (unit.isPlayerOwned == nextIsPlayer)
+            int ownerSeatIndex = ResolveOwnerSeatIndex(unit.ownerSeatIndex, unit.isPlayerOwned, seatCount);
+            unit.ownerSeatIndex = ownerSeatIndex;
+            unit.isPlayerOwned = ownerSeatIndex == 0;
+            if (ownerSeatIndex == nextSeatIndex)
             {
                 unit.movesUsedThisTurn = 0;
                 unit.attacksUsedThisTurn = 0;
@@ -7673,6 +7936,8 @@ private void PBpDebugSyncNow_Context()
             }
         }
 
+        save.playerGold = save.seatGold.Count > 0 ? save.seatGold[0] : 0;
+        save.aiGold = save.seatGold.Count > 1 ? save.seatGold[1] : 0;
         ApplyPlayByPostSeatMetadata(save);
     }
 }
