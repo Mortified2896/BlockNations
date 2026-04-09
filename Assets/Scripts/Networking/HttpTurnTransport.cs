@@ -128,13 +128,17 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
             yield return req.SendWebRequest();
 
-            if (req.result != UnityWebRequest.Result.Success)
+            long status = req.responseCode;
+            bool hasHttpResponse = status > 0;
+
+            if (req.result == UnityWebRequest.Result.ConnectionError ||
+                req.result == UnityWebRequest.Result.DataProcessingError ||
+                (!hasHttpResponse && req.result != UnityWebRequest.Result.Success))
             {
                 done?.Invoke(false, TurnTelemetryConstants.IoError);
                 yield break;
             }
 
-            long status = req.responseCode;
             string text = req.downloadHandler != null ? req.downloadHandler.text : null;
 
             if (status == 200)
@@ -218,13 +222,17 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
             yield return req.SendWebRequest();
 
-            if (req.result != UnityWebRequest.Result.Success)
+            long status = req.responseCode;
+            bool hasHttpResponse = status > 0;
+
+            if (req.result == UnityWebRequest.Result.ConnectionError ||
+                req.result == UnityWebRequest.Result.DataProcessingError ||
+                (!hasHttpResponse && req.result != UnityWebRequest.Result.Success))
             {
                 done?.Invoke(false, TurnTelemetryConstants.IoError, 0, null);
                 yield break;
             }
 
-            long status = req.responseCode;
             string text = req.downloadHandler != null ? req.downloadHandler.text : null;
 
             if (status == 200)
@@ -667,13 +675,40 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
                 return string.Empty;
             }
 
-            return NormalizeApiKeyCandidate(File.ReadAllText(secretPath));
+            return NormalizeApiKeyFileContents(File.ReadAllText(secretPath));
         }
         catch
         {
             // Best-effort only. Fall through to the next configured source.
             return string.Empty;
         }
+    }
+
+    private static string NormalizeApiKeyFileContents(string contents)
+    {
+        if (string.IsNullOrWhiteSpace(contents))
+        {
+            return string.Empty;
+        }
+
+        string[] lines = contents.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string line = lines[i];
+            int commentIndex = line.IndexOf('#');
+            if (commentIndex >= 0)
+            {
+                line = line.Substring(0, commentIndex);
+            }
+
+            string normalized = NormalizeApiKeyCandidate(line);
+            if (!string.IsNullOrEmpty(normalized))
+            {
+                return normalized;
+            }
+        }
+
+        return string.Empty;
     }
 
     private static string NormalizeApiKeyCandidate(string candidate)
