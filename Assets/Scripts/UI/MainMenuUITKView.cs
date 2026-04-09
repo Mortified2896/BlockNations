@@ -3254,6 +3254,17 @@ public class MainMenuUITKView : MonoBehaviour
         if (statusLabel != null)
         {
             string statusText = message ?? string.Empty;
+            string serverIndicatorText = mainMenuController != null
+                ? mainMenuController.GetPlayByPostServerIndicatorText()
+                : string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(serverIndicatorText))
+            {
+                statusText = string.IsNullOrWhiteSpace(statusText)
+                    ? serverIndicatorText
+                    : $"{statusText}\n{serverIndicatorText}";
+            }
+
             statusLabel.text = statusText;
             statusLabel.style.display = string.IsNullOrWhiteSpace(statusText) ? DisplayStyle.None : DisplayStyle.Flex;
         }

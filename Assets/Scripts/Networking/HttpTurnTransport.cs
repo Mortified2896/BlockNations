@@ -12,10 +12,6 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
     private const string DefaultPbpApiKey = "wlrwnDxyIynqTumpdywh_5_5bfIj1wf7RndV_2toTPw";
 
     [SerializeField]
-    [Tooltip("Base URL for the PBp server, e.g. http://127.0.0.1:8080")]
-    private string baseUrl = "http://127.0.0.1:8080";
-
-    [SerializeField]
     [Tooltip("UnityWebRequest timeout in seconds (0 = no timeout).")]
     private float timeoutSeconds = 10f;
 
@@ -25,8 +21,17 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
     public string TransportName => "Http";
     public bool IsAvailable => isAvailable;
-    public string BackgroundExperimentBaseUrl => NormalizeBaseUrl(baseUrl);
+    public string EffectiveBaseUrl
+    {
+        get
+        {
+            Initialize();
+            return normalizedBaseUrl;
+        }
+    }
+    public string BackgroundExperimentBaseUrl => ResolveConfiguredBaseUrl();
     public static string BackgroundExperimentApiKey => GetConfiguredPbpApiKey();
+    public static string NormalizeConfiguredBaseUrl(string url) => NormalizeBaseUrl(url);
 
     public void Initialize()
     {
@@ -34,14 +39,14 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
             return;
 
         initialized = true;
-        normalizedBaseUrl = NormalizeBaseUrl(baseUrl);
+        normalizedBaseUrl = ResolveConfiguredBaseUrl();
         isAvailable = !string.IsNullOrWhiteSpace(normalizedBaseUrl);
     }
 
 #if UNITY_EDITOR
     private void OnValidate()
     {
-        normalizedBaseUrl = NormalizeBaseUrl(baseUrl);
+        normalizedBaseUrl = ResolveConfiguredBaseUrl();
         isAvailable = !string.IsNullOrWhiteSpace(normalizedBaseUrl);
     }
 #endif
@@ -568,6 +573,14 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         }
 
         return trimmed.Length == 0 ? null : trimmed;
+    }
+
+    private string ResolveConfiguredBaseUrl()
+    {
+        PbpDebugSettings sharedSettings = Resources.Load<PbpDebugSettings>("PbpDebugSettings");
+        return sharedSettings != null
+            ? NormalizeBaseUrl(sharedSettings.playByPostBaseUrl)
+            : null;
     }
 
     private string BuildUrl(string path)
