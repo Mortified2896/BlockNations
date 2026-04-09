@@ -50,7 +50,7 @@ public class MainMenuController : MonoBehaviour
     private const string PbpVersionVerificationFailedMessage = "Unable to verify this game's PbP version. For safety, this match cannot be opened on this build.";
     private const string PbpActiveGameUpdateRequiredCardText = "Requires matching version";
     private const string PbpJoinFullMessage = "Can't join: this game is already full.";
-    private const string PbpStagingBaseUrl = "http://91.98.79.206:8081";
+    private const string PbpStagingBaseUrl = "https://staging.blocknations.moneymattersmedia.com";
     private const float RemoteTurnStatusFetchCooldownSeconds = 10f;
     private const float MenuClosedRefreshIntervalSeconds = 60f;
     private const float MenuOpenRefreshIntervalSeconds = 10f;
