@@ -3,8 +3,6 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "PbpDebugSettings", menuName = "BlockNations/PBp Debug Settings")]
 public class PbpDebugSettings : ScriptableObject
 {
-    [Tooltip("Shared PBp base URL used by HttpTurnTransport when set. Leave blank to fall back to the scene component value.")]
-    public string playByPostBaseUrl = string.Empty;
     public bool enableInputLogs = false;
     public bool enableTransportLogs = false;
     public bool enableSaveLoadLogs = false;

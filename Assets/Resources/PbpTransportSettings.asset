@@ -9,9 +9,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5c878fca1a8874f99842abcf5b86c901, type: 3}
-  m_Name: PbpDebugSettings
-  m_EditorClassIdentifier: Assembly-CSharp::PbpDebugSettings
-  enableInputLogs: 0
-  enableTransportLogs: 0
-  enableSaveLoadLogs: 0
+  m_Script: {fileID: 11500000, guid: 96c0d0f74daf4e859e1634f73e4e2c92, type: 3}
+  m_Name: PbpTransportSettings
+  m_EditorClassIdentifier: Assembly-CSharp::PbpTransportSettings
+  playByPostBaseUrl: https://blocknations.moneymattersmedia.com

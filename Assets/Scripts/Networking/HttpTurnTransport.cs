@@ -577,7 +577,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
     private string ResolveConfiguredBaseUrl()
     {
-        PbpDebugSettings sharedSettings = Resources.Load<PbpDebugSettings>("PbpDebugSettings");
+        PbpTransportSettings sharedSettings = Resources.Load<PbpTransportSettings>("PbpTransportSettings");
         return sharedSettings != null
             ? NormalizeBaseUrl(sharedSettings.playByPostBaseUrl)
             : null;
