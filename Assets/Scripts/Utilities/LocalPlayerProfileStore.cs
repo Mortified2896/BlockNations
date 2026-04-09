@@ -3,9 +3,9 @@ using UnityEngine;
 
 public static class LocalPlayerProfileStore
 {
-    private const string PlayerIdKey = "profile_player_id";
-    private const string UsernameKey = "profile_username";
-    private const string TypedDisplayNameKey = "profile_typed_display_name";
+    private const string PlayerIdKeyRaw = "profile_player_id";
+    private const string UsernameKeyRaw = "profile_username";
+    private const string TypedDisplayNameKeyRaw = "profile_typed_display_name";
 
     public struct ProfileData
     {
@@ -25,32 +25,43 @@ public static class LocalPlayerProfileStore
     {
         bool didChange = false;
 
-        string playerId = PlayerPrefs.GetString(PlayerIdKey, string.Empty);
+        string playerIdKey = GetScopedKey(PlayerIdKeyRaw);
+        string usernameKey = GetScopedKey(UsernameKeyRaw);
+        string typedDisplayNameKey = GetScopedKey(TypedDisplayNameKeyRaw);
+
+        string playerId = PlayerPrefs.GetString(playerIdKey, string.Empty);
         if (string.IsNullOrWhiteSpace(playerId))
         {
             playerId = Guid.NewGuid().ToString("N");
-            PlayerPrefs.SetString(PlayerIdKey, playerId);
+            PlayerPrefs.SetString(playerIdKey, playerId);
             didChange = true;
         }
 
-        string username = PlayerPrefs.GetString(UsernameKey, string.Empty);
+        string username = PlayerPrefs.GetString(usernameKey, string.Empty);
         if (!IsValidUsername(username))
         {
             username = ProfileUsernameGenerator.Generate();
-            PlayerPrefs.SetString(UsernameKey, username);
+            PlayerPrefs.SetString(usernameKey, username);
             didChange = true;
         }
 
-        string typedDisplayName = NormalizeTypedDisplayName(PlayerPrefs.GetString(TypedDisplayNameKey, string.Empty));
-        string storedTypedDisplayName = PlayerPrefs.GetString(TypedDisplayNameKey, string.Empty);
+        string typedDisplayName = NormalizeTypedDisplayName(PlayerPrefs.GetString(typedDisplayNameKey, string.Empty));
+        string storedTypedDisplayName = PlayerPrefs.GetString(typedDisplayNameKey, string.Empty);
         if (!HasRecognizableTypedDisplayName(typedDisplayName))
         {
-            typedDisplayName = string.Empty;
+            if (string.IsNullOrWhiteSpace(storedTypedDisplayName))
+            {
+                typedDisplayName = NormalizeTypedDisplayName(DevClientInstanceScope.GetInitialTypedProfileName());
+            }
+            else
+            {
+                typedDisplayName = string.Empty;
+            }
         }
 
         if (!string.Equals(storedTypedDisplayName, typedDisplayName, StringComparison.Ordinal))
         {
-            PlayerPrefs.SetString(TypedDisplayNameKey, typedDisplayName);
+            PlayerPrefs.SetString(typedDisplayNameKey, typedDisplayName);
             didChange = true;
         }
 
@@ -72,7 +83,7 @@ public static class LocalPlayerProfileStore
             regenerated = ProfileUsernameGenerator.Generate();
         }
 
-        PlayerPrefs.SetString(UsernameKey, regenerated);
+        PlayerPrefs.SetString(GetScopedKey(UsernameKeyRaw), regenerated);
         PlayerPrefs.Save();
 
         profile.Username = regenerated;
@@ -87,7 +98,7 @@ public static class LocalPlayerProfileStore
             return GetSavedTypedDisplayName();
         }
 
-        PlayerPrefs.SetString(TypedDisplayNameKey, normalized);
+        PlayerPrefs.SetString(GetScopedKey(TypedDisplayNameKeyRaw), normalized);
         return normalized;
     }
 
@@ -112,12 +123,13 @@ public static class LocalPlayerProfileStore
     public static bool HasRecognizableTypedDisplayName(string typedDisplayName)
     {
         string normalized = NormalizeTypedDisplayName(typedDisplayName);
-        return IsValidTypedDisplayName(normalized) && !ProfileUsernameGenerator.IsGeneratedUsername(normalized);
+        return (IsValidTypedDisplayName(normalized) && !ProfileUsernameGenerator.IsGeneratedUsername(normalized)) ||
+               DevClientInstanceScope.IsCurrentDevDefaultTypedProfileName(normalized);
     }
 
     private static string GetSavedTypedDisplayName()
     {
-        string savedTypedDisplayName = NormalizeTypedDisplayName(PlayerPrefs.GetString(TypedDisplayNameKey, string.Empty));
+        string savedTypedDisplayName = NormalizeTypedDisplayName(PlayerPrefs.GetString(GetScopedKey(TypedDisplayNameKeyRaw), string.Empty));
         return HasRecognizableTypedDisplayName(savedTypedDisplayName)
             ? savedTypedDisplayName
             : string.Empty;
@@ -140,5 +152,10 @@ public static class LocalPlayerProfileStore
     private static bool IsValidUsername(string username)
     {
         return !string.IsNullOrWhiteSpace(username) && username.Length <= ProfileUsernameGenerator.MaxUsernameLength;
+    }
+
+    private static string GetScopedKey(string rawKey)
+    {
+        return DevClientInstanceScope.ScopePlayerPrefsKey(rawKey);
     }
 }

@@ -40,11 +40,11 @@ public class MainMenuController : MonoBehaviour
 
     [Header("Layout")]
     [SerializeField] private bool autoFitMenuToScreenOnDesktop = true;
-    private const string PlayByPostGameIdKey = "pbp_gameId";
-    private const string PlayByPostForceNewKey = "pbp_forceNew";
-    private const string PlayByPostPendingNewGameIdKey = "pbp_pendingNewGameId";
-    private const string PendingCreateShareReadyGameIdKey = "ui_pbp_createShareReadyGameId";
-    private const string ReturnToMultiplayerPaneKey = "ui_returnToMultiplayerPane";
+    private const string PlayByPostGameIdKeyRaw = "pbp_gameId";
+    private const string PlayByPostForceNewKeyRaw = "pbp_forceNew";
+    private const string PlayByPostPendingNewGameIdKeyRaw = "pbp_pendingNewGameId";
+    private const string PendingCreateShareReadyGameIdKeyRaw = "ui_pbp_createShareReadyGameId";
+    private const string ReturnToMultiplayerPaneKeyRaw = "ui_returnToMultiplayerPane";
     private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
     private const string LegacySharedSaveFileName = "save.json";
     private const string PbpVersionVerificationFailedMessage = "Unable to verify this game's PbP version. For safety, this match cannot be opened on this build.";
@@ -61,6 +61,11 @@ public class MainMenuController : MonoBehaviour
     private static readonly Regex PbpGameIdCandidateRegex = new Regex(
         @"(?<![0-9A-Fa-f])(?:\{[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}\}|\([0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}\)|[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}|[0-9A-Fa-f]{32})(?![0-9A-Fa-f])",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    private static string PlayByPostGameIdKey => DevClientInstanceScope.ScopePlayerPrefsKey(PlayByPostGameIdKeyRaw);
+    private static string PlayByPostForceNewKey => DevClientInstanceScope.ScopePlayerPrefsKey(PlayByPostForceNewKeyRaw);
+    private static string PlayByPostPendingNewGameIdKey => DevClientInstanceScope.ScopePlayerPrefsKey(PlayByPostPendingNewGameIdKeyRaw);
+    private static string PendingCreateShareReadyGameIdKey => DevClientInstanceScope.ScopePlayerPrefsKey(PendingCreateShareReadyGameIdKeyRaw);
+    private static string ReturnToMultiplayerPaneKey => DevClientInstanceScope.ScopePlayerPrefsKey(ReturnToMultiplayerPaneKeyRaw);
     private bool isServerOnline = true;
     private bool joinProbeInProgress;
     private Coroutine serverCheckRoutine;
@@ -1005,13 +1010,13 @@ public class MainMenuController : MonoBehaviour
 
     private static string ResolveContinueSavePath()
     {
-        string spPath = Path.Combine(Application.persistentDataPath, SinglePlayerPrimarySaveFileName);
+        string spPath = Path.Combine(GetPersistentRootPath(), SinglePlayerPrimarySaveFileName);
         if (File.Exists(spPath))
         {
             return spPath;
         }
 
-        return Path.Combine(Application.persistentDataPath, LegacySharedSaveFileName);
+        return Path.Combine(GetPersistentRootPath(), LegacySharedSaveFileName);
     }
 
     // === JSON import (paste-based) ===
@@ -1085,7 +1090,7 @@ public class MainMenuController : MonoBehaviour
             return;
         }
 
-        string path = Path.Combine(Application.persistentDataPath, "imported.json");
+        string path = Path.Combine(GetPersistentRootPath(), "imported.json");
         try
         {
             File.WriteAllText(path, json);
@@ -1946,7 +1951,12 @@ public class MainMenuController : MonoBehaviour
             return null;
         }
 
-        return Path.Combine(Application.persistentDataPath, "pbp", $"pbp_{safeGameId}.json");
+        return Path.Combine(GetPersistentRootPath(), "pbp", $"pbp_{safeGameId}.json");
+    }
+
+    private static string GetPersistentRootPath()
+    {
+        return DevClientInstanceScope.GetScopedPersistentDataPath();
     }
 
     private static string SanitizeGameIdForFileName(string gameId)
@@ -2499,7 +2509,7 @@ public class MainMenuController : MonoBehaviour
         bool manifestUpdated = SaveManifestService.MarkPlayByPostGameFinished(gameId);
 
         string turnsFolder = Path.Combine(
-            Application.persistentDataPath,
+            GetPersistentRootPath(),
             "PlayByPost",
             "Turns",
             Hash128.Compute(gameId).ToString());
@@ -2519,9 +2529,9 @@ public class MainMenuController : MonoBehaviour
             }
         }
 
-        string savePath = Path.Combine(Application.persistentDataPath, "save.json");
+        string savePath = Path.Combine(GetPersistentRootPath(), "save.json");
         bool deletedSaveJson = SaveManifestService.TryDeleteMatchingPlayByPostSaveFile(savePath, gameId);
-        string importedPath = Path.Combine(Application.persistentDataPath, "imported.json");
+        string importedPath = Path.Combine(GetPersistentRootPath(), "imported.json");
         bool deletedImportedJson = SaveManifestService.TryDeleteMatchingPlayByPostSaveFile(importedPath, gameId);
 
         bool prefsChanged = LocalPlayerSeatStore.ClearSeat(gameId);

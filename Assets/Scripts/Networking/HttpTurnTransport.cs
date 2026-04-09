@@ -7,7 +7,7 @@ using UnityEngine.Networking;
 public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 {
     private const string ApiKeyHeaderName = "X-BlockNations-Api-Key";
-    private const string ApiKeyPlayerPrefsKey = "pbp_api_key";
+    private const string ApiKeyPlayerPrefsKeyRaw = "pbp_api_key";
     private const string ApiKeyEnvVarName = "PBP_SHARED_SECRET";
     private const string DefaultPbpApiKey = "wlrwnDxyIynqTumpdywh_5_5bfIj1wf7RndV_2toTPw";
 
@@ -540,7 +540,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
             return fromEnv;
         }
 
-        string fromPrefs = PlayerPrefs.GetString(ApiKeyPlayerPrefsKey, string.Empty);
+        string fromPrefs = PlayerPrefs.GetString(DevClientInstanceScope.ScopePlayerPrefsKey(ApiKeyPlayerPrefsKeyRaw), string.Empty);
         if (!string.IsNullOrEmpty(fromPrefs))
         {
             return fromPrefs;

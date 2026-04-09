@@ -57,7 +57,7 @@ public static class LocalPlayerSeatStore
 
     private static string BuildSeatKey(string gameId)
     {
-        return SeatByGameKeyPrefix + Hash128.Compute(gameId).ToString();
+        return DevClientInstanceScope.ScopePlayerPrefsKey(SeatByGameKeyPrefix + Hash128.Compute(gameId).ToString());
     }
 
     private static int NormalizeSeat(int seatOrPlayerIndex)
@@ -68,7 +68,7 @@ public static class LocalPlayerSeatStore
 
 public static class IosPbpBackgroundNotificationExperiment
 {
-    private const string EnabledPlayerPrefsKey = "ios_pbp_background_notification_experiment_enabled";
+    private const string EnabledPlayerPrefsKeyRaw = "ios_pbp_background_notification_experiment_enabled";
     private static bool notificationAuthorizationRequested;
 
     [Serializable]
@@ -143,9 +143,9 @@ public static class IosPbpBackgroundNotificationExperiment
     public static bool IsEnabled()
     {
 #if UNITY_IOS && !UNITY_EDITOR
-        if (PlayerPrefs.HasKey(EnabledPlayerPrefsKey))
+        if (PlayerPrefs.HasKey(GetEnabledPlayerPrefsKey()))
         {
-            return PlayerPrefs.GetInt(EnabledPlayerPrefsKey, 0) == 1;
+            return PlayerPrefs.GetInt(GetEnabledPlayerPrefsKey(), 0) == 1;
         }
 
 #if DEVELOPMENT_BUILD
@@ -160,7 +160,7 @@ public static class IosPbpBackgroundNotificationExperiment
 
     public static void SetEnabled(bool enabled)
     {
-        PlayerPrefs.SetInt(EnabledPlayerPrefsKey, enabled ? 1 : 0);
+        PlayerPrefs.SetInt(GetEnabledPlayerPrefsKey(), enabled ? 1 : 0);
         PlayerPrefs.Save();
         SyncFromCurrentRepoState();
     }
@@ -339,5 +339,10 @@ public static class IosPbpBackgroundNotificationExperiment
         return SaveManifestService.ComputePlayByPostTransportSeq(
             summary.lastKnownRoundTurn,
             summary.lastKnownIsPlayerTurn);
+    }
+
+    private static string GetEnabledPlayerPrefsKey()
+    {
+        return DevClientInstanceScope.ScopePlayerPrefsKey(EnabledPlayerPrefsKeyRaw);
     }
 }

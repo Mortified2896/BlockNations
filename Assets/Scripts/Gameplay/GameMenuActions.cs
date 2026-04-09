@@ -10,8 +10,10 @@ public class GameMenuActions : MonoBehaviour
     [Header("Scenes")]
     public string mainMenuSceneName = "MainMenu";
 
-    private const string PlayByPostGameIdKey = "pbp_gameId";
-    private const string ReturnToMultiplayerPaneKey = "ui_returnToMultiplayerPane";
+    private const string PlayByPostGameIdKeyRaw = "pbp_gameId";
+    private const string ReturnToMultiplayerPaneKeyRaw = "ui_returnToMultiplayerPane";
+    private static string PlayByPostGameIdKey => DevClientInstanceScope.ScopePlayerPrefsKey(PlayByPostGameIdKeyRaw);
+    private static string ReturnToMultiplayerPaneKey => DevClientInstanceScope.ScopePlayerPrefsKey(ReturnToMultiplayerPaneKeyRaw);
 
     public void SaveGame()
     {

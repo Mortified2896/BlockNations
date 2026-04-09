@@ -3,7 +3,8 @@ using UnityEngine;
 
 public class CameraController : MonoBehaviour
 {
-    private const string PlayByPostGameIdKey = "pbp_gameId";
+    private const string PlayByPostGameIdKeyRaw = "pbp_gameId";
+    private static string PlayByPostGameIdKey => DevClientInstanceScope.ScopePlayerPrefsKey(PlayByPostGameIdKeyRaw);
     private const int InitialFocusMaxWaitFrames = 180;
     private const float FitMarginTilesPerEdge = 0.5f;
     private const float PanOverscrollTilesPerEdge = 15f;

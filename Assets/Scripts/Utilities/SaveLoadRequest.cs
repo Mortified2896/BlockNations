@@ -15,7 +15,7 @@ public static class SaveLoadRequest
         pending = true;
         if (string.IsNullOrWhiteSpace(path))
         {
-            pendingPath = System.IO.Path.Combine(Application.persistentDataPath, "save.json");
+            pendingPath = System.IO.Path.Combine(DevClientInstanceScope.GetScopedPersistentDataPath(), "save.json");
         }
         else
         {

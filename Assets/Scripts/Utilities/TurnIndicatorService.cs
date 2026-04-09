@@ -73,14 +73,14 @@ public static class TurnIndicatorService
             return true;
         }
 
-        string savePath = Path.Combine(Application.persistentDataPath, "save.json");
+        string savePath = Path.Combine(GetPersistentRootPath(), "save.json");
         if (TryReadStateFromPath(savePath, gameId, out state))
         {
             reason = "SAVE_JSON";
             return true;
         }
 
-        string importedPath = Path.Combine(Application.persistentDataPath, "imported.json");
+        string importedPath = Path.Combine(GetPersistentRootPath(), "imported.json");
         if (TryReadStateFromPath(importedPath, gameId, out state))
         {
             reason = "IMPORTED_JSON";
@@ -96,7 +96,7 @@ public static class TurnIndicatorService
     {
         state = null;
         string gameFolder = Path.Combine(
-            Application.persistentDataPath,
+            GetPersistentRootPath(),
             "PlayByPost",
             "Turns",
             Hash128.Compute(gameId).ToString());
@@ -220,5 +220,10 @@ public static class TurnIndicatorService
             reason = debugReason,
             computedUtcTicks = DateTime.UtcNow.Ticks
         };
+    }
+
+    private static string GetPersistentRootPath()
+    {
+        return DevClientInstanceScope.GetScopedPersistentDataPath();
     }
 }

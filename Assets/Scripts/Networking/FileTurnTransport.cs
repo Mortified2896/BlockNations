@@ -27,7 +27,7 @@ public sealed class FileTurnTransport : MonoBehaviour, ITurnTransport
         rootPath = null;
         return;
 #else
-        rootPath = Path.Combine(Application.persistentDataPath, "PlayByPost", "Turns");
+        rootPath = Path.Combine(DevClientInstanceScope.GetScopedPersistentDataPath(), "PlayByPost", "Turns");
 
         try
         {

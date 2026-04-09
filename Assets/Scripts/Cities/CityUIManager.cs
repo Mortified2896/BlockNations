@@ -166,7 +166,7 @@ public class CityUIManager : MonoBehaviour
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
         {
             TurnManager tm = turnManager != null ? turnManager : TurnManager.Instance;
-            string pbpGameId = PlayerPrefs.GetString("pbp_gameId", string.Empty);
+            string pbpGameId = PlayerPrefs.GetString(DevClientInstanceScope.ScopePlayerPrefsKey("pbp_gameId"), string.Empty);
             int pbpSeat = LocalPlayerSeatStore.TryGetSeat(pbpGameId, out int resolvedSeat) ? resolvedSeat : -1;
             string cityName = currentCity != null ? currentCity.name : "<null>";
             string mode = tm != null ? tm.currentMode.ToString() : "<null>";

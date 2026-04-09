@@ -157,22 +157,22 @@ public class TurnManager : MonoBehaviour
     private bool playByPostLastFetchWasNoTurn = false;
     private float playByPostLastNoTurnLogTime = -999f;
     private Coroutine aiVsAiDebugRoutine;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
     private AIRecruitVariant aiVsAiSideARecruitVariant = AIRecruitVariant.Default;
     private AIRecruitVariant aiVsAiSideBRecruitVariant = AIRecruitVariant.Default;
+    private bool aiVsAiDebugPaused = false;
+    private const string BottomRightControlNextLabel = "Next";
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
     private AILocalDecisionFeatures aiVsAiSideAFeatures = AILocalDecisionFeatures.None;
     private AILocalDecisionFeatures aiVsAiSideBFeatures = AILocalDecisionFeatures.None;
     private AIDebugProfile aiVsAiSideAProfile = AIDebugProfile.Baseline;
     private AIDebugProfile aiVsAiSideBProfile = AIDebugProfile.Baseline;
     private AIVsAIBatchSpeedPreset aiVsAiBatchSpeedPreset = AIVsAIBatchSpeedPreset.Normal;
-    private bool aiVsAiDebugPaused = false;
     private bool aiVsAiDebugRestartPending = false;
     private bool aiVsAiCompletedTournamentAutoRestartPending = false;
     private string aiVsAiCompletedTournamentAutoRestartMessage = string.Empty;
     private const string AIVsAISimulationCompleteTitle = "AI Simulation Complete";
     private const string AIVsAISimulationAbortedTitle = "AI Simulation Aborted";
     private const string AIVsAITournamentPausedTitle = "Tournament Paused";
-    private const string BottomRightControlNextLabel = "Next";
     private const string BottomRightControlBatchPauseLabel = "Pause";
     private const string BottomRightControlBatchResumeLabel = "Resume";
     private const string BottomRightControlBatchStopLabel = "Stop";
@@ -202,14 +202,18 @@ public class TurnManager : MonoBehaviour
     private bool pbpControlReadinessReady = false;
     private string pbpCreatorBootstrapGameId;
     private const float PlayByPostNoTurnLogCooldownSeconds = 5f;
-    private const string PlayByPostGameIdKey = "pbp_gameId";
-    private const string PlayByPostForceNewKey = "pbp_forceNew";
-    private const string PlayByPostPendingNewGameIdKey = "pbp_pendingNewGameId";
+    private const string PlayByPostGameIdKeyRaw = "pbp_gameId";
+    private const string PlayByPostForceNewKeyRaw = "pbp_forceNew";
+    private const string PlayByPostPendingNewGameIdKeyRaw = "pbp_pendingNewGameId";
     private const string PlayByPostPrimarySaveFileName = "save.json";
     private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
     private const string PlayByPostPerGameSaveFolderName = "pbp";
     private const string PlayByPostPerGameSavePrefix = "pbp_";
-    private const string ReturnToMultiplayerPaneKey = "ui_returnToMultiplayerPane";
+    private const string ReturnToMultiplayerPaneKeyRaw = "ui_returnToMultiplayerPane";
+    private static string PlayByPostGameIdKey => DevClientInstanceScope.ScopePlayerPrefsKey(PlayByPostGameIdKeyRaw);
+    private static string PlayByPostForceNewKey => DevClientInstanceScope.ScopePlayerPrefsKey(PlayByPostForceNewKeyRaw);
+    private static string PlayByPostPendingNewGameIdKey => DevClientInstanceScope.ScopePlayerPrefsKey(PlayByPostPendingNewGameIdKeyRaw);
+    private static string ReturnToMultiplayerPaneKey => DevClientInstanceScope.ScopePlayerPrefsKey(ReturnToMultiplayerPaneKeyRaw);
     private const string MainMenuSceneName = "MainMenu";
     private const string DefaultGameOverMessage = "Game Over";
     private const string DefaultGameOverTitle = "Game Over";
@@ -5928,7 +5932,7 @@ public class TurnManager : MonoBehaviour
 
     string GetDefaultSavePath()
     {
-        return Path.Combine(Application.persistentDataPath, autoSaveFileName);
+        return Path.Combine(GetPersistentRootPath(), autoSaveFileName);
     }
 
     private string GetPrimaryAutosavePathForCurrentMode()
@@ -5936,12 +5940,12 @@ public class TurnManager : MonoBehaviour
         // Primary autosave only: keep SP and PBp isolated from each other.
         if (currentMode == GameMode.VsAI)
         {
-            return Path.Combine(Application.persistentDataPath, SinglePlayerPrimarySaveFileName);
+            return Path.Combine(GetPersistentRootPath(), SinglePlayerPrimarySaveFileName);
         }
 
         if (currentMode == GameMode.PlayByPost)
         {
-            return Path.Combine(Application.persistentDataPath, PlayByPostPrimarySaveFileName);
+            return Path.Combine(GetPersistentRootPath(), PlayByPostPrimarySaveFileName);
         }
 
         return GetDefaultSavePath();
@@ -5978,9 +5982,14 @@ public class TurnManager : MonoBehaviour
             return null;
 
         string safeGameId = SanitizeGameIdForFileName(gameId);
-        string directory = Path.Combine(Application.persistentDataPath, PlayByPostPerGameSaveFolderName);
+        string directory = Path.Combine(GetPersistentRootPath(), PlayByPostPerGameSaveFolderName);
         Directory.CreateDirectory(directory);
         return Path.Combine(directory, $"{PlayByPostPerGameSavePrefix}{safeGameId}.json");
+    }
+
+    private static string GetPersistentRootPath()
+    {
+        return DevClientInstanceScope.GetScopedPersistentDataPath();
     }
 
     private static string SanitizeGameIdForFileName(string gameId)

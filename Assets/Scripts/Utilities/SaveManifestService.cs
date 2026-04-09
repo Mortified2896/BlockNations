@@ -534,7 +534,7 @@ public static class SaveManifestService
     {
         SaveManifest manifest = new SaveManifest();
 
-        string persistentRoot = Application.persistentDataPath;
+        string persistentRoot = GetPersistentRootPath();
         if (string.IsNullOrWhiteSpace(persistentRoot))
             return manifest;
 
@@ -693,7 +693,7 @@ public static class SaveManifestService
         if (string.IsNullOrWhiteSpace(path))
             return path;
 
-        string root = Application.persistentDataPath;
+        string root = GetPersistentRootPath();
         if (string.IsNullOrWhiteSpace(root))
             return path;
 
@@ -826,7 +826,12 @@ public static class SaveManifestService
 
     private static string GetManifestPath()
     {
-        return Path.Combine(Application.persistentDataPath, ManifestFileName);
+        return Path.Combine(GetPersistentRootPath(), ManifestFileName);
+    }
+
+    private static string GetPersistentRootPath()
+    {
+        return DevClientInstanceScope.GetScopedPersistentDataPath();
     }
 
     private static string UtcNowIso()

@@ -8,7 +8,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
 {
     private const string LayoutResourceName = "GameplayBottomHud_UITK";
     private const string ThemeResourceName = "GameplayTopHud_UITK_Theme";
-    private const string PlayByPostGameIdKey = "pbp_gameId";
+    private const string PlayByPostGameIdKeyRaw = "pbp_gameId";
     private const string PlayByPostShareShownKeyPrefix = "pbp_shareShown_";
     private const string ShareOverlayTitleText = "Share Game Code";
     private const string ShareOverlayInstructionText = "Send this code to your friend";
@@ -1383,7 +1383,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
 
     private static string GetCurrentPlayByPostGameId()
     {
-        string gameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
+        string gameId = PlayerPrefs.GetString(GetPlayByPostGameIdKey(), string.Empty);
         return string.IsNullOrWhiteSpace(gameId) ? string.Empty : gameId.Trim();
     }
 
@@ -1396,13 +1396,18 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
 
     private static string GetShareShownKey(string gameId)
     {
-        return PlayByPostShareShownKeyPrefix + gameId;
+        return DevClientInstanceScope.ScopePlayerPrefsKey(PlayByPostShareShownKeyPrefix + gameId);
     }
 
     private static void MarkSharePromptAsShown(string gameId)
     {
         PlayerPrefs.SetInt(GetShareShownKey(gameId), 1);
         PlayerPrefs.Save();
+    }
+
+    private static string GetPlayByPostGameIdKey()
+    {
+        return DevClientInstanceScope.ScopePlayerPrefsKey(PlayByPostGameIdKeyRaw);
     }
 
     private void ApplySafeArea(bool force)

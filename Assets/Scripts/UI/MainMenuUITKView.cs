@@ -3517,7 +3517,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private static bool HasContinueSaveFile()
     {
-        string persistentRoot = Application.persistentDataPath;
+        string persistentRoot = DevClientInstanceScope.GetScopedPersistentDataPath();
         if (string.IsNullOrWhiteSpace(persistentRoot))
         {
             return false;
