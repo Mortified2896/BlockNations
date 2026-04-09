@@ -10,7 +10,9 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
     private const string ThemeResourceName = "GameplayTopHud_UITK_Theme";
     private const float TournamentStandingsDesktopWidthThreshold = 1200f;
     private const string FirstTurnSubmitFailedMessage = "First turn was not submitted. This game was not created on the server yet.";
-    private const string FirstTurnSubmitUnauthorizedMessage = "First turn was not submitted because PBp server authentication is missing or invalid.";
+    private const string FirstTurnSubmitUnauthorizedMessage = "First turn was not submitted because PBp authentication is missing or invalid. This game was not created on the server yet.";
+    private const string SubmitFailedMessage = "PBp turn was not submitted to the server.";
+    private const string SubmitUnauthorizedMessage = "PBp turn was not submitted because PBp authentication is missing or invalid.";
 
     [Header("Spike Toggle")]
     [SerializeField] private bool enableGameplayTopHudUITK = true;
@@ -603,11 +605,6 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             return;
         }
 
-        if (!turnManager.IsCurrentPlayByPostFirstRemoteSubmitPendingForUi())
-        {
-            return;
-        }
-
         string gameId = turnManager.GetCurrentPlayByPostGameIdForUi();
         if (string.IsNullOrWhiteSpace(gameId))
         {
@@ -615,7 +612,9 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         }
 
         pbpSubmitStatusOverrideGameId = gameId;
-        pbpSubmitStatusOverrideMessage = BuildFirstTurnSubmitFailureMessage(err);
+        pbpSubmitStatusOverrideMessage = BuildSubmitFailureMessage(
+            err,
+            turnManager.IsCurrentPlayByPostFirstRemoteSubmitPendingForUi());
     }
 
     private void HandlePlayByPostFetchResult(bool reachable, string resultOrError)
@@ -638,7 +637,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
                !string.IsNullOrWhiteSpace(pbpSubmitStatusOverrideGameId) &&
                string.Equals(currentPbpGameId, pbpSubmitStatusOverrideGameId, StringComparison.Ordinal) &&
                turnManager != null &&
-               turnManager.IsCurrentPlayByPostFirstRemoteSubmitPendingForUi();
+               turnManager.currentMode == TurnManager.GameMode.PlayByPost;
     }
 
     private void ClearPbpSubmitStatusOverride()
@@ -647,14 +646,18 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         pbpSubmitStatusOverrideGameId = null;
     }
 
-    private static string BuildFirstTurnSubmitFailureMessage(string err)
+    private static string BuildSubmitFailureMessage(string err, bool isFirstTurnCreateFailure)
     {
         if (string.Equals(err, "UNAUTHORIZED", StringComparison.Ordinal))
         {
-            return FirstTurnSubmitUnauthorizedMessage;
+            return isFirstTurnCreateFailure
+                ? FirstTurnSubmitUnauthorizedMessage
+                : SubmitUnauthorizedMessage;
         }
 
-        return FirstTurnSubmitFailedMessage;
+        return isFirstTurnCreateFailure
+            ? FirstTurnSubmitFailedMessage
+            : SubmitFailedMessage;
     }
 
     private void DisableOverlay()
