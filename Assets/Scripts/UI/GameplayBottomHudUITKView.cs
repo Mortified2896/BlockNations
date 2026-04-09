@@ -20,6 +20,8 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private const string PbpSettingsTitleText = "Settings";
     private const string PbpSettingsCloseButtonText = "Close";
     private const string MessageAfterTurnEndToggleLabel = "Message after Turn End";
+    private const string ToggleOnText = "ON";
+    private const string ToggleOffText = "OFF";
     private const string GameOverOverlayDefaultTitleText = "Game Over";
     private const string NextButtonDefaultText = "Next";
 
@@ -52,7 +54,8 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private UnityEngine.UIElements.Button pbpShareCopyButton;
     private UnityEngine.UIElements.Button pbpShareCloseButton;
     private VisualElement pbpSettingsOverlay;
-    private Toggle pbpMessageAfterTurnEndToggle;
+    private Label pbpMessageAfterTurnEndLabel;
+    private UnityEngine.UIElements.Button pbpMessageAfterTurnEndToggleButton;
     private UnityEngine.UIElements.Button pbpSettingsCloseButton;
     private VisualElement gameOverOverlay;
     private Label gameOverTitleLabel;
@@ -425,9 +428,9 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             pbpSettingsCloseButton.clicked += HandlePbpSettingsCloseClicked;
         }
 
-        if (pbpMessageAfterTurnEndToggle != null)
+        if (pbpMessageAfterTurnEndToggleButton != null)
         {
-            pbpMessageAfterTurnEndToggle.RegisterValueChangedCallback(HandleMessageAfterTurnEndToggleChanged);
+            pbpMessageAfterTurnEndToggleButton.clicked += HandleMessageAfterTurnEndToggleClicked;
         }
 
         if (gameOverPrimaryButton != null)
@@ -485,9 +488,9 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             pbpSettingsCloseButton.clicked -= HandlePbpSettingsCloseClicked;
         }
 
-        if (pbpMessageAfterTurnEndToggle != null)
+        if (pbpMessageAfterTurnEndToggleButton != null)
         {
-            pbpMessageAfterTurnEndToggle.UnregisterValueChangedCallback(HandleMessageAfterTurnEndToggleChanged);
+            pbpMessageAfterTurnEndToggleButton.clicked -= HandleMessageAfterTurnEndToggleClicked;
         }
 
         if (gameOverPrimaryButton != null)
@@ -565,9 +568,11 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         HidePlayByPostSettingsOverlay();
     }
 
-    private void HandleMessageAfterTurnEndToggleChanged(ChangeEvent<bool> evt)
+    private void HandleMessageAfterTurnEndToggleClicked()
     {
-        PlayByPostUserSettings.SetMessageAfterTurnEndEnabled(evt.newValue);
+        bool enabled = !PlayByPostUserSettings.IsMessageAfterTurnEndEnabled();
+        PlayByPostUserSettings.SetMessageAfterTurnEndEnabled(enabled);
+        RefreshPlayByPostSettingsToggleState();
     }
 
     private void HandleGameOverPrimaryClicked()
@@ -882,13 +887,15 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         }
 
         pbpSettingsOverlay = root.Q<VisualElement>("PbpSettingsOverlay");
-        pbpMessageAfterTurnEndToggle = root.Q<Toggle>("PbpMessageAfterTurnEndToggle");
+        pbpMessageAfterTurnEndLabel = root.Q<Label>("PbpMessageAfterTurnEndLabel");
+        pbpMessageAfterTurnEndToggleButton = root.Q<UnityEngine.UIElements.Button>("PbpMessageAfterTurnEndToggleButton");
         pbpSettingsCloseButton = root.Q<UnityEngine.UIElements.Button>("PbpSettingsCloseButton");
         if (pbpSettingsOverlay != null &&
-            pbpMessageAfterTurnEndToggle != null &&
+            pbpMessageAfterTurnEndLabel != null &&
+            pbpMessageAfterTurnEndToggleButton != null &&
             pbpSettingsCloseButton != null)
         {
-            pbpMessageAfterTurnEndToggle.SetValueWithoutNotify(PlayByPostUserSettings.IsMessageAfterTurnEndEnabled());
+            RefreshPlayByPostSettingsToggleState();
             return;
         }
 
@@ -912,8 +919,8 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         pbpSettingsOverlay.style.top = 0f;
         pbpSettingsOverlay.style.bottom = 0f;
         pbpSettingsOverlay.style.alignItems = Align.Center;
-        pbpSettingsOverlay.style.justifyContent = Justify.FlexEnd;
-        pbpSettingsOverlay.style.backgroundColor = new Color(0f, 0f, 0f, 0.52f);
+        pbpSettingsOverlay.style.justifyContent = Justify.Center;
+        pbpSettingsOverlay.style.backgroundColor = new Color(0f, 0f, 0f, 0.62f);
         pbpSettingsOverlay.style.display = DisplayStyle.None;
         pbpSettingsOverlay.style.visibility = Visibility.Hidden;
 
@@ -922,39 +929,84 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             name = "PbpSettingsCard",
             pickingMode = PickingMode.Ignore
         };
-        card.style.width = 680f;
+        card.style.width = 760f;
         card.style.maxWidth = new Length(92f, LengthUnit.Percent);
-        card.style.marginBottom = 168f;
-        card.style.paddingLeft = 28f;
-        card.style.paddingRight = 28f;
-        card.style.paddingTop = 28f;
-        card.style.paddingBottom = 28f;
-        card.style.backgroundColor = new Color(0.08f, 0.10f, 0.14f, 0.96f);
-        card.style.borderTopLeftRadius = 16f;
-        card.style.borderTopRightRadius = 16f;
-        card.style.borderBottomLeftRadius = 16f;
-        card.style.borderBottomRightRadius = 16f;
+        card.style.paddingLeft = 32f;
+        card.style.paddingRight = 32f;
+        card.style.paddingTop = 32f;
+        card.style.paddingBottom = 32f;
+        card.style.backgroundColor = new Color(0.08f, 0.10f, 0.14f, 0.98f);
+        card.style.borderTopLeftRadius = 20f;
+        card.style.borderTopRightRadius = 20f;
+        card.style.borderBottomLeftRadius = 20f;
+        card.style.borderBottomRightRadius = 20f;
+        card.style.borderLeftWidth = 2f;
+        card.style.borderRightWidth = 2f;
+        card.style.borderTopWidth = 2f;
+        card.style.borderBottomWidth = 2f;
+        card.style.borderLeftColor = new Color(1f, 1f, 1f, 0.08f);
+        card.style.borderRightColor = new Color(1f, 1f, 1f, 0.08f);
+        card.style.borderTopColor = new Color(1f, 1f, 1f, 0.08f);
+        card.style.borderBottomColor = new Color(1f, 1f, 1f, 0.08f);
 
         Label title = new Label(PbpSettingsTitleText)
         {
             name = "PbpSettingsTitleLabel",
             pickingMode = PickingMode.Ignore
         };
-        title.style.fontSize = 38f;
+        title.style.fontSize = 42f;
         title.style.unityFontStyleAndWeight = FontStyle.Bold;
         title.style.color = Color.white;
+        title.style.unityTextAlign = TextAnchor.MiddleCenter;
+        title.style.marginBottom = 24f;
 
-        pbpMessageAfterTurnEndToggle = new Toggle(MessageAfterTurnEndToggleLabel)
+        VisualElement settingRow = new VisualElement
         {
-            name = "PbpMessageAfterTurnEndToggle",
+            name = "PbpMessageAfterTurnEndRow",
+            pickingMode = PickingMode.Ignore
+        };
+        settingRow.style.flexDirection = FlexDirection.Row;
+        settingRow.style.alignItems = Align.Center;
+        settingRow.style.justifyContent = Justify.SpaceBetween;
+        settingRow.style.minHeight = 120f;
+        settingRow.style.marginBottom = 28f;
+        settingRow.style.paddingLeft = 24f;
+        settingRow.style.paddingRight = 24f;
+        settingRow.style.paddingTop = 24f;
+        settingRow.style.paddingBottom = 24f;
+        settingRow.style.backgroundColor = new Color(1f, 1f, 1f, 0.05f);
+        settingRow.style.borderTopLeftRadius = 18f;
+        settingRow.style.borderTopRightRadius = 18f;
+        settingRow.style.borderBottomLeftRadius = 18f;
+        settingRow.style.borderBottomRightRadius = 18f;
+
+        pbpMessageAfterTurnEndLabel = new Label(MessageAfterTurnEndToggleLabel)
+        {
+            name = "PbpMessageAfterTurnEndLabel",
+            pickingMode = PickingMode.Ignore
+        };
+        pbpMessageAfterTurnEndLabel.style.flexGrow = 1f;
+        pbpMessageAfterTurnEndLabel.style.marginRight = 20f;
+        pbpMessageAfterTurnEndLabel.style.fontSize = 30f;
+        pbpMessageAfterTurnEndLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+        pbpMessageAfterTurnEndLabel.style.color = new Color(0.94f, 0.95f, 0.98f, 1f);
+        pbpMessageAfterTurnEndLabel.style.whiteSpace = WhiteSpace.Normal;
+
+        pbpMessageAfterTurnEndToggleButton = new UnityEngine.UIElements.Button
+        {
+            name = "PbpMessageAfterTurnEndToggleButton",
             pickingMode = PickingMode.Position
         };
-        pbpMessageAfterTurnEndToggle.style.marginTop = 22f;
-        pbpMessageAfterTurnEndToggle.style.marginBottom = 26f;
-        pbpMessageAfterTurnEndToggle.style.minHeight = 70f;
-        pbpMessageAfterTurnEndToggle.style.fontSize = 28f;
-        pbpMessageAfterTurnEndToggle.style.color = new Color(0.94f, 0.95f, 0.98f, 1f);
-        pbpMessageAfterTurnEndToggle.SetValueWithoutNotify(PlayByPostUserSettings.IsMessageAfterTurnEndEnabled());
+        pbpMessageAfterTurnEndToggleButton.style.width = 168f;
+        pbpMessageAfterTurnEndToggleButton.style.minWidth = 168f;
+        pbpMessageAfterTurnEndToggleButton.style.height = 78f;
+        pbpMessageAfterTurnEndToggleButton.style.fontSize = 28f;
+        pbpMessageAfterTurnEndToggleButton.style.unityFontStyleAndWeight = FontStyle.Bold;
+        pbpMessageAfterTurnEndToggleButton.style.color = Color.white;
+        pbpMessageAfterTurnEndToggleButton.style.borderTopLeftRadius = 39f;
+        pbpMessageAfterTurnEndToggleButton.style.borderTopRightRadius = 39f;
+        pbpMessageAfterTurnEndToggleButton.style.borderBottomLeftRadius = 39f;
+        pbpMessageAfterTurnEndToggleButton.style.borderBottomRightRadius = 39f;
 
         pbpSettingsCloseButton = new UnityEngine.UIElements.Button
         {
@@ -964,13 +1016,17 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         };
         pbpSettingsCloseButton.style.height = 78f;
         pbpSettingsCloseButton.style.fontSize = 28f;
+        pbpSettingsCloseButton.style.unityFontStyleAndWeight = FontStyle.Bold;
         pbpSettingsCloseButton.style.color = Color.white;
         pbpSettingsCloseButton.style.backgroundColor = new Color(0.28f, 0.32f, 0.40f, 0.95f);
 
+        settingRow.Add(pbpMessageAfterTurnEndLabel);
+        settingRow.Add(pbpMessageAfterTurnEndToggleButton);
         card.Add(title);
-        card.Add(pbpMessageAfterTurnEndToggle);
+        card.Add(settingRow);
         card.Add(pbpSettingsCloseButton);
         pbpSettingsOverlay.Add(card);
+        RefreshPlayByPostSettingsToggleState();
         SetPbpSettingsOverlayInteractionEnabled(false);
     }
 
@@ -1177,11 +1233,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             return;
         }
 
-        if (pbpMessageAfterTurnEndToggle != null)
-        {
-            pbpMessageAfterTurnEndToggle.SetValueWithoutNotify(PlayByPostUserSettings.IsMessageAfterTurnEndEnabled());
-        }
-
+        RefreshPlayByPostSettingsToggleState();
         pbpSettingsOverlay.style.display = DisplayStyle.Flex;
         pbpSettingsOverlay.style.visibility = Visibility.Visible;
         SetPbpSettingsOverlayInteractionEnabled(true);
@@ -1227,10 +1279,10 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             pbpSettingsOverlay.SetEnabled(enabled);
         }
 
-        if (pbpMessageAfterTurnEndToggle != null)
+        if (pbpMessageAfterTurnEndToggleButton != null)
         {
-            pbpMessageAfterTurnEndToggle.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
-            pbpMessageAfterTurnEndToggle.SetEnabled(enabled);
+            pbpMessageAfterTurnEndToggleButton.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
+            pbpMessageAfterTurnEndToggleButton.SetEnabled(enabled);
         }
 
         if (pbpSettingsCloseButton != null)
@@ -1238,6 +1290,25 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             pbpSettingsCloseButton.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
             pbpSettingsCloseButton.SetEnabled(enabled);
         }
+    }
+
+    private void RefreshPlayByPostSettingsToggleState()
+    {
+        if (pbpMessageAfterTurnEndLabel != null)
+        {
+            pbpMessageAfterTurnEndLabel.text = MessageAfterTurnEndToggleLabel;
+        }
+
+        if (pbpMessageAfterTurnEndToggleButton == null)
+        {
+            return;
+        }
+
+        bool enabled = PlayByPostUserSettings.IsMessageAfterTurnEndEnabled();
+        pbpMessageAfterTurnEndToggleButton.text = enabled ? ToggleOnText : ToggleOffText;
+        pbpMessageAfterTurnEndToggleButton.style.backgroundColor = enabled
+            ? new Color(0.22f, 0.62f, 0.36f, 0.98f)
+            : new Color(0.34f, 0.38f, 0.46f, 0.98f);
     }
 
     private void RefreshGameOverOverlayState()
@@ -1489,7 +1560,8 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         pbpShareCopyButton = null;
         pbpShareCloseButton = null;
         pbpSettingsOverlay = null;
-        pbpMessageAfterTurnEndToggle = null;
+        pbpMessageAfterTurnEndLabel = null;
+        pbpMessageAfterTurnEndToggleButton = null;
         pbpSettingsCloseButton = null;
         gameOverOverlay = null;
         gameOverTitleLabel = null;

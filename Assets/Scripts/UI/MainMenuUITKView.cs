@@ -163,6 +163,7 @@ public class MainMenuUITKView : MonoBehaviour
     private IVisualElementScheduledItem profileStatusClearItem;
     private IVisualElementScheduledItem viewInitializationItem;
     private LocalPlayerProfileStore.ProfileData profileData;
+    private string profileTypedDisplayNameDraft = string.Empty;
     private string pendingCreateSuccessGameId;
     private string selectedDetailsGameId = string.Empty;
     private PendingGeneralSettingsMode pendingGeneralSettingsMode = PendingGeneralSettingsMode.None;
@@ -2060,20 +2061,20 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HandleProfileTypedDisplayNameChanged(ChangeEvent<string> evt)
     {
-        string normalized = LocalPlayerProfileStore.NormalizeTypedDisplayName(evt.newValue);
+        profileTypedDisplayNameDraft = LocalPlayerProfileStore.NormalizeTypedDisplayName(evt.newValue);
         if (profileTypedDisplayNameInput != null &&
-            !string.Equals(profileTypedDisplayNameInput.value, normalized, System.StringComparison.Ordinal))
+            !string.Equals(profileTypedDisplayNameInput.value, profileTypedDisplayNameDraft, System.StringComparison.Ordinal))
         {
-            profileTypedDisplayNameInput.SetValueWithoutNotify(normalized);
+            profileTypedDisplayNameInput.SetValueWithoutNotify(profileTypedDisplayNameDraft);
         }
 
-        if (!LocalPlayerProfileStore.IsValidTypedDisplayName(normalized) ||
-            string.Equals(profileData.TypedDisplayName, normalized, System.StringComparison.Ordinal))
+        if (!LocalPlayerProfileStore.HasRecognizableTypedDisplayName(profileTypedDisplayNameDraft) ||
+            string.Equals(profileData.TypedDisplayName, profileTypedDisplayNameDraft, System.StringComparison.Ordinal))
         {
             return;
         }
 
-        profileData.TypedDisplayName = LocalPlayerProfileStore.SetTypedDisplayName(normalized);
+        profileData.TypedDisplayName = LocalPlayerProfileStore.SetTypedDisplayName(profileTypedDisplayNameDraft);
         ClearProfileStatus();
     }
 
@@ -2090,15 +2091,23 @@ public class MainMenuUITKView : MonoBehaviour
             return;
         }
 
-        string normalized = LocalPlayerProfileStore.NormalizeTypedDisplayName(profileTypedDisplayNameInput.value);
-        string committedTypedDisplayName = LocalPlayerProfileStore.SetTypedDisplayName(normalized);
-        if (!string.Equals(profileData.TypedDisplayName, committedTypedDisplayName, System.StringComparison.Ordinal))
+        profileTypedDisplayNameDraft = LocalPlayerProfileStore.NormalizeTypedDisplayName(profileTypedDisplayNameInput.value);
+
+        if (LocalPlayerProfileStore.HasRecognizableTypedDisplayName(profileTypedDisplayNameDraft))
         {
-            profileData.TypedDisplayName = committedTypedDisplayName;
-            ClearProfileStatus();
+            string committedTypedDisplayName = LocalPlayerProfileStore.SetTypedDisplayName(profileTypedDisplayNameDraft);
+            if (!string.Equals(profileData.TypedDisplayName, committedTypedDisplayName, System.StringComparison.Ordinal))
+            {
+                profileData.TypedDisplayName = committedTypedDisplayName;
+                ClearProfileStatus();
+            }
+        }
+        else
+        {
+            profileTypedDisplayNameDraft = profileData.TypedDisplayName ?? string.Empty;
         }
 
-        profileTypedDisplayNameInput.SetValueWithoutNotify(profileData.TypedDisplayName ?? string.Empty);
+        profileTypedDisplayNameInput.SetValueWithoutNotify(profileTypedDisplayNameDraft);
     }
 
     private void HandleMultiplayerBackClicked()
@@ -3345,7 +3354,8 @@ public class MainMenuUITKView : MonoBehaviour
 
         if (profileTypedDisplayNameInput != null)
         {
-            profileTypedDisplayNameInput.SetValueWithoutNotify(profileData.TypedDisplayName ?? string.Empty);
+            profileTypedDisplayNameDraft = profileData.TypedDisplayName ?? string.Empty;
+            profileTypedDisplayNameInput.SetValueWithoutNotify(profileTypedDisplayNameDraft);
         }
     }
 
