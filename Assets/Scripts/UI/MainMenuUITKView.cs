@@ -56,6 +56,7 @@ public class MainMenuUITKView : MonoBehaviour
     private VisualElement generalSettingsCard;
     private VisualElement generalSettingsAiSection;
     private VisualElement generalSettingsAiStyleSection;
+    private VisualElement generalSettingsPbpSection;
     private VisualElement generalSettingsDevSection;
     private VisualElement generalSettingsAIVsAIOptionsSection;
     private VisualElement generalSettingsAIVsAiHeadToHeadSection;
@@ -76,6 +77,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Label createSuccessGameCodeLabel;
     private Label generalSettingsTitleLabel;
     private Label generalSettingsSubtitleLabel;
+    private Label generalSettingsPbpPlayerCountHelperLabel;
     private Label generalSettingsStoreSnapshotHistoryHelperLabel;
     private Label generalSettingsAIVsAiTournamentEstimateLabel;
     private Label generalSettingsAIVsAiTournamentMatchesPerPairingLabel;
@@ -93,6 +95,9 @@ public class MainMenuUITKView : MonoBehaviour
     private Button createSuccessCloseButton;
     private Button generalSettingsMapSmallButton;
     private Button generalSettingsMapLargeButton;
+    private Button generalSettingsPbpPlayerCount2Button;
+    private Button generalSettingsPbpPlayerCount3Button;
+    private Button generalSettingsPbpPlayerCount4Button;
     private Button generalSettingsAiStyleDefaultButton;
     private Button generalSettingsAiStyleRiderFocusButton;
     private Button generalSettingsStoreSnapshotHistoryButton;
@@ -169,6 +174,7 @@ public class MainMenuUITKView : MonoBehaviour
     private PendingGeneralSettingsMode pendingGeneralSettingsMode = PendingGeneralSettingsMode.None;
     private GeneralSettingsBackgroundPane generalSettingsBackgroundPane = GeneralSettingsBackgroundPane.None;
     private TurnManager.MapSizePreset selectedMapSizePreset = TurnManager.GetDefaultMapSizePreset();
+    private int selectedPlayByPostPlayerCount = PlayByPostSeatUtility.MinSeatCount;
     private TurnManager.AIRecruitVariant selectedAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
     private bool selectedStoreSnapshotHistory;
     private bool selectedEnableAIVsAIDebugMode;
@@ -426,6 +432,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsCard = root.Q<VisualElement>("GeneralSettingsCard");
         generalSettingsAiSection = root.Q<VisualElement>("GeneralSettingsAiSection");
         generalSettingsAiStyleSection = root.Q<VisualElement>("GeneralSettingsAiStyleSection");
+        generalSettingsPbpSection = root.Q<VisualElement>("GeneralSettingsPbpSection");
         generalSettingsDevSection = root.Q<VisualElement>("GeneralSettingsDevSection");
         generalSettingsAIVsAIOptionsSection = root.Q<VisualElement>("GeneralSettingsAIVsAIOptionsSection");
         generalSettingsAIVsAiHeadToHeadSection = root.Q<VisualElement>("GeneralSettingsAIVsAiHeadToHeadSection");
@@ -453,6 +460,7 @@ public class MainMenuUITKView : MonoBehaviour
         createSuccessGameCodeLabel = root.Q<Label>("CreateSuccessGameCodeLabel");
         generalSettingsTitleLabel = root.Q<Label>("GeneralSettingsTitleLabel");
         generalSettingsSubtitleLabel = root.Q<Label>("GeneralSettingsSubtitleLabel");
+        generalSettingsPbpPlayerCountHelperLabel = root.Q<Label>("GeneralSettingsPbpPlayerCountHelperLabel");
         generalSettingsStoreSnapshotHistoryHelperLabel = root.Q<Label>("GeneralSettingsStoreSnapshotHistoryHelperLabel");
         generalSettingsAIVsAiTournamentEstimateLabel = root.Q<Label>("GeneralSettingsAIVsAiTournamentEstimateLabel");
         generalSettingsAIVsAiTournamentMatchesPerPairingLabel = root.Q<Label>("GeneralSettingsAIVsAiTournamentMatchesPerPairingLabel");
@@ -472,6 +480,9 @@ public class MainMenuUITKView : MonoBehaviour
         createSuccessCloseButton = root.Q<Button>("CreateSuccessCloseButton");
         generalSettingsMapSmallButton = root.Q<Button>("GeneralSettingsMapSmallButton");
         generalSettingsMapLargeButton = root.Q<Button>("GeneralSettingsMapLargeButton");
+        generalSettingsPbpPlayerCount2Button = root.Q<Button>("GeneralSettingsPbpPlayerCount2Button");
+        generalSettingsPbpPlayerCount3Button = root.Q<Button>("GeneralSettingsPbpPlayerCount3Button");
+        generalSettingsPbpPlayerCount4Button = root.Q<Button>("GeneralSettingsPbpPlayerCount4Button");
         generalSettingsAiStyleDefaultButton = root.Q<Button>("GeneralSettingsAiStyleDefaultButton");
         generalSettingsAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsAiStyleRiderFocusButton");
         generalSettingsStoreSnapshotHistoryButton = root.Q<Button>("GeneralSettingsStoreSnapshotHistoryButton");
@@ -980,6 +991,11 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsMapLargeButton.clicked += HandleGeneralSettingsMapLargeClicked;
         }
 
+        if (generalSettingsPbpPlayerCount2Button != null)
+        {
+            generalSettingsPbpPlayerCount2Button.clicked += HandleGeneralSettingsPbpPlayerCount2Clicked;
+        }
+
         if (generalSettingsAiStyleDefaultButton != null)
         {
             generalSettingsAiStyleDefaultButton.clicked += HandleGeneralSettingsAiStyleDefaultClicked;
@@ -1292,6 +1308,11 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsMapLargeButton != null)
         {
             generalSettingsMapLargeButton.clicked -= HandleGeneralSettingsMapLargeClicked;
+        }
+
+        if (generalSettingsPbpPlayerCount2Button != null)
+        {
+            generalSettingsPbpPlayerCount2Button.clicked -= HandleGeneralSettingsPbpPlayerCount2Clicked;
         }
 
         if (generalSettingsAiStyleDefaultButton != null)
@@ -1658,6 +1679,12 @@ public class MainMenuUITKView : MonoBehaviour
         RefreshGeneralSettingsSelectionState();
     }
 
+    private void HandleGeneralSettingsPbpPlayerCount2Clicked()
+    {
+        selectedPlayByPostPlayerCount = PlayByPostSeatUtility.MinSeatCount;
+        RefreshGeneralSettingsSelectionState();
+    }
+
     private void HandleGeneralSettingsAiStyleDefaultClicked()
     {
         selectedAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
@@ -1965,7 +1992,8 @@ public class MainMenuUITKView : MonoBehaviour
         {
             started = mainMenuController.StartPlayByPostGameWithSettings(
                 selectedMapSizePreset,
-                selectedStoreSnapshotHistory);
+                selectedStoreSnapshotHistory,
+                selectedPlayByPostPlayerCount);
             if (!started)
             {
                 SetStatus(mainMenuController.CurrentImportStatus);
@@ -2268,10 +2296,8 @@ public class MainMenuUITKView : MonoBehaviour
             SaveManifestService.ManifestGameSummary summary = games[i];
             string subtitle = BuildActiveGameSubtitle(summary);
             bool isYourTurn = mainMenuController != null &&
-                              string.Equals(
-                                  mainMenuController.BuildPlayByPostTurnStateForMenu(summary),
-                                  "Your turn",
-                                  System.StringComparison.Ordinal);
+                              mainMenuController.GetPlayByPostTurnStateKindForMenu(summary) ==
+                              MainMenuController.PlayByPostMenuTurnStateKind.YourTurn;
             if (isYourTurn)
             {
                 yourTurnGames.Add(summary);
@@ -2673,6 +2699,7 @@ public class MainMenuUITKView : MonoBehaviour
             ? GeneralSettingsBackgroundPane.Multiplayer
             : GeneralSettingsBackgroundPane.Main;
         selectedMapSizePreset = TurnManager.GetDefaultMapSizePreset();
+        selectedPlayByPostPlayerCount = PlayByPostSeatUtility.MinSeatCount;
         selectedAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
         selectedStoreSnapshotHistory = false;
         selectedEnableAIVsAIDebugMode = false;
@@ -2710,12 +2737,17 @@ public class MainMenuUITKView : MonoBehaviour
         {
             generalSettingsSubtitleLabel.text = isVsAi
                 ? "Choose your map size and AI level."
-                : "Choose your map size for this new play-by-post match.";
+                : "Choose your map size and player count for this new play-by-post match.";
         }
 
         if (generalSettingsAiSection != null)
         {
             generalSettingsAiSection.style.display = isVsAi ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        if (generalSettingsPbpSection != null)
+        {
+            generalSettingsPbpSection.style.display = isVsAi ? DisplayStyle.None : DisplayStyle.Flex;
         }
 
         if (generalSettingsDevSection != null)
@@ -2808,6 +2840,34 @@ public class MainMenuUITKView : MonoBehaviour
         {
             generalSettingsStoreSnapshotHistoryHelperLabel.style.display =
                 IsDevBuild() && disableSnapshotHistory ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        bool isPlayByPost = pendingGeneralSettingsMode == PendingGeneralSettingsMode.PlayByPost;
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsPbpPlayerCount2Button,
+            isPlayByPost && selectedPlayByPostPlayerCount == 2);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsPbpPlayerCount3Button,
+            isPlayByPost && selectedPlayByPostPlayerCount == 3);
+        UpdateGeneralSettingsSelectionButton(
+            generalSettingsPbpPlayerCount4Button,
+            isPlayByPost && selectedPlayByPostPlayerCount == 4);
+        UpdateGeneralSettingsDisabledButton(
+            generalSettingsPbpPlayerCount2Button,
+            !isPlayByPost);
+        UpdateGeneralSettingsDisabledButton(
+            generalSettingsPbpPlayerCount3Button,
+            true);
+        UpdateGeneralSettingsDisabledButton(
+            generalSettingsPbpPlayerCount4Button,
+            true);
+
+        if (generalSettingsPbpPlayerCountHelperLabel != null)
+        {
+            generalSettingsPbpPlayerCountHelperLabel.text =
+                "2-player PBp is available now. 3- and 4-player matches stay disabled until the seat-based gameplay phase lands.";
+            generalSettingsPbpPlayerCountHelperLabel.style.display =
+                isPlayByPost ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
         if (generalSettingsAIVsAIOptionsSection != null)
@@ -3615,6 +3675,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsCard = null;
         generalSettingsAiSection = null;
         generalSettingsAiStyleSection = null;
+        generalSettingsPbpSection = null;
         generalSettingsDevSection = null;
         generalSettingsAIVsAIOptionsSection = null;
         generalSettingsAIVsAiHeadToHeadSection = null;
@@ -3636,6 +3697,7 @@ public class MainMenuUITKView : MonoBehaviour
         createSuccessGameCodeLabel = null;
         generalSettingsTitleLabel = null;
         generalSettingsSubtitleLabel = null;
+        generalSettingsPbpPlayerCountHelperLabel = null;
         generalSettingsStoreSnapshotHistoryHelperLabel = null;
         generalSettingsAIVsAiTournamentEstimateLabel = null;
         generalSettingsAIVsAiTournamentMatchesPerPairingLabel = null;
@@ -3652,6 +3714,9 @@ public class MainMenuUITKView : MonoBehaviour
         createSuccessCloseButton = null;
         generalSettingsMapSmallButton = null;
         generalSettingsMapLargeButton = null;
+        generalSettingsPbpPlayerCount2Button = null;
+        generalSettingsPbpPlayerCount3Button = null;
+        generalSettingsPbpPlayerCount4Button = null;
         generalSettingsAiStyleDefaultButton = null;
         generalSettingsAiStyleRiderFocusButton = null;
         generalSettingsStoreSnapshotHistoryButton = null;

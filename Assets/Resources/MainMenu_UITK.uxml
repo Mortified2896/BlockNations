@@ -125,6 +125,20 @@
                         </ui:VisualElement>
                     </ui:VisualElement>
 
+                    <ui:VisualElement name="GeneralSettingsPbpSection" class="general-settings-section" style="display: none;">
+                        <ui:Label text="Player Count" class="general-settings-section-label" />
+                        <ui:VisualElement class="general-settings-option-row">
+                            <ui:Button name="GeneralSettingsPbpPlayerCount2Button" text="2 Players" class="menu-button general-settings-option-button" />
+                            <ui:Button name="GeneralSettingsPbpPlayerCount3Button" text="3 Players" class="menu-button general-settings-option-button" />
+                            <ui:Button name="GeneralSettingsPbpPlayerCount4Button" text="4 Players" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                        </ui:VisualElement>
+                        <ui:Label
+                            name="GeneralSettingsPbpPlayerCountHelperLabel"
+                            text=""
+                            class="general-settings-help-text"
+                            style="display: none;" />
+                    </ui:VisualElement>
+
                     <ui:VisualElement name="GeneralSettingsAiSection" class="general-settings-section">
                         <ui:Label text="AI" class="general-settings-section-label" />
                         <ui:VisualElement name="GeneralSettingsAiStyleSection">

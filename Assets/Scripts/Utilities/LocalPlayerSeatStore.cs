@@ -62,7 +62,7 @@ public static class LocalPlayerSeatStore
 
     private static int NormalizeSeat(int seatOrPlayerIndex)
     {
-        return seatOrPlayerIndex <= 0 ? 0 : 1;
+        return Mathf.Clamp(seatOrPlayerIndex, 0, PlayByPostSeatUtility.MaxSeatCount - 1);
     }
 }
 

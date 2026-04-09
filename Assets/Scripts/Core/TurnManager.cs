@@ -462,8 +462,12 @@ public class TurnManager : MonoBehaviour
         public int aiGold;
         public bool gameOver;
         public int visibilityRadius;
+        public int seatCount = PlayByPostSeatUtility.MinSeatCount;
+        public int currentTurnSeatIndex;
+        public int transportSeq;
         public string playerOneTypedDisplayName;
         public string playerTwoTypedDisplayName;
+        public List<PlayByPostSeatMetadata> seats = new List<PlayByPostSeatMetadata>();
         public List<SavedCity> cities = new List<SavedCity>();
         public List<SavedUnit> units = new List<SavedUnit>();
         public List<SavedTile> tiles = new List<SavedTile>();
@@ -474,6 +478,7 @@ public class TurnManager : MonoBehaviour
     private string typedDisplayMetadataGameId;
     private string knownPlayerOneTypedDisplayName;
     private string knownPlayerTwoTypedDisplayName;
+    private int configuredPlayByPostSeatCount = PlayByPostSeatUtility.MinSeatCount;
     private string cachedGameIdRaw;
     private string cachedGameIdHash;
     public event System.Action<bool, string> PlayByPostSubmitResult;
@@ -905,7 +910,7 @@ public class TurnManager : MonoBehaviour
 
         if (!string.IsNullOrWhiteSpace(gameId) && LocalPlayerSeatStore.TryGetSeat(gameId, out int storedSeat))
         {
-            seat = storedSeat <= 0 ? 0 : 1;
+            seat = PlayByPostSeatUtility.NormalizeSeatIndex(storedSeat);
             return true;
         }
 
@@ -970,6 +975,77 @@ public class TurnManager : MonoBehaviour
     {
         string normalized = LocalPlayerProfileStore.NormalizeTypedDisplayName(value);
         return string.IsNullOrEmpty(normalized) ? null : normalized;
+    }
+
+    private int GetConfiguredPlayByPostSeatCount()
+    {
+        return PlayByPostSeatUtility.NormalizeSeatCount(configuredPlayByPostSeatCount);
+    }
+
+    private int ResolveCurrentTurnSeatIndex(bool turnIsPlayer)
+    {
+        return turnIsPlayer ? 0 : 1;
+    }
+
+    private void ApplyPlayByPostSeatMetadata(GameSave save)
+    {
+        if (save == null)
+        {
+            return;
+        }
+
+        int seatCount = currentMode == GameMode.PlayByPost
+            ? GetConfiguredPlayByPostSeatCount()
+            : PlayByPostSeatUtility.MinSeatCount;
+        int currentTurnSeatIndex = ResolveCurrentTurnSeatIndex(save.isPlayerTurn);
+        save.seatCount = seatCount;
+        save.currentTurnSeatIndex = currentTurnSeatIndex;
+        save.transportSeq = ComputeTransportSeq(save.turnNumber, save.isPlayerTurn);
+
+        save.seats ??= new List<PlayByPostSeatMetadata>();
+        save.seats.Clear();
+        for (int seatIndex = 0; seatIndex < seatCount; seatIndex++)
+        {
+            save.seats.Add(new PlayByPostSeatMetadata
+            {
+                seatIndex = seatIndex,
+                state = PlayByPostSeatUtility.SeatStateUnclaimed,
+                claimedPlayerId = string.Empty,
+                typedDisplayName = string.Empty
+            });
+        }
+
+        if (currentMode != GameMode.PlayByPost || string.IsNullOrWhiteSpace(currentGameId))
+        {
+            return;
+        }
+
+        LocalPlayerProfileStore.ProfileData profile = LocalPlayerProfileStore.GetOrCreateProfile();
+        string normalizedTypedName = LocalPlayerProfileStore.NormalizeTypedDisplayName(profile.TypedDisplayName);
+
+        if (TryGetLocalSeatIndexForPbp(currentGameId, out int localSeat) &&
+            localSeat >= 0 &&
+            localSeat < save.seats.Count)
+        {
+            PlayByPostSeatMetadata localSeatMetadata = save.seats[localSeat];
+            localSeatMetadata.state = PlayByPostSeatUtility.SeatStateActive;
+            localSeatMetadata.claimedPlayerId = profile.PlayerId ?? string.Empty;
+            localSeatMetadata.typedDisplayName = normalizedTypedName ?? string.Empty;
+        }
+
+        if (save.seats.Count > 0)
+        {
+            save.seats[0].typedDisplayName = string.IsNullOrWhiteSpace(save.seats[0].typedDisplayName)
+                ? (save.playerOneTypedDisplayName ?? string.Empty)
+                : save.seats[0].typedDisplayName;
+        }
+
+        if (save.seats.Count > 1)
+        {
+            save.seats[1].typedDisplayName = string.IsNullOrWhiteSpace(save.seats[1].typedDisplayName)
+                ? (save.playerTwoTypedDisplayName ?? string.Empty)
+                : save.seats[1].typedDisplayName;
+        }
     }
 
     public string GetCurrentPlayByPostOpponentTypedDisplayName()
@@ -2329,7 +2405,10 @@ public class TurnManager : MonoBehaviour
                 currentGameId,
                 turnTransport != null ? turnTransport.TransportName : null,
                 lastKnownRoundTurn: exportTurnNumber,
-                lastKnownIsPlayerTurn: exportIsPlayerTurn);
+                lastKnownIsPlayerTurn: exportIsPlayerTurn,
+                lastKnownCurrentTurnSeatIndex: ResolveCurrentTurnSeatIndex(exportIsPlayerTurn),
+                lastKnownTransportSeq: transportSeq,
+                lastKnownSeatCount: GetConfiguredPlayByPostSeatCount());
             StartPlayByPostPolling(transportSeq);
             yield break;
         }
@@ -2763,6 +2842,13 @@ public class TurnManager : MonoBehaviour
         if (MapSizeSelection.TryConsume(out MapSizePreset pendingMapSize))
         {
             selectedMapSize = pendingMapSize;
+        }
+
+        configuredPlayByPostSeatCount = PlayByPostSeatUtility.MinSeatCount;
+        if (currentMode == GameMode.PlayByPost &&
+            PlayByPostSeatCountSelection.TryConsume(out int pendingPlayByPostSeatCount))
+        {
+            configuredPlayByPostSeatCount = PlayByPostSeatUtility.NormalizeSeatCount(pendingPlayByPostSeatCount);
         }
 
         GetBoardDimensionsForPreset(selectedMapSize, out int boardWidth, out int boardHeight);
@@ -6133,7 +6219,10 @@ public class TurnManager : MonoBehaviour
                 targetPath,
                 gameOver,
                 lastKnownRoundTurn: turnNumber,
-                lastKnownIsPlayerTurn: isPlayerTurn);
+                lastKnownIsPlayerTurn: isPlayerTurn,
+                lastKnownCurrentTurnSeatIndex: ResolveCurrentTurnSeatIndex(isPlayerTurn),
+                lastKnownTransportSeq: ComputeTransportSeq(turnNumber, isPlayerTurn),
+                lastKnownSeatCount: GetConfiguredPlayByPostSeatCount());
         }
         catch (IOException ex)
         {
@@ -6588,6 +6677,7 @@ public class TurnManager : MonoBehaviour
         };
 
         ApplyTypedDisplayNameMetadata(save);
+        ApplyPlayByPostSeatMetadata(save);
 
         // Cities
         City[] cities = Object.FindObjectsByType<City>();
@@ -6708,12 +6798,20 @@ public class TurnManager : MonoBehaviour
             currentGameId,
             null,
             lastKnownRoundTurn: saveForExport.turnNumber,
-            lastKnownIsPlayerTurn: saveForExport.isPlayerTurn);
+            lastKnownIsPlayerTurn: saveForExport.isPlayerTurn,
+            lastKnownCurrentTurnSeatIndex: saveForExport.currentTurnSeatIndex,
+            lastKnownTransportSeq: ComputeTransportSeq(saveForExport),
+            lastKnownSeatCount: saveForExport.seatCount);
         return true;
     }
 
     private static int ComputeTransportSeq(GameSave s)
     {
+        if (s != null && s.transportSeq > 0)
+        {
+            return s.transportSeq;
+        }
+
         return ComputeTransportSeq(s.turnNumber, s.isPlayerTurn);
     }
 
@@ -6996,6 +7094,9 @@ private void PBpDebugSyncNow_Context()
             }
 
             currentMode = loadedMode;
+            configuredPlayByPostSeatCount = currentMode == GameMode.PlayByPost
+                ? PlayByPostSeatUtility.NormalizeSeatCount(save.seatCount)
+                : PlayByPostSeatUtility.MinSeatCount;
 
             aiRecruitVariant = AIRecruitVariant.Default;
             if (!string.IsNullOrEmpty(save.aiRecruitVariant) &&
@@ -7304,7 +7405,10 @@ private void PBpDebugSyncNow_Context()
                 currentMode,
                 gameOver,
                 lastKnownRoundTurn: turnNumber,
-                lastKnownIsPlayerTurn: isPlayerTurn);
+                lastKnownIsPlayerTurn: isPlayerTurn,
+                lastKnownCurrentTurnSeatIndex: ResolveCurrentTurnSeatIndex(isPlayerTurn),
+                lastKnownTransportSeq: ComputeTransportSeq(turnNumber, isPlayerTurn),
+                lastKnownSeatCount: GetConfiguredPlayByPostSeatCount());
             GameplayInputOrchestrator.ResetTransientInputState();
 
             if (currentMode == GameMode.VsAI && !gameOver)
@@ -7511,5 +7615,7 @@ private void PBpDebugSyncNow_Context()
                 unit.hasAttackedThisTurn = false;
             }
         }
+
+        ApplyPlayByPostSeatMetadata(save);
     }
 }

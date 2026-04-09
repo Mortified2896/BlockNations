@@ -407,6 +407,106 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         }
     }
 
+    public IEnumerator ClaimSeat(
+        string gameId,
+        string playerId,
+        string typedDisplayName,
+        Action<bool, string, int, bool> done)
+    {
+        if (!IsValidGameId(gameId) || string.IsNullOrWhiteSpace(playerId))
+        {
+            done?.Invoke(false, "INVALID_INPUT", 0, false);
+            yield break;
+        }
+
+        if (!IsAvailable)
+        {
+            done?.Invoke(false, TurnTelemetryConstants.Unavailable, 0, false);
+            yield break;
+        }
+
+        yield return null;
+
+        string url = BuildUrl("pbp/game/claim");
+        var payload = new SeatClaimRequest
+        {
+            gameId = gameId,
+            playerId = playerId,
+            typedDisplayName = LocalPlayerProfileStore.NormalizeTypedDisplayName(typedDisplayName)
+        };
+
+        string body = JsonUtility.ToJson(payload);
+        byte[] bodyBytes = Encoding.UTF8.GetBytes(body);
+
+        using (var req = new UnityWebRequest(url, UnityWebRequest.kHttpVerbPOST))
+        {
+            req.uploadHandler = new UploadHandlerRaw(bodyBytes);
+            req.downloadHandler = new DownloadHandlerBuffer();
+            req.SetRequestHeader("Content-Type", "application/json");
+            ApplyPbpApiKeyHeader(req);
+            req.timeout = GetTimeoutSeconds();
+
+            yield return req.SendWebRequest();
+
+            long status = req.responseCode;
+            string text = req.downloadHandler != null ? req.downloadHandler.text : null;
+
+            if (req.result == UnityWebRequest.Result.ConnectionError ||
+                req.result == UnityWebRequest.Result.DataProcessingError ||
+                (status <= 0 && req.result != UnityWebRequest.Result.Success))
+            {
+                done?.Invoke(false, TurnTelemetryConstants.IoError, 0, false);
+                yield break;
+            }
+
+            if (status == 200)
+            {
+                if (TryParseSeatClaimOk(text, out int seatIndex, out bool alreadyClaimed))
+                {
+                    done?.Invoke(true, null, seatIndex, alreadyClaimed);
+                }
+                else
+                {
+                    done?.Invoke(false, TurnTelemetryConstants.IoError, 0, false);
+                }
+                yield break;
+            }
+
+            if (status == 400)
+            {
+                done?.Invoke(false, "INVALID_INPUT", 0, false);
+                yield break;
+            }
+
+            if (status == 401)
+            {
+                done?.Invoke(false, "UNAUTHORIZED", 0, false);
+                yield break;
+            }
+
+            if (status == 409)
+            {
+                if (HasError(text, "GAME_FULL"))
+                {
+                    done?.Invoke(false, "GAME_FULL", 0, false);
+                }
+                else
+                {
+                    done?.Invoke(false, TurnTelemetryConstants.IoError, 0, false);
+                }
+                yield break;
+            }
+
+            if (status >= 500)
+            {
+                done?.Invoke(false, TurnTelemetryConstants.IoError, 0, false);
+                yield break;
+            }
+
+            done?.Invoke(false, TurnTelemetryConstants.IoError, 0, false);
+        }
+    }
+
     private static bool IsValidGameId(string gameId)
     {
         return !string.IsNullOrWhiteSpace(gameId);
@@ -656,6 +756,36 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         return true;
     }
 
+    private static bool TryParseSeatClaimOk(string text, out int seatIndex, out bool alreadyClaimed)
+    {
+        seatIndex = 0;
+        alreadyClaimed = false;
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        SeatClaimResponse response;
+        try
+        {
+            response = JsonUtility.FromJson<SeatClaimResponse>(text);
+        }
+        catch
+        {
+            return false;
+        }
+
+        if (response == null || !response.ok)
+        {
+            return false;
+        }
+
+        seatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(response.seatIndex);
+        alreadyClaimed = response.alreadyClaimed;
+        return true;
+    }
+
     [Serializable]
     private class SubmitRequest
     {
@@ -691,6 +821,23 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
     private class TurnStatusRequest
     {
         public TurnStatusRequestItem[] games;
+    }
+
+    [Serializable]
+    private class SeatClaimRequest
+    {
+        public string gameId;
+        public string playerId;
+        public string typedDisplayName;
+    }
+
+    [Serializable]
+    private class SeatClaimResponse
+    {
+        public bool ok;
+        public string error;
+        public int seatIndex;
+        public bool alreadyClaimed;
     }
 
     [Serializable]

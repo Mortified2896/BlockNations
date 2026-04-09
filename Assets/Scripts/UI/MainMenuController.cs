@@ -49,6 +49,7 @@ public class MainMenuController : MonoBehaviour
     private const string LegacySharedSaveFileName = "save.json";
     private const string PbpVersionVerificationFailedMessage = "Unable to verify this game's PbP version. For safety, this match cannot be opened on this build.";
     private const string PbpActiveGameUpdateRequiredCardText = "Requires matching version";
+    private const string PbpJoinFullMessage = "Can't join: this game is already full.";
     private const float RemoteTurnStatusFetchCooldownSeconds = 10f;
     private const float MenuClosedRefreshIntervalSeconds = 60f;
     private const float MenuOpenRefreshIntervalSeconds = 10f;
@@ -119,6 +120,26 @@ public class MainMenuController : MonoBehaviour
         {
             HasNewerThanKnown = hasNewerThanKnown;
             TurnSeat = turnSeat;
+        }
+    }
+
+    public enum PlayByPostMenuTurnStateKind
+    {
+        Unknown,
+        YourTurn,
+        Waiting,
+        GameOver
+    }
+
+    private readonly struct PlayByPostMenuTurnStateResult
+    {
+        public readonly PlayByPostMenuTurnStateKind Kind;
+        public readonly int CurrentTurnSeatIndex;
+
+        public PlayByPostMenuTurnStateResult(PlayByPostMenuTurnStateKind kind, int currentTurnSeatIndex)
+        {
+            Kind = kind;
+            CurrentTurnSeatIndex = currentTurnSeatIndex;
         }
     }
 
@@ -539,7 +560,10 @@ public class MainMenuController : MonoBehaviour
         StartPlayByPostGameWithSettings(TurnManager.GetDefaultMapSizePreset());
     }
 
-    public bool StartPlayByPostGameWithSettings(TurnManager.MapSizePreset mapSizePreset, bool storeSnapshotHistory = false)
+    public bool StartPlayByPostGameWithSettings(
+        TurnManager.MapSizePreset mapSizePreset,
+        bool storeSnapshotHistory = false,
+        int playerCount = PlayByPostSeatUtility.MinSeatCount)
     {
         AIVsAIBatchRunController.ClearAll();
 
@@ -558,6 +582,7 @@ public class MainMenuController : MonoBehaviour
         GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
         MapSizeSelection.SetPending(mapSizePreset);
         SnapshotHistorySelection.SetPending(storeSnapshotHistory);
+        PlayByPostSeatCountSelection.SetPending(playerCount);
         SceneManager.LoadScene(gameplaySceneName);
 
         if (modeSelectionPanel != null)
@@ -729,7 +754,7 @@ public class MainMenuController : MonoBehaviour
         for (int i = 0; i < activePbpGames.Count; i++)
         {
             SaveManifestService.ManifestGameSummary summary = activePbpGames[i];
-            if (string.Equals(BuildPlayByPostTurnStateForMenu(summary), "Your turn", StringComparison.Ordinal))
+            if (GetPlayByPostTurnStateKindForMenu(summary) == PlayByPostMenuTurnStateKind.YourTurn)
             {
                 countMyTurn++;
             }
@@ -809,8 +834,7 @@ public class MainMenuController : MonoBehaviour
             return false;
         }
 
-        string subtitle = BuildPlayByPostTurnStateForMenu(summary);
-        return string.Equals(subtitle, "Waiting for opponent", StringComparison.Ordinal);
+        return GetPlayByPostTurnStateKindForMenu(summary) == PlayByPostMenuTurnStateKind.Waiting;
     }
 
     public void GameDetails_SendReminder()
@@ -1015,8 +1039,12 @@ public class MainMenuController : MonoBehaviour
         public bool isPlayerTurn;
         public int turnNumber;
         public bool gameOver;
+        public int seatCount = PlayByPostSeatUtility.MinSeatCount;
+        public int currentTurnSeatIndex;
+        public int transportSeq;
         public string playerOneTypedDisplayName = string.Empty;
         public string playerTwoTypedDisplayName = string.Empty;
+        public List<PlayByPostSeatMetadata> seats = new List<PlayByPostSeatMetadata>();
     }
 
     public void ImportFromPastedJson()
@@ -1218,8 +1246,35 @@ public class MainMenuController : MonoBehaviour
                     yield break;
                 }
 
+                LocalPlayerProfileStore.ProfileData profile = LocalPlayerProfileStore.GetOrCreateProfile();
+                bool claimOk = false;
+                string claimError = null;
+                int claimedSeatIndex = 0;
+                yield return StartCoroutine(httpTransport.ClaimSeat(
+                    gameId,
+                    profile.PlayerId,
+                    profile.TypedDisplayName,
+                    (ok, error, seatIndex, alreadyClaimed) =>
+                    {
+                        claimOk = ok;
+                        claimError = error;
+                        claimedSeatIndex = seatIndex;
+                    }));
+
+                if (!claimOk)
+                {
+                    if (string.Equals(claimError, "GAME_FULL", StringComparison.Ordinal))
+                    {
+                        SetImportStatus(PbpJoinFullMessage);
+                        yield break;
+                    }
+
+                    SetImportStatus($"{BuildConnectivityWarningStatus()}. Can't verify game.");
+                    yield break;
+                }
+
                 SetImportStatus("Game found. Joining...");
-                LocalPlayerSeatStore.SetSeat(gameId, 1);
+                LocalPlayerSeatStore.SetSeat(gameId, claimedSeatIndex);
                 PersistPlayByPostSelection(gameId, returnToMultiplayerPane: true);
                 GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
                 SceneManager.LoadScene(gameplaySceneName);
@@ -1417,17 +1472,12 @@ public class MainMenuController : MonoBehaviour
 
     public static string BuildPlayByPostTurnSubtitle(SaveManifestService.ManifestGameSummary summary)
     {
-        if (TryGetLocalPbpSnapshotGameOver(summary.gameId, out bool snapshotGameOver) && snapshotGameOver)
+        return ResolveFallbackPlayByPostMenuTurnState(summary).Kind switch
         {
-            return "Game Over";
-        }
-
-        if (TryGetIsYourTurnFromManifest(summary, out bool isYourTurn, out _, out _) && isYourTurn)
-        {
-            return "Your turn";
-        }
-
-        return "Waiting for opponent";
+            PlayByPostMenuTurnStateKind.GameOver => "Game Over",
+            PlayByPostMenuTurnStateKind.YourTurn => "Your turn",
+            _ => "Waiting for opponent"
+        };
     }
 
     public string BuildPlayByPostTurnSubtitleForMenu(SaveManifestService.ManifestGameSummary summary)
@@ -1438,78 +1488,128 @@ public class MainMenuController : MonoBehaviour
             return PbpActiveGameUpdateRequiredCardText;
         }
 
-        string turnState = BuildPlayByPostTurnStateForMenu(summary);
-        if (string.Equals(turnState, "Game Over", StringComparison.Ordinal))
+        PlayByPostMenuTurnStateResult turnState = ResolvePlayByPostMenuTurnStateForMenu(summary);
+        if (turnState.Kind == PlayByPostMenuTurnStateKind.GameOver)
         {
-            return turnState;
+            return "Game Over";
+        }
+
+        if (TryReadLocalPbpSnapshotHeader(summary.gameId, out MinimalSaveHeader seatAwareHeader) &&
+            PlayByPostSeatUtility.NormalizeSeatCount(seatAwareHeader.seatCount) > 2)
+        {
+            if (turnState.CurrentTurnSeatIndex < 0)
+            {
+                return turnState.Kind == PlayByPostMenuTurnStateKind.YourTurn
+                    ? "Your turn"
+                    : "Waiting for player";
+            }
+
+            return turnState.Kind == PlayByPostMenuTurnStateKind.YourTurn
+                ? "Your turn"
+                : $"Waiting for {GetSeatDisplayNameOrFallbackForMenu(seatAwareHeader, turnState.CurrentTurnSeatIndex)}";
         }
 
         string opponentTypedDisplayName = TryGetOpponentTypedDisplayNameForMenu(summary.gameId, out string foundOpponentTypedDisplayName)
             ? foundOpponentTypedDisplayName
             : "Opponent";
 
-        return string.Equals(turnState, "Your turn", StringComparison.Ordinal)
+        return turnState.Kind == PlayByPostMenuTurnStateKind.YourTurn
             ? $"Your turn against {opponentTypedDisplayName}"
             : $"Waiting for {opponentTypedDisplayName}";
     }
 
+    public PlayByPostMenuTurnStateKind GetPlayByPostTurnStateKindForMenu(SaveManifestService.ManifestGameSummary summary)
+    {
+        return ResolvePlayByPostMenuTurnStateForMenu(summary).Kind;
+    }
+
     public string BuildPlayByPostTurnStateForMenu(SaveManifestService.ManifestGameSummary summary)
     {
-        string fallback = BuildPlayByPostTurnSubtitle(summary);
-        if (string.Equals(fallback, "Game Over", StringComparison.Ordinal))
+        return ResolvePlayByPostMenuTurnStateForMenu(summary).Kind switch
+        {
+            PlayByPostMenuTurnStateKind.GameOver => "Game Over",
+            PlayByPostMenuTurnStateKind.YourTurn => "Your turn",
+            _ => "Waiting for opponent"
+        };
+    }
+
+    private PlayByPostMenuTurnStateResult ResolvePlayByPostMenuTurnStateForMenu(SaveManifestService.ManifestGameSummary summary)
+    {
+        PlayByPostMenuTurnStateResult fallback = ResolveFallbackPlayByPostMenuTurnState(summary);
+        if (fallback.Kind == PlayByPostMenuTurnStateKind.GameOver)
         {
             LogRemoteTurnStatusDiagnostics(
-                $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason=FALLBACK_GAME_OVER fallback={fallback}");
+                $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason=FALLBACK_GAME_OVER fallback={fallback.Kind}");
             return fallback;
         }
 
         if (!IsHttpPbpGame(summary))
         {
             LogRemoteTurnStatusDiagnostics(
-                $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason=FALLBACK_NOT_HTTP fallback={fallback} transportType={summary.transportType ?? "<null>"} slotType={summary.slotType ?? "<null>"}");
+                $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason=FALLBACK_NOT_HTTP fallback={fallback.Kind} transportType={summary.transportType ?? "<null>"} slotType={summary.slotType ?? "<null>"}");
             return fallback;
         }
 
         if (!remoteTurnStatusByGameId.TryGetValue(summary.gameId, out RemoteTurnStatusOverlay remote))
         {
             LogRemoteTurnStatusDiagnostics(
-                $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason=FALLBACK_NO_REMOTE_STATUS fallback={fallback}");
+                $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason=FALLBACK_NO_REMOTE_STATUS fallback={fallback.Kind}");
             return fallback;
         }
 
         if (!remote.HasNewerThanKnown)
         {
             LogRemoteTurnStatusDiagnostics(
-                $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason=FALLBACK_NOT_NEWER fallback={fallback} turnSeat={remote.TurnSeat}");
+                $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason=FALLBACK_NOT_NEWER fallback={fallback.Kind} turnSeat={remote.TurnSeat}");
             return fallback;
         }
 
-        if (remote.TurnSeat != 0 && remote.TurnSeat != 1)
+        if (remote.TurnSeat < 0 || remote.TurnSeat >= PlayByPostSeatUtility.MaxSeatCount)
         {
             LogRemoteTurnStatusDiagnostics(
-                $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason=FALLBACK_INVALID_TURN_SEAT fallback={fallback} turnSeat={remote.TurnSeat}");
+                $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason=FALLBACK_INVALID_TURN_SEAT fallback={fallback.Kind} turnSeat={remote.TurnSeat}");
             return fallback;
         }
 
         if (!LocalPlayerSeatStore.TryGetSeat(summary.gameId, out int localSeat))
         {
             LogRemoteTurnStatusDiagnostics(
-                $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason=FALLBACK_SEAT_MISSING fallback={fallback} turnSeat={remote.TurnSeat}");
+                $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason=FALLBACK_SEAT_MISSING fallback={fallback.Kind} turnSeat={remote.TurnSeat}");
             return fallback;
         }
 
-        if (localSeat != 0 && localSeat != 1)
-        {
-            LogRemoteTurnStatusDiagnostics(
-                $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason=FALLBACK_INVALID_LOCAL_SEAT fallback={fallback} localSeat={localSeat} turnSeat={remote.TurnSeat}");
-            return fallback;
-        }
-
-        string overlayText = localSeat == remote.TurnSeat ? "Your turn" : "Waiting for opponent";
-        string reason = localSeat == remote.TurnSeat ? "OVERLAY_YOUR_TURN" : "OVERLAY_WAITING";
+        PlayByPostMenuTurnStateResult overlay = new PlayByPostMenuTurnStateResult(
+            localSeat == remote.TurnSeat ? PlayByPostMenuTurnStateKind.YourTurn : PlayByPostMenuTurnStateKind.Waiting,
+            remote.TurnSeat);
+        string reason = overlay.Kind == PlayByPostMenuTurnStateKind.YourTurn ? "OVERLAY_YOUR_TURN" : "OVERLAY_WAITING";
         LogRemoteTurnStatusDiagnostics(
-            $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason={reason} overlay={overlayText} localSeat={localSeat} turnSeat={remote.TurnSeat}");
-        return overlayText;
+            $"[MPRemoteStatus] subtitle gameId={summary.gameId} reason={reason} overlay={overlay.Kind} localSeat={localSeat} turnSeat={remote.TurnSeat}");
+        return overlay;
+    }
+
+    private static PlayByPostMenuTurnStateResult ResolveFallbackPlayByPostMenuTurnState(SaveManifestService.ManifestGameSummary summary)
+    {
+        if (TryGetLocalPbpSnapshotGameOver(summary.gameId, out bool snapshotGameOver) && snapshotGameOver)
+        {
+            return new PlayByPostMenuTurnStateResult(PlayByPostMenuTurnStateKind.GameOver, -1);
+        }
+
+        if (TryGetIsYourTurnFromManifest(summary, out bool isYourTurn, out _, out _))
+        {
+            int currentTurnSeatIndex = summary.lastKnownCurrentTurnSeatIndex;
+            if (summary.lastKnownSeatCount > 0)
+            {
+                currentTurnSeatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(
+                    currentTurnSeatIndex,
+                    summary.lastKnownSeatCount);
+            }
+
+            return new PlayByPostMenuTurnStateResult(
+                isYourTurn ? PlayByPostMenuTurnStateKind.YourTurn : PlayByPostMenuTurnStateKind.Waiting,
+                currentTurnSeatIndex);
+        }
+
+        return new PlayByPostMenuTurnStateResult(PlayByPostMenuTurnStateKind.Waiting, -1);
     }
 
     public string BuildPlayByPostDetailsSubtitleForMenu(SaveManifestService.ManifestGameSummary summary)
@@ -1560,6 +1660,51 @@ public class MainMenuController : MonoBehaviour
         string playerTwoTypedDisplayName = LocalPlayerProfileStore.NormalizeTypedDisplayName(header.playerTwoTypedDisplayName);
         opponentTypedDisplayName = localSeat == 0 ? playerTwoTypedDisplayName : playerOneTypedDisplayName;
         return !string.IsNullOrWhiteSpace(opponentTypedDisplayName);
+    }
+
+    private static bool TryGetSeatTypedDisplayNameForMenu(MinimalSaveHeader header, int seatIndex, out string typedDisplayName)
+    {
+        typedDisplayName = null;
+        if (header == null)
+        {
+            return false;
+        }
+
+        if (header.seats != null)
+        {
+            for (int i = 0; i < header.seats.Count; i++)
+            {
+                PlayByPostSeatMetadata seat = header.seats[i];
+                if (seat == null || seat.seatIndex != seatIndex)
+                {
+                    continue;
+                }
+
+                typedDisplayName = LocalPlayerProfileStore.NormalizeTypedDisplayName(seat.typedDisplayName);
+                return !string.IsNullOrWhiteSpace(typedDisplayName);
+            }
+        }
+
+        if (seatIndex == 0)
+        {
+            typedDisplayName = LocalPlayerProfileStore.NormalizeTypedDisplayName(header.playerOneTypedDisplayName);
+            return !string.IsNullOrWhiteSpace(typedDisplayName);
+        }
+
+        if (seatIndex == 1)
+        {
+            typedDisplayName = LocalPlayerProfileStore.NormalizeTypedDisplayName(header.playerTwoTypedDisplayName);
+            return !string.IsNullOrWhiteSpace(typedDisplayName);
+        }
+
+        return false;
+    }
+
+    private static string GetSeatDisplayNameOrFallbackForMenu(MinimalSaveHeader header, int seatIndex)
+    {
+        return TryGetSeatTypedDisplayNameForMenu(header, seatIndex, out string typedDisplayName)
+            ? PlayByPostSeatUtility.ResolveSeatDisplayNameOrFallback(seatIndex, typedDisplayName)
+            : PlayByPostSeatUtility.BuildPlayerLabel(seatIndex);
     }
 
     private static bool TryReadLocalPbpSnapshotHeader(string gameId, out MinimalSaveHeader header)
@@ -1834,8 +1979,19 @@ public class MainMenuController : MonoBehaviour
             return false;
         }
 
-        bool localIsPlayerOwned = seatOrPlayerIndex == 0;
-        isYourTurn = summary.lastKnownIsPlayerTurn == localIsPlayerOwned;
+        int currentTurnSeatIndex = summary.lastKnownCurrentTurnSeatIndex;
+        if (summary.lastKnownSeatCount > 0)
+        {
+            currentTurnSeatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(
+                currentTurnSeatIndex,
+                summary.lastKnownSeatCount);
+        }
+        else
+        {
+            currentTurnSeatIndex = summary.lastKnownIsPlayerTurn ? 0 : 1;
+        }
+
+        isYourTurn = seatOrPlayerIndex == currentTurnSeatIndex;
         reason = "OK";
         return true;
     }

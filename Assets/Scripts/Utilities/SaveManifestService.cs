@@ -40,6 +40,8 @@ public static class SaveManifestService
         public bool hasLastKnownTurnState;
         public int lastKnownRoundTurn;
         public bool lastKnownIsPlayerTurn;
+        public int lastKnownCurrentTurnSeatIndex;
+        public int lastKnownSeatCount = PlayByPostSeatUtility.MinSeatCount;
         public int lastKnownTransportSeq;
     }
 
@@ -56,6 +58,8 @@ public static class SaveManifestService
         public bool hasLastKnownTurnState;
         public int lastKnownRoundTurn;
         public bool lastKnownIsPlayerTurn;
+        public int lastKnownCurrentTurnSeatIndex;
+        public int lastKnownSeatCount;
         public int lastKnownTransportSeq;
     }
 
@@ -70,6 +74,10 @@ public static class SaveManifestService
         public bool isPlayerTurn;
         public int turnNumber;
         public bool gameOver;
+        public int seatCount = PlayByPostSeatUtility.MinSeatCount;
+        public int currentTurnSeatIndex;
+        public int transportSeq;
+        public List<PlayByPostSeatMetadata> seats = new List<PlayByPostSeatMetadata>();
     }
 
     public static void RecordLocalSave(
@@ -78,7 +86,10 @@ public static class SaveManifestService
         string savePath,
         bool isFinished,
         int? lastKnownRoundTurn = null,
-        bool? lastKnownIsPlayerTurn = null)
+        bool? lastKnownIsPlayerTurn = null,
+        int? lastKnownCurrentTurnSeatIndex = null,
+        int? lastKnownTransportSeq = null,
+        int? lastKnownSeatCount = null)
     {
         string entryKey = mode == TurnManager.GameMode.PlayByPost
             ? BuildPbpGameEntryKey(gameId)
@@ -93,7 +104,10 @@ public static class SaveManifestService
             folderPath: null,
             allowCreateWithoutEntryKey: mode == TurnManager.GameMode.PlayByPost,
             lastKnownRoundTurn: lastKnownRoundTurn,
-            lastKnownIsPlayerTurn: lastKnownIsPlayerTurn);
+            lastKnownIsPlayerTurn: lastKnownIsPlayerTurn,
+            lastKnownCurrentTurnSeatIndex: lastKnownCurrentTurnSeatIndex,
+            lastKnownTransportSeq: lastKnownTransportSeq,
+            lastKnownSeatCount: lastKnownSeatCount);
     }
 
     public static void RecordImportedSave(string gameId, string mode, bool isFinished, string savePath)
@@ -114,21 +128,30 @@ public static class SaveManifestService
             folderPath: null,
             allowCreateWithoutEntryKey: false,
             lastKnownRoundTurn: null,
-            lastKnownIsPlayerTurn: null);
+            lastKnownIsPlayerTurn: null,
+            lastKnownCurrentTurnSeatIndex: null,
+            lastKnownTransportSeq: null,
+            lastKnownSeatCount: null);
     }
 
     public static void RecordPlayByPostExport(
         string gameId,
         string transportType,
         int? lastKnownRoundTurn = null,
-        bool? lastKnownIsPlayerTurn = null)
+        bool? lastKnownIsPlayerTurn = null,
+        int? lastKnownCurrentTurnSeatIndex = null,
+        int? lastKnownTransportSeq = null,
+        int? lastKnownSeatCount = null)
     {
         if (string.IsNullOrWhiteSpace(gameId))
             return;
 
         RecordSave(entryKey: null, gameId, TurnManager.GameMode.PlayByPost, savePath: null, isFinished: false,
             transportType: transportType, folderPath: null, allowCreateWithoutEntryKey: true,
-            lastKnownRoundTurn: lastKnownRoundTurn, lastKnownIsPlayerTurn: lastKnownIsPlayerTurn);
+            lastKnownRoundTurn: lastKnownRoundTurn, lastKnownIsPlayerTurn: lastKnownIsPlayerTurn,
+            lastKnownCurrentTurnSeatIndex: lastKnownCurrentTurnSeatIndex,
+            lastKnownTransportSeq: lastKnownTransportSeq,
+            lastKnownSeatCount: lastKnownSeatCount);
     }
 
     public static void RecordLoadApplied(
@@ -136,14 +159,20 @@ public static class SaveManifestService
         TurnManager.GameMode mode,
         bool isFinished,
         int? lastKnownRoundTurn = null,
-        bool? lastKnownIsPlayerTurn = null)
+        bool? lastKnownIsPlayerTurn = null,
+        int? lastKnownCurrentTurnSeatIndex = null,
+        int? lastKnownTransportSeq = null,
+        int? lastKnownSeatCount = null)
     {
         if (string.IsNullOrWhiteSpace(gameId))
             gameId = DefaultLocalGameId;
 
         RecordSave(entryKey: null, gameId, mode, savePath: null, isFinished: isFinished,
             transportType: null, folderPath: null, allowCreateWithoutEntryKey: true,
-            lastKnownRoundTurn: lastKnownRoundTurn, lastKnownIsPlayerTurn: lastKnownIsPlayerTurn);
+            lastKnownRoundTurn: lastKnownRoundTurn, lastKnownIsPlayerTurn: lastKnownIsPlayerTurn,
+            lastKnownCurrentTurnSeatIndex: lastKnownCurrentTurnSeatIndex,
+            lastKnownTransportSeq: lastKnownTransportSeq,
+            lastKnownSeatCount: lastKnownSeatCount);
     }
 
     public static void EnsurePlayByPostEntry(string gameId, string transportType)
@@ -153,7 +182,10 @@ public static class SaveManifestService
 
         RecordSave(entryKey: null, gameId, TurnManager.GameMode.PlayByPost, savePath: null, isFinished: false,
             transportType: transportType, folderPath: null, allowCreateWithoutEntryKey: true,
-            lastKnownRoundTurn: null, lastKnownIsPlayerTurn: null);
+            lastKnownRoundTurn: null, lastKnownIsPlayerTurn: null,
+            lastKnownCurrentTurnSeatIndex: null,
+            lastKnownTransportSeq: null,
+            lastKnownSeatCount: null);
     }
 
     public static void DumpManifestToLog()
@@ -175,7 +207,7 @@ public static class SaveManifestService
 
                 Debug.Log(
                     $"[SaveManifest] entryKey={entry.entryKey} mode={entry.mode} savePath={entry.savePath} folderPath={entry.folderPath} lastPlayedUtc={entry.lastPlayedUtc} isFinished={entry.isFinished} " +
-                    $"lastKnownRoundTurn={entry.lastKnownRoundTurn} lastKnownIsPlayerTurn={entry.lastKnownIsPlayerTurn} lastKnownTransportSeq={entry.lastKnownTransportSeq} hasLastKnownTurnState={entry.hasLastKnownTurnState}");
+                    $"lastKnownRoundTurn={entry.lastKnownRoundTurn} lastKnownIsPlayerTurn={entry.lastKnownIsPlayerTurn} lastKnownCurrentTurnSeatIndex={entry.lastKnownCurrentTurnSeatIndex} lastKnownSeatCount={entry.lastKnownSeatCount} lastKnownTransportSeq={entry.lastKnownTransportSeq} hasLastKnownTurnState={entry.hasLastKnownTurnState}");
             }
         }
 #endif
@@ -190,7 +222,10 @@ public static class SaveManifestService
         string entryKey = BuildPbpFileEntryKey(folderRel);
         RecordSave(entryKey, gameId, TurnManager.GameMode.PlayByPost, savePath: null, isFinished: false,
             transportType: "File", folderPath: folderRel, allowCreateWithoutEntryKey: false,
-            lastKnownRoundTurn: null, lastKnownIsPlayerTurn: null);
+            lastKnownRoundTurn: null, lastKnownIsPlayerTurn: null,
+            lastKnownCurrentTurnSeatIndex: null,
+            lastKnownTransportSeq: null,
+            lastKnownSeatCount: null);
     }
 
     public static List<ManifestGameSummary> GetActivePlayByPostGames()
@@ -227,6 +262,10 @@ public static class SaveManifestService
                     hasLastKnownTurnState = entry.hasLastKnownTurnState,
                     lastKnownRoundTurn = entry.lastKnownRoundTurn,
                     lastKnownIsPlayerTurn = entry.lastKnownIsPlayerTurn,
+                    lastKnownCurrentTurnSeatIndex = entry.lastKnownCurrentTurnSeatIndex,
+                    lastKnownSeatCount = entry.lastKnownSeatCount > 0
+                        ? entry.lastKnownSeatCount
+                        : PlayByPostSeatUtility.MinSeatCount,
                     lastKnownTransportSeq = entry.lastKnownTransportSeq
                 });
             }
@@ -315,7 +354,10 @@ public static class SaveManifestService
         string folderPath,
         bool allowCreateWithoutEntryKey,
         int? lastKnownRoundTurn,
-        bool? lastKnownIsPlayerTurn)
+        bool? lastKnownIsPlayerTurn,
+        int? lastKnownCurrentTurnSeatIndex,
+        int? lastKnownTransportSeq,
+        int? lastKnownSeatCount)
     {
         lock (Sync)
         {
@@ -393,10 +435,16 @@ public static class SaveManifestService
             {
                 int clampedRoundTurn = Math.Max(0, lastKnownRoundTurn.Value);
                 bool knownIsPlayerTurn = lastKnownIsPlayerTurn.Value;
+                int normalizedSeatCount = PlayByPostSeatUtility.NormalizeSeatCount(
+                    lastKnownSeatCount ?? PlayByPostSeatUtility.MinSeatCount);
+                int currentTurnSeatIndex = lastKnownCurrentTurnSeatIndex ?? (knownIsPlayerTurn ? 0 : 1);
                 entry.hasLastKnownTurnState = true;
                 entry.lastKnownRoundTurn = clampedRoundTurn;
                 entry.lastKnownIsPlayerTurn = knownIsPlayerTurn;
-                entry.lastKnownTransportSeq = ComputePlayByPostTransportSeq(clampedRoundTurn, knownIsPlayerTurn);
+                entry.lastKnownCurrentTurnSeatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(currentTurnSeatIndex, normalizedSeatCount);
+                entry.lastKnownSeatCount = normalizedSeatCount;
+                entry.lastKnownTransportSeq = lastKnownTransportSeq.GetValueOrDefault(
+                    ComputePlayByPostTransportSeq(clampedRoundTurn, knownIsPlayerTurn));
             }
 
             WriteManifest(cachedManifest);
@@ -534,7 +582,13 @@ public static class SaveManifestService
             entry.hasLastKnownTurnState = true;
             entry.lastKnownRoundTurn = clampedRoundTurn;
             entry.lastKnownIsPlayerTurn = header.isPlayerTurn;
-            entry.lastKnownTransportSeq = ComputePlayByPostTransportSeq(clampedRoundTurn, header.isPlayerTurn);
+            entry.lastKnownCurrentTurnSeatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(
+                header.currentTurnSeatIndex,
+                header.seatCount);
+            entry.lastKnownSeatCount = PlayByPostSeatUtility.NormalizeSeatCount(header.seatCount);
+            entry.lastKnownTransportSeq = header.transportSeq > 0
+                ? header.transportSeq
+                : ComputePlayByPostTransportSeq(clampedRoundTurn, header.isPlayerTurn);
         }
         manifest.entries.Add(entry);
     }
@@ -589,7 +643,13 @@ public static class SaveManifestService
                 entry.hasLastKnownTurnState = true;
                 entry.lastKnownRoundTurn = clampedRoundTurn;
                 entry.lastKnownIsPlayerTurn = header.isPlayerTurn;
-                entry.lastKnownTransportSeq = ComputePlayByPostTransportSeq(clampedRoundTurn, header.isPlayerTurn);
+                entry.lastKnownCurrentTurnSeatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(
+                    header.currentTurnSeatIndex,
+                    header.seatCount);
+                entry.lastKnownSeatCount = PlayByPostSeatUtility.NormalizeSeatCount(header.seatCount);
+                entry.lastKnownTransportSeq = header.transportSeq > 0
+                    ? header.transportSeq
+                    : ComputePlayByPostTransportSeq(clampedRoundTurn, header.isPlayerTurn);
             }
 
             manifest.entries.Add(entry);
