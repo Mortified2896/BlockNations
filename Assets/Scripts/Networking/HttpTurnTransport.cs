@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.IO;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -9,7 +10,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
     private const string ApiKeyHeaderName = "X-BlockNations-Api-Key";
     private const string ApiKeyPlayerPrefsKeyRaw = "pbp_api_key";
     private const string ApiKeyEnvVarName = "PBP_SHARED_SECRET";
-    private const string DefaultPbpApiKey = "wlrwnDxyIynqTumpdywh_5_5bfIj1wf7RndV_2toTPw";
+    private const string ApiKeyLocalSecretRelativePath = "UserSettings/pbp-api-key.local";
 
     [SerializeField]
     [Tooltip("UnityWebRequest timeout in seconds (0 = no timeout).")]
@@ -20,6 +21,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
     private string normalizedBaseUrl;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
     private static bool hasLoggedApiKeySource;
+    private static bool hasLoggedMissingApiKeyWarning;
 #endif
 
     public string TransportName => "Http";
@@ -35,6 +37,27 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
     public string BackgroundExperimentBaseUrl => ResolveConfiguredBaseUrl();
     public static string BackgroundExperimentApiKey => GetConfiguredPbpApiKey();
     public static string NormalizeConfiguredBaseUrl(string url) => NormalizeBaseUrl(url);
+
+    public static bool TryStoreScopedApiKeyForCurrentNamespace(string rawApiKey, out string message)
+    {
+        string normalized = NormalizeApiKeyCandidate(rawApiKey);
+        if (string.IsNullOrEmpty(normalized))
+        {
+            message = "Clipboard does not contain a valid PBp API key.";
+            return false;
+        }
+
+        string scopedPrefsKey = DevClientInstanceScope.ScopePlayerPrefsKey(ApiKeyPlayerPrefsKeyRaw);
+        PlayerPrefs.SetString(scopedPrefsKey, normalized);
+        PlayerPrefs.Save();
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        hasLoggedApiKeySource = false;
+#endif
+        message =
+            $"PBp API key saved for {DevClientInstanceScope.StorageNamespace} " +
+            $"({DescribeApiKeyCandidate(normalized)}).";
+        return true;
+    }
 
     public void Initialize()
     {
@@ -146,6 +169,12 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
                 yield break;
             }
 
+            if (status == 401)
+            {
+                done?.Invoke(false, "UNAUTHORIZED");
+                yield break;
+            }
+
             if (status >= 500)
             {
                 done?.Invoke(false, TurnTelemetryConstants.IoError);
@@ -220,6 +249,12 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
             {
                 string mapped = MapInvalidFetchInput(gameId, afterTurnNumber);
                 done?.Invoke(false, mapped, 0, null);
+                yield break;
+            }
+
+            if (status == 401)
+            {
+                done?.Invoke(false, "UNAUTHORIZED", 0, null);
                 yield break;
             }
 
@@ -537,34 +572,100 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
     private static string GetConfiguredPbpApiKey()
     {
-        string fromEnv = Environment.GetEnvironmentVariable(ApiKeyEnvVarName);
+        string fromEnv = NormalizeApiKeyCandidate(Environment.GetEnvironmentVariable(ApiKeyEnvVarName));
+        string fromLocalSecretFile = TryReadLocalSecretFileApiKey();
+        string scopedPrefsKey = DevClientInstanceScope.ScopePlayerPrefsKey(ApiKeyPlayerPrefsKeyRaw);
+        string fromScopedPrefs = NormalizeApiKeyCandidate(PlayerPrefs.GetString(scopedPrefsKey, string.Empty));
+        string fromLegacyPrefs = NormalizeApiKeyCandidate(PlayerPrefs.GetString(ApiKeyPlayerPrefsKeyRaw, string.Empty));
+
         if (!string.IsNullOrEmpty(fromEnv))
         {
-            LogApiKeySourceOnce("env var");
+            LogApiKeyResolutionOnce("env var", scopedPrefsKey, fromEnv, fromLocalSecretFile, fromScopedPrefs, fromLegacyPrefs);
             return fromEnv;
         }
 
-        string scopedPrefsKey = DevClientInstanceScope.ScopePlayerPrefsKey(ApiKeyPlayerPrefsKeyRaw);
-        string fromScopedPrefs = PlayerPrefs.GetString(scopedPrefsKey, string.Empty);
+        if (!string.IsNullOrEmpty(fromLocalSecretFile))
+        {
+            LogApiKeyResolutionOnce(
+                $"local secret file ({ApiKeyLocalSecretRelativePath})",
+                scopedPrefsKey,
+                fromEnv,
+                fromLocalSecretFile,
+                fromScopedPrefs,
+                fromLegacyPrefs);
+            return fromLocalSecretFile;
+        }
+
         if (!string.IsNullOrEmpty(fromScopedPrefs))
         {
-            LogApiKeySourceOnce($"scoped PlayerPrefs ({scopedPrefsKey})");
+            LogApiKeyResolutionOnce(
+                $"scoped PlayerPrefs ({scopedPrefsKey})",
+                scopedPrefsKey,
+                fromEnv,
+                fromLocalSecretFile,
+                fromScopedPrefs,
+                fromLegacyPrefs);
             return fromScopedPrefs;
         }
 
-        string fromLegacyPrefs = PlayerPrefs.GetString(ApiKeyPlayerPrefsKeyRaw, string.Empty);
         if (!string.IsNullOrEmpty(fromLegacyPrefs))
         {
-            LogApiKeySourceOnce($"legacy PlayerPrefs ({ApiKeyPlayerPrefsKeyRaw})");
+            LogApiKeyResolutionOnce(
+                $"legacy PlayerPrefs ({ApiKeyPlayerPrefsKeyRaw})",
+                scopedPrefsKey,
+                fromEnv,
+                fromLocalSecretFile,
+                fromScopedPrefs,
+                fromLegacyPrefs);
             return fromLegacyPrefs;
         }
 
-        LogApiKeySourceOnce("hardcoded fallback");
-        return DefaultPbpApiKey;
+        LogApiKeyResolutionOnce("missing", scopedPrefsKey, fromEnv, fromLocalSecretFile, fromScopedPrefs, fromLegacyPrefs);
+        return string.Empty;
+    }
+
+    private static string TryReadLocalSecretFileApiKey()
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        try
+        {
+            string projectRoot = Path.GetDirectoryName(Application.dataPath);
+            if (string.IsNullOrWhiteSpace(projectRoot))
+            {
+                return string.Empty;
+            }
+
+            string secretPath = Path.Combine(projectRoot, ApiKeyLocalSecretRelativePath);
+            if (!File.Exists(secretPath))
+            {
+                return string.Empty;
+            }
+
+            return NormalizeApiKeyCandidate(File.ReadAllText(secretPath));
+        }
+        catch
+        {
+            // Best-effort only. Fall through to the next configured source.
+            return string.Empty;
+        }
+#else
+        return string.Empty;
+#endif
+    }
+
+    private static string NormalizeApiKeyCandidate(string candidate)
+    {
+        return string.IsNullOrWhiteSpace(candidate) ? string.Empty : candidate.Trim();
     }
 
     [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
-    private static void LogApiKeySourceOnce(string source)
+    private static void LogApiKeyResolutionOnce(
+        string source,
+        string scopedPrefsKey,
+        string fromEnv,
+        string fromLocalSecretFile,
+        string fromScopedPrefs,
+        string fromLegacyPrefs)
     {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (hasLoggedApiKeySource || !PbpDebugSettingsLoader.EnableTransportLogs)
@@ -573,8 +674,33 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         }
 
         hasLoggedApiKeySource = true;
-        Debug.Log($"PBp API key source: {source}");
+        Debug.Log(
+            $"PBp API key resolution: source={source} namespace={DevClientInstanceScope.StorageNamespace} " +
+            $"scopedKey={scopedPrefsKey} env={DescribeApiKeyCandidate(fromEnv)} " +
+            $"file={DescribeApiKeyCandidate(fromLocalSecretFile)} " +
+            $"scoped={DescribeApiKeyCandidate(fromScopedPrefs)} legacy={DescribeApiKeyCandidate(fromLegacyPrefs)}");
 #endif
+    }
+
+    private static string DescribeApiKeyCandidate(string candidate)
+    {
+        if (string.IsNullOrEmpty(candidate))
+        {
+            return "missing";
+        }
+
+        return $"present(len={candidate.Length},fp={BuildApiKeyFingerprint(candidate)})";
+    }
+
+    private static string BuildApiKeyFingerprint(string candidate)
+    {
+        if (string.IsNullOrEmpty(candidate))
+        {
+            return "none";
+        }
+
+        string hash = Hash128.Compute(candidate).ToString();
+        return hash.Length <= 8 ? hash : hash.Substring(0, 8);
     }
 
     private static void ApplyPbpApiKeyHeader(UnityWebRequest req)
@@ -584,9 +710,30 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
         string apiKey = GetConfiguredPbpApiKey();
         if (string.IsNullOrEmpty(apiKey))
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            LogMissingApiKeyWarningOnce();
+#endif
             return;
+        }
 
         req.SetRequestHeader(ApiKeyHeaderName, apiKey);
+    }
+
+    [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+    private static void LogMissingApiKeyWarningOnce()
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (hasLoggedMissingApiKeyWarning || !PbpDebugSettingsLoader.EnableTransportLogs)
+        {
+            return;
+        }
+
+        hasLoggedMissingApiKeyWarning = true;
+        Debug.LogWarning(
+            $"PBp API key is missing. Checked env var {ApiKeyEnvVarName}, local file {ApiKeyLocalSecretRelativePath}, " +
+            $"scoped PlayerPrefs, and legacy PlayerPrefs.");
+#endif
     }
 
     private static string NormalizeBaseUrl(string url)

@@ -139,6 +139,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Button joinCancelButton;
     private Button profileRegenerateButton;
     private Button profileCopyPlayerIdButton;
+    private Button profilePbpApiKeyClipboardButton;
     private Button profileBackButton;
     private TextField profileTypedDisplayNameInput;
     private TextField generalSettingsAIVsAiCertaintyThresholdInput;
@@ -456,6 +457,7 @@ public class MainMenuUITKView : MonoBehaviour
         profileUsernameValueLabel = root.Q<Label>("ProfileUsernameValueLabel");
         profilePlayerIdValueLabel = root.Q<Label>("ProfilePlayerIdValueLabel");
         profileStatusLabel = root.Q<Label>("ProfileStatusLabel");
+        EnsureDevProfilePbpApiKeyButton();
         profileTypedDisplayNameInput = root.Q<TextField>("ProfileTypedDisplayNameInput");
         createSuccessGameCodeLabel = root.Q<Label>("CreateSuccessGameCodeLabel");
         generalSettingsTitleLabel = root.Q<Label>("GeneralSettingsTitleLabel");
@@ -524,6 +526,7 @@ public class MainMenuUITKView : MonoBehaviour
         joinCancelButton = root.Q<Button>("JoinCancelButton");
         profileRegenerateButton = root.Q<Button>("ProfileRegenerateButton");
         profileCopyPlayerIdButton = root.Q<Button>("ProfileCopyPlayerIdButton");
+        profilePbpApiKeyClipboardButton = root.Q<Button>("ProfilePbpApiKeyClipboardButton");
         profileBackButton = root.Q<Button>("ProfileBackButton");
         generalSettingsAIVsAiCertaintyThresholdInput = root.Q<TextField>("GeneralSettingsAIVsAiCertaintyThresholdInput");
         generalSettingsAIVsAiMinimumGamesInput = root.Q<TextField>("GeneralSettingsAIVsAiMinimumGamesInput");
@@ -1231,6 +1234,11 @@ public class MainMenuUITKView : MonoBehaviour
             profileCopyPlayerIdButton.clicked += HandleProfileCopyPlayerIdClicked;
         }
 
+        if (profilePbpApiKeyClipboardButton != null)
+        {
+            profilePbpApiKeyClipboardButton.clicked += HandleProfilePbpApiKeyClipboardClicked;
+        }
+
         if (profileBackButton != null)
         {
             profileBackButton.clicked += HandleProfileBackClicked;
@@ -1548,6 +1556,11 @@ public class MainMenuUITKView : MonoBehaviour
         if (profileCopyPlayerIdButton != null)
         {
             profileCopyPlayerIdButton.clicked -= HandleProfileCopyPlayerIdClicked;
+        }
+
+        if (profilePbpApiKeyClipboardButton != null)
+        {
+            profilePbpApiKeyClipboardButton.clicked -= HandleProfilePbpApiKeyClipboardClicked;
         }
 
         if (profileBackButton != null)
@@ -2066,6 +2079,17 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         ShowTransientProfileStatus("Copy failed.");
+    }
+
+    private void HandleProfilePbpApiKeyClipboardClicked()
+    {
+        if (HttpTurnTransport.TryStoreScopedApiKeyForCurrentNamespace(GUIUtility.systemCopyBuffer, out string message))
+        {
+            ShowTransientProfileStatus(message);
+            return;
+        }
+
+        ShowTransientProfileStatus(message);
     }
 
     private void HandleProfileBackClicked()
@@ -3453,6 +3477,51 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         profileStatusClearItem = profilePanel.schedule.Execute(ClearProfileStatus).StartingIn(ProfileStatusHideDelayMs);
+    }
+
+    private void EnsureDevProfilePbpApiKeyButton()
+    {
+        VisualElement profileCard = root != null ? root.Q(className: "profile-card") : null;
+        if (profileCard == null)
+        {
+            profilePbpApiKeyClipboardButton = null;
+            return;
+        }
+
+        Button existingButton = profileCard.Q<Button>("ProfilePbpApiKeyClipboardButton");
+        if (!IsDevBuild())
+        {
+            if (existingButton != null)
+            {
+                profileCard.Remove(existingButton);
+            }
+
+            profilePbpApiKeyClipboardButton = null;
+            return;
+        }
+
+        if (existingButton == null)
+        {
+            Button button = new Button
+            {
+                name = "ProfilePbpApiKeyClipboardButton",
+                text = "Use Clipboard As PBp Key"
+            };
+            button.AddToClassList("menu-button");
+            button.AddToClassList("profile-copy-button");
+            button.AddToClassList("ui-text-button");
+
+            int insertIndex = profileStatusLabel != null ? profileCard.IndexOf(profileStatusLabel) : profileCard.childCount;
+            if (insertIndex < 0)
+            {
+                insertIndex = profileCard.childCount;
+            }
+
+            profileCard.Insert(insertIndex, button);
+            existingButton = button;
+        }
+
+        profilePbpApiKeyClipboardButton = existingButton;
     }
 
     private void ClearProfileStatus()
