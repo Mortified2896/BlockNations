@@ -2656,6 +2656,11 @@ public class TurnManager : MonoBehaviour
         TryNotifyPlayByPostSubmitResult(submitOk, submitError);
         if (submitOk)
         {
+            int exportSeatCount = GetConfiguredPlayByPostSeatCount();
+            int exportCurrentTurnSeatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(
+                transportSeq % Mathf.Max(1, exportSeatCount),
+                exportSeatCount);
+
             // Re-save on successful submit so disk state always matches the submitted turn.
             SavePlayByPostPerGameSnapshot(
                 snapshotJson: exportJson,
@@ -2668,11 +2673,9 @@ public class TurnManager : MonoBehaviour
                 turnTransport != null ? turnTransport.TransportName : null,
                 lastKnownRoundTurn: exportTurnNumber,
                 lastKnownIsPlayerTurn: exportIsPlayerTurn,
-                lastKnownCurrentTurnSeatIndex: exportSave != null
-                    ? ResolveCurrentTurnSeatIndex(exportSave, GetConfiguredPlayByPostSeatCount())
-                    : (exportIsPlayerTurn ? 0 : 1),
+                lastKnownCurrentTurnSeatIndex: exportCurrentTurnSeatIndex,
                 lastKnownTransportSeq: transportSeq,
-                lastKnownSeatCount: GetConfiguredPlayByPostSeatCount());
+                lastKnownSeatCount: exportSeatCount);
             StartPlayByPostPolling(transportSeq);
             yield break;
         }
@@ -5422,7 +5425,7 @@ public class TurnManager : MonoBehaviour
             CityUIManager.Instance.ClosePanel();
         }
 
-        int winnerSeatIndex = capturedByPlayer ? 0 : 1;
+        int winnerSeatIndex = capturedBySeatIndex;
         string message;
         if (currentMode == GameMode.PlayByPost && TryComputePbpLocalResult(winnerSeatIndex, out bool didLocalWin, out _))
         {
@@ -5431,18 +5434,18 @@ public class TurnManager : MonoBehaviour
         }
         else
         {
-            message = capturedByPlayer ? "You Win!" : "You Lose!";
+            message = capturedBySeatIndex == 0 ? "You Win!" : "You Lose!";
         }
 
         if (SoundManager.Instance != null && !ShouldSuppressAIVsAIAudio())
         {
             // In Play-by-Post both sides are human-controlled, so always treat game-over as a "win" cue.
-            bool playWinCue = (currentMode == GameMode.VsAI) ? capturedByPlayer : true;
+            bool playWinCue = (currentMode == GameMode.VsAI) ? (capturedBySeatIndex == 0) : true;
             SoundManager.Instance.PlayGameOver(playWinCue);
         }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-        if (TryHandleCompletedAIVsAIDebugMatch(capturedByPlayer ? "SideA" : "SideB"))
+        if (TryHandleCompletedAIVsAIDebugMatch(capturedBySeatIndex == 0 ? "SideA" : "SideB"))
         {
             return;
         }

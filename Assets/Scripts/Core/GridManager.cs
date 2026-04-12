@@ -152,7 +152,7 @@ public class GridManager : MonoBehaviour
         City city = cityObject.GetComponent<City>();
         if (city != null)
         {
-            city.isPlayerOwned = isPlayerOwned;
+            city.SetOwnerSeatIndex(isPlayerOwned ? 0 : 1);
             city.x = x;
             city.y = y;
         }
