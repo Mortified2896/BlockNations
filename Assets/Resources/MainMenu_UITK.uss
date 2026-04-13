@@ -643,8 +643,8 @@
     align-items: stretch;
     padding-left: 0;
     padding-right: 0;
-    padding-top: 0;
-    padding-bottom: 0;
+    padding-top: 24px;
+    padding-bottom: 24px;
     background-color: rgba(76, 97, 151, 0.98);
 }
 
@@ -795,6 +795,19 @@
 #ProfilePanel .profile-typed-display-name-input .unity-base-text-field__input,
 #ProfilePanel .profile-typed-display-name-input .unity-text-field__input {
     -unity-text-align: middle-left;
+    background-color: rgba(0, 0, 0, 0);
+    border-top-width: 0;
+    border-right-width: 0;
+    border-bottom-width: 0;
+    border-left-width: 0;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0;
+    padding-bottom: 0;
 }
 
 #ProfilePanel .profile-inline-row {
@@ -2059,8 +2072,8 @@
     bottom: 0;
     padding-left: 0;
     padding-right: 0;
-    padding-top: 0;
-    padding-bottom: 0;
+    padding-top: 24px;
+    padding-bottom: 24px;
 }
 
 .ui-responsive-root.ui-compact #ProfilePanel .profile-title,

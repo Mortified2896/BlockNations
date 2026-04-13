@@ -42,10 +42,19 @@ public class SoundManager : MonoBehaviour
     [Range(0f, 0.3f)]
     public float pitchJitter = 0.05f;
 
+    [Header("Music Ducking")]
+    [Range(0f, 1f)]
+    public float menuAttackMusicDuckMultiplier = 0.5f;
+    [Min(0f)]
+    public float menuAttackMusicDuckLeadSeconds = 0.05f;
+    [Min(0f)]
+    public float menuAttackMusicDuckTailSeconds = 0.15f;
+
     [Header("Debug")]
     public bool debugLogInvalid = false;
 
     private Coroutine playlistRoutine;
+    private Coroutine menuAttackMusicDuckRoutine;
     private bool loggedMissingInvalidClip;
 
     public bool HasPlaylistConfigured()
@@ -385,6 +394,23 @@ public class SoundManager : MonoBehaviour
         PlayClip(clip, sfxSource);
     }
 
+    public void PlayMenuAttackPreview()
+    {
+        AudioClip clip = PickClip(attackClips, attackClip);
+        if (clip == null)
+        {
+            return;
+        }
+
+        if (menuAttackMusicDuckRoutine != null)
+        {
+            StopCoroutine(menuAttackMusicDuckRoutine);
+            menuAttackMusicDuckRoutine = null;
+        }
+
+        menuAttackMusicDuckRoutine = StartCoroutine(PlayMenuAttackPreviewRoutine(clip));
+    }
+
     public void PlayUnitDown()
     {
         AudioClip clip = PickClip(unitDownClips, unitDownClip);
@@ -426,5 +452,36 @@ public class SoundManager : MonoBehaviour
         }
 
         PlayClip(victoryClip ?? defeatClip, sfxSource);
+    }
+
+    private IEnumerator PlayMenuAttackPreviewRoutine(AudioClip clip)
+    {
+        AudioSource source = GetSource(musicSource);
+        float originalVolume = source != null ? source.volume : 0f;
+
+        if (source != null)
+        {
+            source.volume = originalVolume * Mathf.Clamp01(menuAttackMusicDuckMultiplier);
+        }
+
+        if (menuAttackMusicDuckLeadSeconds > 0f)
+        {
+            yield return new WaitForSeconds(menuAttackMusicDuckLeadSeconds);
+        }
+
+        PlayClip(clip, sfxSource);
+
+        float holdSeconds = Mathf.Max(0f, clip.length + menuAttackMusicDuckTailSeconds);
+        if (holdSeconds > 0f)
+        {
+            yield return new WaitForSeconds(holdSeconds);
+        }
+
+        if (source != null)
+        {
+            source.volume = originalVolume;
+        }
+
+        menuAttackMusicDuckRoutine = null;
     }
 }

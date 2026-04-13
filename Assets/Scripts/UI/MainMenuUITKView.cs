@@ -15,6 +15,7 @@ public class MainMenuUITKView : MonoBehaviour
     private const int VisiblePlayerIdPrefixLength = 8;
     private const int VisiblePlayerIdSuffixLength = 5;
     private const int ProfileStatusHideDelayMs = 1800;
+    private const int ProfileNewTitleCooldownMs = 500;
     private const int InvalidPointerId = -1;
     private const string ProfileContinueButtonLabel = "Continue";
     private const string ProfileScreenClass = "profile-screen";
@@ -47,6 +48,10 @@ public class MainMenuUITKView : MonoBehaviour
     private readonly UITKResponsiveSizeTierController responsiveSizeTierController = new UITKResponsiveSizeTierController();
 
     private VisualElement root;
+    private VisualElement topGutterMask;
+    private VisualElement bottomGutterMask;
+    private VisualElement leftGutterMask;
+    private VisualElement rightGutterMask;
     private VisualElement mainPanel;
     private VisualElement multiplayerPanel;
     private VisualElement profilePanel;
@@ -171,6 +176,7 @@ public class MainMenuUITKView : MonoBehaviour
     private IVisualElementScheduledItem activeGamesElasticResetItem;
     private IVisualElementScheduledItem refreshCountdownItem;
     private IVisualElementScheduledItem profileStatusClearItem;
+    private IVisualElementScheduledItem profileNewTitleCooldownItem;
     private IVisualElementScheduledItem viewInitializationItem;
     private LocalPlayerProfileStore.ProfileData profileData;
     private string profileTypedDisplayNameDraft = string.Empty;
@@ -236,6 +242,7 @@ public class MainMenuUITKView : MonoBehaviour
         StopViewInitialization();
         StopRefreshCountdownTimer();
         StopProfileStatusClearTimer();
+        StopProfileNewTitleCooldownTimer();
         UnsubscribeMainMenuEvents();
         UnbindButtons();
         UnregisterActiveGamesListCallbacks();
@@ -371,6 +378,7 @@ public class MainMenuUITKView : MonoBehaviour
             return false;
         }
 
+        EnsureSafeAreaGutterMask();
         CacheElements();
         if (mainPanel == null
             || multiplayerPanel == null
@@ -2066,9 +2074,16 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HandleProfileNewTitleClicked()
     {
+        if (profileNewTitleButton == null || !profileNewTitleButton.enabledSelf)
+        {
+            return;
+        }
+
         profileData = LocalPlayerProfileStore.RegenerateTitle();
         RefreshProfileLabels();
         ClearProfileStatus();
+        SoundManager.Instance?.PlayMenuAttackPreview();
+        StartProfileNewTitleCooldown();
     }
 
     private void HandleProfileCopyPlayerIdClicked()
@@ -3627,6 +3642,41 @@ public class MainMenuUITKView : MonoBehaviour
         profileStatusClearItem = null;
     }
 
+    private void StartProfileNewTitleCooldown()
+    {
+        if (profileNewTitleButton == null)
+        {
+            return;
+        }
+
+        StopProfileNewTitleCooldownTimer();
+        profileNewTitleButton.SetEnabled(false);
+
+        VisualElement cooldownHost = profilePanel ?? profileNewTitleButton;
+        profileNewTitleCooldownItem = cooldownHost.schedule.Execute(EndProfileNewTitleCooldown).StartingIn(ProfileNewTitleCooldownMs);
+    }
+
+    private void EndProfileNewTitleCooldown()
+    {
+        StopProfileNewTitleCooldownTimer();
+
+        if (profileNewTitleButton != null)
+        {
+            profileNewTitleButton.SetEnabled(true);
+        }
+    }
+
+    private void StopProfileNewTitleCooldownTimer()
+    {
+        if (profileNewTitleCooldownItem == null)
+        {
+            return;
+        }
+
+        profileNewTitleCooldownItem.Pause();
+        profileNewTitleCooldownItem = null;
+    }
+
     private static string BuildVisiblePlayerId(string playerId)
     {
         if (string.IsNullOrWhiteSpace(playerId))
@@ -3719,6 +3769,11 @@ public class MainMenuUITKView : MonoBehaviour
         root.style.paddingRight = right;
         root.style.paddingBottom = bottom;
         root.style.paddingTop = top;
+
+        UpdateHorizontalGutterMask(topGutterMask, 0f, top);
+        UpdateHorizontalGutterMask(bottomGutterMask, screenSize.y - bottom, bottom);
+        UpdateLeftGutterMask(leftGutterMask, top, bottom, left);
+        UpdateRightGutterMask(rightGutterMask, top, bottom, right);
     }
 
     private void ApplyMenuPhoneLayoutClasses()
@@ -3890,6 +3945,110 @@ public class MainMenuUITKView : MonoBehaviour
         }
     }
 
+    private void EnsureSafeAreaGutterMask()
+    {
+        if (root == null)
+        {
+            return;
+        }
+
+        topGutterMask = EnsureGutterMaskBar("TopSafeAreaGutterMask");
+        bottomGutterMask = EnsureGutterMaskBar("BottomSafeAreaGutterMask");
+        leftGutterMask = EnsureGutterMaskBar("LeftSafeAreaGutterMask");
+        rightGutterMask = EnsureGutterMaskBar("RightSafeAreaGutterMask");
+    }
+
+    private VisualElement EnsureGutterMaskBar(string elementName)
+    {
+        VisualElement gutterMask = root.Q<VisualElement>(elementName);
+        if (gutterMask == null)
+        {
+            gutterMask = new VisualElement
+            {
+                name = elementName,
+                pickingMode = PickingMode.Ignore
+            };
+            root.Insert(0, gutterMask);
+        }
+
+        gutterMask.style.position = Position.Absolute;
+        gutterMask.style.backgroundColor = Color.black;
+        gutterMask.style.display = DisplayStyle.None;
+        return gutterMask;
+    }
+
+    private static void UpdateHorizontalGutterMask(VisualElement gutterMask, float top, float height)
+    {
+        if (gutterMask == null)
+        {
+            return;
+        }
+
+        gutterMask.style.left = 0f;
+        gutterMask.style.top = top;
+        gutterMask.style.right = 0f;
+        gutterMask.style.bottom = StyleKeyword.Auto;
+        gutterMask.style.width = StyleKeyword.Auto;
+        gutterMask.style.height = StyleKeyword.Auto;
+
+        if (Mathf.Approximately(height, 0f))
+        {
+            gutterMask.style.display = DisplayStyle.None;
+            return;
+        }
+
+        gutterMask.style.height = height;
+        gutterMask.style.display = DisplayStyle.Flex;
+    }
+
+    private static void UpdateLeftGutterMask(VisualElement gutterMask, float top, float bottom, float width)
+    {
+        if (gutterMask == null)
+        {
+            return;
+        }
+
+        gutterMask.style.left = 0f;
+        gutterMask.style.top = top;
+        gutterMask.style.right = StyleKeyword.Auto;
+        gutterMask.style.bottom = bottom;
+        gutterMask.style.width = StyleKeyword.Auto;
+        gutterMask.style.height = StyleKeyword.Auto;
+
+        if (Mathf.Approximately(width, 0f))
+        {
+            gutterMask.style.display = DisplayStyle.None;
+            return;
+        }
+
+        gutterMask.style.width = width;
+        gutterMask.style.display = DisplayStyle.Flex;
+    }
+
+    private static void UpdateRightGutterMask(VisualElement gutterMask, float top, float bottom, float width)
+    {
+        if (gutterMask == null)
+        {
+            return;
+        }
+
+        gutterMask.style.left = StyleKeyword.Auto;
+        gutterMask.style.top = top;
+        gutterMask.style.right = 0f;
+        gutterMask.style.bottom = bottom;
+        gutterMask.style.width = StyleKeyword.Auto;
+        gutterMask.style.height = StyleKeyword.Auto;
+
+        if (Mathf.Approximately(width, 0f))
+        {
+            gutterMask.style.display = DisplayStyle.None;
+            return;
+        }
+
+        gutterMask.style.width = width;
+        gutterMask.style.display = DisplayStyle.Flex;
+    }
+
     private static bool TryGetPanelSettingsProperty(object panelSettings, string propertyName, out PropertyInfo propertyInfo)
     {
         propertyInfo = panelSettings.GetType().GetProperty(
@@ -3992,6 +4151,10 @@ public class MainMenuUITKView : MonoBehaviour
         profilePlayerIdValueLabel = null;
         profileTypedDisplayNameHelperLabel = null;
         profileStatusLabel = null;
+        topGutterMask = null;
+        bottomGutterMask = null;
+        leftGutterMask = null;
+        rightGutterMask = null;
         profileTypedDisplayNameInput = null;
         createSuccessGameCodeLabel = null;
         generalSettingsTitleLabel = null;
