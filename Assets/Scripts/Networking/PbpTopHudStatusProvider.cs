@@ -88,7 +88,7 @@ public static class PbpTopHudStatusProvider
             return $"Offline • {baseText}";
         }
 
-        if (serverClassification.HasValue)
+        if (serverClassification.HasValue && !PbpServerStatusText.IsHealthy(serverClassification.Value))
         {
             return $"{PbpServerStatusText.GetStatusText(serverClassification.Value)} • {baseText}";
         }
