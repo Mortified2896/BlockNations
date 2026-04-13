@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -16,6 +17,7 @@ public class MainMenuUITKView : MonoBehaviour
     private const int ProfileStatusHideDelayMs = 1800;
     private const int InvalidPointerId = -1;
     private const string ProfileContinueButtonLabel = "Continue";
+    private const string ProfileScreenClass = "profile-screen";
     private const string WidePhoneMenuClass = "menu-phone-wide";
     private const float WidePhoneShortestSideMin = 428f;
     private const float WidePhoneHeightMin = 900f;
@@ -32,6 +34,7 @@ public class MainMenuUITKView : MonoBehaviour
     private const float PullToRefreshTopScrollTolerance = 1f;
     private const float DetailsGameIdFontSize = 30f;
     private const int RefreshCountdownTickMs = 1000;
+    private static readonly Color ProfileScreenBackgroundColor = Color.black;
 
     [Header("Trial Toggle")]
     [SerializeField] private bool enableUITK = true;
@@ -72,6 +75,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Label multiplayerVersionLabel;
     private Label titleLabel;
     private Label profileUsernameValueLabel;
+    private Label profileTitleValueLabel;
     private Label profilePlayerIdValueLabel;
     private Label profileTypedDisplayNameHelperLabel;
     private Label profileStatusLabel;
@@ -138,7 +142,7 @@ public class MainMenuUITKView : MonoBehaviour
     private TextField joinGameIdInput;
     private Button joinConfirmButton;
     private Button joinCancelButton;
-    private Button profileRegenerateButton;
+    private Button profileNewTitleButton;
     private Button profileCopyPlayerIdButton;
     private Button profileBackButton;
     private TextField profileTypedDisplayNameInput;
@@ -181,6 +185,9 @@ public class MainMenuUITKView : MonoBehaviour
     private bool selectedStoreSnapshotHistory;
     private bool selectedEnableAIVsAIDebugMode;
     private TurnManager.AIRecruitVariant selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
+    private bool hasCachedPanelClearState;
+    private bool defaultPanelClearColorEnabled;
+    private Color defaultPanelClearColorValue = Color.clear;
     private TurnManager.AIRecruitVariant selectedSideBAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
     private AILocalDecisionFeatures selectedSideAFeatures = AILocalDecisionFeatures.None;
     private AILocalDecisionFeatures selectedSideBFeatures = AILocalDecisionFeatures.None;
@@ -387,6 +394,7 @@ public class MainMenuUITKView : MonoBehaviour
         SetVisible(mainPanel, true);
         SetVisible(multiplayerPanel, false);
         SetVisible(profilePanel, false);
+        UpdateRootScreenClass(profileVisible: false);
         SetVisible(detailsPanel, false);
         SetVisible(createSuccessPanel, false);
         SetVisible(generalSettingsPanel, false);
@@ -456,6 +464,7 @@ public class MainMenuUITKView : MonoBehaviour
         multiplayerVersionLabel = root.Q<Label>("MultiplayerVersionLabel");
         titleLabel = root.Q<Label>("TitleLabel");
         profileUsernameValueLabel = root.Q<Label>("ProfileUsernameValueLabel");
+        profileTitleValueLabel = root.Q<Label>("ProfileTitleValueLabel");
         profilePlayerIdValueLabel = root.Q<Label>("ProfilePlayerIdValueLabel");
         profileTypedDisplayNameHelperLabel = root.Q<Label>("ProfileTypedDisplayNameHelperLabel");
         profileStatusLabel = root.Q<Label>("ProfileStatusLabel");
@@ -525,7 +534,7 @@ public class MainMenuUITKView : MonoBehaviour
         joinGameIdInput = root.Q<TextField>("JoinGameIdInput");
         joinConfirmButton = root.Q<Button>("JoinConfirmButton");
         joinCancelButton = root.Q<Button>("JoinCancelButton");
-        profileRegenerateButton = root.Q<Button>("ProfileRegenerateButton");
+        profileNewTitleButton = root.Q<Button>("ProfileNewTitleButton");
         profileCopyPlayerIdButton = root.Q<Button>("ProfileCopyPlayerIdButton");
         profileBackButton = root.Q<Button>("ProfileBackButton");
         generalSettingsAIVsAiCertaintyThresholdInput = root.Q<TextField>("GeneralSettingsAIVsAiCertaintyThresholdInput");
@@ -1224,9 +1233,9 @@ public class MainMenuUITKView : MonoBehaviour
             joinCancelButton.clicked += HandleJoinCancelClicked;
         }
 
-        if (profileRegenerateButton != null)
+        if (profileNewTitleButton != null)
         {
-            profileRegenerateButton.clicked += HandleProfileRegenerateClicked;
+            profileNewTitleButton.clicked += HandleProfileNewTitleClicked;
         }
 
         if (profileCopyPlayerIdButton != null)
@@ -1544,9 +1553,9 @@ public class MainMenuUITKView : MonoBehaviour
             joinCancelButton.clicked -= HandleJoinCancelClicked;
         }
 
-        if (profileRegenerateButton != null)
+        if (profileNewTitleButton != null)
         {
-            profileRegenerateButton.clicked -= HandleProfileRegenerateClicked;
+            profileNewTitleButton.clicked -= HandleProfileNewTitleClicked;
         }
 
         if (profileCopyPlayerIdButton != null)
@@ -2055,9 +2064,9 @@ public class MainMenuUITKView : MonoBehaviour
         }
     }
 
-    private void HandleProfileRegenerateClicked()
+    private void HandleProfileNewTitleClicked()
     {
-        profileData = LocalPlayerProfileStore.RegenerateUsername();
+        profileData = LocalPlayerProfileStore.RegenerateTitle();
         RefreshProfileLabels();
         ClearProfileStatus();
     }
@@ -2117,6 +2126,7 @@ public class MainMenuUITKView : MonoBehaviour
 
         profileTypedDisplayNameOverflowAttempted = false;
         ResetTypedDisplayNameHelperLabel();
+        RefreshProfilePublicUsernamePreview();
     }
 
     private void HandleProfileTypedDisplayNameKeyDown(KeyDownEvent evt)
@@ -2162,6 +2172,7 @@ public class MainMenuUITKView : MonoBehaviour
 
             profileTypedDisplayNameOverflowAttempted = false;
             ResetTypedDisplayNameHelperLabel();
+            RefreshProfilePublicUsernamePreview();
             ClearProfileStatus();
         }
         else
@@ -2531,6 +2542,7 @@ public class MainMenuUITKView : MonoBehaviour
         SetVisible(mainPanel, true);
         SetVisible(multiplayerPanel, false);
         SetVisible(profilePanel, false);
+        UpdateRootScreenClass(profileVisible: false);
         NotifyControllerVisiblePaneChanged(multiplayerVisible: false);
 
         if (versionLabel != null)
@@ -2557,6 +2569,7 @@ public class MainMenuUITKView : MonoBehaviour
         SetVisible(mainPanel, false);
         SetVisible(multiplayerPanel, true);
         SetVisible(profilePanel, false);
+        UpdateRootScreenClass(profileVisible: false);
         NotifyControllerVisiblePaneChanged(multiplayerVisible: true);
 
         if (versionLabel != null)
@@ -2622,6 +2635,7 @@ public class MainMenuUITKView : MonoBehaviour
         SetVisible(mainPanel, false);
         SetVisible(multiplayerPanel, false);
         SetVisible(profilePanel, true);
+        UpdateRootScreenClass(profileVisible: true);
         NotifyControllerVisiblePaneChanged(multiplayerVisible: false);
 
         if (versionLabel != null)
@@ -2665,7 +2679,7 @@ public class MainMenuUITKView : MonoBehaviour
         Label playerIdValue = profilePlayerIdValueLabel;
         VisualElement typedDisplayInput = profileTypedDisplayNameInput?.Q(className: "unity-base-text-field__input")
             ?? profileTypedDisplayNameInput?.Q(className: "unity-text-field__input");
-        VisualElement regenerateButtonText = profileRegenerateButton?.Q(className: "unity-button__text");
+        VisualElement newTitleButtonText = profileNewTitleButton?.Q(className: "unity-button__text");
         VisualElement copyButtonText = profileCopyPlayerIdButton?.Q(className: "unity-button__text");
         VisualElement backButtonText = profileBackButton?.Q(className: "unity-button__text");
 
@@ -2680,7 +2694,7 @@ public class MainMenuUITKView : MonoBehaviour
             DescribeElement("typedDisplayInput", typedDisplayInput) +
             DescribeElement("playerIdLabel", playerIdLabel) +
             DescribeElement("playerIdValue", playerIdValue) +
-            DescribeElement("regenerateButtonText", regenerateButtonText) +
+            DescribeElement("newTitleButtonText", newTitleButtonText) +
             DescribeElement("copyButtonText", copyButtonText) +
             DescribeElement("backButtonText", backButtonText),
             this);
@@ -3451,9 +3465,16 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void RefreshProfileLabels()
     {
+        profileTypedDisplayNameDraft = profileData.TypedDisplayName ?? string.Empty;
+
         if (profileUsernameValueLabel != null)
         {
-            profileUsernameValueLabel.text = profileData.Username ?? string.Empty;
+            profileUsernameValueLabel.text = BuildProfilePublicUsernamePreview();
+        }
+
+        if (profileTitleValueLabel != null)
+        {
+            profileTitleValueLabel.text = profileData.Title ?? string.Empty;
         }
 
         if (profilePlayerIdValueLabel != null)
@@ -3463,14 +3484,13 @@ public class MainMenuUITKView : MonoBehaviour
 
         if (profileTypedDisplayNameInput != null)
         {
-            profileTypedDisplayNameDraft = profileData.TypedDisplayName ?? string.Empty;
             profileTypedDisplayNameInput.SetValueWithoutNotify(profileTypedDisplayNameDraft);
         }
     }
 
     private string GetTypedDisplayNameDefaultHelperText()
     {
-        return $"Please set a recognizable name for playtesting ({LocalPlayerProfileStore.GetTypedDisplayNameLengthRangeText()} chars)";
+        return $"{LocalPlayerProfileStore.GetTypedDisplayNameLengthRangeText()} characters";
     }
 
     private string GetTypedDisplayNameValidationMessage(LocalPlayerProfileStore.TypedDisplayNameValidationResult validationResult)
@@ -3479,9 +3499,9 @@ public class MainMenuUITKView : MonoBehaviour
         switch (validationResult)
         {
             case LocalPlayerProfileStore.TypedDisplayNameValidationResult.TooShort:
-                return $"Too short! ({lengthRange} chars)";
+                return $"Too short! ({lengthRange} characters)";
             case LocalPlayerProfileStore.TypedDisplayNameValidationResult.TooLong:
-                return $"Too long! ({lengthRange} chars)";
+                return $"Too long! ({lengthRange} characters)";
             case LocalPlayerProfileStore.TypedDisplayNameValidationResult.InvalidCharacters:
                 return "Use letters and numbers only.";
             case LocalPlayerProfileStore.TypedDisplayNameValidationResult.NotRecognizable:
@@ -3517,6 +3537,21 @@ public class MainMenuUITKView : MonoBehaviour
 
         profileTypedDisplayNameHelperLabel.text = GetTypedDisplayNameDefaultHelperText();
         profileTypedDisplayNameHelperLabel.EnableInClassList(ProfileTypedDisplayNameHelperErrorClass, false);
+    }
+
+    private string BuildProfilePublicUsernamePreview()
+    {
+        return LocalPlayerProfileStore.FormatPublicUsername(profileTypedDisplayNameDraft, profileData.Title);
+    }
+
+    private void RefreshProfilePublicUsernamePreview()
+    {
+        if (profileUsernameValueLabel == null)
+        {
+            return;
+        }
+
+        profileUsernameValueLabel.text = BuildProfilePublicUsernamePreview();
     }
 
     private bool IsProfileTypedDisplayNameOverflowAttempt(KeyDownEvent evt)
@@ -3751,6 +3786,126 @@ public class MainMenuUITKView : MonoBehaviour
         }
     }
 
+    private void UpdateRootScreenClass(bool profileVisible)
+    {
+        if (root == null)
+        {
+            UpdatePanelClearColor(profileVisible);
+            return;
+        }
+
+        root.EnableInClassList(ProfileScreenClass, profileVisible);
+        UpdatePanelClearColor(profileVisible);
+    }
+
+    private void UpdatePanelClearColor(bool profileVisible)
+    {
+        object panelSettings = uiDocument != null ? uiDocument.panelSettings : null;
+        if (panelSettings == null)
+        {
+            return;
+        }
+
+        if (!hasCachedPanelClearState)
+        {
+            defaultPanelClearColorEnabled = ReadPanelSettingsBool(panelSettings, "clearColor", "m_ClearColor");
+            defaultPanelClearColorValue = ReadPanelSettingsColor(panelSettings, "colorClearValue", "m_ColorClearValue", Color.clear);
+            hasCachedPanelClearState = true;
+        }
+
+        bool clearColorEnabled = profileVisible || defaultPanelClearColorEnabled;
+        Color clearColorValue = profileVisible ? ProfileScreenBackgroundColor : defaultPanelClearColorValue;
+
+        WritePanelSettingsBool(panelSettings, clearColorEnabled, "clearColor", "m_ClearColor");
+        WritePanelSettingsColor(panelSettings, clearColorValue, "colorClearValue", "m_ColorClearValue");
+    }
+
+    private static bool ReadPanelSettingsBool(object panelSettings, string propertyName, string fieldName)
+    {
+        if (TryGetPanelSettingsProperty(panelSettings, propertyName, out PropertyInfo propertyInfo) &&
+            propertyInfo.PropertyType == typeof(bool) &&
+            propertyInfo.CanRead)
+        {
+            return (bool)propertyInfo.GetValue(panelSettings);
+        }
+
+        if (TryGetPanelSettingsField(panelSettings, fieldName, out FieldInfo fieldInfo) &&
+            fieldInfo.FieldType == typeof(bool))
+        {
+            return (bool)fieldInfo.GetValue(panelSettings);
+        }
+
+        return false;
+    }
+
+    private static Color ReadPanelSettingsColor(object panelSettings, string propertyName, string fieldName, Color fallback)
+    {
+        if (TryGetPanelSettingsProperty(panelSettings, propertyName, out PropertyInfo propertyInfo) &&
+            propertyInfo.PropertyType == typeof(Color) &&
+            propertyInfo.CanRead)
+        {
+            return (Color)propertyInfo.GetValue(panelSettings);
+        }
+
+        if (TryGetPanelSettingsField(panelSettings, fieldName, out FieldInfo fieldInfo) &&
+            fieldInfo.FieldType == typeof(Color))
+        {
+            return (Color)fieldInfo.GetValue(panelSettings);
+        }
+
+        return fallback;
+    }
+
+    private static void WritePanelSettingsBool(object panelSettings, bool value, string propertyName, string fieldName)
+    {
+        if (TryGetPanelSettingsProperty(panelSettings, propertyName, out PropertyInfo propertyInfo) &&
+            propertyInfo.PropertyType == typeof(bool) &&
+            propertyInfo.CanWrite)
+        {
+            propertyInfo.SetValue(panelSettings, value);
+            return;
+        }
+
+        if (TryGetPanelSettingsField(panelSettings, fieldName, out FieldInfo fieldInfo) &&
+            fieldInfo.FieldType == typeof(bool))
+        {
+            fieldInfo.SetValue(panelSettings, value);
+        }
+    }
+
+    private static void WritePanelSettingsColor(object panelSettings, Color value, string propertyName, string fieldName)
+    {
+        if (TryGetPanelSettingsProperty(panelSettings, propertyName, out PropertyInfo propertyInfo) &&
+            propertyInfo.PropertyType == typeof(Color) &&
+            propertyInfo.CanWrite)
+        {
+            propertyInfo.SetValue(panelSettings, value);
+            return;
+        }
+
+        if (TryGetPanelSettingsField(panelSettings, fieldName, out FieldInfo fieldInfo) &&
+            fieldInfo.FieldType == typeof(Color))
+        {
+            fieldInfo.SetValue(panelSettings, value);
+        }
+    }
+
+    private static bool TryGetPanelSettingsProperty(object panelSettings, string propertyName, out PropertyInfo propertyInfo)
+    {
+        propertyInfo = panelSettings.GetType().GetProperty(
+            propertyName,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        return propertyInfo != null;
+    }
+
+    private static bool TryGetPanelSettingsField(object panelSettings, string fieldName, out FieldInfo fieldInfo)
+    {
+        fieldInfo = panelSettings.GetType().GetField(
+            fieldName,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        return fieldInfo != null;
+    }
+
     private float ResolveMainMenuTitleBaseFontSize()
     {
         if (root.ClassListContains("ui-large"))
@@ -3833,6 +3988,7 @@ public class MainMenuUITKView : MonoBehaviour
         versionLabel = null;
         multiplayerVersionLabel = null;
         profileUsernameValueLabel = null;
+        profileTitleValueLabel = null;
         profilePlayerIdValueLabel = null;
         profileTypedDisplayNameHelperLabel = null;
         profileStatusLabel = null;
@@ -3899,7 +4055,7 @@ public class MainMenuUITKView : MonoBehaviour
         joinGameIdInput = null;
         joinConfirmButton = null;
         joinCancelButton = null;
-        profileRegenerateButton = null;
+        profileNewTitleButton = null;
         profileCopyPlayerIdButton = null;
         profileBackButton = null;
         generalSettingsAIVsAiCertaintyThresholdInput = null;

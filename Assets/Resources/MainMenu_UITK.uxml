@@ -88,21 +88,38 @@
                     <ui:VisualElement class="profile-title-line" />
                 </ui:VisualElement>
 
-                <ui:Label name="ProfileUsernameValueLabel" text="" class="profile-username-value" style="display: none;" />
-                <ui:Button name="ProfileRegenerateButton" text="Regenerate Name" class="menu-button profile-action-button profile-action-button-primary ui-text-button" style="display: none;" />
+                <ui:VisualElement class="profile-field">
+                    <ui:Label text="Public Username" class="profile-field-label profile-section-title ui-text-meta" />
+                    <ui:Label name="ProfileUsernameValueLabel" text="" class="profile-username-value ui-text-body" />
+                    <ui:Label text="This is how other players will see you in-game." class="profile-supporting-text ui-text-body" />
+                </ui:VisualElement>
 
                 <ui:VisualElement class="profile-divider" />
 
                 <ui:VisualElement class="profile-field">
-                    <ui:Label name="ProfileTypedDisplayNameHelperLabel" text="Please set a recognizable name for playtesting (2-8 chars)" class="profile-field-label profile-typed-display-name-label ui-text-body" />
+                    <ui:Label text="Nickname" class="profile-field-label profile-section-title ui-text-meta" />
                     <ui:TextField name="ProfileTypedDisplayNameInput" value="" class="profile-typed-display-name-input ui-text-body" />
+                    <ui:Label name="ProfileTypedDisplayNameHelperLabel" text="2-8 characters" class="profile-field-label profile-typed-display-name-label ui-text-body" />
                 </ui:VisualElement>
 
+                <ui:VisualElement class="profile-divider" />
+
+                <ui:VisualElement class="profile-field">
+                    <ui:Label text="Title" class="profile-field-label profile-section-title ui-text-meta" />
+                    <ui:VisualElement class="profile-inline-row">
+                        <ui:Label name="ProfileTitleValueLabel" text="" class="profile-readonly-value ui-text-body" />
+                        <ui:Button name="ProfileNewTitleButton" text="New Title" class="menu-button profile-inline-button profile-action-button-primary ui-text-button" />
+                    </ui:VisualElement>
+                    <ui:Label text="Assigned at random. You can get a new title later." class="profile-supporting-text ui-text-body" />
+                </ui:VisualElement>
+
+                <ui:VisualElement class="profile-divider" />
+
                 <ui:VisualElement class="profile-field profile-player-id-section">
-                    <ui:Label text="Player ID" class="profile-field-label ui-text-meta" />
-                    <ui:VisualElement class="profile-id-row">
-                        <ui:Label name="ProfilePlayerIdValueLabel" text="" class="profile-player-id-value ui-text-body" />
-                        <ui:Button name="ProfileCopyPlayerIdButton" text="Copy Player ID" class="menu-button profile-copy-button ui-text-button" />
+                    <ui:Label text="Player ID" class="profile-field-label profile-section-title ui-text-meta" />
+                    <ui:VisualElement class="profile-inline-row profile-id-row">
+                        <ui:Label name="ProfilePlayerIdValueLabel" text="" class="profile-readonly-value profile-player-id-value ui-text-body" />
+                        <ui:Button name="ProfileCopyPlayerIdButton" text="Copy Player ID" class="menu-button profile-inline-button profile-copy-button ui-text-button" />
                     </ui:VisualElement>
                 </ui:VisualElement>
 

@@ -11,6 +11,7 @@ public static class DevClientInstanceScope
     private static bool resolved;
     private static string storageNamespace;
     private static string initialTypedProfileName;
+    private static string legacyInitialTypedProfileName;
 
     public static bool IsEnabled
     {
@@ -61,8 +62,15 @@ public static class DevClientInstanceScope
     {
         string normalizedInput = LocalPlayerProfileStore.NormalizeTypedDisplayName(typedProfileName);
         string normalizedDefault = LocalPlayerProfileStore.NormalizeTypedDisplayName(GetInitialTypedProfileName());
-        return !string.IsNullOrWhiteSpace(normalizedDefault) &&
-               string.Equals(normalizedInput, normalizedDefault, StringComparison.Ordinal);
+        if (!string.IsNullOrWhiteSpace(normalizedDefault) &&
+            string.Equals(normalizedInput, normalizedDefault, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        string normalizedLegacyDefault = LocalPlayerProfileStore.NormalizeTypedDisplayName(legacyInitialTypedProfileName);
+        return !string.IsNullOrWhiteSpace(normalizedLegacyDefault) &&
+               string.Equals(normalizedInput, normalizedLegacyDefault, StringComparison.Ordinal);
     }
 
     private static void EnsureResolved()
@@ -75,12 +83,13 @@ public static class DevClientInstanceScope
         resolved = true;
         storageNamespace = string.Empty;
         initialTypedProfileName = string.Empty;
+        legacyInitialTypedProfileName = string.Empty;
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (Application.isEditor)
         {
             storageNamespace = "editor";
-            initialTypedProfileName = string.Empty;
+            initialTypedProfileName = "Editor";
             return;
         }
 
@@ -89,7 +98,8 @@ public static class DevClientInstanceScope
         if (TryParseMacDevAppSuffix(appBundleName, out string suffix))
         {
             storageNamespace = "mac" + suffix;
-            initialTypedProfileName = suffix;
+            initialTypedProfileName = "Mac" + suffix;
+            legacyInitialTypedProfileName = suffix;
             return;
         }
 

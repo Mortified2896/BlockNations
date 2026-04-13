@@ -7,6 +7,7 @@ public static class LocalPlayerProfileStore
 
     private const string PlayerIdKeyRaw = "profile_player_id";
     private const string UsernameKeyRaw = "profile_username";
+    private const string TitleKeyRaw = "profile_title";
     private const string TypedDisplayNameKeyRaw = "profile_typed_display_name";
 
     public enum TypedDisplayNameValidationResult
@@ -22,12 +23,14 @@ public static class LocalPlayerProfileStore
     {
         public string PlayerId;
         public string Username;
+        public string Title;
         public string TypedDisplayName;
 
-        public ProfileData(string playerId, string username, string typedDisplayName)
+        public ProfileData(string playerId, string username, string title, string typedDisplayName)
         {
             PlayerId = playerId;
             Username = username;
+            Title = title;
             TypedDisplayName = typedDisplayName;
         }
     }
@@ -38,6 +41,7 @@ public static class LocalPlayerProfileStore
 
         string playerIdKey = GetScopedKey(PlayerIdKeyRaw);
         string usernameKey = GetScopedKey(UsernameKeyRaw);
+        string titleKey = GetScopedKey(TitleKeyRaw);
         string typedDisplayNameKey = GetScopedKey(TypedDisplayNameKeyRaw);
 
         string playerId = PlayerPrefs.GetString(playerIdKey, string.Empty);
@@ -53,6 +57,19 @@ public static class LocalPlayerProfileStore
         {
             username = ProfileUsernameGenerator.Generate();
             PlayerPrefs.SetString(usernameKey, username);
+            didChange = true;
+        }
+
+        string storedTitle = PlayerPrefs.GetString(titleKey, string.Empty);
+        string title = NormalizeTitle(storedTitle);
+        if (!IsValidTitle(title))
+        {
+            title = ResolveInitialTitle(username);
+        }
+
+        if (!string.Equals(storedTitle, title, StringComparison.Ordinal))
+        {
+            PlayerPrefs.SetString(titleKey, title);
             didChange = true;
         }
 
@@ -81,23 +98,18 @@ public static class LocalPlayerProfileStore
             PlayerPrefs.Save();
         }
 
-        return new ProfileData(playerId, username, typedDisplayName);
+        return new ProfileData(playerId, username, title, typedDisplayName);
     }
 
-    public static ProfileData RegenerateUsername()
+    public static ProfileData RegenerateTitle()
     {
         ProfileData profile = GetOrCreateProfile();
-        string regenerated = ProfileUsernameGenerator.GenerateDistinct(profile.Username);
+        string regenerated = ProfileTitleGenerator.GenerateDistinct(profile.Title);
 
-        if (!IsValidUsername(regenerated))
-        {
-            regenerated = ProfileUsernameGenerator.Generate();
-        }
-
-        PlayerPrefs.SetString(GetScopedKey(UsernameKeyRaw), regenerated);
+        PlayerPrefs.SetString(GetScopedKey(TitleKeyRaw), regenerated);
         PlayerPrefs.Save();
 
-        profile.Username = regenerated;
+        profile.Title = regenerated;
         return profile;
     }
 
@@ -110,6 +122,18 @@ public static class LocalPlayerProfileStore
         }
 
         PlayerPrefs.SetString(GetScopedKey(TypedDisplayNameKeyRaw), normalized);
+        return normalized;
+    }
+
+    public static string SetTitle(string title)
+    {
+        string normalized = NormalizeTitle(title);
+        if (!IsValidTitle(normalized))
+        {
+            return GetSavedTitle();
+        }
+
+        PlayerPrefs.SetString(GetScopedKey(TitleKeyRaw), normalized);
         return normalized;
     }
 
@@ -128,6 +152,36 @@ public static class LocalPlayerProfileStore
     public static string GetTypedDisplayNameLengthRangeText()
     {
         return $"{MinTypedDisplayNameLength}-{ProfileUsernameGenerator.MaxUsernameLength}";
+    }
+
+    public static string NormalizeTitle(string title)
+    {
+        return string.IsNullOrWhiteSpace(title)
+            ? string.Empty
+            : title.Trim();
+    }
+
+    public static bool IsValidTitle(string title)
+    {
+        return !string.IsNullOrWhiteSpace(NormalizeTitle(title));
+    }
+
+    public static string FormatPublicUsername(string typedDisplayName, string title)
+    {
+        string normalizedTypedDisplayName = NormalizeTypedDisplayName(typedDisplayName);
+        string normalizedTitle = NormalizeTitle(title);
+
+        if (string.IsNullOrWhiteSpace(normalizedTypedDisplayName))
+        {
+            return string.Empty;
+        }
+
+        if (string.IsNullOrWhiteSpace(normalizedTitle))
+        {
+            return normalizedTypedDisplayName;
+        }
+
+        return $"{normalizedTypedDisplayName} {normalizedTitle}";
     }
 
     public static TypedDisplayNameValidationResult GetTypedDisplayNameValidationResult(string typedDisplayName)
@@ -179,6 +233,14 @@ public static class LocalPlayerProfileStore
             : string.Empty;
     }
 
+    private static string GetSavedTitle()
+    {
+        string savedTitle = NormalizeTitle(PlayerPrefs.GetString(GetScopedKey(TitleKeyRaw), string.Empty));
+        return IsValidTitle(savedTitle)
+            ? savedTitle
+            : string.Empty;
+    }
+
     public static string GenerateValidTypedDisplayNameFallback()
     {
         for (int attempt = 0; attempt < 8; attempt++)
@@ -198,6 +260,20 @@ public static class LocalPlayerProfileStore
     private static bool IsValidUsername(string username)
     {
         return !string.IsNullOrWhiteSpace(username) && username.Length <= ProfileUsernameGenerator.MaxUsernameLength;
+    }
+
+    private static string ResolveInitialTitle(string legacyUsername)
+    {
+        string normalizedLegacyUsername = NormalizeTitle(legacyUsername);
+        if (IsValidUsername(normalizedLegacyUsername))
+        {
+            return normalizedLegacyUsername;
+        }
+
+        string generatedTitle = NormalizeTitle(ProfileTitleGenerator.Generate());
+        return IsValidTitle(generatedTitle)
+            ? generatedTitle
+            : "the Bold";
     }
 
     private static bool ContainsOnlyAllowedTypedDisplayNameCharacters(string typedDisplayName)

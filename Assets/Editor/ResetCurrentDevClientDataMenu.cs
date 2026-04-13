@@ -10,6 +10,7 @@ public static class ResetCurrentDevClientDataMenu
 
     private const string ProfilePlayerIdKeyRaw = "profile_player_id";
     private const string ProfileUsernameKeyRaw = "profile_username";
+    private const string ProfileTitleKeyRaw = "profile_title";
     private const string ProfileTypedDisplayNameKeyRaw = "profile_typed_display_name";
     private const string PlayByPostGameIdKeyRaw = "pbp_gameId";
     private const string PlayByPostForceNewKeyRaw = "pbp_forceNew";
@@ -122,6 +123,7 @@ public static class ResetCurrentDevClientDataMenu
         {
             ProfilePlayerIdKeyRaw,
             ProfileUsernameKeyRaw,
+            ProfileTitleKeyRaw,
             ProfileTypedDisplayNameKeyRaw,
             PlayByPostGameIdKeyRaw,
             PlayByPostForceNewKeyRaw,

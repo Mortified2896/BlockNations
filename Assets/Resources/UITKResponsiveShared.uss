@@ -507,3 +507,30 @@
     height: 88px;
     font-size: 42px;
 }
+
+.ui-compact #ProfilePanel .profile-inline-row {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.ui-compact #ProfilePanel .profile-username-value {
+    min-height: 98px;
+    font-size: 40px;
+}
+
+.ui-compact #ProfilePanel .profile-readonly-value {
+    min-height: 68px;
+    font-size: 26px;
+}
+
+.ui-compact #ProfilePanel .profile-inline-button {
+    width: 100%;
+    min-width: 0;
+    height: 68px;
+    margin-top: 10px;
+    margin-left: 0;
+}
+
+.ui-compact #ProfilePanel .profile-supporting-text {
+    font-size: 24px;
+}
