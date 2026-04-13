@@ -56,6 +56,7 @@ public class SoundManager : MonoBehaviour
     private Coroutine playlistRoutine;
     private Coroutine menuAttackMusicDuckRoutine;
     private bool loggedMissingInvalidClip;
+    private AudioClip lastAttackPlayedClip;
 
     public bool HasPlaylistConfigured()
     {
@@ -170,6 +171,50 @@ public class SoundManager : MonoBehaviour
         }
 
         return chosen != null ? chosen : fallback;
+    }
+
+    AudioClip PickClipAvoidImmediateRepeat(AudioClip[] options, AudioClip fallback, AudioClip previousClip)
+    {
+        AudioClip chosen = PickClip(options, fallback);
+        if (chosen == null || previousClip == null || chosen != previousClip)
+        {
+            return chosen;
+        }
+
+        int distinctAlternatives = 0;
+
+        if (options != null)
+        {
+            for (int i = 0; i < options.Length; i++)
+            {
+                AudioClip clip = options[i];
+                if (clip == null || clip == previousClip)
+                {
+                    continue;
+                }
+
+                distinctAlternatives++;
+            }
+        }
+
+        if (fallback != null && fallback != previousClip)
+        {
+            distinctAlternatives++;
+        }
+
+        if (distinctAlternatives == 0)
+        {
+            return chosen;
+        }
+
+        AudioClip rerolled;
+        do
+        {
+            rerolled = PickClip(options, fallback);
+        }
+        while (rerolled == previousClip);
+
+        return rerolled;
     }
 
     public void PlayBackgroundMusic(AudioClip clip = null, bool restart = false)
@@ -390,17 +435,20 @@ public class SoundManager : MonoBehaviour
 
     public void PlayAttack()
     {
-        AudioClip clip = PickClip(attackClips, attackClip);
+        AudioClip clip = PickClipAvoidImmediateRepeat(attackClips, attackClip, lastAttackPlayedClip);
+        lastAttackPlayedClip = clip;
         PlayClip(clip, sfxSource);
     }
 
     public void PlayMenuAttackPreview()
     {
-        AudioClip clip = PickClip(attackClips, attackClip);
+        AudioClip clip = PickClipAvoidImmediateRepeat(attackClips, attackClip, lastAttackPlayedClip);
         if (clip == null)
         {
             return;
         }
+
+        lastAttackPlayedClip = clip;
 
         if (menuAttackMusicDuckRoutine != null)
         {

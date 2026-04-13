@@ -12,14 +12,6 @@ using System;
 /// </summary>
 public static class PbpTopHudStatusProvider
 {
-    public enum ConnectivityState
-    {
-        Unknown,
-        Connected,
-        Unreachable,
-        ServerUnreachable
-    }
-
     public readonly struct StatusResult
     {
         public readonly bool Visible;
@@ -37,13 +29,13 @@ public static class PbpTopHudStatusProvider
     /// <summary>
     /// Build the status result to show on the top HUD.
     /// 
-    /// - ConnectivityState.Unknown keeps the normal case clean with no prefix.
-    /// - ConnectivityState.Unreachable adds an offline warning prefix.
-    /// - ConnectivityState.ServerUnreachable adds a server reachability warning prefix.
+    /// - Offline always takes precedence over server classification text.
+    /// - When a server classification is known, prepend the shared status text.
     /// </summary>
     public static StatusResult Build(
         TurnManager turnManager,
-        ConnectivityState connectivityState = ConnectivityState.Unknown,
+        bool isOffline = false,
+        HttpTurnTransport.ServerStatusProbeClassification? serverClassification = null,
         string opponentDisplayName = null)
     {
         if (turnManager == null)
@@ -67,7 +59,7 @@ public static class PbpTopHudStatusProvider
             ? "Your turn"
             : BuildWaitingText(opponentDisplayName);
 
-        string message = PrependConnectivity(turnOwnershipText, connectivityState);
+        string message = PrependConnectivity(turnOwnershipText, isOffline, serverClassification);
         return new StatusResult(!string.IsNullOrWhiteSpace(message), message);
     }
 
@@ -81,18 +73,26 @@ public static class PbpTopHudStatusProvider
         return "Waiting for opponent";
     }
 
-    private static string PrependConnectivity(string baseText, ConnectivityState connectivityState)
+    private static string PrependConnectivity(
+        string baseText,
+        bool isOffline,
+        HttpTurnTransport.ServerStatusProbeClassification? serverClassification)
     {
         if (string.IsNullOrWhiteSpace(baseText))
         {
             return string.Empty;
         }
 
-        return connectivityState switch
+        if (isOffline)
         {
-            ConnectivityState.Unreachable => $"Offline • {baseText}",
-            ConnectivityState.ServerUnreachable => $"Can't reach server • {baseText}",
-            _ => baseText
-        };
+            return $"Offline • {baseText}";
+        }
+
+        if (serverClassification.HasValue)
+        {
+            return $"{PbpServerStatusText.GetStatusText(serverClassification.Value)} • {baseText}";
+        }
+
+        return baseText;
     }
 }

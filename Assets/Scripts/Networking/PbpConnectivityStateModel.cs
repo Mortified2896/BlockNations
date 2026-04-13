@@ -11,78 +11,78 @@ public readonly struct PbpConnectivitySnapshot
 {
     public readonly PbpConnectivityState State;
     public readonly bool? LastKnownServerReachable;
+    public readonly HttpTurnTransport.ServerStatusProbeClassification? LastKnownServerClassification;
 
-    public PbpConnectivitySnapshot(PbpConnectivityState state, bool? lastKnownServerReachable)
+    public PbpConnectivitySnapshot(
+        PbpConnectivityState state,
+        bool? lastKnownServerReachable,
+        HttpTurnTransport.ServerStatusProbeClassification? lastKnownServerClassification)
     {
         State = state;
         LastKnownServerReachable = lastKnownServerReachable;
+        LastKnownServerClassification = lastKnownServerClassification;
     }
 }
 
 public static class PbpConnectivityStateModel
 {
     private static bool? lastKnownServerReachable;
+    private static HttpTurnTransport.ServerStatusProbeClassification? lastKnownServerClassification;
 
     public static bool? LastKnownServerReachable => lastKnownServerReachable;
+    public static HttpTurnTransport.ServerStatusProbeClassification? LastKnownServerClassification => lastKnownServerClassification;
 
     public static void ObserveSubmitResult(bool ok, string err)
     {
-        if (ok)
-        {
-            lastKnownServerReachable = true;
-            return;
-        }
-
-        if (IsConnectivityFailure(err))
-        {
-            lastKnownServerReachable = false;
-        }
+        ObserveServerProbeResult(PbpServerStatusText.ClassifyTransportResult(ok, err));
     }
 
     public static void ObserveFetchResult(bool reachable, string resultOrError)
     {
-        if (reachable)
-        {
-            lastKnownServerReachable = true;
-            return;
-        }
-
-        if (IsConnectivityFailure(resultOrError))
-        {
-            lastKnownServerReachable = false;
-        }
+        ObserveServerProbeResult(PbpServerStatusText.ClassifyFetchResult(reachable, resultOrError));
     }
 
     public static void ObserveServerProbeResult(bool reachable)
     {
-        lastKnownServerReachable = reachable;
+        ObserveServerProbeResult(
+            reachable
+                ? HttpTurnTransport.ServerStatusProbeClassification.Connected
+                : HttpTurnTransport.ServerStatusProbeClassification.Unreachable);
+    }
+
+    public static void ObserveServerProbeResult(HttpTurnTransport.ServerStatusProbeClassification classification)
+    {
+        lastKnownServerClassification = classification;
+        lastKnownServerReachable =
+            classification != HttpTurnTransport.ServerStatusProbeClassification.Unreachable;
     }
 
     public static PbpConnectivitySnapshot Resolve(NetworkReachability internetReachability)
     {
         if (internetReachability == NetworkReachability.NotReachable)
         {
-            return new PbpConnectivitySnapshot(PbpConnectivityState.Offline, lastKnownServerReachable);
+            return new PbpConnectivitySnapshot(
+                PbpConnectivityState.Offline,
+                lastKnownServerReachable,
+                lastKnownServerClassification);
         }
 
-        if (lastKnownServerReachable == false)
+        if (lastKnownServerClassification == HttpTurnTransport.ServerStatusProbeClassification.Unreachable)
         {
-            return new PbpConnectivitySnapshot(PbpConnectivityState.ServerUnreachable, lastKnownServerReachable);
+            return new PbpConnectivitySnapshot(
+                PbpConnectivityState.ServerUnreachable,
+                lastKnownServerReachable,
+                lastKnownServerClassification);
         }
 
-        return new PbpConnectivitySnapshot(PbpConnectivityState.Normal, lastKnownServerReachable);
+        return new PbpConnectivitySnapshot(
+            PbpConnectivityState.Normal,
+            lastKnownServerReachable,
+            lastKnownServerClassification);
     }
 
     public static bool IsConnectivityFailure(string err)
     {
-        if (string.IsNullOrEmpty(err))
-        {
-            return true;
-        }
-
-        return string.Equals(err, TurnTelemetryConstants.IoError, System.StringComparison.Ordinal) ||
-               string.Equals(err, TurnTelemetryConstants.Unavailable, System.StringComparison.Ordinal) ||
-               string.Equals(err, TurnTelemetryConstants.NullTransport, System.StringComparison.Ordinal) ||
-               string.Equals(err, TurnTelemetryConstants.Unknown, System.StringComparison.Ordinal);
+        return PbpServerStatusText.IsConnectivityFailure(err);
     }
 }

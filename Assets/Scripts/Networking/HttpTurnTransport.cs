@@ -23,6 +23,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
     private static bool hasLoggedApiKeySource;
     private static bool hasLoggedMissingApiKeyWarning;
+    private bool hasLoggedInitializationDiagnostics;
 #endif
 
     public string TransportName => "Http";
@@ -68,6 +69,9 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         initialized = true;
         normalizedBaseUrl = ResolveConfiguredBaseUrl();
         isAvailable = !string.IsNullOrWhiteSpace(normalizedBaseUrl);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        LogInitializationDiagnosticsOnce();
+#endif
     }
 
 #if UNITY_EDITOR
@@ -149,7 +153,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
                 }
                 else
                 {
-                    done?.Invoke(false, TurnTelemetryConstants.IoError);
+                    done?.Invoke(false, TurnTelemetryConstants.BadResponse);
                 }
                 yield break;
             }
@@ -162,7 +166,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
                 }
                 else
                 {
-                    done?.Invoke(false, TurnTelemetryConstants.IoError);
+                    done?.Invoke(false, TurnTelemetryConstants.BadResponse);
                 }
                 yield break;
             }
@@ -182,11 +186,11 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
             if (status >= 500)
             {
-                done?.Invoke(false, TurnTelemetryConstants.IoError);
+                done?.Invoke(false, TurnTelemetryConstants.BadResponse);
                 yield break;
             }
 
-            done?.Invoke(false, TurnTelemetryConstants.IoError);
+            done?.Invoke(false, TurnTelemetryConstants.BadResponse);
         }
     }
 
@@ -249,7 +253,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
                 }
                 else
                 {
-                    done?.Invoke(false, TurnTelemetryConstants.IoError, 0, null);
+                    done?.Invoke(false, TurnTelemetryConstants.BadResponse, 0, null);
                 }
                 yield break;
             }
@@ -269,38 +273,147 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
             if (status >= 500)
             {
-                done?.Invoke(false, TurnTelemetryConstants.IoError, 0, null);
+                done?.Invoke(false, TurnTelemetryConstants.BadResponse, 0, null);
                 yield break;
             }
 
-            done?.Invoke(false, TurnTelemetryConstants.IoError, 0, null);
+            done?.Invoke(false, TurnTelemetryConstants.BadResponse, 0, null);
         }
     }
 
     public IEnumerator CheckServerReachable(Action<bool> done)
     {
+        ServerStatusProbeResult probeResult = default;
+        yield return CheckServerStatus(result => probeResult = result);
+        done?.Invoke(probeResult.IsReachable);
+    }
+
+    public enum ServerStatusProbeClassification
+    {
+        Connected,
+        AuthenticationFailed,
+        Unreachable,
+        BadResponse
+    }
+
+    public readonly struct ServerStatusProbeResult
+    {
+        public readonly ServerStatusProbeClassification Classification;
+        public readonly long HttpStatusCode;
+        public readonly bool RequestAttempted;
+        public readonly string ExceptionType;
+        public readonly string ExceptionMessage;
+
+        public ServerStatusProbeResult(
+            ServerStatusProbeClassification classification,
+            long httpStatusCode,
+            bool requestAttempted,
+            string exceptionType,
+            string exceptionMessage)
+        {
+            Classification = classification;
+            HttpStatusCode = httpStatusCode;
+            RequestAttempted = requestAttempted;
+            ExceptionType = exceptionType ?? string.Empty;
+            ExceptionMessage = exceptionMessage ?? string.Empty;
+        }
+
+        public bool IsReachable => Classification != ServerStatusProbeClassification.Unreachable;
+        public bool IsConnected => Classification == ServerStatusProbeClassification.Connected;
+    }
+
+    public IEnumerator CheckServerStatus(Action<ServerStatusProbeResult> done)
+    {
         Initialize();
 
-        if (!IsAvailable)
+        bool secretConfigured = HasConfiguredPbpApiKey();
+        string probeUrl = BuildStatusProbeUrl();
+        bool requestAttempted = false;
+        long httpStatusCode = 0;
+        string exceptionType = null;
+        string exceptionMessage = null;
+        string unityRequestError = null;
+        ServerStatusProbeClassification classification;
+
+        if (!IsAvailable || string.IsNullOrWhiteSpace(probeUrl))
         {
-            done?.Invoke(false);
+            classification = ServerStatusProbeClassification.Unreachable;
+            LogServerStatusProbeDiagnostics(
+                probeUrl,
+                secretConfigured,
+                requestAttempted,
+                httpStatusCode,
+                unityRequestError,
+                exceptionType,
+                exceptionMessage,
+                classification);
+            done?.Invoke(new ServerStatusProbeResult(
+                classification,
+                httpStatusCode,
+                requestAttempted,
+                exceptionType,
+                exceptionMessage));
             yield break;
         }
 
-        bool reachable = false;
-
-        // Prefer a dedicated health endpoint if the server has one.
-        yield return ProbeReachability(BuildUrl("health"), ok => reachable = ok);
-
-        // Fallback to a safe read endpoint to avoid requiring /health support.
-        if (!reachable)
+        using (var req = UnityWebRequest.Get(probeUrl))
         {
-            string probeGameId = Guid.NewGuid().ToString();
-            string probeUrl = BuildUrl($"pbp/turn/next?gameId={Uri.EscapeDataString(probeGameId)}&after=0");
-            yield return ProbeReachability(probeUrl, ok => reachable = ok);
-        }
+            UnityWebRequestAsyncOperation sendOperation;
 
-        done?.Invoke(reachable);
+            try
+            {
+                ApplyPbpApiKeyHeader(req);
+                req.timeout = GetServerCheckTimeoutSeconds();
+                requestAttempted = true;
+                sendOperation = req.SendWebRequest();
+            }
+            catch (Exception ex)
+            {
+                exceptionType = ex.GetType().FullName;
+                exceptionMessage = ex.Message;
+                classification = ServerStatusProbeClassification.Unreachable;
+                LogServerStatusProbeDiagnostics(
+                    probeUrl,
+                    secretConfigured,
+                    requestAttempted,
+                    httpStatusCode,
+                    unityRequestError,
+                    exceptionType,
+                    exceptionMessage,
+                    classification);
+                done?.Invoke(new ServerStatusProbeResult(
+                    classification,
+                    httpStatusCode,
+                    requestAttempted,
+                    exceptionType,
+                    exceptionMessage));
+                yield break;
+            }
+
+            yield return sendOperation;
+
+            httpStatusCode = req.responseCode;
+            unityRequestError = req.error;
+            string responseText = req.downloadHandler != null ? req.downloadHandler.text : null;
+            classification = ClassifyServerStatusProbe(req, responseText);
+
+            LogServerStatusProbeDiagnostics(
+                probeUrl,
+                secretConfigured,
+                requestAttempted,
+                httpStatusCode,
+                unityRequestError,
+                exceptionType,
+                exceptionMessage,
+                classification);
+
+            done?.Invoke(new ServerStatusProbeResult(
+                classification,
+                httpStatusCode,
+                requestAttempted,
+                exceptionType,
+                exceptionMessage));
+        }
     }
 
     public readonly struct TurnStatusQuery
@@ -426,7 +539,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
                 }
                 else
                 {
-                    done?.Invoke(false, TurnTelemetryConstants.IoError, null);
+                    done?.Invoke(false, TurnTelemetryConstants.BadResponse, null);
                 }
                 yield break;
             }
@@ -451,11 +564,11 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
             if (status >= 500)
             {
-                done?.Invoke(false, TurnTelemetryConstants.IoError, null);
+                done?.Invoke(false, TurnTelemetryConstants.BadResponse, null);
                 yield break;
             }
 
-            done?.Invoke(false, TurnTelemetryConstants.IoError, null);
+            done?.Invoke(false, TurnTelemetryConstants.BadResponse, null);
         }
     }
 
@@ -519,7 +632,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
                 }
                 else
                 {
-                    done?.Invoke(false, TurnTelemetryConstants.IoError, 0, false);
+                    done?.Invoke(false, TurnTelemetryConstants.BadResponse, 0, false);
                 }
                 yield break;
             }
@@ -544,18 +657,18 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
                 }
                 else
                 {
-                    done?.Invoke(false, TurnTelemetryConstants.IoError, 0, false);
+                    done?.Invoke(false, TurnTelemetryConstants.BadResponse, 0, false);
                 }
                 yield break;
             }
 
             if (status >= 500)
             {
-                done?.Invoke(false, TurnTelemetryConstants.IoError, 0, false);
+                done?.Invoke(false, TurnTelemetryConstants.BadResponse, 0, false);
                 yield break;
             }
 
-            done?.Invoke(false, TurnTelemetryConstants.IoError, 0, false);
+            done?.Invoke(false, TurnTelemetryConstants.BadResponse, 0, false);
         }
     }
 
@@ -873,31 +986,90 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         return Mathf.Clamp(configured, 1, 3);
     }
 
-    private IEnumerator ProbeReachability(string url, Action<bool> done)
+    private string BuildStatusProbeUrl()
     {
-        if (string.IsNullOrWhiteSpace(url))
+        string probeGameId = Guid.NewGuid().ToString();
+        return BuildUrl($"pbp/turn/next?gameId={Uri.EscapeDataString(probeGameId)}&after=0");
+    }
+
+    private static ServerStatusProbeClassification ClassifyServerStatusProbe(UnityWebRequest req, string responseText)
+    {
+        if (req == null)
         {
-            done?.Invoke(false);
-            yield break;
+            return ServerStatusProbeClassification.Unreachable;
         }
 
-        using (var req = UnityWebRequest.Get(url))
+        long status = req.responseCode;
+        bool hasHttpResponse = status > 0;
+        if (req.result == UnityWebRequest.Result.ConnectionError ||
+            req.result == UnityWebRequest.Result.DataProcessingError ||
+            (!hasHttpResponse && req.result != UnityWebRequest.Result.Success))
         {
-            ApplyPbpApiKeyHeader(req);
-            req.timeout = GetServerCheckTimeoutSeconds();
-            yield return req.SendWebRequest();
+            return ServerStatusProbeClassification.Unreachable;
+        }
 
-            bool reachable = req.responseCode > 0 && req.result != UnityWebRequest.Result.ConnectionError;
-
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            if (PbpDebugSettingsLoader.EnableTransportLogs)
+        if (status == 200)
+        {
+            if (IsPlainNoTurn(responseText) ||
+                HasError(responseText, TurnTelemetryConstants.NoTurn) ||
+                TryParseFetchOk(responseText, out _, out _))
             {
-                Debug.Log($"PBp server probe: {url} reachable={reachable} result={req.result} code={req.responseCode}");
+                return ServerStatusProbeClassification.Connected;
             }
-#endif
 
-            done?.Invoke(reachable);
+            return ServerStatusProbeClassification.BadResponse;
         }
+
+        if (status == 401 || status == 403)
+        {
+            return ServerStatusProbeClassification.AuthenticationFailed;
+        }
+
+        return ServerStatusProbeClassification.BadResponse;
+    }
+
+    private static bool HasConfiguredPbpApiKey()
+    {
+        return !string.IsNullOrEmpty(GetConfiguredPbpApiKey());
+    }
+
+    [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+    private void LogInitializationDiagnosticsOnce()
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (hasLoggedInitializationDiagnostics)
+        {
+            return;
+        }
+
+        hasLoggedInitializationDiagnostics = true;
+        Debug.Log(
+            $"PBp transport init: baseUrl={(normalizedBaseUrl ?? "<missing>")} " +
+            $"available={isAvailable} secretConfigured={HasConfiguredPbpApiKey()}");
+#endif
+    }
+
+    [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+    private void LogServerStatusProbeDiagnostics(
+        string probeUrl,
+        bool secretConfigured,
+        bool requestAttempted,
+        long httpStatusCode,
+        string unityRequestError,
+        string exceptionType,
+        string exceptionMessage,
+        ServerStatusProbeClassification classification)
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        Debug.Log(
+            $"PBp server status probe: baseUrl={(normalizedBaseUrl ?? "<missing>")} " +
+            $"secretConfigured={secretConfigured} requestAttempted={requestAttempted} " +
+            $"probeUrl={(probeUrl ?? "<missing>")} httpStatus={httpStatusCode} " +
+            $"requestError={(string.IsNullOrWhiteSpace(unityRequestError) ? "<none>" : unityRequestError)} " +
+            $"exceptionType={(string.IsNullOrWhiteSpace(exceptionType) ? "<none>" : exceptionType)} " +
+            $"exceptionMessage={(string.IsNullOrWhiteSpace(exceptionMessage) ? "<none>" : exceptionMessage)} " +
+            $"classified={classification}");
+#endif
     }
 
     private static string MapInvalidSubmitInput(string gameId, int turnNumber, string json)

@@ -9,10 +9,8 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 {
     private const string ThemeResourceName = "GameplayTopHud_UITK_Theme";
     private const float TournamentStandingsDesktopWidthThreshold = 1200f;
-    private const string FirstTurnSubmitFailedMessage = "First turn was not submitted. This game was not created on the server yet.";
-    private const string FirstTurnSubmitUnauthorizedMessage = "First turn was not submitted because PBp authentication is missing or invalid. This game was not created on the server yet.";
-    private const string SubmitFailedMessage = "PBp turn was not submitted to the server.";
-    private const string SubmitUnauthorizedMessage = "PBp turn was not submitted because PBp authentication is missing or invalid.";
+    private const string FirstTurnSubmitFailedSuffix = "First turn was not submitted. This game was not created on the server yet.";
+    private const string SubmitFailedSuffix = "PBp turn was not submitted.";
 
     [Header("Spike Toggle")]
     [SerializeField] private bool enableGameplayTopHudUITK = true;
@@ -269,13 +267,6 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         }
 
         PbpConnectivitySnapshot connectivity = PbpConnectivityStateModel.Resolve(Application.internetReachability);
-        PbpTopHudStatusProvider.ConnectivityState connectivityState = connectivity.State switch
-        {
-            PbpConnectivityState.Offline => PbpTopHudStatusProvider.ConnectivityState.Unreachable,
-            PbpConnectivityState.ServerUnreachable => PbpTopHudStatusProvider.ConnectivityState.ServerUnreachable,
-            _ => PbpTopHudStatusProvider.ConnectivityState.Unknown
-        };
-
         string opponentDisplayName = turnManager.GetCurrentPlayByPostOpponentTypedDisplayName();
         if (string.IsNullOrWhiteSpace(opponentDisplayName))
         {
@@ -283,7 +274,11 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         }
 
         PbpTopHudStatusProvider.StatusResult pbpStatus =
-            PbpTopHudStatusProvider.Build(turnManager, connectivityState, opponentDisplayName);
+            PbpTopHudStatusProvider.Build(
+                turnManager,
+                connectivity.State == PbpConnectivityState.Offline,
+                connectivity.LastKnownServerClassification,
+                opponentDisplayName);
 
         statusLabel.text = pbpStatus.Visible ? pbpStatus.Message : string.Empty;
         statusLabel.style.display = pbpStatus.Visible ? DisplayStyle.Flex : DisplayStyle.None;
@@ -641,16 +636,9 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
     private static string BuildSubmitFailureMessage(string err, bool isFirstTurnCreateFailure)
     {
-        if (string.Equals(err, "UNAUTHORIZED", StringComparison.Ordinal))
-        {
-            return isFirstTurnCreateFailure
-                ? FirstTurnSubmitUnauthorizedMessage
-                : SubmitUnauthorizedMessage;
-        }
-
-        return isFirstTurnCreateFailure
-            ? FirstTurnSubmitFailedMessage
-            : SubmitFailedMessage;
+        return PbpServerStatusText.BuildStatusWithContext(
+            PbpServerStatusText.ClassifyTransportResult(false, err),
+            isFirstTurnCreateFailure ? FirstTurnSubmitFailedSuffix : SubmitFailedSuffix);
     }
 
     private void DisableOverlay()

@@ -71,6 +71,7 @@ public class MainMenuController : MonoBehaviour
     private Coroutine serverCheckRoutine;
     private Coroutine menuRefreshLoopRoutine;
     private HttpTurnTransport cachedHttpTransport;
+    private string latestServerStatusText = string.Empty;
 
     public event Action ActivePbpGamesChanged;
     public event Action<string> ImportStatusChanged;
@@ -644,6 +645,7 @@ public class MainMenuController : MonoBehaviour
 
         ResolveServerCheckSources();
         isServerOnline = false;
+        latestServerStatusText = string.Empty;
         SetImportStatus("Checking server...");
         UpdateMultiplayerButtonStates();
         serverCheckRoutine = StartCoroutine(CheckServerOnlineCoroutine());
@@ -711,22 +713,11 @@ public class MainMenuController : MonoBehaviour
         PbpConnectivityState connectivityState = ResolveSharedConnectivityState();
         if (connectivityState == PbpConnectivityState.Normal)
         {
-            if (activePbpGames.Count <= 0)
-            {
-                SetImportStatus("No active games");
-            }
-            else if (activePbpGames.Count == 1)
-            {
-                SetImportStatus("1 active game");
-            }
-            else
-            {
-                SetImportStatus($"{activePbpGames.Count} active games");
-            }
+            SetImportStatus(GetDefaultMultiplayerStatusText());
         }
         else
         {
-            SetImportStatus(connectivityState == PbpConnectivityState.Offline ? "Offline" : "Can't reach server");
+            SetImportStatus(BuildConnectivityWarningStatus());
         }
 
         TryRefreshRemoteTurnStatusesForMenu(bypassRemoteCooldown);
@@ -1185,27 +1176,34 @@ public class MainMenuController : MonoBehaviour
         HttpTurnTransport httpTransport = cachedHttpTransport;
         if (httpTransport != null)
         {
-            bool probeResult = false;
-            yield return StartCoroutine(httpTransport.CheckServerReachable(result => probeResult = result));
-            online = probeResult;
+            HttpTurnTransport.ServerStatusProbeResult probeResult = default;
+            yield return StartCoroutine(httpTransport.CheckServerStatus(result => probeResult = result));
+            online = PbpServerStatusText.IsHealthy(probeResult.Classification);
+            latestServerStatusText = PbpServerStatusText.GetStatusText(probeResult.Classification);
+            PbpConnectivityStateModel.ObserveServerProbeResult(probeResult.Classification);
         }
         else
         {
             online = false;
+            latestServerStatusText = PbpServerStatusText.GetStatusText(
+                HttpTurnTransport.ServerStatusProbeClassification.Unreachable);
+            PbpConnectivityStateModel.ObserveServerProbeResult(
+                HttpTurnTransport.ServerStatusProbeClassification.Unreachable);
         }
 
         isServerOnline = online;
-        PbpConnectivityStateModel.ObserveServerProbeResult(online);
         UpdateMultiplayerButtonStates();
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (PbpDebugSettingsLoader.EnableTransportLogs)
         {
-            Debug.Log($"Multiplayer server check complete. online={isServerOnline}, checkedTransport={hasCheck}");
+            Debug.Log(
+                $"Multiplayer server check complete. online={isServerOnline}, checkedTransport={hasCheck}, " +
+                $"statusText={latestServerStatusText}");
         }
 #endif
 
-        SetImportStatus(isServerOnline ? "Server online" : BuildConnectivityWarningStatus());
+        SetImportStatus(latestServerStatusText);
         RefreshMultiplayerList();
         serverCheckRoutine = null;
     }
@@ -1222,7 +1220,7 @@ public class MainMenuController : MonoBehaviour
             HttpTurnTransport httpTransport = cachedHttpTransport;
             if (httpTransport == null)
             {
-                SetImportStatus($"{BuildConnectivityWarningStatus()}. Can't verify game.");
+                SetImportStatus("Server unreachable. Can't verify game.");
                 yield break;
             }
 
@@ -1238,9 +1236,11 @@ public class MainMenuController : MonoBehaviour
                 probeJson = fetchedJson;
             }));
 
-            bool serverReachableForJoin = probeOk || !PbpConnectivityStateModel.IsConnectivityFailure(probeError);
-            isServerOnline = serverReachableForJoin;
-            PbpConnectivityStateModel.ObserveServerProbeResult(serverReachableForJoin);
+            HttpTurnTransport.ServerStatusProbeClassification probeClassification =
+                PbpServerStatusText.ClassifyTransportResult(probeOk, probeError);
+            isServerOnline = PbpServerStatusText.IsHealthy(probeClassification);
+            latestServerStatusText = PbpServerStatusText.GetStatusText(probeClassification);
+            PbpConnectivityStateModel.ObserveServerProbeResult(probeClassification);
 
             if (probeOk)
             {
@@ -1265,9 +1265,11 @@ public class MainMenuController : MonoBehaviour
                         claimedSeatIndex = seatIndex;
                     }));
 
-                bool claimReachable = claimOk || !PbpConnectivityStateModel.IsConnectivityFailure(claimError);
-                isServerOnline = claimReachable;
-                PbpConnectivityStateModel.ObserveServerProbeResult(claimReachable);
+                HttpTurnTransport.ServerStatusProbeClassification claimClassification =
+                    PbpServerStatusText.ClassifyTransportResult(claimOk, claimError);
+                isServerOnline = PbpServerStatusText.IsHealthy(claimClassification);
+                latestServerStatusText = PbpServerStatusText.GetStatusText(claimClassification);
+                PbpConnectivityStateModel.ObserveServerProbeResult(claimClassification);
 
                 if (!claimOk)
                 {
@@ -1277,7 +1279,7 @@ public class MainMenuController : MonoBehaviour
                         yield break;
                     }
 
-                    SetImportStatus($"{BuildConnectivityWarningStatus()}. Can't verify game.");
+                    SetImportStatus(BuildVerificationFailureStatus(claimError));
                     yield break;
                 }
 
@@ -1301,7 +1303,7 @@ public class MainMenuController : MonoBehaviour
                 yield break;
             }
 
-            SetImportStatus($"{BuildConnectivityWarningStatus()}. Can't verify game.");
+            SetImportStatus(BuildVerificationFailureStatus(probeError));
         }
         finally
         {
@@ -1448,7 +1450,34 @@ public class MainMenuController : MonoBehaviour
     {
         return ResolveSharedConnectivityState() == PbpConnectivityState.Offline
             ? "Offline"
-            : "Can't reach server";
+            : PbpServerStatusText.GetStatusText(HttpTurnTransport.ServerStatusProbeClassification.Unreachable);
+    }
+
+    private string GetDefaultMultiplayerStatusText()
+    {
+        if (!string.IsNullOrWhiteSpace(latestServerStatusText))
+        {
+            return latestServerStatusText;
+        }
+
+        if (activePbpGames.Count <= 0)
+        {
+            return "No active games";
+        }
+
+        if (activePbpGames.Count == 1)
+        {
+            return "1 active game";
+        }
+
+        return $"{activePbpGames.Count} active games";
+    }
+
+    private static string BuildVerificationFailureStatus(string transportError)
+    {
+        return PbpServerStatusText.BuildStatusWithContext(
+            PbpServerStatusText.ClassifyTransportResult(false, transportError),
+            "Can't verify game.");
     }
 
     public string GetPlayByPostServerIndicatorText()
