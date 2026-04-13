@@ -4,7 +4,7 @@ using UnityEngine;
 
 public static class ProfileUsernameGenerator
 {
-    public const int MaxUsernameLength = 12;
+    public const int MaxUsernameLength = 8;
     private const string FallbackUsername = "IronWolf";
 
     private static readonly string[] Adjectives =

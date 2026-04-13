@@ -80,7 +80,7 @@ public static class DevClientInstanceScope
         if (Application.isEditor)
         {
             storageNamespace = "editor";
-            initialTypedProfileName = "Editor";
+            initialTypedProfileName = string.Empty;
             return;
         }
 

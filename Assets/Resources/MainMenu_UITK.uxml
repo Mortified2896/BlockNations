@@ -94,7 +94,7 @@
                 <ui:VisualElement class="profile-divider" />
 
                 <ui:VisualElement class="profile-field">
-                    <ui:Label text="Please set a recognizable name for playtesting (2–12 chars)" class="profile-field-label profile-typed-display-name-label ui-text-body" />
+                    <ui:Label name="ProfileTypedDisplayNameHelperLabel" text="Please set a recognizable name for playtesting (2-8 chars)" class="profile-field-label profile-typed-display-name-label ui-text-body" />
                     <ui:TextField name="ProfileTypedDisplayNameInput" value="" class="profile-typed-display-name-input ui-text-body" />
                 </ui:VisualElement>
 
@@ -107,7 +107,7 @@
                 </ui:VisualElement>
 
                 <ui:Label name="ProfileStatusLabel" text="" class="profile-status-label ui-text-meta" style="display: none;" />
-                <ui:Button name="ProfileBackButton" text="Back" class="menu-button profile-back-button ui-text-button" />
+                <ui:Button name="ProfileBackButton" text="Continue" class="menu-button profile-back-button ui-text-button" />
             </ui:VisualElement>
         </ui:VisualElement>
 

@@ -3,9 +3,20 @@ using UnityEngine;
 
 public static class LocalPlayerProfileStore
 {
+    public const int MinTypedDisplayNameLength = 2;
+
     private const string PlayerIdKeyRaw = "profile_player_id";
     private const string UsernameKeyRaw = "profile_username";
     private const string TypedDisplayNameKeyRaw = "profile_typed_display_name";
+
+    public enum TypedDisplayNameValidationResult
+    {
+        Valid,
+        TooShort,
+        TooLong,
+        InvalidCharacters,
+        NotRecognizable
+    }
 
     public struct ProfileData
     {
@@ -114,10 +125,43 @@ public static class LocalPlayerProfileStore
         return trimmed.Length <= maxLength ? trimmed : trimmed.Substring(0, maxLength);
     }
 
+    public static string GetTypedDisplayNameLengthRangeText()
+    {
+        return $"{MinTypedDisplayNameLength}-{ProfileUsernameGenerator.MaxUsernameLength}";
+    }
+
+    public static TypedDisplayNameValidationResult GetTypedDisplayNameValidationResult(string typedDisplayName)
+    {
+        string trimmed = string.IsNullOrWhiteSpace(typedDisplayName)
+            ? string.Empty
+            : typedDisplayName.Trim();
+
+        if (trimmed.Length < MinTypedDisplayNameLength)
+        {
+            return TypedDisplayNameValidationResult.TooShort;
+        }
+
+        if (trimmed.Length > ProfileUsernameGenerator.MaxUsernameLength)
+        {
+            return TypedDisplayNameValidationResult.TooLong;
+        }
+
+        if (!ContainsOnlyAllowedTypedDisplayNameCharacters(trimmed))
+        {
+            return TypedDisplayNameValidationResult.InvalidCharacters;
+        }
+
+        if (ProfileUsernameGenerator.IsGeneratedUsername(trimmed))
+        {
+            return TypedDisplayNameValidationResult.NotRecognizable;
+        }
+
+        return TypedDisplayNameValidationResult.Valid;
+    }
+
     public static bool IsValidTypedDisplayName(string typedDisplayName)
     {
-        string normalized = NormalizeTypedDisplayName(typedDisplayName);
-        return normalized.Length >= 2 && normalized.Length <= ProfileUsernameGenerator.MaxUsernameLength;
+        return GetTypedDisplayNameValidationResult(typedDisplayName) == TypedDisplayNameValidationResult.Valid;
     }
 
     public static bool HasRecognizableTypedDisplayName(string typedDisplayName)
@@ -140,7 +184,9 @@ public static class LocalPlayerProfileStore
         for (int attempt = 0; attempt < 8; attempt++)
         {
             string generated = NormalizeTypedDisplayName(ProfileUsernameGenerator.Generate());
-            if (IsValidTypedDisplayName(generated))
+            if (generated.Length >= MinTypedDisplayNameLength &&
+                generated.Length <= ProfileUsernameGenerator.MaxUsernameLength &&
+                ContainsOnlyAllowedTypedDisplayNameCharacters(generated))
             {
                 return generated;
             }
@@ -152,6 +198,20 @@ public static class LocalPlayerProfileStore
     private static bool IsValidUsername(string username)
     {
         return !string.IsNullOrWhiteSpace(username) && username.Length <= ProfileUsernameGenerator.MaxUsernameLength;
+    }
+
+    private static bool ContainsOnlyAllowedTypedDisplayNameCharacters(string typedDisplayName)
+    {
+        for (int i = 0; i < typedDisplayName.Length; i++)
+        {
+            char c = typedDisplayName[i];
+            if (!char.IsLetterOrDigit(c))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static string GetScopedKey(string rawKey)

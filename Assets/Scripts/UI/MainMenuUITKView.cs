@@ -7,6 +7,7 @@ using UnityEngine.UIElements;
 public class MainMenuUITKView : MonoBehaviour
 {
     private const bool EnableProfileResponsiveDebugLogs = true;
+    private const string ProfileTypedDisplayNameHelperErrorClass = "profile-typed-display-name-label--error";
     private const string ThemeResourceName = "MainMenu_UITK_Theme";
     private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
     private const string LegacySharedSaveFileName = "save.json";
@@ -14,7 +15,6 @@ public class MainMenuUITKView : MonoBehaviour
     private const int VisiblePlayerIdSuffixLength = 5;
     private const int ProfileStatusHideDelayMs = 1800;
     private const int InvalidPointerId = -1;
-    private const string ProfileBackButtonLabel = "Back";
     private const string ProfileContinueButtonLabel = "Continue";
     private const string WidePhoneMenuClass = "menu-phone-wide";
     private const float WidePhoneShortestSideMin = 428f;
@@ -73,6 +73,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Label titleLabel;
     private Label profileUsernameValueLabel;
     private Label profilePlayerIdValueLabel;
+    private Label profileTypedDisplayNameHelperLabel;
     private Label profileStatusLabel;
     private Label createSuccessGameCodeLabel;
     private Label generalSettingsTitleLabel;
@@ -170,6 +171,7 @@ public class MainMenuUITKView : MonoBehaviour
     private IVisualElementScheduledItem viewInitializationItem;
     private LocalPlayerProfileStore.ProfileData profileData;
     private string profileTypedDisplayNameDraft = string.Empty;
+    private bool profileTypedDisplayNameOverflowAttempted;
     private string pendingCreateSuccessGameId;
     private string selectedDetailsGameId = string.Empty;
     private PendingGeneralSettingsMode pendingGeneralSettingsMode = PendingGeneralSettingsMode.None;
@@ -456,6 +458,7 @@ public class MainMenuUITKView : MonoBehaviour
         titleLabel = root.Q<Label>("TitleLabel");
         profileUsernameValueLabel = root.Q<Label>("ProfileUsernameValueLabel");
         profilePlayerIdValueLabel = root.Q<Label>("ProfilePlayerIdValueLabel");
+        profileTypedDisplayNameHelperLabel = root.Q<Label>("ProfileTypedDisplayNameHelperLabel");
         profileStatusLabel = root.Q<Label>("ProfileStatusLabel");
         EnsureDevProfilePbpApiKeyButton();
         profileTypedDisplayNameInput = root.Q<TextField>("ProfileTypedDisplayNameInput");
@@ -1247,6 +1250,7 @@ public class MainMenuUITKView : MonoBehaviour
         if (profileTypedDisplayNameInput != null)
         {
             profileTypedDisplayNameInput.RegisterValueChangedCallback(HandleProfileTypedDisplayNameChanged);
+            profileTypedDisplayNameInput.RegisterCallback<KeyDownEvent>(HandleProfileTypedDisplayNameKeyDown);
             profileTypedDisplayNameInput.RegisterCallback<FocusOutEvent>(HandleProfileTypedDisplayNameFocusOut);
         }
     }
@@ -1571,6 +1575,7 @@ public class MainMenuUITKView : MonoBehaviour
         if (profileTypedDisplayNameInput != null)
         {
             profileTypedDisplayNameInput.UnregisterValueChangedCallback(HandleProfileTypedDisplayNameChanged);
+            profileTypedDisplayNameInput.UnregisterCallback<KeyDownEvent>(HandleProfileTypedDisplayNameKeyDown);
             profileTypedDisplayNameInput.UnregisterCallback<FocusOutEvent>(HandleProfileTypedDisplayNameFocusOut);
         }
     }
@@ -2094,8 +2099,15 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HandleProfileBackClicked()
     {
-        CommitOrRestoreTypedDisplayNameInput();
+        LocalPlayerProfileStore.TypedDisplayNameValidationResult validationResult =
+            CommitOrRestoreTypedDisplayNameInput(showValidationFeedback: true);
         PlayerPrefs.Save();
+
+        if (validationResult != LocalPlayerProfileStore.TypedDisplayNameValidationResult.Valid)
+        {
+            RefreshProfileBackButtonLabel();
+            return;
+        }
 
         bool returnToMultiplayer = profileOpenedFromMultiplayerRedirect &&
             LocalPlayerProfileStore.HasRecognizableTypedDisplayName(profileData.TypedDisplayName);
@@ -2120,46 +2132,72 @@ public class MainMenuUITKView : MonoBehaviour
             profileTypedDisplayNameInput.SetValueWithoutNotify(profileTypedDisplayNameDraft);
         }
 
-        if (!LocalPlayerProfileStore.HasRecognizableTypedDisplayName(profileTypedDisplayNameDraft) ||
-            string.Equals(profileData.TypedDisplayName, profileTypedDisplayNameDraft, System.StringComparison.Ordinal))
+        if (profileTypedDisplayNameOverflowAttempted &&
+            profileTypedDisplayNameDraft.Length >= ProfileUsernameGenerator.MaxUsernameLength)
+        {
+            ShowTypedDisplayNameValidation(LocalPlayerProfileStore.TypedDisplayNameValidationResult.TooLong);
+            return;
+        }
+
+        profileTypedDisplayNameOverflowAttempted = false;
+        ResetTypedDisplayNameHelperLabel();
+    }
+
+    private void HandleProfileTypedDisplayNameKeyDown(KeyDownEvent evt)
+    {
+        if (evt == null || profileTypedDisplayNameInput == null)
         {
             return;
         }
 
-        profileData.TypedDisplayName = LocalPlayerProfileStore.SetTypedDisplayName(profileTypedDisplayNameDraft);
-        ClearProfileStatus();
+        if (!IsProfileTypedDisplayNameOverflowAttempt(evt))
+        {
+            return;
+        }
+
+        profileTypedDisplayNameOverflowAttempted = true;
+        ShowTypedDisplayNameValidation(LocalPlayerProfileStore.TypedDisplayNameValidationResult.TooLong);
     }
 
     private void HandleProfileTypedDisplayNameFocusOut(FocusOutEvent evt)
     {
-        CommitOrRestoreTypedDisplayNameInput();
-        PlayerPrefs.Save();
+        // Keep profile name edits as draft-only until the player explicitly
+        // confirms with Continue/Back.
     }
 
-    private void CommitOrRestoreTypedDisplayNameInput()
+    private LocalPlayerProfileStore.TypedDisplayNameValidationResult CommitOrRestoreTypedDisplayNameInput(bool showValidationFeedback)
     {
         if (profileTypedDisplayNameInput == null)
         {
-            return;
+            return LocalPlayerProfileStore.TypedDisplayNameValidationResult.Valid;
         }
 
         profileTypedDisplayNameDraft = LocalPlayerProfileStore.NormalizeTypedDisplayName(profileTypedDisplayNameInput.value);
+        LocalPlayerProfileStore.TypedDisplayNameValidationResult validationResult =
+            LocalPlayerProfileStore.GetTypedDisplayNameValidationResult(profileTypedDisplayNameInput.value);
 
-        if (LocalPlayerProfileStore.HasRecognizableTypedDisplayName(profileTypedDisplayNameDraft))
+        if (validationResult == LocalPlayerProfileStore.TypedDisplayNameValidationResult.Valid)
         {
             string committedTypedDisplayName = LocalPlayerProfileStore.SetTypedDisplayName(profileTypedDisplayNameDraft);
             if (!string.Equals(profileData.TypedDisplayName, committedTypedDisplayName, System.StringComparison.Ordinal))
             {
                 profileData.TypedDisplayName = committedTypedDisplayName;
-                ClearProfileStatus();
             }
+
+            profileTypedDisplayNameOverflowAttempted = false;
+            ResetTypedDisplayNameHelperLabel();
+            ClearProfileStatus();
         }
         else
         {
-            profileTypedDisplayNameDraft = profileData.TypedDisplayName ?? string.Empty;
+            if (showValidationFeedback)
+            {
+                ShowTypedDisplayNameValidation(validationResult);
+            }
         }
 
         profileTypedDisplayNameInput.SetValueWithoutNotify(profileTypedDisplayNameDraft);
+        return validationResult;
     }
 
     private void HandleMultiplayerBackClicked()
@@ -2598,6 +2636,8 @@ public class MainMenuUITKView : MonoBehaviour
         StopRefreshCountdownTimer();
         profileData = LocalPlayerProfileStore.GetOrCreateProfile();
         RefreshProfileLabels();
+        profileTypedDisplayNameOverflowAttempted = false;
+        ResetTypedDisplayNameHelperLabel();
         RefreshProfileBackButtonLabel();
         ClearProfileStatus();
         HideGeneralSettingsPanel();
@@ -2631,9 +2671,7 @@ public class MainMenuUITKView : MonoBehaviour
             return;
         }
 
-        profileBackButton.text = profileOpenedFromMultiplayerRedirect
-            ? ProfileContinueButtonLabel
-            : ProfileBackButtonLabel;
+        profileBackButton.text = ProfileContinueButtonLabel;
     }
 
     private void LogProfileResponsiveDebugInfo()
@@ -3454,6 +3492,88 @@ public class MainMenuUITKView : MonoBehaviour
         }
     }
 
+    private string GetTypedDisplayNameDefaultHelperText()
+    {
+        return $"Please set a recognizable name for playtesting ({LocalPlayerProfileStore.GetTypedDisplayNameLengthRangeText()} chars)";
+    }
+
+    private string GetTypedDisplayNameValidationMessage(LocalPlayerProfileStore.TypedDisplayNameValidationResult validationResult)
+    {
+        string lengthRange = LocalPlayerProfileStore.GetTypedDisplayNameLengthRangeText();
+        switch (validationResult)
+        {
+            case LocalPlayerProfileStore.TypedDisplayNameValidationResult.TooShort:
+                return $"Too short! ({lengthRange} chars)";
+            case LocalPlayerProfileStore.TypedDisplayNameValidationResult.TooLong:
+                return $"Too long! ({lengthRange} chars)";
+            case LocalPlayerProfileStore.TypedDisplayNameValidationResult.InvalidCharacters:
+                return "Use letters and numbers only.";
+            case LocalPlayerProfileStore.TypedDisplayNameValidationResult.NotRecognizable:
+                return GetTypedDisplayNameDefaultHelperText();
+            default:
+                return GetTypedDisplayNameDefaultHelperText();
+        }
+    }
+
+    private void ShowTypedDisplayNameValidation(LocalPlayerProfileStore.TypedDisplayNameValidationResult validationResult)
+    {
+        if (validationResult == LocalPlayerProfileStore.TypedDisplayNameValidationResult.Valid)
+        {
+            ResetTypedDisplayNameHelperLabel();
+            return;
+        }
+
+        if (profileTypedDisplayNameHelperLabel == null)
+        {
+            return;
+        }
+
+        profileTypedDisplayNameHelperLabel.text = GetTypedDisplayNameValidationMessage(validationResult);
+        profileTypedDisplayNameHelperLabel.EnableInClassList(ProfileTypedDisplayNameHelperErrorClass, true);
+    }
+
+    private void ResetTypedDisplayNameHelperLabel()
+    {
+        if (profileTypedDisplayNameHelperLabel == null)
+        {
+            return;
+        }
+
+        profileTypedDisplayNameHelperLabel.text = GetTypedDisplayNameDefaultHelperText();
+        profileTypedDisplayNameHelperLabel.EnableInClassList(ProfileTypedDisplayNameHelperErrorClass, false);
+    }
+
+    private bool IsProfileTypedDisplayNameOverflowAttempt(KeyDownEvent evt)
+    {
+        if (evt.altKey || evt.ctrlKey || evt.commandKey)
+        {
+            return false;
+        }
+
+        if (profileTypedDisplayNameDraft.Length < ProfileUsernameGenerator.MaxUsernameLength)
+        {
+            return false;
+        }
+
+        if (evt.keyCode == KeyCode.Backspace ||
+            evt.keyCode == KeyCode.Delete ||
+            evt.keyCode == KeyCode.LeftArrow ||
+            evt.keyCode == KeyCode.RightArrow ||
+            evt.keyCode == KeyCode.UpArrow ||
+            evt.keyCode == KeyCode.DownArrow ||
+            evt.keyCode == KeyCode.Home ||
+            evt.keyCode == KeyCode.End ||
+            evt.keyCode == KeyCode.Tab ||
+            evt.keyCode == KeyCode.Return ||
+            evt.keyCode == KeyCode.KeypadEnter ||
+            evt.keyCode == KeyCode.Escape)
+        {
+            return false;
+        }
+
+        return evt.character != 0 && !char.IsControl(evt.character);
+    }
+
     private void SetProfileStatus(string message)
     {
         if (profileStatusLabel == null)
@@ -3523,7 +3643,6 @@ public class MainMenuUITKView : MonoBehaviour
 
         profilePbpApiKeyClipboardButton = existingButton;
     }
-
     private void ClearProfileStatus()
     {
         StopProfileStatusClearTimer();
@@ -3772,6 +3891,7 @@ public class MainMenuUITKView : MonoBehaviour
         multiplayerVersionLabel = null;
         profileUsernameValueLabel = null;
         profilePlayerIdValueLabel = null;
+        profileTypedDisplayNameHelperLabel = null;
         profileStatusLabel = null;
         profileTypedDisplayNameInput = null;
         createSuccessGameCodeLabel = null;
