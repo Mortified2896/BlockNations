@@ -140,7 +140,6 @@ public class MainMenuUITKView : MonoBehaviour
     private Button joinCancelButton;
     private Button profileRegenerateButton;
     private Button profileCopyPlayerIdButton;
-    private Button profilePbpApiKeyClipboardButton;
     private Button profileBackButton;
     private TextField profileTypedDisplayNameInput;
     private TextField generalSettingsAIVsAiCertaintyThresholdInput;
@@ -460,7 +459,6 @@ public class MainMenuUITKView : MonoBehaviour
         profilePlayerIdValueLabel = root.Q<Label>("ProfilePlayerIdValueLabel");
         profileTypedDisplayNameHelperLabel = root.Q<Label>("ProfileTypedDisplayNameHelperLabel");
         profileStatusLabel = root.Q<Label>("ProfileStatusLabel");
-        EnsureDevProfilePbpApiKeyButton();
         profileTypedDisplayNameInput = root.Q<TextField>("ProfileTypedDisplayNameInput");
         createSuccessGameCodeLabel = root.Q<Label>("CreateSuccessGameCodeLabel");
         generalSettingsTitleLabel = root.Q<Label>("GeneralSettingsTitleLabel");
@@ -529,7 +527,6 @@ public class MainMenuUITKView : MonoBehaviour
         joinCancelButton = root.Q<Button>("JoinCancelButton");
         profileRegenerateButton = root.Q<Button>("ProfileRegenerateButton");
         profileCopyPlayerIdButton = root.Q<Button>("ProfileCopyPlayerIdButton");
-        profilePbpApiKeyClipboardButton = root.Q<Button>("ProfilePbpApiKeyClipboardButton");
         profileBackButton = root.Q<Button>("ProfileBackButton");
         generalSettingsAIVsAiCertaintyThresholdInput = root.Q<TextField>("GeneralSettingsAIVsAiCertaintyThresholdInput");
         generalSettingsAIVsAiMinimumGamesInput = root.Q<TextField>("GeneralSettingsAIVsAiMinimumGamesInput");
@@ -1237,11 +1234,6 @@ public class MainMenuUITKView : MonoBehaviour
             profileCopyPlayerIdButton.clicked += HandleProfileCopyPlayerIdClicked;
         }
 
-        if (profilePbpApiKeyClipboardButton != null)
-        {
-            profilePbpApiKeyClipboardButton.clicked += HandleProfilePbpApiKeyClipboardClicked;
-        }
-
         if (profileBackButton != null)
         {
             profileBackButton.clicked += HandleProfileBackClicked;
@@ -1560,11 +1552,6 @@ public class MainMenuUITKView : MonoBehaviour
         if (profileCopyPlayerIdButton != null)
         {
             profileCopyPlayerIdButton.clicked -= HandleProfileCopyPlayerIdClicked;
-        }
-
-        if (profilePbpApiKeyClipboardButton != null)
-        {
-            profilePbpApiKeyClipboardButton.clicked -= HandleProfilePbpApiKeyClipboardClicked;
         }
 
         if (profileBackButton != null)
@@ -2084,17 +2071,6 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         ShowTransientProfileStatus("Copy failed.");
-    }
-
-    private void HandleProfilePbpApiKeyClipboardClicked()
-    {
-        if (HttpTurnTransport.TryStoreScopedApiKeyForCurrentNamespace(GUIUtility.systemCopyBuffer, out string message))
-        {
-            ShowTransientProfileStatus(message);
-            return;
-        }
-
-        ShowTransientProfileStatus(message);
     }
 
     private void HandleProfileBackClicked()
@@ -3599,50 +3575,6 @@ public class MainMenuUITKView : MonoBehaviour
         profileStatusClearItem = profilePanel.schedule.Execute(ClearProfileStatus).StartingIn(ProfileStatusHideDelayMs);
     }
 
-    private void EnsureDevProfilePbpApiKeyButton()
-    {
-        VisualElement profileCard = root != null ? root.Q(className: "profile-card") : null;
-        if (profileCard == null)
-        {
-            profilePbpApiKeyClipboardButton = null;
-            return;
-        }
-
-        Button existingButton = profileCard.Q<Button>("ProfilePbpApiKeyClipboardButton");
-        if (!IsDevBuild())
-        {
-            if (existingButton != null)
-            {
-                profileCard.Remove(existingButton);
-            }
-
-            profilePbpApiKeyClipboardButton = null;
-            return;
-        }
-
-        if (existingButton == null)
-        {
-            Button button = new Button
-            {
-                name = "ProfilePbpApiKeyClipboardButton",
-                text = "Use Clipboard As PBp Key"
-            };
-            button.AddToClassList("menu-button");
-            button.AddToClassList("profile-copy-button");
-            button.AddToClassList("ui-text-button");
-
-            int insertIndex = profileStatusLabel != null ? profileCard.IndexOf(profileStatusLabel) : profileCard.childCount;
-            if (insertIndex < 0)
-            {
-                insertIndex = profileCard.childCount;
-            }
-
-            profileCard.Insert(insertIndex, button);
-            existingButton = button;
-        }
-
-        profilePbpApiKeyClipboardButton = existingButton;
-    }
     private void ClearProfileStatus()
     {
         StopProfileStatusClearTimer();
@@ -3761,17 +3693,20 @@ public class MainMenuUITKView : MonoBehaviour
             return;
         }
 
-        Rect safeArea = Screen.safeArea;
-        Vector2Int screenSize = new Vector2Int(Screen.width, Screen.height);
-        if (safeArea.width <= 0f || safeArea.height <= 0f)
+        Vector2 responsiveSize = responsiveSizeTierController.LastResponsiveSize;
+        if (responsiveSize.x <= 0f || responsiveSize.y <= 0f)
         {
-            safeArea = new Rect(0f, 0f, screenSize.x, screenSize.y);
+            Rect safeArea = Screen.safeArea;
+            Vector2Int screenSize = new Vector2Int(Screen.width, Screen.height);
+            if (safeArea.width <= 0f || safeArea.height <= 0f)
+            {
+                safeArea = new Rect(0f, 0f, screenSize.x, screenSize.y);
+            }
+
+            responsiveSize = UITKResponsiveSizeTierController.ComputeResponsiveSize(safeArea.size);
         }
 
-        float shortestSide = Mathf.Min(safeArea.width, safeArea.height);
-        float usableHeight = Mathf.Max(safeArea.width, safeArea.height);
-        bool isWidePhone = shortestSide >= WidePhoneShortestSideMin && usableHeight >= WidePhoneHeightMin;
-        root.EnableInClassList(WidePhoneMenuClass, isWidePhone);
+        root.EnableInClassList(WidePhoneMenuClass, ShouldUseWidePhoneMenuLayout(responsiveSize));
     }
 
     private void FitMainMenuTitleToWidth()
@@ -3823,17 +3758,25 @@ public class MainMenuUITKView : MonoBehaviour
             return MainMenuTitleLargeBaseFontSize;
         }
 
-        if (root.ClassListContains("ui-regular"))
-        {
-            return MainMenuTitleRegularBaseFontSize;
-        }
-
+        // Keep smaller phone-class title sizing even when the shared responsive tier lands on regular.
         if (root.ClassListContains(WidePhoneMenuClass))
         {
             return MainMenuTitleWidePhoneBaseFontSize;
         }
 
+        if (root.ClassListContains("ui-regular"))
+        {
+            return MainMenuTitleRegularBaseFontSize;
+        }
+
         return MainMenuTitleCompactBaseFontSize;
+    }
+
+    private static bool ShouldUseWidePhoneMenuLayout(Vector2 responsiveSize)
+    {
+        float shortestSide = Mathf.Min(responsiveSize.x, responsiveSize.y);
+        float usableHeight = Mathf.Max(responsiveSize.x, responsiveSize.y);
+        return shortestSide >= WidePhoneShortestSideMin && usableHeight >= WidePhoneHeightMin;
     }
 
     private void ResetActiveGamesInteractionState()

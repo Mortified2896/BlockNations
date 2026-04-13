@@ -1,5 +1,9 @@
 using UnityEngine;
 using UnityEngine.UIElements;
+#if UNITY_EDITOR
+using System.Reflection;
+using UnityEditor;
+#endif
 
 internal sealed class UITKResponsiveSizeTierController
 {
@@ -63,7 +67,7 @@ internal sealed class UITKResponsiveSizeTierController
         lastSafeArea = safeArea;
         lastScreenSize = screenSize;
 
-        Vector2 responsiveSize = NormalizeForResponsiveSizing(safeArea.size);
+        Vector2 responsiveSize = ComputeResponsiveSize(safeArea.size);
         lastResponsiveSize = responsiveSize;
 
         string nextTierClass = ResolveTierClass(responsiveSize);
@@ -117,9 +121,14 @@ internal sealed class UITKResponsiveSizeTierController
         styleSheetAttachedRoot = root;
     }
 
-    private static Vector2 NormalizeForResponsiveSizing(Vector2 safeAreaSize)
+    internal static Vector2 ComputeResponsiveSize(Vector2 safeAreaSize)
     {
-        float dpi = Screen.dpi;
+        float dpi = ResolveResponsiveDpi();
+        return ComputeResponsiveSize(safeAreaSize, dpi);
+    }
+
+    internal static Vector2 ComputeResponsiveSize(Vector2 safeAreaSize, float dpi)
+    {
         if (dpi < MinimumReliableDpi)
         {
             return safeAreaSize;
@@ -133,6 +142,103 @@ internal sealed class UITKResponsiveSizeTierController
 
         return safeAreaSize / densityScale;
     }
+
+    private static float ResolveResponsiveDpi()
+    {
+        float dpi = Screen.dpi;
+        if (dpi >= MinimumReliableDpi)
+        {
+            return dpi;
+        }
+
+#if UNITY_EDITOR
+        if (TryGetDeviceSimulatorDpi(out float deviceSimulatorDpi))
+        {
+            return deviceSimulatorDpi;
+        }
+#endif
+
+        return dpi;
+    }
+
+#if UNITY_EDITOR
+    private const string SimulatorWindowTypeName = "UnityEditor.DeviceSimulation.SimulatorWindow, UnityEditor";
+    private const string SimulatorMainPropertyName = "main";
+    private const string SimulatorCurrentScreenPropertyName = "currentScreen";
+    private const string SimulatorDpiFieldName = "dpi";
+
+    private static bool TryGetDeviceSimulatorDpi(out float dpi)
+    {
+        dpi = 0f;
+
+        EditorWindow focusedWindow = EditorWindow.focusedWindow;
+        if (TryGetSimulatorWindowDpi(focusedWindow, out dpi))
+        {
+            return true;
+        }
+
+        EditorWindow[] editorWindows = Resources.FindObjectsOfTypeAll<EditorWindow>();
+        for (int i = 0; i < editorWindows.Length; i++)
+        {
+            if (TryGetSimulatorWindowDpi(editorWindows[i], out dpi))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryGetSimulatorWindowDpi(EditorWindow editorWindow, out float dpi)
+    {
+        dpi = 0f;
+        if (editorWindow == null)
+        {
+            return false;
+        }
+
+        System.Type simulatorWindowType = System.Type.GetType(SimulatorWindowTypeName);
+        if (simulatorWindowType == null || !simulatorWindowType.IsInstanceOfType(editorWindow))
+        {
+            return false;
+        }
+
+        PropertyInfo mainProperty = simulatorWindowType.GetProperty(
+            SimulatorMainPropertyName,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        object simulatorMain = mainProperty?.GetValue(editorWindow);
+        if (simulatorMain == null)
+        {
+            return false;
+        }
+
+        PropertyInfo currentScreenProperty = simulatorMain.GetType().GetProperty(
+            SimulatorCurrentScreenPropertyName,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        object currentScreen = currentScreenProperty?.GetValue(simulatorMain);
+        if (currentScreen == null)
+        {
+            return false;
+        }
+
+        FieldInfo dpiField = currentScreen.GetType().GetField(
+            SimulatorDpiFieldName,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (dpiField == null)
+        {
+            return false;
+        }
+
+        object dpiValue = dpiField.GetValue(currentScreen);
+        if (dpiValue is not float currentScreenDpi || currentScreenDpi < MinimumReliableDpi)
+        {
+            return false;
+        }
+
+        dpi = currentScreenDpi;
+        return true;
+    }
+#endif
 
     private static string ResolveTierClass(Vector2 responsiveSize)
     {
