@@ -12,6 +12,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
     private const string ApiKeyEnvVarName = "PBP_SHARED_SECRET";
     private const string ApiKeyStagingSecretRelativePath = "UserSettings/pbp-api-key.staging";
     private const string ApiKeyDefaultSecretRelativePath = "UserSettings/pbp-api-key.default";
+    private const string ApiKeyProvisionedMacDevelopmentFileName = "pbp-api-key.staging";
 
     [SerializeField]
     [Tooltip("UnityWebRequest timeout in seconds (0 = no timeout).")]
@@ -694,6 +695,40 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
     private static string GetConfiguredPbpApiKey()
     {
+        string provisionedMacDevelopmentPath = string.Empty;
+        string provisionedMacDevelopmentExists = "false";
+        string provisionedMacDevelopmentEmpty = "unknown";
+        string provisionedMacDevelopmentStatus = "not-applicable";
+        string fromProvisionedMacDevelopment = TryReadProvisionedMacDevelopmentApiKey(
+            out provisionedMacDevelopmentPath,
+            out provisionedMacDevelopmentExists,
+            out provisionedMacDevelopmentEmpty,
+            out provisionedMacDevelopmentStatus);
+        bool selectedProvisionedMacDevelopment = !string.IsNullOrEmpty(fromProvisionedMacDevelopment);
+
+        if (ShouldUseProvisionedMacDevelopmentApiKeyOnly())
+        {
+            LogProvisionedMacDevelopmentApiKeyDiagnosticsOnce(
+                provisionedMacDevelopmentPath,
+                provisionedMacDevelopmentExists,
+                provisionedMacDevelopmentEmpty,
+                selectedProvisionedMacDevelopment,
+                provisionedMacDevelopmentStatus,
+                fromProvisionedMacDevelopment);
+
+            if (selectedProvisionedMacDevelopment)
+            {
+                return fromProvisionedMacDevelopment;
+            }
+
+            LogProvisionedMacDevelopmentApiKeyFailureOnce(
+                provisionedMacDevelopmentPath,
+                provisionedMacDevelopmentExists,
+                provisionedMacDevelopmentEmpty,
+                provisionedMacDevelopmentStatus);
+            return string.Empty;
+        }
+
         string fromEnv = NormalizeApiKeyCandidate(Environment.GetEnvironmentVariable(ApiKeyEnvVarName));
         string fromStagingSecretFile = TryReadStagingSecretFileApiKey();
         string fromDefaultSecretFile = TryReadApiKeyFromProjectRelativePath(ApiKeyDefaultSecretRelativePath);
@@ -701,9 +736,37 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         string fromScopedPrefs = NormalizeApiKeyCandidate(PlayerPrefs.GetString(scopedPrefsKey, string.Empty));
         string fromLegacyPrefs = NormalizeApiKeyCandidate(PlayerPrefs.GetString(ApiKeyPlayerPrefsKeyRaw, string.Empty));
 
+        if (!string.IsNullOrEmpty(fromProvisionedMacDevelopment))
+        {
+            LogApiKeyResolutionOnce(
+                $"provisioned mac development file ({provisionedMacDevelopmentPath})",
+                scopedPrefsKey,
+                fromProvisionedMacDevelopment,
+                provisionedMacDevelopmentPath,
+                provisionedMacDevelopmentStatus,
+                usedProvisionedMacDevelopment: true,
+                fromEnv,
+                fromStagingSecretFile,
+                fromDefaultSecretFile,
+                fromScopedPrefs,
+                fromLegacyPrefs);
+            return fromProvisionedMacDevelopment;
+        }
+
         if (!string.IsNullOrEmpty(fromEnv))
         {
-            LogApiKeyResolutionOnce("env var", scopedPrefsKey, fromEnv, fromStagingSecretFile, fromDefaultSecretFile, fromScopedPrefs, fromLegacyPrefs);
+            LogApiKeyResolutionOnce(
+                "env var",
+                scopedPrefsKey,
+                fromProvisionedMacDevelopment,
+                provisionedMacDevelopmentPath,
+                provisionedMacDevelopmentStatus,
+                usedProvisionedMacDevelopment: false,
+                fromEnv,
+                fromStagingSecretFile,
+                fromDefaultSecretFile,
+                fromScopedPrefs,
+                fromLegacyPrefs);
             return fromEnv;
         }
 
@@ -712,6 +775,10 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
             LogApiKeyResolutionOnce(
                 $"staging secret file ({ApiKeyStagingSecretRelativePath})",
                 scopedPrefsKey,
+                fromProvisionedMacDevelopment,
+                provisionedMacDevelopmentPath,
+                provisionedMacDevelopmentStatus,
+                usedProvisionedMacDevelopment: false,
                 fromEnv,
                 fromStagingSecretFile,
                 fromDefaultSecretFile,
@@ -725,6 +792,10 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
             LogApiKeyResolutionOnce(
                 $"default secret file ({ApiKeyDefaultSecretRelativePath})",
                 scopedPrefsKey,
+                fromProvisionedMacDevelopment,
+                provisionedMacDevelopmentPath,
+                provisionedMacDevelopmentStatus,
+                usedProvisionedMacDevelopment: false,
                 fromEnv,
                 fromStagingSecretFile,
                 fromDefaultSecretFile,
@@ -738,6 +809,10 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
             LogApiKeyResolutionOnce(
                 $"scoped PlayerPrefs ({scopedPrefsKey})",
                 scopedPrefsKey,
+                fromProvisionedMacDevelopment,
+                provisionedMacDevelopmentPath,
+                provisionedMacDevelopmentStatus,
+                usedProvisionedMacDevelopment: false,
                 fromEnv,
                 fromStagingSecretFile,
                 fromDefaultSecretFile,
@@ -751,6 +826,10 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
             LogApiKeyResolutionOnce(
                 $"legacy PlayerPrefs ({ApiKeyPlayerPrefsKeyRaw})",
                 scopedPrefsKey,
+                fromProvisionedMacDevelopment,
+                provisionedMacDevelopmentPath,
+                provisionedMacDevelopmentStatus,
+                usedProvisionedMacDevelopment: false,
                 fromEnv,
                 fromStagingSecretFile,
                 fromDefaultSecretFile,
@@ -759,7 +838,18 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
             return fromLegacyPrefs;
         }
 
-        LogApiKeyResolutionOnce("missing", scopedPrefsKey, fromEnv, fromStagingSecretFile, fromDefaultSecretFile, fromScopedPrefs, fromLegacyPrefs);
+        LogApiKeyResolutionOnce(
+            "missing",
+            scopedPrefsKey,
+            fromProvisionedMacDevelopment,
+            provisionedMacDevelopmentPath,
+            provisionedMacDevelopmentStatus,
+            usedProvisionedMacDevelopment: false,
+            fromEnv,
+            fromStagingSecretFile,
+            fromDefaultSecretFile,
+            fromScopedPrefs,
+            fromLegacyPrefs);
         return string.Empty;
     }
 
@@ -789,6 +879,102 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         catch
         {
             // Best-effort only. Fall through to the next configured source.
+            return string.Empty;
+        }
+    }
+
+    private static string TryReadProvisionedMacDevelopmentApiKey(
+        out string resolvedPath,
+        out string fileExists,
+        out string fileEmpty,
+        out string readStatus)
+    {
+        resolvedPath = string.Empty;
+        fileExists = "false";
+        fileEmpty = "unknown";
+        readStatus = "not-applicable";
+#if DEVELOPMENT_BUILD && !UNITY_EDITOR && UNITY_STANDALONE_OSX
+        string provisionedPath = GetProvisionedMacDevelopmentApiKeyPath();
+        resolvedPath = provisionedPath;
+        string apiKey = TryReadApiKeyAtAbsolutePath(
+            provisionedPath,
+            out fileExists,
+            out fileEmpty,
+            out readStatus);
+        if (!string.IsNullOrEmpty(apiKey))
+        {
+            return apiKey;
+        }
+#endif
+        return string.Empty;
+    }
+
+    private static string GetProvisionedMacDevelopmentApiKeyPath()
+    {
+        try
+        {
+            string contentsPath = Application.dataPath;
+            if (string.IsNullOrWhiteSpace(contentsPath))
+            {
+                return string.Empty;
+            }
+
+            return Path.Combine(contentsPath, "Resources", ApiKeyProvisionedMacDevelopmentFileName);
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static bool ShouldUseProvisionedMacDevelopmentApiKeyOnly()
+    {
+#if DEVELOPMENT_BUILD && !UNITY_EDITOR && UNITY_STANDALONE_OSX
+        return true;
+#else
+        return false;
+#endif
+    }
+
+    private static string TryReadApiKeyAtAbsolutePath(
+        string absolutePath,
+        out string fileExists,
+        out string fileEmpty,
+        out string readStatus)
+    {
+        fileExists = "false";
+        fileEmpty = "unknown";
+        readStatus = "missing";
+        if (string.IsNullOrWhiteSpace(absolutePath))
+        {
+            readStatus = "invalid-path";
+            return string.Empty;
+        }
+
+        try
+        {
+            bool exists = File.Exists(absolutePath);
+            fileExists = exists ? "true" : "false";
+            if (!exists)
+            {
+                return string.Empty;
+            }
+
+            string apiKey = NormalizeApiKeyFileContents(File.ReadAllText(absolutePath));
+            fileEmpty = string.IsNullOrEmpty(apiKey) ? "true" : "false";
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                readStatus = "empty";
+                return string.Empty;
+            }
+
+            readStatus = "present";
+            return apiKey;
+        }
+        catch
+        {
+            fileExists = File.Exists(absolutePath) ? "true" : fileExists;
+            readStatus = "unreadable";
             return string.Empty;
         }
     }
@@ -829,6 +1015,10 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
     private static void LogApiKeyResolutionOnce(
         string source,
         string scopedPrefsKey,
+        string fromProvisionedMacDevelopment,
+        string provisionedMacDevelopmentPath,
+        string provisionedMacDevelopmentStatus,
+        bool usedProvisionedMacDevelopment,
         string fromEnv,
         string fromStagingSecretFile,
         string fromDefaultSecretFile,
@@ -844,11 +1034,50 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         hasLoggedApiKeySource = true;
         Debug.Log(
             $"PBp API key resolution: source={source} namespace={DevClientInstanceScope.StorageNamespace} " +
+            $"provisionedMacDev={DescribeApiKeyCandidate(fromProvisionedMacDevelopment)} " +
+            $"provisionedMacDevPath={DescribeCheckedPath(provisionedMacDevelopmentPath, provisionedMacDevelopmentStatus, usedProvisionedMacDevelopment)} " +
             $"scopedKey={scopedPrefsKey} env={DescribeApiKeyCandidate(fromEnv)} " +
             $"stagingFile={DescribeApiKeyCandidate(fromStagingSecretFile)} " +
             $"defaultFile={DescribeApiKeyCandidate(fromDefaultSecretFile)} " +
             $"scoped={DescribeApiKeyCandidate(fromScopedPrefs)} legacy={DescribeApiKeyCandidate(fromLegacyPrefs)}");
 #endif
+    }
+
+    [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+    private static void LogProvisionedMacDevelopmentApiKeyDiagnosticsOnce(
+        string path,
+        string fileExists,
+        string fileEmpty,
+        bool selected,
+        string status,
+        string candidate)
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (hasLoggedApiKeySource)
+        {
+            return;
+        }
+
+        hasLoggedApiKeySource = true;
+        Debug.Log(
+            $"PBp Mac DEVELOPMENT_BUILD provisioned secret: path={DescribeExactPath(path)} " +
+            $"exists={fileExists} empty={fileEmpty} selected={selected} status={status} " +
+            $"value={DescribeApiKeyCandidate(candidate)}");
+#endif
+    }
+
+    private static string DescribeCheckedPath(string path, string status, bool used)
+    {
+        string normalizedPath = string.IsNullOrWhiteSpace(path) ? "<missing>" : path;
+        string normalizedStatus = used
+            ? "used"
+            : (string.IsNullOrWhiteSpace(status) ? "missing" : status);
+        return $"{normalizedPath} ({normalizedStatus})";
+    }
+
+    private static string DescribeExactPath(string path)
+    {
+        return string.IsNullOrWhiteSpace(path) ? "<missing>" : path;
     }
 
     private static string DescribeApiKeyCandidate(string candidate)
@@ -926,9 +1155,30 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
         hasLoggedMissingApiKeyWarning = true;
         Debug.LogWarning(
-            $"PBp API key is missing. Checked env var {ApiKeyEnvVarName}, staging file {ApiKeyStagingSecretRelativePath}, " +
+            $"PBp API key is missing. Checked provisioned mac development app file, env var {ApiKeyEnvVarName}, " +
+            $"staging file {ApiKeyStagingSecretRelativePath}, " +
             $"default file {ApiKeyDefaultSecretRelativePath}, " +
             $"scoped PlayerPrefs, and legacy PlayerPrefs.");
+#endif
+    }
+
+    [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+    private static void LogProvisionedMacDevelopmentApiKeyFailureOnce(
+        string path,
+        string fileExists,
+        string fileEmpty,
+        string status)
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (hasLoggedMissingApiKeyWarning)
+        {
+            return;
+        }
+
+        hasLoggedMissingApiKeyWarning = true;
+        Debug.LogError(
+            $"PBp Mac DEVELOPMENT_BUILD requires the provisioned secret file and will not fall back. " +
+            $"path={DescribeExactPath(path)} exists={fileExists} empty={fileEmpty} selected=false status={status}");
 #endif
     }
 
