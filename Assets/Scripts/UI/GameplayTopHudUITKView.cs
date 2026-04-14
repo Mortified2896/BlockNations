@@ -694,7 +694,8 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
                !string.IsNullOrWhiteSpace(pbpSubmitStatusOverrideGameId) &&
                string.Equals(currentPbpGameId, pbpSubmitStatusOverrideGameId, StringComparison.Ordinal) &&
                turnManager != null &&
-               turnManager.currentMode == TurnManager.GameMode.PlayByPost;
+               turnManager.currentMode == TurnManager.GameMode.PlayByPost &&
+               !turnManager.IsPbpEndgameResolvedCompletedForUi;
     }
 
     private void ClearPbpSubmitStatusOverride()

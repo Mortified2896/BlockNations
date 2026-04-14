@@ -1847,13 +1847,11 @@ public class MainMenuController : MonoBehaviour
                 : $"Waiting for {waitingSeatLabel}";
         }
 
-        string opponentTypedDisplayName = TryGetOpponentTypedDisplayNameForMenu(summary.gameId, out string foundOpponentTypedDisplayName)
-            ? foundOpponentTypedDisplayName
-            : "Opponent";
+        string opponentDisplayName = GetTwoPlayerOpponentDisplayNameOrFallbackForMenu(summary.gameId, localHeader, turnState);
 
         return turnState.Kind == PlayByPostMenuTurnStateKind.YourTurn
-            ? $"Your turn against {opponentTypedDisplayName}"
-            : $"Waiting for {opponentTypedDisplayName}";
+            ? $"Your turn against {opponentDisplayName}"
+            : $"Waiting for {opponentDisplayName}";
     }
 
     public PlayByPostMenuTurnStateKind GetPlayByPostTurnStateKindForMenu(SaveManifestService.ManifestGameSummary summary)
@@ -2326,66 +2324,36 @@ public class MainMenuController : MonoBehaviour
         return true;
     }
 
-    private static bool TryGetOpponentTypedDisplayNameForMenu(string gameId, out string opponentTypedDisplayName)
+    private static string GetTwoPlayerOpponentDisplayNameOrFallbackForMenu(
+        string gameId,
+        MinimalSaveHeader header,
+        PlayByPostMenuTurnStateResult turnState)
     {
-        opponentTypedDisplayName = null;
-        if (!TryReadLocalPbpSnapshotHeader(gameId, out MinimalSaveHeader header))
+        if (LocalPlayerSeatStore.TryGetSeat(gameId, out int localSeat) && (localSeat == 0 || localSeat == 1))
         {
-            return false;
+            int localSeatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(localSeat, PlayByPostSeatUtility.MinSeatCount);
+            int opponentSeatIndex = localSeatIndex == 0 ? 1 : 0;
+            return GetSeatDisplayNameOrFallbackForMenu(header, opponentSeatIndex);
         }
 
-        if (!LocalPlayerSeatStore.TryGetSeat(gameId, out int localSeat) || (localSeat != 0 && localSeat != 1))
-        {
-            return false;
-        }
-
-        string playerOneTypedDisplayName = LocalPlayerProfileStore.NormalizeTypedDisplayName(header.playerOneTypedDisplayName);
-        string playerTwoTypedDisplayName = LocalPlayerProfileStore.NormalizeTypedDisplayName(header.playerTwoTypedDisplayName);
-        opponentTypedDisplayName = localSeat == 0 ? playerTwoTypedDisplayName : playerOneTypedDisplayName;
-        return !string.IsNullOrWhiteSpace(opponentTypedDisplayName);
+        int inferredOpponentSeatIndex =
+            turnState.Kind == PlayByPostMenuTurnStateKind.YourTurn
+                ? 1 - PlayByPostSeatUtility.NormalizeSeatIndex(turnState.CurrentTurnSeatIndex, PlayByPostSeatUtility.MinSeatCount)
+                : PlayByPostSeatUtility.NormalizeSeatIndex(turnState.CurrentTurnSeatIndex, PlayByPostSeatUtility.MinSeatCount);
+        int fallbackOpponentSeatIndex = Mathf.Clamp(inferredOpponentSeatIndex, 0, PlayByPostSeatUtility.MinSeatCount - 1);
+        return GetSeatDisplayNameOrFallbackForMenu(header, fallbackOpponentSeatIndex);
     }
 
     private static bool TryGetSeatTypedDisplayNameForMenu(MinimalSaveHeader header, int seatIndex, out string typedDisplayName)
     {
         typedDisplayName = null;
-        if (header == null)
+        if (!TryGetSeatMetadataForMenu(header, seatIndex, out PlayByPostSeatMetadata seat))
         {
             return false;
         }
 
-        if (header.seats != null)
-        {
-            for (int i = 0; i < header.seats.Count; i++)
-            {
-                PlayByPostSeatMetadata seat = header.seats[i];
-                if (seat == null || seat.seatIndex != seatIndex)
-                {
-                    continue;
-                }
-
-                typedDisplayName = LocalPlayerProfileStore.NormalizeTypedDisplayName(seat.typedDisplayName);
-                return !string.IsNullOrWhiteSpace(typedDisplayName);
-            }
-        }
-
-        if (PlayByPostSeatUtility.NormalizeSeatCount(header.seatCount) > PlayByPostSeatUtility.MinSeatCount)
-        {
-            return false;
-        }
-
-        if (seatIndex == 0)
-        {
-            typedDisplayName = LocalPlayerProfileStore.NormalizeTypedDisplayName(header.playerOneTypedDisplayName);
-            return !string.IsNullOrWhiteSpace(typedDisplayName);
-        }
-
-        if (seatIndex == 1)
-        {
-            typedDisplayName = LocalPlayerProfileStore.NormalizeTypedDisplayName(header.playerTwoTypedDisplayName);
-            return !string.IsNullOrWhiteSpace(typedDisplayName);
-        }
-
-        return false;
+        typedDisplayName = LocalPlayerProfileStore.NormalizeTypedDisplayName(seat.typedDisplayName);
+        return !string.IsNullOrWhiteSpace(typedDisplayName);
     }
 
     private static string GetSeatDisplayNameOrFallbackForMenu(MinimalSaveHeader header, int seatIndex)
@@ -2919,6 +2887,21 @@ public class MainMenuController : MonoBehaviour
             next[item.GameId] = new RemoteTurnStatusOverlay(item.HasNewerThanKnown, item.TurnSeat, item.LatestSeq);
         }
 
+        bool refreshedLocalSnapshots = false;
+        yield return StartCoroutine(FetchAndApplyNewerSnapshotsForMenuCoroutine(
+            httpTransport,
+            items,
+            requestSerial,
+            result => refreshedLocalSnapshots = result));
+
+        if (refreshedLocalSnapshots)
+        {
+            LogRemoteTurnStatusDiagnostics(
+                "[MPRemoteStatus] fetch applied local_snapshot_updates=true");
+            RefreshMultiplayerListInternal(bypassRemoteCooldown: true);
+            yield break;
+        }
+
         bool changed = !AreRemoteTurnStatusOverlaysEqual(next);
         remoteTurnStatusByGameId.Clear();
         foreach (KeyValuePair<string, RemoteTurnStatusOverlay> kv in next)
@@ -2976,6 +2959,132 @@ public class MainMenuController : MonoBehaviour
 
         queries = requestList.ToArray();
         signature = string.Join(";", signatureParts);
+        return true;
+    }
+
+    private IEnumerator FetchAndApplyNewerSnapshotsForMenuCoroutine(
+        HttpTurnTransport httpTransport,
+        HttpTurnTransport.TurnStatusItem[] items,
+        int requestSerial,
+        Action<bool> done)
+    {
+        bool anyUpdated = false;
+
+        if (httpTransport == null || items == null || items.Length <= 0)
+        {
+            done?.Invoke(false);
+            yield break;
+        }
+
+        for (int i = 0; i < items.Length; i++)
+        {
+            if (requestSerial != remoteTurnStatusRequestSerial ||
+                SharedMenuRefreshState.Mode == MenuRefreshMode.Inactive)
+            {
+                done?.Invoke(anyUpdated);
+                yield break;
+            }
+
+            HttpTurnTransport.TurnStatusItem item = items[i];
+            if (!item.HasNewerThanKnown || string.IsNullOrWhiteSpace(item.GameId))
+            {
+                continue;
+            }
+
+            if (!TryGetHttpActivePbpGameSummary(item.GameId, out SaveManifestService.ManifestGameSummary summary))
+            {
+                continue;
+            }
+
+            int knownSeq = Mathf.Max(-1, GetKnownTransportSeqOrUnknown(summary));
+            int targetSeq = Mathf.Max(knownSeq, item.LatestSeq);
+            while (knownSeq < targetSeq)
+            {
+                bool fetchOk = false;
+                string fetchError = null;
+                int fetchedSeq = 0;
+                string fetchedJson = null;
+                yield return StartCoroutine(httpTransport.TryFetchNextTurn(item.GameId, knownSeq, (ok, err, seq, json) =>
+                {
+                    fetchOk = ok;
+                    fetchError = err;
+                    fetchedSeq = seq;
+                    fetchedJson = json;
+                }));
+
+                if (!fetchOk || string.IsNullOrWhiteSpace(fetchedJson) || fetchedSeq <= knownSeq)
+                {
+                    LogRemoteTurnStatusDiagnostics(
+                        $"[MPRemoteStatus] snapshot fetch stop gameId={item.GameId} ok={fetchOk} err={(fetchError ?? "<null>")} fetchedSeq={fetchedSeq} knownSeq={knownSeq} targetSeq={targetSeq}");
+                    break;
+                }
+
+                if (!TryApplyFetchedPbpSnapshotForMenu(summary, item.GameId, fetchedSeq, fetchedJson))
+                {
+                    LogRemoteTurnStatusDiagnostics(
+                        $"[MPRemoteStatus] snapshot apply failed gameId={item.GameId} fetchedSeq={fetchedSeq}");
+                    break;
+                }
+
+                anyUpdated = true;
+                knownSeq = fetchedSeq;
+            }
+        }
+
+        done?.Invoke(anyUpdated);
+    }
+
+    private bool TryGetHttpActivePbpGameSummary(string gameId, out SaveManifestService.ManifestGameSummary summary)
+    {
+        summary = default;
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            return false;
+        }
+
+        for (int i = 0; i < activePbpGames.Count; i++)
+        {
+            SaveManifestService.ManifestGameSummary candidate = activePbpGames[i];
+            if (!string.Equals(candidate.gameId, gameId, StringComparison.Ordinal) ||
+                !IsHttpPbpGame(candidate))
+            {
+                continue;
+            }
+
+            summary = candidate;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryApplyFetchedPbpSnapshotForMenu(
+        SaveManifestService.ManifestGameSummary summary,
+        string expectedGameId,
+        int fetchedSeq,
+        string fetchedJson)
+    {
+        if (string.IsNullOrWhiteSpace(expectedGameId) || string.IsNullOrWhiteSpace(fetchedJson))
+        {
+            return false;
+        }
+
+        if (!TurnManager.TryIngestFetchedPlayByPostSnapshotJson(
+                fetchedJson,
+                expectedGameId,
+                fetchedSeq,
+                summary.lastKnownSeatCount,
+                "menu_refresh_fetch",
+                out _,
+                out _,
+                out _,
+                out _,
+                out _,
+                out _))
+        {
+            return false;
+        }
+
         return true;
     }
 

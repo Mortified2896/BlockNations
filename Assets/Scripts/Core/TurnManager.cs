@@ -499,6 +499,7 @@ public class TurnManager : MonoBehaviour
     private int pbpEndgameCachedExportTurnNumber;
     private bool pbpEndgameCachedExportIsPlayerTurn;
     private string pbpEndgameCachedExportGameId;
+    private int pbpWinnerSeatIndex = -1;
     private string gameOverUiTitle = string.Empty;
     private string gameOverUiMessage = string.Empty;
     private string gameOverUiPrimaryButtonLabel = DefaultGameOverPrimaryButtonLabel;
@@ -588,6 +589,8 @@ public class TurnManager : MonoBehaviour
         public int playerGold;
         public int aiGold;
         public bool gameOver;
+        public bool hasWinnerSeatIndex;
+        public int winnerSeatIndex = -1;
         public int visibilityRadius;
         public int seatCount = PlayByPostSeatUtility.MinSeatCount;
         public int currentTurnSeatIndex;
@@ -680,6 +683,11 @@ public class TurnManager : MonoBehaviour
         gameOver &&
         pbpEndgameLocalWinner &&
         pbpEndgameSubmitPending;
+    public bool IsPbpEndgameResolvedCompletedForUi =>
+        currentMode == GameMode.PlayByPost &&
+        gameOver &&
+        pbpEndgamePrimaryAction == PbpEndgamePrimaryAction.BackAndArchive &&
+        (!pbpEndgameLocalWinner || pbpEndgameSubmitSucceeded);
 
     public bool IsHumanTurn()
     {
@@ -1326,6 +1334,8 @@ public class TurnManager : MonoBehaviour
         LocalPlayerProfileStore.ProfileData profile = LocalPlayerProfileStore.GetOrCreateProfile();
         string normalizedTypedName = NormalizeTypedDisplayNameMetadataValue(profile.TypedDisplayName);
         bool hasExistingClaimSignal = SeatMetadataHasClaimSignal(localSeatMetadata);
+        bool hasExistingTypedDisplayName =
+            !string.IsNullOrWhiteSpace(NormalizeTypedDisplayNameMetadataValue(localSeatMetadata.typedDisplayName));
 
         localSeatMetadata.state = PlayByPostSeatUtility.SeatStateActive;
         if (!string.IsNullOrWhiteSpace(profile.PlayerId))
@@ -1343,7 +1353,8 @@ public class TurnManager : MonoBehaviour
                 localSeatMetadata.typedDisplayName = normalizedTypedName;
             }
         }
-        else if (!hasExistingClaimSignal && !string.IsNullOrWhiteSpace(normalizedTypedName))
+        else if ((!hasExistingClaimSignal || !hasExistingTypedDisplayName) &&
+                 !string.IsNullOrWhiteSpace(normalizedTypedName))
         {
             localSeatMetadata.typedDisplayName = normalizedTypedName;
         }
@@ -2071,6 +2082,7 @@ public class TurnManager : MonoBehaviour
         pbpEndgameCachedExportTurnNumber = 0;
         pbpEndgameCachedExportIsPlayerTurn = false;
         pbpEndgameCachedExportGameId = null;
+        pbpWinnerSeatIndex = -1;
     }
 
     private void ResetGameOverUiState()
@@ -2493,61 +2505,70 @@ public class TurnManager : MonoBehaviour
         return true;
     }
 
-    private bool TryComputePbpWinnerSeatFromBoard(out int winnerSeatIndex)
+    private static bool TryResolvePbpWinnerSeatFromEligibleSeats(
+        List<PlayByPostSeatMetadata> normalizedSeats,
+        int seatCount,
+        out int winnerSeatIndex)
     {
-        winnerSeatIndex = 0;
-        City[] cities = Object.FindObjectsByType<City>();
-        if (cities == null || cities.Length == 0)
+        winnerSeatIndex = -1;
+        int normalizedSeatCount = PlayByPostSeatUtility.NormalizeSeatCount(seatCount);
+        for (int seatIndex = 0; seatIndex < normalizedSeatCount; seatIndex++)
+        {
+            PlayByPostSeatMetadata seatMetadata =
+                normalizedSeats != null && seatIndex < normalizedSeats.Count
+                    ? normalizedSeats[seatIndex]
+                    : null;
+            if (!IsEligiblePlayByPostSeatForTurnProgression(seatMetadata))
+                continue;
+
+            if (winnerSeatIndex >= 0)
+                return false;
+
+            winnerSeatIndex = seatIndex;
+        }
+
+        return winnerSeatIndex >= 0;
+    }
+
+    private void SetPbpWinnerSeatIndex(int winnerSeatIndex)
+    {
+        if (currentMode != GameMode.PlayByPost)
+        {
+            pbpWinnerSeatIndex = -1;
+            return;
+        }
+
+        pbpWinnerSeatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(
+            winnerSeatIndex,
+            GetConfiguredPlayByPostSeatCount());
+    }
+
+    private bool TryGetPbpWinnerSeatIndex(out int winnerSeatIndex)
+    {
+        winnerSeatIndex = -1;
+        if (currentMode != GameMode.PlayByPost || pbpWinnerSeatIndex < 0)
             return false;
 
-        // Preferred PBp endgame inference for loaded snapshots:
-        // if a city is occupied by an opposite-owner unit, treat that
-        // unit owner as the capturing winner side.
-        bool foundCaptureMarker = false;
-        bool captureWinnerIsPlayerOwned = false;
-        for (int i = 0; i < cities.Length; i++)
-        {
-            City city = cities[i];
-            if (city == null)
-                continue;
-
-            Unit occupyingUnit = GridUtils.GetUnitAtPosition(city.transform.position);
-            if (occupyingUnit == null || occupyingUnit.isPlayerOwned == city.isPlayerOwned)
-                continue;
-
-            if (!foundCaptureMarker)
-            {
-                foundCaptureMarker = true;
-                captureWinnerIsPlayerOwned = occupyingUnit.isPlayerOwned;
-                continue;
-            }
-
-            if (occupyingUnit.isPlayerOwned != captureWinnerIsPlayerOwned)
-                return false;
-        }
-
-        if (foundCaptureMarker)
-        {
-            winnerSeatIndex = captureWinnerIsPlayerOwned ? 0 : 1;
-            return true;
-        }
-
-        bool owner = cities[0].isPlayerOwned;
-        for (int i = 1; i < cities.Length; i++)
-        {
-            if (cities[i] == null)
-                continue;
-
-            if (cities[i].isPlayerOwned != owner)
-                return false;
-        }
-
-        winnerSeatIndex = owner ? 0 : 1;
+        winnerSeatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(
+            pbpWinnerSeatIndex,
+            GetConfiguredPlayByPostSeatCount());
         return true;
     }
 
-    private void ConfigurePbpEndgameFromCapture(bool didLocalWin)
+    private bool TryConfigurePbpEndgameForWinnerSeat(int winnerSeatIndex, string debugSource)
     {
+        SetPbpWinnerSeatIndex(winnerSeatIndex);
+        if (!TryComputePbpLocalResult(winnerSeatIndex, out bool didLocalWin, out _))
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.LogError(
+                $"PBp gameOver result resolution failed (source={debugSource}, gameId={currentGameId ?? "<none>"}, winnerSeatIndex={winnerSeatIndex}).");
+#endif
+            return false;
+        }
+
+        ShowGameOverPopup(didLocalWin ? "You won." : "You lost.", writeLog: false);
+
         pbpEndgameLocalWinner = didLocalWin;
         pbpEndgameSubmitPending = false;
         pbpEndgameSubmitSucceeded = false;
@@ -2562,70 +2583,44 @@ public class TurnManager : MonoBehaviour
         {
             SetGameOverPrimaryButtonState("Submitting...", false, PbpEndgamePrimaryAction.Submitting);
             TryStartPbpEndgameAutoSubmit();
-            return;
+            return true;
         }
 
+        SetGameOverPrimaryButtonState("Archive game", true, PbpEndgamePrimaryAction.BackAndArchive);
+        return true;
+    }
+
+    private void ConfigurePbpEndgameFallback(string debugSource)
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        Debug.LogError(
+            $"PBp gameOver fell back to neutral result (source={debugSource}, gameId={currentGameId ?? "<none>"}).");
+#endif
+        ShowGameOverPopup("Game over.", writeLog: false);
+        pbpEndgameLocalWinner = false;
+        pbpEndgameSubmitPending = false;
+        pbpEndgameSubmitSucceeded = false;
+        pbpEndgameSubmitPayloadCached = false;
+        pbpEndgameCachedExportJson = null;
+        pbpEndgameCachedExportGameId = null;
+        pbpEndgameCachedTransportSeq = 0;
+        pbpEndgameCachedExportTurnNumber = 0;
+        pbpEndgameCachedExportIsPlayerTurn = false;
         SetGameOverPrimaryButtonState("Archive game", true, PbpEndgamePrimaryAction.BackAndArchive);
     }
 
     private void ConfigurePbpEndgameFromLoadedState()
     {
-        if (!TryComputePbpWinnerSeatFromBoard(out int winnerSeatIndex))
+        if (!TryGetPbpWinnerSeatIndex(out int winnerSeatIndex))
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            Debug.LogWarning("PBp gameOver load could not derive a single objective winner seat from board ownership.");
-#endif
-            ShowGameOverPopup("Game over.", writeLog: false);
-            pbpEndgameLocalWinner = false;
-            pbpEndgameSubmitPending = false;
-            pbpEndgameSubmitSucceeded = false;
-            pbpEndgameSubmitPayloadCached = false;
-            pbpEndgameCachedExportJson = null;
-            pbpEndgameCachedExportGameId = null;
-            pbpEndgameCachedTransportSeq = 0;
-            pbpEndgameCachedExportTurnNumber = 0;
-            pbpEndgameCachedExportIsPlayerTurn = false;
-            SetGameOverPrimaryButtonState("Archive game", true, PbpEndgamePrimaryAction.BackAndArchive);
+            ConfigurePbpEndgameFallback("load_missing_winner");
             return;
         }
 
-        if (!TryComputePbpLocalResult(winnerSeatIndex, out bool didLocalWin, out _))
+        if (!TryConfigurePbpEndgameForWinnerSeat(winnerSeatIndex, "load"))
         {
-            ShowGameOverPopup("Game over.", writeLog: false);
-            pbpEndgameLocalWinner = false;
-            pbpEndgameSubmitPending = false;
-            pbpEndgameSubmitSucceeded = false;
-            pbpEndgameSubmitPayloadCached = false;
-            pbpEndgameCachedExportJson = null;
-            pbpEndgameCachedExportGameId = null;
-            pbpEndgameCachedTransportSeq = 0;
-            pbpEndgameCachedExportTurnNumber = 0;
-            pbpEndgameCachedExportIsPlayerTurn = false;
-            SetGameOverPrimaryButtonState("Archive game", true, PbpEndgamePrimaryAction.BackAndArchive);
-            return;
+            ConfigurePbpEndgameFallback("load_result_resolution_failed");
         }
-
-        string message = didLocalWin ? "You won!" : "You lost!";
-        ShowGameOverPopup(message, writeLog: false);
-
-        pbpEndgameLocalWinner = didLocalWin;
-        pbpEndgameSubmitPending = false;
-        pbpEndgameSubmitSucceeded = false;
-        pbpEndgameSubmitPayloadCached = false;
-        pbpEndgameCachedExportJson = null;
-        pbpEndgameCachedExportGameId = null;
-        pbpEndgameCachedTransportSeq = 0;
-        pbpEndgameCachedExportTurnNumber = 0;
-        pbpEndgameCachedExportIsPlayerTurn = false;
-
-        if (didLocalWin)
-        {
-            SetGameOverPrimaryButtonState("Submitting...", false, PbpEndgamePrimaryAction.Submitting);
-            TryStartPbpEndgameAutoSubmit();
-            return;
-        }
-
-        SetGameOverPrimaryButtonState("Archive game", true, PbpEndgamePrimaryAction.BackAndArchive);
     }
 
     private bool TryBuildPbpEndgameSubmitPayload()
@@ -3070,6 +3065,18 @@ public class TurnManager : MonoBehaviour
         }
 
         TryNotifyPlayByPostSubmitResult(submitOk, submitError);
+        bool isWinningPbpEndgameSubmit =
+            currentMode == GameMode.PlayByPost &&
+            gameOver &&
+            pbpEndgameLocalWinner;
+        bool didWinningPbpEndgameSubmitSucceed =
+            submitOk ||
+            submitError == TurnTelemetryConstants.Conflict;
+        if (isWinningPbpEndgameSubmit && !didWinningPbpEndgameSubmitSucceed)
+        {
+            yield break;
+        }
+
         if (submitOk)
         {
             int exportSeatCount = GetConfiguredPlayByPostSeatCount();
@@ -3158,6 +3165,37 @@ public class TurnManager : MonoBehaviour
             lastKnownCurrentTurnSeatIndex: exportTransportSeq % Mathf.Max(1, exportSeatCount),
             lastKnownTransportSeq: exportTransportSeq,
             lastKnownSeatCount: exportSeatCount);
+
+        if (exportGameOver)
+        {
+            gameOver = true;
+
+            GameSave resignedSave = null;
+            try
+            {
+                resignedSave = JsonUtility.FromJson<GameSave>(resignedJson);
+            }
+            catch
+            {
+                resignedSave = null;
+            }
+
+            if (resignedSave != null && resignedSave.hasWinnerSeatIndex)
+            {
+                if (!TryConfigurePbpEndgameForWinnerSeat(resignedSave.winnerSeatIndex, "resign"))
+                {
+                    ConfigurePbpEndgameFallback("resign_result_resolution_failed");
+                }
+            }
+            else
+            {
+                ConfigurePbpEndgameFallback("resign_missing_winner");
+            }
+
+            RefreshEndTurnButtonInteractable(force: true);
+            yield break;
+        }
+
         MainMenuController.ArchiveLocalPlayByPostGame(
             currentGameId,
             clearActiveGameSelection: true,
@@ -5902,15 +5940,18 @@ public class TurnManager : MonoBehaviour
         }
 
         int winnerSeatIndex = capturedBySeatIndex;
-        string message;
-        if (currentMode == GameMode.PlayByPost && TryComputePbpLocalResult(winnerSeatIndex, out bool didLocalWin, out _))
+        bool handledPbpGameOver = currentMode == GameMode.PlayByPost &&
+                                  TryConfigurePbpEndgameForWinnerSeat(winnerSeatIndex, "capture");
+        string message = currentMode == GameMode.PlayByPost
+            ? null
+            : capturedBySeatIndex == 0 ? "You Win!" : "You Lose!";
+        if (handledPbpGameOver)
         {
-            message = didLocalWin ? "You won!" : "You lost!";
-            ConfigurePbpEndgameFromCapture(didLocalWin);
+            SavePlayByPostPerGameSnapshot(historySource: "capture_gameover");
         }
-        else
+        else if (currentMode == GameMode.PlayByPost)
         {
-            message = capturedBySeatIndex == 0 ? "You Win!" : "You Lose!";
+            ConfigurePbpEndgameFallback("capture_result_resolution_failed");
         }
 
         if (SoundManager.Instance != null && !ShouldSuppressAIVsAIAudio())
@@ -5927,7 +5968,10 @@ public class TurnManager : MonoBehaviour
         }
 #endif
 
-        ShowGameOverPopup(message);
+        if (currentMode != GameMode.PlayByPost && !handledPbpGameOver)
+        {
+            ShowGameOverPopup(message);
+        }
     }
 
     private AIVsAIMatchCsvLogger.MatchResult BuildAIVsAIDebugMatchResult(string winner)
@@ -6737,6 +6781,11 @@ public class TurnManager : MonoBehaviour
 
     private string GetPbpPerGameSavePath(string gameId)
     {
+        return GetPbpPerGameSavePathStatic(gameId);
+    }
+
+    private static string GetPbpPerGameSavePathStatic(string gameId)
+    {
         if (string.IsNullOrWhiteSpace(gameId))
             return null;
 
@@ -7443,6 +7492,10 @@ public class TurnManager : MonoBehaviour
             playerGold = playerGold,
             aiGold = aiGold,
             gameOver = gameOver,
+            hasWinnerSeatIndex = currentMode == GameMode.PlayByPost && gameOver && pbpWinnerSeatIndex >= 0,
+            winnerSeatIndex = currentMode == GameMode.PlayByPost && gameOver && pbpWinnerSeatIndex >= 0
+                ? PlayByPostSeatUtility.NormalizeSeatIndex(pbpWinnerSeatIndex, GetRuntimeSeatCount())
+                : -1,
             visibilityRadius = visibilityRadius
         };
 
@@ -7687,6 +7740,17 @@ public class TurnManager : MonoBehaviour
             string tmp = JsonUtility.ToJson(current);
             saveForExport = JsonUtility.FromJson<GameSave>(tmp);
             PreparePlayByPostNextTurnSnapshot(saveForExport);
+            if (saveForExport != null &&
+                saveForExport.gameOver &&
+                !saveForExport.hasWinnerSeatIndex)
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.LogError(
+                    $"PBp export build missing authoritative winner seat (gameId={saveForExport.gameId ?? "<none>"}, turn={saveForExport.turnNumber}).");
+#endif
+                json = null;
+                return false;
+            }
         }
 
         json = JsonUtility.ToJson(saveForExport, playByPostExportPretty);
@@ -7923,6 +7987,14 @@ private void PBpDebugSyncNow_Context()
             turnNumber = save.turnNumber;
             SetSeatGoldStateFromList(ResolveSeatGold(save, runtimeSeatCount), runtimeSeatCount);
             gameOver = save.gameOver;
+            if (currentMode == GameMode.PlayByPost && gameOver && save.hasWinnerSeatIndex)
+            {
+                pbpWinnerSeatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(save.winnerSeatIndex, runtimeSeatCount);
+            }
+            else
+            {
+                pbpWinnerSeatIndex = -1;
+            }
             if (!gameOver)
             {
                 ResetGameOverUiState();
@@ -7949,6 +8021,7 @@ private void PBpDebugSyncNow_Context()
             int unitCountAfterSpawn = 0;
             int duplicateOwnerTileSlots = 0;
             string snapshotWriteMode = "none";
+            bool recordedLoadAppliedViaFetchedSnapshotIngest = false;
             int pbpSeat = 0;
             bool pbpHasSeat = false;
             string pbpSeatTextForLog = "<none>";
@@ -8145,21 +8218,33 @@ private void PBpDebugSyncNow_Context()
             {
                 if (!string.IsNullOrWhiteSpace(rawLoadedJson))
                 {
-                    if (migrationSourceProtocolVersion == SupportedPbpMigrationProtocolVersion)
+                    string historySource = migrationSourceProtocolVersion == SupportedPbpMigrationProtocolVersion
+                        ? "migrated_rewrite"
+                        : ResolveSnapshotHistorySourceForLoad(debugSource);
+                    if (TryIngestFetchedPlayByPostSnapshotJson(
+                            rawLoadedJson,
+                            currentGameId,
+                            ComputeTransportSeq(turnNumber, GetAuthoritativeCurrentTurnSeatIndex(), GetRuntimeSeatCount()),
+                            GetConfiguredPlayByPostSeatCount(),
+                            historySource,
+                            out _,
+                            out _,
+                            out _,
+                            out _,
+                            out _,
+                            out _))
                     {
-                        SavePlayByPostPerGameSnapshot(historySource: "migrated_rewrite");
-                        snapshotWriteMode = "migratedRebuild";
+                        snapshotWriteMode = migrationSourceProtocolVersion == SupportedPbpMigrationProtocolVersion
+                            ? "migratedIngest"
+                            : "canonicalIngest";
+                        recordedLoadAppliedViaFetchedSnapshotIngest = true;
                     }
                     else
                     {
-                        string historySource = ResolveSnapshotHistorySourceForLoad(debugSource);
-                        SavePlayByPostPerGameSnapshot(
-                            snapshotJson: rawLoadedJson,
-                            snapshotRoundTurn: save.turnNumber,
-                            snapshotIsPlayerTurn: save.isPlayerTurn,
-                            snapshotGameId: save.gameId,
-                            historySource: historySource);
-                        snapshotWriteMode = "rawJson";
+                        SavePlayByPostPerGameSnapshot(historySource: historySource);
+                        snapshotWriteMode = migrationSourceProtocolVersion == SupportedPbpMigrationProtocolVersion
+                            ? "migratedRebuildFallback"
+                            : "canonicalRebuildFallback";
                     }
                 }
                 else
@@ -8202,15 +8287,18 @@ private void PBpDebugSyncNow_Context()
                 }
             }
 
-            SaveManifestService.RecordLoadApplied(
-                currentGameId,
-                currentMode,
-                gameOver,
-                lastKnownRoundTurn: turnNumber,
-                lastKnownIsPlayerTurn: isPlayerTurn,
-                lastKnownCurrentTurnSeatIndex: GetAuthoritativeCurrentTurnSeatIndex(),
-                lastKnownTransportSeq: ComputeTransportSeq(turnNumber, GetAuthoritativeCurrentTurnSeatIndex(), GetRuntimeSeatCount()),
-                lastKnownSeatCount: GetConfiguredPlayByPostSeatCount());
+            if (!recordedLoadAppliedViaFetchedSnapshotIngest)
+            {
+                SaveManifestService.RecordLoadApplied(
+                    currentGameId,
+                    currentMode,
+                    gameOver,
+                    lastKnownRoundTurn: turnNumber,
+                    lastKnownIsPlayerTurn: isPlayerTurn,
+                    lastKnownCurrentTurnSeatIndex: GetAuthoritativeCurrentTurnSeatIndex(),
+                    lastKnownTransportSeq: ComputeTransportSeq(turnNumber, GetAuthoritativeCurrentTurnSeatIndex(), GetRuntimeSeatCount()),
+                    lastKnownSeatCount: GetConfiguredPlayByPostSeatCount());
+            }
             GameplayInputOrchestrator.ResetTransientInputState();
 
             if (currentMode == GameMode.VsAI && !gameOver)
@@ -8557,6 +8645,18 @@ private void PBpDebugSyncNow_Context()
         save.isPlayerTurn = nextSeatIndex == 0;
         save.turnNumber = nextTurnNumber;
         save.gameOver = eligibleSeatCount <= 1;
+        save.hasWinnerSeatIndex = false;
+        save.winnerSeatIndex = -1;
+        if (save.gameOver)
+        {
+            if (!TryResolvePbpWinnerSeatFromEligibleSeats(normalizedSeats, seatCount, out int winnerSeatIndex))
+            {
+                return false;
+            }
+
+            save.hasWinnerSeatIndex = true;
+            save.winnerSeatIndex = winnerSeatIndex;
+        }
         save.transportSeq = ComputeTransportSeq(save.turnNumber, save.currentTurnSeatIndex, seatCount);
 
         resignedJson = JsonUtility.ToJson(save, false);
@@ -8653,5 +8753,185 @@ private void PBpDebugSyncNow_Context()
 
         patchedJson = JsonUtility.ToJson(save, false);
         return !string.IsNullOrWhiteSpace(patchedJson);
+    }
+
+    public static bool TryCanonicalizePlayByPostSnapshotJson(
+        string json,
+        string expectedGameId,
+        out string canonicalJson,
+        out int canonicalTurnNumber,
+        out bool canonicalIsPlayerTurn,
+        out int canonicalCurrentTurnSeatIndex,
+        out int canonicalTransportSeq,
+        out int canonicalSeatCount,
+        out bool canonicalGameOver)
+    {
+        canonicalJson = json;
+        canonicalTurnNumber = 0;
+        canonicalIsPlayerTurn = false;
+        canonicalCurrentTurnSeatIndex = 0;
+        canonicalTransportSeq = 0;
+        canonicalSeatCount = PlayByPostSeatUtility.MinSeatCount;
+        canonicalGameOver = false;
+
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return false;
+        }
+
+        GameSave save;
+        try
+        {
+            save = JsonUtility.FromJson<GameSave>(json);
+        }
+        catch
+        {
+            return false;
+        }
+
+        if (save == null ||
+            !string.Equals(save.mode, GameMode.PlayByPost.ToString(), System.StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expectedGameId) &&
+            !string.IsNullOrWhiteSpace(save.gameId) &&
+            !string.Equals(save.gameId, expectedGameId, System.StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        int seatCount = ResolvePlayByPostSeatMetadataSeatCount(
+            save.seatCount,
+            save.seats);
+        List<PlayByPostSeatMetadata> normalizedSeats = BuildNormalizedPlayByPostSeatMetadata(
+            save.seats,
+            seatCount,
+            save.playerOneTypedDisplayName,
+            save.playerTwoTypedDisplayName);
+        int currentTurnSeatIndex = ResolveCurrentTurnSeatIndex(save, seatCount);
+
+        save.seatCount = seatCount;
+        save.seats = normalizedSeats;
+        save.playerOneTypedDisplayName = normalizedSeats.Count > 0
+            ? NormalizeTypedDisplayNameMetadataValue(normalizedSeats[0].typedDisplayName)
+            : null;
+        save.playerTwoTypedDisplayName = normalizedSeats.Count > 1
+            ? NormalizeTypedDisplayNameMetadataValue(normalizedSeats[1].typedDisplayName)
+            : null;
+        save.currentTurnSeatIndex = currentTurnSeatIndex;
+        save.isPlayerTurn = currentTurnSeatIndex == 0;
+        save.transportSeq = ComputeTransportSeq(save.turnNumber, currentTurnSeatIndex, seatCount);
+        if (save.hasWinnerSeatIndex)
+        {
+            save.winnerSeatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(save.winnerSeatIndex, seatCount);
+        }
+
+        canonicalJson = JsonUtility.ToJson(save, false);
+        canonicalTurnNumber = save.turnNumber;
+        canonicalIsPlayerTurn = save.isPlayerTurn;
+        canonicalCurrentTurnSeatIndex = save.currentTurnSeatIndex;
+        canonicalTransportSeq = save.transportSeq;
+        canonicalSeatCount = save.seatCount;
+        canonicalGameOver = save.gameOver;
+        return !string.IsNullOrWhiteSpace(canonicalJson);
+    }
+
+    public static bool TryIngestFetchedPlayByPostSnapshotJson(
+        string json,
+        string expectedGameId,
+        int fallbackTransportSeq,
+        int fallbackSeatCount,
+        string historySource,
+        out int canonicalTurnNumber,
+        out bool canonicalIsPlayerTurn,
+        out int canonicalCurrentTurnSeatIndex,
+        out int canonicalTransportSeq,
+        out int canonicalSeatCount,
+        out bool canonicalGameOver)
+    {
+        canonicalTurnNumber = 0;
+        canonicalIsPlayerTurn = false;
+        canonicalCurrentTurnSeatIndex = 0;
+        canonicalTransportSeq = 0;
+        canonicalSeatCount = PlayByPostSeatUtility.MinSeatCount;
+        canonicalGameOver = false;
+
+        if (!TryCanonicalizePlayByPostSnapshotJson(
+                json,
+                expectedGameId,
+                out string canonicalJson,
+                out canonicalTurnNumber,
+                out canonicalIsPlayerTurn,
+                out canonicalCurrentTurnSeatIndex,
+                out canonicalTransportSeq,
+                out canonicalSeatCount,
+                out canonicalGameOver))
+        {
+            return false;
+        }
+
+        string gameId = expectedGameId;
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            try
+            {
+                GameSave canonicalSave = JsonUtility.FromJson<GameSave>(canonicalJson);
+                gameId = canonicalSave != null ? canonicalSave.gameId : null;
+            }
+            catch
+            {
+                gameId = null;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            return false;
+        }
+
+        string snapshotPath = GetPbpPerGameSavePathStatic(gameId);
+        if (string.IsNullOrWhiteSpace(snapshotPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            string snapshotDirectory = Path.GetDirectoryName(snapshotPath);
+            if (!string.IsNullOrWhiteSpace(snapshotDirectory))
+            {
+                Directory.CreateDirectory(snapshotDirectory);
+            }
+
+            File.WriteAllText(snapshotPath, canonicalJson);
+
+            if (Instance != null)
+            {
+                Instance.TryCaptureSnapshotHistoryCopy(
+                    gameId,
+                    canonicalJson,
+                    canonicalTurnNumber,
+                    canonicalIsPlayerTurn,
+                    snapshotPath,
+                    string.IsNullOrWhiteSpace(historySource) ? "snapshot_ingest" : historySource);
+            }
+        }
+        catch (System.Exception)
+        {
+            return false;
+        }
+
+        SaveManifestService.RecordLoadApplied(
+            gameId,
+            GameMode.PlayByPost,
+            canonicalGameOver,
+            lastKnownRoundTurn: canonicalTurnNumber,
+            lastKnownIsPlayerTurn: canonicalIsPlayerTurn,
+            lastKnownCurrentTurnSeatIndex: canonicalCurrentTurnSeatIndex,
+            lastKnownTransportSeq: canonicalTransportSeq > 0 ? canonicalTransportSeq : fallbackTransportSeq,
+            lastKnownSeatCount: canonicalSeatCount > 0 ? canonicalSeatCount : fallbackSeatCount);
+        return true;
     }
 }
