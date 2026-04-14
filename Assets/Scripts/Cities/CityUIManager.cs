@@ -108,7 +108,7 @@ public class CityUIManager : MonoBehaviour
             TurnManager tm = ResolveTurnManager();
             if (tm != null && tm.currentMode == TurnManager.GameMode.PlayByPost)
             {
-                return currentCity.isPlayerOwned ? "Player 1 City" : "Player 2 City";
+                return $"{PlayByPostSeatUtility.BuildPlayerLabel(currentCity.ownerSeatIndex)} City";
             }
 
             return currentCity.isPlayerOwned ? "Player City" : "AI City";

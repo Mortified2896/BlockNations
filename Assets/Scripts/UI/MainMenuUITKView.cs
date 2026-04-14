@@ -1016,6 +1016,16 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsPbpPlayerCount2Button.clicked += HandleGeneralSettingsPbpPlayerCount2Clicked;
         }
 
+        if (generalSettingsPbpPlayerCount3Button != null)
+        {
+            generalSettingsPbpPlayerCount3Button.clicked += HandleGeneralSettingsPbpPlayerCount3Clicked;
+        }
+
+        if (generalSettingsPbpPlayerCount4Button != null)
+        {
+            generalSettingsPbpPlayerCount4Button.clicked += HandleGeneralSettingsPbpPlayerCount4Clicked;
+        }
+
         if (generalSettingsAiStyleDefaultButton != null)
         {
             generalSettingsAiStyleDefaultButton.clicked += HandleGeneralSettingsAiStyleDefaultClicked;
@@ -1334,6 +1344,16 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsPbpPlayerCount2Button != null)
         {
             generalSettingsPbpPlayerCount2Button.clicked -= HandleGeneralSettingsPbpPlayerCount2Clicked;
+        }
+
+        if (generalSettingsPbpPlayerCount3Button != null)
+        {
+            generalSettingsPbpPlayerCount3Button.clicked -= HandleGeneralSettingsPbpPlayerCount3Clicked;
+        }
+
+        if (generalSettingsPbpPlayerCount4Button != null)
+        {
+            generalSettingsPbpPlayerCount4Button.clicked -= HandleGeneralSettingsPbpPlayerCount4Clicked;
         }
 
         if (generalSettingsAiStyleDefaultButton != null)
@@ -1704,6 +1724,18 @@ public class MainMenuUITKView : MonoBehaviour
     private void HandleGeneralSettingsPbpPlayerCount2Clicked()
     {
         selectedPlayByPostPlayerCount = PlayByPostSeatUtility.MinSeatCount;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsPbpPlayerCount3Clicked()
+    {
+        selectedPlayByPostPlayerCount = 3;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsPbpPlayerCount4Clicked()
+    {
+        selectedPlayByPostPlayerCount = 4;
         RefreshGeneralSettingsSelectionState();
     }
 
@@ -2924,15 +2956,15 @@ public class MainMenuUITKView : MonoBehaviour
             !isPlayByPost);
         UpdateGeneralSettingsDisabledButton(
             generalSettingsPbpPlayerCount3Button,
-            true);
+            !isPlayByPost);
         UpdateGeneralSettingsDisabledButton(
             generalSettingsPbpPlayerCount4Button,
-            true);
+            !isPlayByPost);
 
         if (generalSettingsPbpPlayerCountHelperLabel != null)
         {
             generalSettingsPbpPlayerCountHelperLabel.text =
-                "2-player PBp is available now. 3- and 4-player matches stay disabled until the seat-based gameplay phase lands.";
+                "Choose 2, 3, or 4 players for this new play-by-post match.";
             generalSettingsPbpPlayerCountHelperLabel.style.display =
                 isPlayByPost ? DisplayStyle.Flex : DisplayStyle.None;
         }

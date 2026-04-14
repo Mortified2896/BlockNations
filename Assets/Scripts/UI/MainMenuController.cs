@@ -776,6 +776,7 @@ public class MainMenuController : MonoBehaviour
             return;
         }
 
+        PlayByPostSeatCountSelection.SetPending(localHeader.seatCount);
         GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         Debug.Log($"Resuming PlayByPost game. pendingMode={TurnManager.GameMode.PlayByPost}, gameId={gameId}");
@@ -1285,7 +1286,9 @@ public class MainMenuController : MonoBehaviour
 
                 SetImportStatus("Game found. Joining...");
                 LocalPlayerSeatStore.SetSeat(gameId, claimedSeatIndex);
+                TryWriteLocalPbpSnapshot(gameId, probeJson);
                 PersistPlayByPostSelection(gameId, returnToMultiplayerPane: true);
+                SeedPendingPlayByPostSeatCountFromJson(probeJson);
                 GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
                 SceneManager.LoadScene(gameplaySceneName);
 
@@ -1967,6 +1970,74 @@ public class MainMenuController : MonoBehaviour
         }
 
         return TryGetPbpPreflightBlockWarningFromHeader(header, out warning);
+    }
+
+    private static void SeedPendingPlayByPostSeatCountFromJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return;
+        }
+
+        try
+        {
+            MinimalSaveHeader header = JsonUtility.FromJson<MinimalSaveHeader>(json);
+            if (header == null ||
+                !string.Equals(header.mode, TurnManager.GameMode.PlayByPost.ToString(), StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            PlayByPostSeatCountSelection.SetPending(header.seatCount);
+        }
+        catch
+        {
+            // Leave the default seat count in place if the probe payload cannot be parsed here.
+        }
+    }
+
+    private static void TryWriteLocalPbpSnapshot(string gameId, string json)
+    {
+        if (string.IsNullOrWhiteSpace(gameId) || string.IsNullOrWhiteSpace(json))
+        {
+            return;
+        }
+
+        try
+        {
+            MinimalSaveHeader header = JsonUtility.FromJson<MinimalSaveHeader>(json);
+            if (header == null ||
+                !string.Equals(header.mode, TurnManager.GameMode.PlayByPost.ToString(), StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(header.gameId) &&
+                !string.Equals(header.gameId, gameId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            string snapshotPath = GetPbpPerGameSnapshotPath(gameId);
+            if (string.IsNullOrWhiteSpace(snapshotPath))
+            {
+                return;
+            }
+
+            string snapshotDirectory = Path.GetDirectoryName(snapshotPath);
+            if (!string.IsNullOrWhiteSpace(snapshotDirectory))
+            {
+                Directory.CreateDirectory(snapshotDirectory);
+            }
+
+            File.WriteAllText(snapshotPath, json);
+        }
+        catch (Exception ex)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.LogWarning($"[MP] Failed to seed local PBp snapshot for gameId={gameId}: {ex.Message}");
+#endif
+        }
     }
 
     private static string GetPbpPerGameSnapshotPath(string gameId)

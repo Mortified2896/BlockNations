@@ -3,11 +3,14 @@ using UnityEngine;
 public class OwnedSprite : MonoBehaviour
 {
     [Header("Owner")]
+    public int ownerSeatIndex = 0;
     public bool isPlayerOwned = true;
 
     [Header("Colors")]
     public Color playerColor = Color.blue;
     public Color aiColor = Color.red;
+    public Color player3Color = new Color(0.16f, 0.5f, 0.18f, 1f);
+    public Color player4Color = Color.yellow;
 
     [Header("References")]
     [SerializeField] private SpriteRenderer targetRenderer;
@@ -24,7 +27,13 @@ public class OwnedSprite : MonoBehaviour
 
     public void SetOwner(bool playerOwned)
     {
-        isPlayerOwned = playerOwned;
+        SetOwnerSeatIndex(playerOwned ? 0 : 1);
+    }
+
+    public void SetOwnerSeatIndex(int seatIndex)
+    {
+        ownerSeatIndex = Mathf.Max(0, seatIndex);
+        isPlayerOwned = ownerSeatIndex == 0;
         UpdateColor();
     }
 
@@ -37,7 +46,24 @@ public class OwnedSprite : MonoBehaviour
 
         if (targetRenderer == null) return;
 
-        targetRenderer.color = isPlayerOwned ? playerColor : aiColor;
+        targetRenderer.color = ResolveSeatColor(ownerSeatIndex);
+    }
+
+    private Color ResolveSeatColor(int seatIndex)
+    {
+        switch (PlayByPostSeatUtility.NormalizeSeatIndex(seatIndex))
+        {
+            case 0:
+                return playerColor;
+            case 1:
+                return aiColor;
+            case 2:
+                return player3Color;
+            case 3:
+                return player4Color;
+            default:
+                return playerColor;
+        }
     }
 
     private SpriteRenderer ResolveTargetRenderer()

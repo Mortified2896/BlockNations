@@ -137,7 +137,7 @@
                     <ui:VisualElement class="general-settings-section">
                         <ui:Label text="Map Size" class="general-settings-section-label" />
                         <ui:VisualElement class="general-settings-option-row">
-                            <ui:Button name="GeneralSettingsMapSmallButton" text="Small 10x10" class="menu-button general-settings-option-button" />
+                            <ui:Button name="GeneralSettingsMapSmallButton" text="Small 11x11" class="menu-button general-settings-option-button" />
                             <ui:Button name="GeneralSettingsMapLargeButton" text="Large 15x15" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                         </ui:VisualElement>
                     </ui:VisualElement>

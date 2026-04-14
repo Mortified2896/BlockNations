@@ -245,8 +245,28 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         }
 
         ApplyStandardHudLayout();
-        turnLabel.text = BuildTurnLabel();
-        goldLabel.text = BuildGoldLabel();
+        if (turnManager.currentMode == TurnManager.GameMode.PlayByPost)
+        {
+            bool hasLocalPlayByPostSeat = TryGetLocalPlayByPostSeatIndexForUi(out int localPlayByPostSeatIndex);
+            turnLabel.text = BuildPlayByPostTurnLabel(hasLocalPlayByPostSeat, localPlayByPostSeatIndex);
+
+            if (hasLocalPlayByPostSeat)
+            {
+                goldLabel.style.display = DisplayStyle.Flex;
+                goldLabel.text = BuildPlayByPostGoldLabel(localPlayByPostSeatIndex);
+            }
+            else
+            {
+                goldLabel.text = string.Empty;
+                goldLabel.style.display = DisplayStyle.None;
+            }
+        }
+        else
+        {
+            turnLabel.text = BuildTurnLabel();
+            goldLabel.style.display = DisplayStyle.Flex;
+            goldLabel.text = BuildGoldLabel();
+        }
 
         if (statusLabel == null)
         {
@@ -267,10 +287,10 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         }
 
         PbpConnectivitySnapshot connectivity = PbpConnectivityStateModel.Resolve(Application.internetReachability);
-        string opponentDisplayName = turnManager.GetCurrentPlayByPostOpponentTypedDisplayName();
-        if (string.IsNullOrWhiteSpace(opponentDisplayName))
+        string waitingPlayerDisplayName = turnManager.GetCurrentPlayByPostTurnOwnerLabelForUi();
+        if (string.IsNullOrWhiteSpace(waitingPlayerDisplayName))
         {
-            opponentDisplayName = "Opponent";
+            waitingPlayerDisplayName = "Player";
         }
 
         PbpTopHudStatusProvider.StatusResult pbpStatus =
@@ -278,7 +298,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
                 turnManager,
                 connectivity.State == PbpConnectivityState.Offline,
                 connectivity.LastKnownServerClassification,
-                opponentDisplayName);
+                waitingPlayerDisplayName);
 
         statusLabel.text = pbpStatus.Visible ? pbpStatus.Message : string.Empty;
         statusLabel.style.display = pbpStatus.Visible ? DisplayStyle.Flex : DisplayStyle.None;
@@ -392,6 +412,19 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         return $"Turn {turnManager.turnNumber} - {turnManager.GetCurrentSideName()}";
     }
 
+    private string BuildPlayByPostTurnLabel(bool hasLocalPlayByPostSeat, int localPlayByPostSeatIndex)
+    {
+        if (turnManager == null)
+        {
+            return string.Empty;
+        }
+
+        string localSeatLabel = hasLocalPlayByPostSeat
+            ? PlayByPostSeatUtility.BuildPlayerLabel(localPlayByPostSeatIndex)
+            : "Player ?";
+        return $"Turn {turnManager.turnNumber} - {localSeatLabel}";
+    }
+
     private string BuildGoldLabel()
     {
         if (turnManager == null)
@@ -400,6 +433,33 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         }
 
         return $"Gold {turnManager.GetDisplayedGoldForUi()}";
+    }
+
+    private string BuildPlayByPostGoldLabel(int localPlayByPostSeatIndex)
+    {
+        if (turnManager == null)
+        {
+            return string.Empty;
+        }
+
+        return $"Gold {turnManager.GetGoldForSeat(localPlayByPostSeatIndex)}";
+    }
+
+    private bool TryGetLocalPlayByPostSeatIndexForUi(out int localPlayByPostSeatIndex)
+    {
+        localPlayByPostSeatIndex = -1;
+        if (turnManager == null || turnManager.currentMode != TurnManager.GameMode.PlayByPost)
+        {
+            return false;
+        }
+
+        string currentGameId = turnManager.GetCurrentPlayByPostGameIdForUi();
+        if (string.IsNullOrWhiteSpace(currentGameId))
+        {
+            return false;
+        }
+
+        return LocalPlayerSeatStore.TryGetSeat(currentGameId, out localPlayByPostSeatIndex);
     }
 
     private static string FormatDurationCompact(float totalSeconds)
@@ -589,7 +649,16 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         PbpConnectivityStateModel.ObserveSubmitResult(ok, err);
         if (ok)
         {
-            ClearPbpSubmitStatusOverride();
+            string currentPbpGameId = turnManager.GetCurrentPlayByPostGameIdForUi();
+            string nextPlayerDisplayName = turnManager.GetNextPlayByPostTurnOwnerLabelForUi();
+            if (string.IsNullOrWhiteSpace(currentPbpGameId) || string.IsNullOrWhiteSpace(nextPlayerDisplayName))
+            {
+                ClearPbpSubmitStatusOverride();
+                return;
+            }
+
+            pbpSubmitStatusOverrideGameId = currentPbpGameId;
+            pbpSubmitStatusOverrideMessage = $"Waiting for {nextPlayerDisplayName}";
             return;
         }
 

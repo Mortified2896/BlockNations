@@ -36,7 +36,7 @@ public static class PbpTopHudStatusProvider
         TurnManager turnManager,
         bool isOffline = false,
         HttpTurnTransport.ServerStatusProbeClassification? serverClassification = null,
-        string opponentDisplayName = null)
+        string waitingPlayerDisplayName = null)
     {
         if (turnManager == null)
         {
@@ -57,20 +57,20 @@ public static class PbpTopHudStatusProvider
 
         string turnOwnershipText = isLocalPlayersTurn
             ? "Your turn"
-            : BuildWaitingText(opponentDisplayName);
+            : BuildWaitingText(waitingPlayerDisplayName);
 
         string message = PrependConnectivity(turnOwnershipText, isOffline, serverClassification);
         return new StatusResult(!string.IsNullOrWhiteSpace(message), message);
     }
 
-    private static string BuildWaitingText(string opponentDisplayName)
+    private static string BuildWaitingText(string waitingPlayerDisplayName)
     {
-        if (!string.IsNullOrWhiteSpace(opponentDisplayName))
+        if (!string.IsNullOrWhiteSpace(waitingPlayerDisplayName))
         {
-            return $"Waiting for {opponentDisplayName.Trim()}";
+            return $"Waiting for {waitingPlayerDisplayName.Trim()}";
         }
 
-        return "Waiting for opponent";
+        return "Waiting for player";
     }
 
     private static string PrependConnectivity(

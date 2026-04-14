@@ -234,8 +234,10 @@ public class TurnManager : MonoBehaviour
     // - Keep at most one explicit migration source at a time: the immediately previous protocol.
     private const int SupportedPbpMigrationProtocolVersion = 4;
     private const int SupportedPbpProtocolVersion = 5;
-    public const int SmallBoardWidth = 10;
-    public const int SmallBoardHeight = 10;
+    public const int SmallBoardWidth = 11;
+    public const int SmallBoardHeight = 11;
+    private const int LegacySmallBoardWidth = 10;
+    private const int LegacySmallBoardHeight = 10;
     public const int LargeBoardWidth = 15;
     public const int LargeBoardHeight = 15;
     public static int PbpProtocolVersion => SupportedPbpProtocolVersion;
@@ -319,7 +321,8 @@ public class TurnManager : MonoBehaviour
 
     public static MapSizePreset ResolveMapSizePreset(int boardWidth, int boardHeight)
     {
-        if (boardWidth == SmallBoardWidth && boardHeight == SmallBoardHeight)
+        if ((boardWidth == SmallBoardWidth && boardHeight == SmallBoardHeight) ||
+            (boardWidth == LegacySmallBoardWidth && boardHeight == LegacySmallBoardHeight))
         {
             return MapSizePreset.Small;
         }
@@ -807,7 +810,7 @@ public class TurnManager : MonoBehaviour
         OwnedSprite owned = spawnedObject.GetComponent<OwnedSprite>();
         if (owned != null)
         {
-            owned.SetOwner(ownerSeatIndex == 0);
+            owned.SetOwnerSeatIndex(ownerSeatIndex);
         }
 
         return spawnedObject;
@@ -1260,8 +1263,45 @@ public class TurnManager : MonoBehaviour
     public int GetDisplayedGoldForUi()
     {
         return currentMode == GameMode.PlayByPost
-            ? GetGoldForSeat(GetAuthoritativeCurrentTurnSeatIndex())
+            ? GetGoldForSeat(GetViewerSeatIndexForRuntime())
             : (isPlayerTurn ? playerGold : aiGold);
+    }
+
+    public string GetLocalPlayByPostSeatLabelForUi()
+    {
+        if (currentMode != GameMode.PlayByPost)
+        {
+            return GetCurrentSideName();
+        }
+
+        return PlayByPostSeatUtility.BuildPlayerLabel(GetViewerSeatIndexForRuntime());
+    }
+
+    public string GetCurrentPlayByPostTurnOwnerLabelForUi()
+    {
+        if (currentMode != GameMode.PlayByPost)
+        {
+            return GetCurrentSideName();
+        }
+
+        return PlayByPostSeatUtility.BuildPlayerLabel(GetAuthoritativeCurrentTurnSeatIndex());
+    }
+
+    public string GetNextPlayByPostTurnOwnerLabelForUi()
+    {
+        if (currentMode != GameMode.PlayByPost || string.IsNullOrWhiteSpace(currentGameId))
+        {
+            return string.Empty;
+        }
+
+        if (!TryGetLocalSeatIndexForPbp(currentGameId, out int localSeat))
+        {
+            return string.Empty;
+        }
+
+        int seatCount = GetConfiguredPlayByPostSeatCount();
+        int nextSeatIndex = (localSeat + 1) % seatCount;
+        return PlayByPostSeatUtility.BuildPlayerLabel(nextSeatIndex);
     }
 
     private void ApplyPlayByPostSeatMetadata(GameSave save)
@@ -1585,7 +1625,7 @@ public class TurnManager : MonoBehaviour
     {
         if (currentMode == GameMode.PlayByPost)
         {
-            return PlayByPostSeatUtility.BuildPlayerLabel(GetAuthoritativeCurrentTurnSeatIndex());
+            return GetLocalPlayByPostSeatLabelForUi();
         }
 
         return isPlayerTurn ? "Player" : "AI";
@@ -5403,7 +5443,7 @@ public class TurnManager : MonoBehaviour
             OwnedSprite cityOwnerVisual = capturedCity.GetComponent<OwnedSprite>();
             if (cityOwnerVisual != null)
             {
-                cityOwnerVisual.SetOwner(capturedBySeatIndex == 0);
+                cityOwnerVisual.SetOwnerSeatIndex(capturedBySeatIndex);
             }
         }
 

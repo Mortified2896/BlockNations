@@ -1,9 +1,16 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 
 public class GridManager : MonoBehaviour
 {
     public const int MinSupportedBoardSize = 2;
+    private const int StartingCityEdgeInset = 1;
+    private const string PlayByPostGameIdKeyRaw = "pbp_gameId";
+    private const string PlayByPostPerGameSaveFolderName = "pbp";
+    private const string PlayByPostPerGameSavePrefix = "pbp_";
+    private static string PlayByPostGameIdKey => DevClientInstanceScope.ScopePlayerPrefsKey(PlayByPostGameIdKeyRaw);
 
     [Header("Grid Settings")]
     public int width = 15;      // Number of tiles in X direction
@@ -21,6 +28,13 @@ public class GridManager : MonoBehaviour
 
     private float originX;
     private float originY;
+
+    [Serializable]
+    private sealed class MinimalPlayByPostHeader
+    {
+        public string mode;
+        public int seatCount = PlayByPostSeatUtility.MinSeatCount;
+    }
 
     void Start()
     {
@@ -77,16 +91,204 @@ public class GridManager : MonoBehaviour
     {
         if (cityPrefab != null)
         {
-            // Player city near bottom-left
-            SpawnCity(1, 1, true);
-
-            // AI city near top-right
-            SpawnCity(width - 2, height - 2, false);
+            int seatCount = ResolveStartingSeatCount();
+            List<Vector2Int> desiredAnchors = BuildDesiredStartingAnchors(seatCount);
+            HashSet<int> claimedTiles = new HashSet<int>();
+            for (int seatIndex = 0; seatIndex < desiredAnchors.Count; seatIndex++)
+            {
+                Vector2Int resolvedAnchor = ResolveNearestAvailableStartTile(desiredAnchors[seatIndex], claimedTiles);
+                claimedTiles.Add(FlattenTileIndex(resolvedAnchor.x, resolvedAnchor.y));
+                SpawnCity(resolvedAnchor.x, resolvedAnchor.y, seatIndex);
+            }
         }
         else
         {
             Debug.LogWarning("City prefab not assigned on GridManager, no cities spawned.");
         }
+    }
+
+    private int ResolveStartingSeatCount()
+    {
+        if (GameModeSelection.TryPeek(out TurnManager.GameMode pendingMode))
+        {
+            if (pendingMode != TurnManager.GameMode.PlayByPost)
+            {
+                return PlayByPostSeatUtility.MinSeatCount;
+            }
+
+            if (PlayByPostSeatCountSelection.TryPeek(out int pendingSeatCount))
+            {
+                return PlayByPostSeatUtility.NormalizeSeatCount(pendingSeatCount);
+            }
+        }
+
+        if (TryReadActivePlayByPostSeatCount(out int seatCount))
+        {
+            return seatCount;
+        }
+
+        return PlayByPostSeatUtility.MinSeatCount;
+    }
+
+    private bool TryReadActivePlayByPostSeatCount(out int seatCount)
+    {
+        seatCount = PlayByPostSeatUtility.MinSeatCount;
+
+        string gameId = PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty);
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            return false;
+        }
+
+        string snapshotPath = GetPlayByPostSnapshotPath(gameId);
+        if (string.IsNullOrWhiteSpace(snapshotPath) || !File.Exists(snapshotPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            string json = File.ReadAllText(snapshotPath);
+            MinimalPlayByPostHeader header = JsonUtility.FromJson<MinimalPlayByPostHeader>(json);
+            if (header == null ||
+                !string.Equals(header.mode, TurnManager.GameMode.PlayByPost.ToString(), StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            seatCount = PlayByPostSeatUtility.NormalizeSeatCount(header.seatCount);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private string GetPlayByPostSnapshotPath(string gameId)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            return null;
+        }
+
+        string safeGameId = SanitizeGameIdForFileName(gameId);
+        string directory = Path.Combine(
+            DevClientInstanceScope.GetScopedPersistentDataPath(),
+            PlayByPostPerGameSaveFolderName);
+        return Path.Combine(directory, $"{PlayByPostPerGameSavePrefix}{safeGameId}.json");
+    }
+
+    private static string SanitizeGameIdForFileName(string gameId)
+    {
+        if (string.IsNullOrEmpty(gameId))
+        {
+            return string.Empty;
+        }
+
+        char[] chars = gameId.ToCharArray();
+        char[] invalidChars = Path.GetInvalidFileNameChars();
+        for (int i = 0; i < chars.Length; i++)
+        {
+            if (Array.IndexOf(invalidChars, chars[i]) >= 0)
+            {
+                chars[i] = '_';
+            }
+        }
+
+        return new string(chars);
+    }
+
+    private List<Vector2Int> BuildDesiredStartingAnchors(int seatCount)
+    {
+        int normalizedSeatCount = PlayByPostSeatUtility.NormalizeSeatCount(seatCount);
+        int left = Mathf.Clamp(StartingCityEdgeInset, 0, Mathf.Max(0, width - 1));
+        int right = Mathf.Clamp(width - 1 - StartingCityEdgeInset, 0, Mathf.Max(0, width - 1));
+        int bottom = Mathf.Clamp(StartingCityEdgeInset, 0, Mathf.Max(0, height - 1));
+        int top = Mathf.Clamp(height - 1 - StartingCityEdgeInset, 0, Mathf.Max(0, height - 1));
+        int centerX = Mathf.Clamp(width / 2, 0, Mathf.Max(0, width - 1));
+
+        var anchors = new List<Vector2Int>(normalizedSeatCount);
+        switch (normalizedSeatCount)
+        {
+            case 3:
+                anchors.Add(new Vector2Int(centerX, bottom));
+                anchors.Add(new Vector2Int(right, top));
+                anchors.Add(new Vector2Int(left, top));
+                break;
+
+            case 4:
+                anchors.Add(new Vector2Int(left, bottom));
+                anchors.Add(new Vector2Int(right, top));
+                anchors.Add(new Vector2Int(left, top));
+                anchors.Add(new Vector2Int(right, bottom));
+                break;
+
+            default:
+                anchors.Add(new Vector2Int(left, bottom));
+                anchors.Add(new Vector2Int(right, top));
+                break;
+        }
+
+        return anchors;
+    }
+
+    private Vector2Int ResolveNearestAvailableStartTile(Vector2Int desiredAnchor, HashSet<int> claimedTiles)
+    {
+        Vector2Int clampedDesired = new Vector2Int(
+            Mathf.Clamp(desiredAnchor.x, 0, Mathf.Max(0, width - 1)),
+            Mathf.Clamp(desiredAnchor.y, 0, Mathf.Max(0, height - 1)));
+
+        bool found = false;
+        Vector2Int best = clampedDesired;
+        int bestManhattan = int.MaxValue;
+        int bestSquaredDistance = int.MaxValue;
+        int bestAbsY = int.MaxValue;
+        int bestAbsX = int.MaxValue;
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int flattened = FlattenTileIndex(x, y);
+                if (claimedTiles.Contains(flattened))
+                {
+                    continue;
+                }
+
+                int deltaX = Mathf.Abs(x - clampedDesired.x);
+                int deltaY = Mathf.Abs(y - clampedDesired.y);
+                int manhattan = deltaX + deltaY;
+                int squaredDistance = (deltaX * deltaX) + (deltaY * deltaY);
+
+                bool isBetter = !found ||
+                                manhattan < bestManhattan ||
+                                (manhattan == bestManhattan && squaredDistance < bestSquaredDistance) ||
+                                (manhattan == bestManhattan && squaredDistance == bestSquaredDistance && deltaY < bestAbsY) ||
+                                (manhattan == bestManhattan && squaredDistance == bestSquaredDistance && deltaY == bestAbsY && deltaX < bestAbsX) ||
+                                (manhattan == bestManhattan && squaredDistance == bestSquaredDistance && deltaY == bestAbsY && deltaX == bestAbsX && y < best.y) ||
+                                (manhattan == bestManhattan && squaredDistance == bestSquaredDistance && deltaY == bestAbsY && deltaX == bestAbsX && y == best.y && x < best.x);
+
+                if (!isBetter)
+                {
+                    continue;
+                }
+
+                found = true;
+                best = new Vector2Int(x, y);
+                bestManhattan = manhattan;
+                bestSquaredDistance = squaredDistance;
+                bestAbsY = deltaY;
+                bestAbsX = deltaX;
+            }
+        }
+
+        return best;
+    }
+
+    private int FlattenTileIndex(int x, int y)
+    {
+        return (y * width) + x;
     }
 
     void GenerateGrid()
@@ -128,7 +330,7 @@ public class GridManager : MonoBehaviour
         }
     }
 
-    void SpawnCity(int x, int y, bool isPlayerOwned)
+    void SpawnCity(int x, int y, int ownerSeatIndex)
     {
         if (cityPrefab == null)
         {
@@ -146,13 +348,13 @@ public class GridManager : MonoBehaviour
         );
 
         GameObject cityObject = Instantiate(cityPrefab, position, Quaternion.identity, transform);
-        cityObject.name = (isPlayerOwned ? "PlayerCity_" : "AICity_") + x + "_" + y;
+        cityObject.name = $"Seat{ownerSeatIndex + 1}City_{x}_{y}";
 
         // Set ownership and grid coordinates on the City component
         City city = cityObject.GetComponent<City>();
         if (city != null)
         {
-            city.SetOwnerSeatIndex(isPlayerOwned ? 0 : 1);
+            city.SetOwnerSeatIndex(ownerSeatIndex);
             city.x = x;
             city.y = y;
         }
@@ -161,7 +363,7 @@ public class GridManager : MonoBehaviour
         OwnedSprite owned = cityObject.GetComponent<OwnedSprite>();
         if (owned != null)
         {
-            owned.SetOwner(isPlayerOwned);
+            owned.SetOwnerSeatIndex(ownerSeatIndex);
         }
     }
 
