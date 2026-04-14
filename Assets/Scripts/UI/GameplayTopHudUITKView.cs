@@ -287,18 +287,14 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         }
 
         PbpConnectivitySnapshot connectivity = PbpConnectivityStateModel.Resolve(Application.internetReachability);
-        string waitingPlayerDisplayName = turnManager.GetCurrentPlayByPostTurnOwnerLabelForUi();
-        if (string.IsNullOrWhiteSpace(waitingPlayerDisplayName))
-        {
-            waitingPlayerDisplayName = "Player";
-        }
+        string waitingText = turnManager.GetCurrentPlayByPostWaitingTextForUi();
 
         PbpTopHudStatusProvider.StatusResult pbpStatus =
             PbpTopHudStatusProvider.Build(
                 turnManager,
                 connectivity.State == PbpConnectivityState.Offline,
                 connectivity.LastKnownServerClassification,
-                waitingPlayerDisplayName);
+                waitingText);
 
         statusLabel.text = pbpStatus.Visible ? pbpStatus.Message : string.Empty;
         statusLabel.style.display = pbpStatus.Visible ? DisplayStyle.Flex : DisplayStyle.None;

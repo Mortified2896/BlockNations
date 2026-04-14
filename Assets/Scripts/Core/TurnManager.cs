@@ -1725,6 +1725,16 @@ public class TurnManager : MonoBehaviour
         return ResolvePlayByPostTurnOwnerLabelForUi((localSeat + 1) % seatCount);
     }
 
+    public string GetCurrentPlayByPostWaitingTextForUi()
+    {
+        if (currentMode != GameMode.PlayByPost)
+        {
+            return string.Empty;
+        }
+
+        return BuildPlayByPostWaitingTextForUi(GetAuthoritativeCurrentTurnSeatIndex());
+    }
+
     private string ResolvePlayByPostTurnOwnerLabelForUi(int seatIndex)
     {
         int seatCount = GetConfiguredPlayByPostSeatCount();
@@ -1741,7 +1751,42 @@ public class TurnManager : MonoBehaviour
             waitingSeatIndex < runtimePlayByPostSeatMetadata.Count
                 ? runtimePlayByPostSeatMetadata[waitingSeatIndex].typedDisplayName
                 : null;
-        return PlayByPostSeatUtility.ResolveSeatDisplayNameOrFallback(waitingSeatIndex, typedDisplayName);
+        return ResolvePlayByPostSeatDisplayNameForUi(waitingSeatIndex, typedDisplayName);
+    }
+
+    private string BuildPlayByPostWaitingTextForUi(int seatIndex)
+    {
+        int seatCount = GetConfiguredPlayByPostSeatCount();
+        int waitingSeatIndex = PlayByPostSeatUtility.ResolveEffectiveWaitingSeatIndex(
+            runtimePlayByPostSeatMetadata,
+            seatIndex,
+            seatCount);
+        if (waitingSeatIndex < 0)
+        {
+            return "Waiting";
+        }
+
+        PlayByPostSeatMetadata waitingSeatMetadata =
+            waitingSeatIndex < runtimePlayByPostSeatMetadata.Count
+                ? runtimePlayByPostSeatMetadata[waitingSeatIndex]
+                : null;
+        string normalizedSeatState = PlayByPostSeatUtility.NormalizeSeatState(
+            waitingSeatMetadata != null ? waitingSeatMetadata.state : null);
+        if (string.Equals(normalizedSeatState, PlayByPostSeatUtility.SeatStateUnclaimed, System.StringComparison.Ordinal))
+        {
+            return $"Waiting for {PlayByPostSeatUtility.BuildPlayerLabel(waitingSeatIndex)} to join";
+        }
+
+        string typedDisplayName =
+            waitingSeatIndex < runtimePlayByPostSeatMetadata.Count
+                ? runtimePlayByPostSeatMetadata[waitingSeatIndex].typedDisplayName
+                : null;
+        return $"Waiting for {ResolvePlayByPostSeatDisplayNameForUi(waitingSeatIndex, typedDisplayName)}";
+    }
+
+    private static string ResolvePlayByPostSeatDisplayNameForUi(int seatIndex, string typedDisplayName)
+    {
+        return PlayByPostSeatUtility.ResolveSeatDisplayNameOrFallback(seatIndex, typedDisplayName);
     }
 
     private void ApplyPlayByPostSeatMetadata(GameSave save, bool refreshLocalSeatTypedDisplayName = false)
