@@ -76,7 +76,21 @@
             <ui:VisualElement class="multiplayer-action-bar">
                 <ui:Button name="CreateButton" text="Create" class="menu-button multiplayer-action-button" />
                 <ui:Button name="JoinButton" text="Join" class="menu-button multiplayer-action-button" />
+                <ui:Button name="ClearLocalPbpButton" text="Clear Local PbP" class="menu-button multiplayer-action-button" />
                 <ui:Button name="MultiplayerBackButton" text="Back" class="menu-button multiplayer-action-button" />
+            </ui:VisualElement>
+
+            <ui:VisualElement name="ClearLocalPbpConfirmOverlay" class="multiplayer-details-overlay" style="display: none;">
+                <ui:VisualElement class="multiplayer-details-card">
+                    <ui:Label text="Clear Local PbP" class="multiplayer-confirm-title" />
+                    <ui:VisualElement class="multiplayer-confirm-body-region">
+                        <ui:Label text="This only removes local active and archived PbP games on this device." class="multiplayer-confirm-body" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="multiplayer-confirm-actions">
+                        <ui:Button name="ClearLocalPbpCancelButton" text="Cancel" class="menu-button multiplayer-details-button" />
+                        <ui:Button name="ClearLocalPbpConfirmButton" text="Clear" class="menu-button multiplayer-details-button multiplayer-details-button-danger" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
             </ui:VisualElement>
         </ui:VisualElement>
 

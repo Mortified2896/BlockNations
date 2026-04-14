@@ -151,6 +151,9 @@ public class MainMenuUITKView : MonoBehaviour
     private Button generalSettingsAIVsAiTournamentSelectFullPoolButton;
     private Button generalSettingsConfirmButton;
     private Button generalSettingsBackButton;
+    private Button clearLocalPbpButton;
+    private Button clearLocalPbpConfirmButton;
+    private Button clearLocalPbpCancelButton;
     private Button detailsOpenButton;
     private Button detailsSendReminderButton;
     private Button detailsResignButton;
@@ -198,6 +201,8 @@ public class MainMenuUITKView : MonoBehaviour
     private string selectedDetailsGameId = string.Empty;
     private PendingGeneralSettingsMode pendingGeneralSettingsMode = PendingGeneralSettingsMode.None;
     private GeneralSettingsBackgroundPane generalSettingsBackgroundPane = GeneralSettingsBackgroundPane.None;
+    private VisualElement clearLocalPbpConfirmOverlay;
+    private bool clearLocalPbpConfirmVisible;
     private TurnManager.MapSizePreset selectedMapSizePreset = TurnManager.GetDefaultMapSizePreset();
     private int selectedPlayByPostPlayerCount = PlayByPostSeatUtility.MinSeatCount;
     private TurnManager.AIRecruitVariant selectedAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
@@ -469,6 +474,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAIVsAiHeadToHeadSection = root.Q<VisualElement>("GeneralSettingsAIVsAiHeadToHeadSection");
         generalSettingsAIVsAiTournamentSection = root.Q<VisualElement>("GeneralSettingsAIVsAiTournamentSection");
         generalSettingsAIVsAiTournamentParticipantPool = root.Q<VisualElement>("GeneralSettingsAIVsAiTournamentParticipantPool");
+        clearLocalPbpConfirmOverlay = root.Q<VisualElement>("ClearLocalPbpConfirmOverlay");
         activeGamesList = root.Q<ScrollView>("ActiveGamesList");
         detailsTitleLabel = root.Q<Label>("DetailsTitleLabel");
         detailsSubtitleLabel = root.Q<Label>("DetailsSubtitleLabel");
@@ -544,6 +550,9 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAIVsAiTournamentRunContinuouslyButton = root.Q<Button>("GeneralSettingsAIVsAiTournamentRunContinuouslyButton");
         generalSettingsAIVsAiTournamentSeatSwapButton = root.Q<Button>("GeneralSettingsAIVsAiTournamentSeatSwapButton");
         generalSettingsAIVsAiTournamentSelectFullPoolButton = root.Q<Button>("GeneralSettingsAIVsAiTournamentSelectFullPoolButton");
+        clearLocalPbpButton = root.Q<Button>("ClearLocalPbpButton");
+        clearLocalPbpConfirmButton = root.Q<Button>("ClearLocalPbpConfirmButton");
+        clearLocalPbpCancelButton = root.Q<Button>("ClearLocalPbpCancelButton");
         generalSettingsConfirmButton = root.Q<Button>("GeneralSettingsConfirmButton");
         generalSettingsBackButton = root.Q<Button>("GeneralSettingsBackButton");
         detailsOpenButton = root.Q<Button>("DetailsOpenButton");
@@ -1209,6 +1218,21 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsAIVsAiTournamentGamesPerPairingInput.RegisterValueChangedCallback(HandleGeneralSettingsAIVsAiTournamentGamesPerPairingChanged);
         }
 
+        if (clearLocalPbpButton != null)
+        {
+            clearLocalPbpButton.clicked += HandleClearLocalPbpClicked;
+        }
+
+        if (clearLocalPbpConfirmButton != null)
+        {
+            clearLocalPbpConfirmButton.clicked += HandleClearLocalPbpConfirmClicked;
+        }
+
+        if (clearLocalPbpCancelButton != null)
+        {
+            clearLocalPbpCancelButton.clicked += HandleClearLocalPbpCancelClicked;
+        }
+
         if (generalSettingsConfirmButton != null)
         {
             generalSettingsConfirmButton.clicked += HandleGeneralSettingsConfirmClicked;
@@ -1537,6 +1561,21 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsAIVsAiTournamentGamesPerPairingInput != null)
         {
             generalSettingsAIVsAiTournamentGamesPerPairingInput.UnregisterValueChangedCallback(HandleGeneralSettingsAIVsAiTournamentGamesPerPairingChanged);
+        }
+
+        if (clearLocalPbpButton != null)
+        {
+            clearLocalPbpButton.clicked -= HandleClearLocalPbpClicked;
+        }
+
+        if (clearLocalPbpConfirmButton != null)
+        {
+            clearLocalPbpConfirmButton.clicked -= HandleClearLocalPbpConfirmClicked;
+        }
+
+        if (clearLocalPbpCancelButton != null)
+        {
+            clearLocalPbpCancelButton.clicked -= HandleClearLocalPbpCancelClicked;
         }
 
         if (generalSettingsConfirmButton != null)
@@ -2071,6 +2110,33 @@ public class MainMenuUITKView : MonoBehaviour
         {
             HideGeneralSettingsPanel();
         }
+    }
+
+    private void HandleClearLocalPbpClicked()
+    {
+        if (!IsDevBuild())
+        {
+            return;
+        }
+
+        SetClearLocalPbpConfirmVisible(true);
+    }
+
+    private void HandleClearLocalPbpConfirmClicked()
+    {
+        if (!IsDevBuild() || mainMenuController == null)
+        {
+            return;
+        }
+
+        SetClearLocalPbpConfirmVisible(false);
+        mainMenuController.ClearAllLocalPlayByPostGames();
+        HideDetailsPanel();
+    }
+
+    private void HandleClearLocalPbpCancelClicked()
+    {
+        SetClearLocalPbpConfirmVisible(false);
     }
 
     private void HandleGeneralSettingsBackClicked()
@@ -2734,6 +2800,7 @@ public class MainMenuUITKView : MonoBehaviour
         SetDetailsConfirmState(false);
         HideDetailsPanel();
         ClearProfileStatus();
+        SetClearLocalPbpConfirmVisible(false);
         SetVisible(mainPanel, true);
         SetVisible(multiplayerPanel, false);
         SetVisible(profilePanel, false);
@@ -2760,6 +2827,7 @@ public class MainMenuUITKView : MonoBehaviour
         HideGeneralSettingsPanel();
         SetDetailsConfirmState(false);
         HideJoinPanel();
+        SetClearLocalPbpConfirmVisible(false);
         ClearProfileStatus();
         SetVisible(mainPanel, false);
         SetVisible(multiplayerPanel, true);
@@ -2780,6 +2848,7 @@ public class MainMenuUITKView : MonoBehaviour
         StartRefreshCountdownTimer();
         RefreshMultiplayerRefreshCountdown();
         TryShowPendingCreateSuccessPanel();
+        UpdateClearLocalPbpActionVisibility();
     }
 
     private void OpenMultiplayerPanelOrRedirect(bool requestControllerOpen)
@@ -2827,6 +2896,7 @@ public class MainMenuUITKView : MonoBehaviour
         HideGeneralSettingsPanel();
         HideJoinPanel();
         HideDetailsPanel();
+        SetClearLocalPbpConfirmVisible(false);
         SetVisible(mainPanel, false);
         SetVisible(multiplayerPanel, false);
         SetVisible(profilePanel, true);
@@ -3140,6 +3210,38 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         generalSettingsBackgroundPane = GeneralSettingsBackgroundPane.None;
+    }
+
+    private void UpdateClearLocalPbpActionVisibility()
+    {
+        bool visible = IsDevBuild();
+        if (clearLocalPbpButton != null)
+        {
+            clearLocalPbpButton.style.display = visible
+                ? DisplayStyle.Flex
+                : DisplayStyle.None;
+        }
+
+        if (!visible)
+        {
+            SetClearLocalPbpConfirmVisible(false);
+        }
+    }
+
+    private void SetClearLocalPbpConfirmVisible(bool visible)
+    {
+        if (clearLocalPbpConfirmVisible == visible)
+        {
+            return;
+        }
+
+        clearLocalPbpConfirmVisible = visible;
+        if (clearLocalPbpConfirmOverlay != null)
+        {
+            clearLocalPbpConfirmOverlay.style.display = visible
+                ? DisplayStyle.Flex
+                : DisplayStyle.None;
+        }
     }
 
     private void RefreshGeneralSettingsSelectionState()
@@ -4478,6 +4580,9 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAIVsAiTournamentRunContinuouslyButton = null;
         generalSettingsAIVsAiTournamentSeatSwapButton = null;
         generalSettingsAIVsAiTournamentSelectFullPoolButton = null;
+        clearLocalPbpButton = null;
+        clearLocalPbpConfirmButton = null;
+        clearLocalPbpCancelButton = null;
         generalSettingsConfirmButton = null;
         generalSettingsBackButton = null;
         detailsOpenButton = null;
@@ -4499,6 +4604,8 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAIVsAiEmergencyHardMaxGamesInput = null;
         generalSettingsAIVsAiTournamentGamesPerPairingInput = null;
         generalSettingsAIVsAiTournamentParticipantButtons.Clear();
+        clearLocalPbpConfirmOverlay = null;
+        clearLocalPbpConfirmVisible = false;
     }
 
     private void TryShowPendingCreateSuccessPanel()

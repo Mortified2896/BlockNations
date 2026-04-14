@@ -982,6 +982,63 @@ public class MainMenuController : MonoBehaviour
         RefreshMultiplayerList();
     }
 
+    public int ClearAllLocalPlayByPostGames()
+    {
+        HashSet<string> gameIds = new HashSet<string>(StringComparer.Ordinal);
+        CollectLocalPlayByPostGameIds(SaveManifestService.GetActivePlayByPostGames(), gameIds);
+        CollectLocalPlayByPostGameIds(SaveManifestService.GetArchivedPlayByPostGames(), gameIds);
+
+        if (gameIds.Count <= 0)
+        {
+            ClearSelectedPlayByPostGameSelection();
+            RefreshMultiplayerList();
+            return 0;
+        }
+
+        int clearedCount = 0;
+        foreach (string gameId in gameIds)
+        {
+            DeleteLocalPlayByPostGameData(gameId, clearActiveGameSelection: true);
+            clearedCount++;
+        }
+
+        ClearSelectedPlayByPostGameSelection();
+        RefreshMultiplayerList();
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        Debug.Log($"[MP] Cleared all local PBp games clearedCount={clearedCount}");
+#endif
+        return clearedCount;
+    }
+
+    private static void CollectLocalPlayByPostGameIds(
+        IReadOnlyList<SaveManifestService.ManifestGameSummary> summaries,
+        HashSet<string> gameIds)
+    {
+        if (summaries == null || gameIds == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < summaries.Count; i++)
+        {
+            SaveManifestService.ManifestGameSummary summary = summaries[i];
+            if (string.IsNullOrWhiteSpace(summary.gameId))
+            {
+                continue;
+            }
+
+            gameIds.Add(summary.gameId);
+        }
+    }
+
+    private void ClearSelectedPlayByPostGameSelection()
+    {
+        selectedPbpGame = default;
+        hasSelectedPbpGame = false;
+        selectedGameId = string.Empty;
+    }
+
     private IEnumerator SubmitPlayByPostResignation(
         string gameId,
         HttpTurnTransport httpTransport,
