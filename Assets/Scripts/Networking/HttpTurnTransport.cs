@@ -13,6 +13,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
     private const string ApiKeyStagingSecretRelativePath = "UserSettings/pbp-api-key.staging";
     private const string ApiKeyDefaultSecretRelativePath = "UserSettings/pbp-api-key.default";
     private const string ApiKeyProvisionedMacDevelopmentFileName = "pbp-api-key.staging";
+    private const string PbpStagingBaseUrl = "https://staging.blocknations.moneymattersmedia.com";
 
     [SerializeField]
     [Tooltip("UnityWebRequest timeout in seconds (0 = no timeout).")]
@@ -737,8 +738,8 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         }
 
         string fromEnv = NormalizeApiKeyCandidate(Environment.GetEnvironmentVariable(ApiKeyEnvVarName));
-        string fromStagingSecretFile = TryReadStagingSecretFileApiKey();
-        string fromDefaultSecretFile = TryReadApiKeyFromProjectRelativePath(ApiKeyDefaultSecretRelativePath);
+        string preferredProjectSecretRelativePath = GetPreferredProjectSecretRelativePath();
+        string fromPreferredProjectSecretFile = TryReadApiKeyFromProjectRelativePath(preferredProjectSecretRelativePath);
         string scopedPrefsKey = DevClientInstanceScope.ScopePlayerPrefsKey(ApiKeyPlayerPrefsKeyRaw);
         string fromScopedPrefs = NormalizeApiKeyCandidate(PlayerPrefs.GetString(scopedPrefsKey, string.Empty));
         string fromLegacyPrefs = NormalizeApiKeyCandidate(PlayerPrefs.GetString(ApiKeyPlayerPrefsKeyRaw, string.Empty));
@@ -753,8 +754,8 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
                 provisionedMacDevelopmentStatus,
                 usedProvisionedMacDevelopment: true,
                 fromEnv,
-                fromStagingSecretFile,
-                fromDefaultSecretFile,
+                preferredProjectSecretRelativePath,
+                fromPreferredProjectSecretFile,
                 fromScopedPrefs,
                 fromLegacyPrefs);
             return fromProvisionedMacDevelopment;
@@ -770,45 +771,28 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
                 provisionedMacDevelopmentStatus,
                 usedProvisionedMacDevelopment: false,
                 fromEnv,
-                fromStagingSecretFile,
-                fromDefaultSecretFile,
+                preferredProjectSecretRelativePath,
+                fromPreferredProjectSecretFile,
                 fromScopedPrefs,
                 fromLegacyPrefs);
             return fromEnv;
         }
 
-        if (!string.IsNullOrEmpty(fromStagingSecretFile))
+        if (!string.IsNullOrEmpty(fromPreferredProjectSecretFile))
         {
             LogApiKeyResolutionOnce(
-                $"staging secret file ({ApiKeyStagingSecretRelativePath})",
+                $"project secret file ({preferredProjectSecretRelativePath})",
                 scopedPrefsKey,
                 fromProvisionedMacDevelopment,
                 provisionedMacDevelopmentPath,
                 provisionedMacDevelopmentStatus,
                 usedProvisionedMacDevelopment: false,
                 fromEnv,
-                fromStagingSecretFile,
-                fromDefaultSecretFile,
+                preferredProjectSecretRelativePath,
+                fromPreferredProjectSecretFile,
                 fromScopedPrefs,
                 fromLegacyPrefs);
-            return fromStagingSecretFile;
-        }
-
-        if (!string.IsNullOrEmpty(fromDefaultSecretFile))
-        {
-            LogApiKeyResolutionOnce(
-                $"default secret file ({ApiKeyDefaultSecretRelativePath})",
-                scopedPrefsKey,
-                fromProvisionedMacDevelopment,
-                provisionedMacDevelopmentPath,
-                provisionedMacDevelopmentStatus,
-                usedProvisionedMacDevelopment: false,
-                fromEnv,
-                fromStagingSecretFile,
-                fromDefaultSecretFile,
-                fromScopedPrefs,
-                fromLegacyPrefs);
-            return fromDefaultSecretFile;
+            return fromPreferredProjectSecretFile;
         }
 
         if (!string.IsNullOrEmpty(fromScopedPrefs))
@@ -821,8 +805,8 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
                 provisionedMacDevelopmentStatus,
                 usedProvisionedMacDevelopment: false,
                 fromEnv,
-                fromStagingSecretFile,
-                fromDefaultSecretFile,
+                preferredProjectSecretRelativePath,
+                fromPreferredProjectSecretFile,
                 fromScopedPrefs,
                 fromLegacyPrefs);
             return fromScopedPrefs;
@@ -838,8 +822,8 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
                 provisionedMacDevelopmentStatus,
                 usedProvisionedMacDevelopment: false,
                 fromEnv,
-                fromStagingSecretFile,
-                fromDefaultSecretFile,
+                preferredProjectSecretRelativePath,
+                fromPreferredProjectSecretFile,
                 fromScopedPrefs,
                 fromLegacyPrefs);
             return fromLegacyPrefs;
@@ -853,16 +837,21 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
             provisionedMacDevelopmentStatus,
             usedProvisionedMacDevelopment: false,
             fromEnv,
-            fromStagingSecretFile,
-            fromDefaultSecretFile,
+            preferredProjectSecretRelativePath,
+            fromPreferredProjectSecretFile,
             fromScopedPrefs,
             fromLegacyPrefs);
         return string.Empty;
     }
 
-    private static string TryReadStagingSecretFileApiKey()
+    // Match the local project secret file to the configured PBp backend so live does not silently use staging auth.
+    private static string GetPreferredProjectSecretRelativePath()
     {
-        return TryReadApiKeyFromProjectRelativePath(ApiKeyStagingSecretRelativePath);
+        string configuredBaseUrl = GetConfiguredBaseUrl();
+        string normalizedStagingBaseUrl = NormalizeBaseUrl(PbpStagingBaseUrl);
+        return string.Equals(configuredBaseUrl, normalizedStagingBaseUrl, StringComparison.OrdinalIgnoreCase)
+            ? ApiKeyStagingSecretRelativePath
+            : ApiKeyDefaultSecretRelativePath;
     }
 
     private static string TryReadApiKeyFromProjectRelativePath(string relativePath)
@@ -963,6 +952,14 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         return NormalizeApiKeyCandidate(sharedSettings.releaseMobileApiKey);
     }
 
+    private static string GetConfiguredBaseUrl()
+    {
+        PbpTransportSettings sharedSettings = LoadTransportSettings();
+        return sharedSettings != null
+            ? NormalizeBaseUrl(sharedSettings.playByPostBaseUrl)
+            : null;
+    }
+
     private static string TryReadApiKeyAtAbsolutePath(
         string absolutePath,
         out string fileExists,
@@ -1047,8 +1044,8 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         string provisionedMacDevelopmentStatus,
         bool usedProvisionedMacDevelopment,
         string fromEnv,
-        string fromStagingSecretFile,
-        string fromDefaultSecretFile,
+        string preferredProjectSecretRelativePath,
+        string fromPreferredProjectSecretFile,
         string fromScopedPrefs,
         string fromLegacyPrefs)
     {
@@ -1064,8 +1061,8 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
             $"provisionedMacDev={DescribeApiKeyCandidate(fromProvisionedMacDevelopment)} " +
             $"provisionedMacDevPath={DescribeCheckedPath(provisionedMacDevelopmentPath, provisionedMacDevelopmentStatus, usedProvisionedMacDevelopment)} " +
             $"scopedKey={scopedPrefsKey} env={DescribeApiKeyCandidate(fromEnv)} " +
-            $"stagingFile={DescribeApiKeyCandidate(fromStagingSecretFile)} " +
-            $"defaultFile={DescribeApiKeyCandidate(fromDefaultSecretFile)} " +
+            $"projectFilePath={preferredProjectSecretRelativePath} " +
+            $"projectFile={DescribeApiKeyCandidate(fromPreferredProjectSecretFile)} " +
             $"scoped={DescribeApiKeyCandidate(fromScopedPrefs)} legacy={DescribeApiKeyCandidate(fromLegacyPrefs)}");
 #endif
     }
@@ -1183,8 +1180,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
         hasLoggedMissingApiKeyWarning = true;
         Debug.LogWarning(
             $"PBp API key is missing. Checked provisioned mac development app file, env var {ApiKeyEnvVarName}, " +
-            $"staging file {ApiKeyStagingSecretRelativePath}, " +
-            $"default file {ApiKeyDefaultSecretRelativePath}, " +
+            $"the project secret file selected for the configured base URL, " +
             $"scoped PlayerPrefs, and legacy PlayerPrefs.");
 #endif
     }
@@ -1225,10 +1221,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
     private string ResolveConfiguredBaseUrl()
     {
-        PbpTransportSettings sharedSettings = LoadTransportSettings();
-        return sharedSettings != null
-            ? NormalizeBaseUrl(sharedSettings.playByPostBaseUrl)
-            : null;
+        return GetConfiguredBaseUrl();
     }
 
     private static PbpTransportSettings LoadTransportSettings()

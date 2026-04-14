@@ -49,3 +49,13 @@ What the script does:
 Notes:
 - Keep live PBp data and secrets managed on the VPS.
 - Do not store `PBP_SHARED_SECRET` in Git.
+
+Unity PBp environment/auth behavior:
+- Default project behavior is live PBp. `Assets/Resources/PbpTransportSettings.asset` should point `playByPostBaseUrl` at the live server, and public mobile release builds are expected to use live.
+- Editor / normal dev path: `PBP_SHARED_SECRET` is the highest explicit override. Otherwise the project secret file is selected from the configured base URL: staging URL uses `UserSettings/pbp-api-key.staging`; live/default URL uses `UserSettings/pbp-api-key.default`. Scoped and legacy PlayerPrefs remain lower-priority local overrides.
+- macOS standalone `DEVELOPMENT_BUILD`: uses the provisioned in-app `pbp-api-key.staging` file path. This path is unchanged and separate from normal Editor behavior.
+- Non-development iOS release: uses bundled `releaseMobileApiKey` from `PbpTransportSettings.asset`.
+- Non-development Android release: uses bundled `releaseMobileApiKey` from `PbpTransportSettings.asset`.
+- `releaseMobileApiKey` is an MVP workaround for release testing convenience, not real secret security.
+- Staging is not the default. To use staging again later, set the shared PBp base URL to the staging server and make sure `UserSettings/pbp-api-key.staging` exists with the staging secret.
+- Release validation reminder: confirm the menu shows `PBp server: Live`, then verify clean-device create/join/submit on fresh installs.
