@@ -1264,6 +1264,8 @@ public class MainMenuController : MonoBehaviour
         public bool isPlayerTurn;
         public int turnNumber;
         public bool gameOver;
+        public bool hasWinnerSeatIndex;
+        public int winnerSeatIndex = -1;
         public int seatCount = PlayByPostSeatUtility.MinSeatCount;
         public int currentTurnSeatIndex;
         public int transportSeq;
@@ -2118,6 +2120,14 @@ public class MainMenuController : MonoBehaviour
         if (string.Equals(seatState, PlayByPostSeatUtility.SeatStateResigned, StringComparison.Ordinal))
         {
             string resignedDisplayName = GetSeatDisplayNameOrFallbackForMenu(header, seatIndex);
+            string resignedBaseLine = string.Equals(resignedDisplayName, seatLabel, StringComparison.Ordinal)
+                ? seatLabel
+                : $"{seatLabel}: {resignedDisplayName}";
+            if (TryGetFinishedSeatOutcomeSuffixForMenu(header, summary, seatIndex, seatState, out string resignedFinishedOutcomeSuffix))
+            {
+                return $"{resignedBaseLine} {resignedFinishedOutcomeSuffix}";
+            }
+
             return string.Equals(resignedDisplayName, seatLabel, StringComparison.Ordinal)
                 ? $"{seatLabel}: Resigned"
                 : $"{seatLabel}: {resignedDisplayName} (Resigned)";
@@ -2129,9 +2139,16 @@ public class MainMenuController : MonoBehaviour
         }
 
         string displayName = GetSeatDisplayNameOrFallbackForMenu(header, seatIndex);
-        return string.Equals(displayName, seatLabel, StringComparison.Ordinal)
+        string baseLine = string.Equals(displayName, seatLabel, StringComparison.Ordinal)
             ? seatLabel
             : $"{seatLabel}: {displayName}";
+
+        if (TryGetFinishedSeatOutcomeSuffixForMenu(header, summary, seatIndex, seatState, out string finishedOutcomeSuffix))
+        {
+            return $"{baseLine} {finishedOutcomeSuffix}";
+        }
+
+        return baseLine;
     }
 
     private bool TryResolveSeatStateForMenu(
@@ -2367,6 +2384,55 @@ public class MainMenuController : MonoBehaviour
         return TryGetSeatTypedDisplayNameForMenu(header, seatIndex, out string typedDisplayName)
             ? PlayByPostSeatUtility.ResolveSeatDisplayNameOrFallback(seatIndex, typedDisplayName)
             : PlayByPostSeatUtility.BuildPlayerLabel(seatIndex);
+    }
+
+    private static bool TryGetFinishedSeatOutcomeSuffixForMenu(
+        MinimalSaveHeader header,
+        SaveManifestService.ManifestGameSummary summary,
+        int seatIndex,
+        string resolvedSeatState,
+        out string suffix)
+    {
+        suffix = null;
+        if (!summary.isFinished && (header == null || !header.gameOver))
+        {
+            return false;
+        }
+
+        bool hasAuthoritativeWinner =
+            header != null &&
+            header.hasWinnerSeatIndex &&
+            header.winnerSeatIndex >= 0;
+        int normalizedWinnerSeatIndex = hasAuthoritativeWinner
+            ? PlayByPostSeatUtility.NormalizeSeatIndex(header.winnerSeatIndex, GetMenuSeatCount(summary, header))
+            : -1;
+
+        if (hasAuthoritativeWinner && seatIndex == normalizedWinnerSeatIndex)
+        {
+            suffix = "(Won)";
+            return true;
+        }
+
+        if (string.Equals(resolvedSeatState, PlayByPostSeatUtility.SeatStateResigned, StringComparison.Ordinal))
+        {
+            suffix = "(Resigned)";
+            return true;
+        }
+
+        if (string.Equals(resolvedSeatState, PlayByPostSeatUtility.SeatStateEliminated, StringComparison.Ordinal))
+        {
+            suffix = "(Eliminated)";
+            return true;
+        }
+
+        if (hasAuthoritativeWinner &&
+            !string.Equals(resolvedSeatState, PlayByPostSeatUtility.SeatStateUnclaimed, StringComparison.Ordinal))
+        {
+            suffix = "(Eliminated)";
+            return true;
+        }
+
+        return false;
     }
 
     private static bool TryReadLocalPbpSnapshotJson(string gameId, out string json, out MinimalSaveHeader header)

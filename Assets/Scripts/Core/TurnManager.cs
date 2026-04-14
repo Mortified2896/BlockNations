@@ -2623,6 +2623,11 @@ public class TurnManager : MonoBehaviour
 
     private bool TryConfigurePbpEndgameForWinnerSeat(int winnerSeatIndex, string debugSource)
     {
+        return TryConfigurePbpEndgameForWinnerSeat(winnerSeatIndex, debugSource, isArchivedLocally: false);
+    }
+
+    private bool TryConfigurePbpEndgameForWinnerSeat(int winnerSeatIndex, string debugSource, bool isArchivedLocally)
+    {
         SetPbpWinnerSeatIndex(winnerSeatIndex);
         if (!TryComputePbpLocalResult(winnerSeatIndex, out bool didLocalWin, out _))
         {
@@ -2647,16 +2652,27 @@ public class TurnManager : MonoBehaviour
 
         if (didLocalWin)
         {
+            if (isArchivedLocally)
+            {
+                SetGameOverPrimaryButtonState("Back", true, PbpEndgamePrimaryAction.BackToMultiplayer);
+                return true;
+            }
+
             SetGameOverPrimaryButtonState("Submitting...", false, PbpEndgamePrimaryAction.Submitting);
             TryStartPbpEndgameAutoSubmit();
             return true;
         }
 
-        SetGameOverPrimaryButtonState("Archive game", true, PbpEndgamePrimaryAction.BackAndArchive);
+        ConfigurePbpEndgamePrimaryButtonForArchiveState(isArchivedLocally);
         return true;
     }
 
     private void ConfigurePbpEndgameFallback(string debugSource)
+    {
+        ConfigurePbpEndgameFallback(debugSource, isArchivedLocally: false);
+    }
+
+    private void ConfigurePbpEndgameFallback(string debugSource, bool isArchivedLocally)
     {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         Debug.LogError(
@@ -2672,21 +2688,49 @@ public class TurnManager : MonoBehaviour
         pbpEndgameCachedTransportSeq = 0;
         pbpEndgameCachedExportTurnNumber = 0;
         pbpEndgameCachedExportIsPlayerTurn = false;
-        SetGameOverPrimaryButtonState("Archive game", true, PbpEndgamePrimaryAction.BackAndArchive);
+        ConfigurePbpEndgamePrimaryButtonForArchiveState(isArchivedLocally);
     }
 
     private void ConfigurePbpEndgameFromLoadedState()
     {
+        bool isArchivedLocally = IsCurrentPbpGameArchivedLocally();
         if (!TryGetPbpWinnerSeatIndex(out int winnerSeatIndex))
         {
-            ConfigurePbpEndgameFallback("load_missing_winner");
+            ConfigurePbpEndgameFallback("load_missing_winner", isArchivedLocally);
             return;
         }
 
-        if (!TryConfigurePbpEndgameForWinnerSeat(winnerSeatIndex, "load"))
+        if (!TryConfigurePbpEndgameForWinnerSeat(winnerSeatIndex, "load", isArchivedLocally))
         {
-            ConfigurePbpEndgameFallback("load_result_resolution_failed");
+            ConfigurePbpEndgameFallback("load_result_resolution_failed", isArchivedLocally);
         }
+    }
+
+    private void ConfigurePbpEndgamePrimaryButtonForArchiveState(bool isArchivedLocally)
+    {
+        SetGameOverPrimaryButtonState(
+            isArchivedLocally ? "Back" : "Archive game",
+            true,
+            isArchivedLocally ? PbpEndgamePrimaryAction.BackToMultiplayer : PbpEndgamePrimaryAction.BackAndArchive);
+    }
+
+    private bool IsCurrentPbpGameArchivedLocally()
+    {
+        if (string.IsNullOrWhiteSpace(currentGameId))
+        {
+            return false;
+        }
+
+        List<SaveManifestService.ManifestGameSummary> archivedGames = SaveManifestService.GetArchivedPlayByPostGames();
+        for (int i = 0; i < archivedGames.Count; i++)
+        {
+            if (string.Equals(archivedGames[i].gameId, currentGameId, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private bool TryBuildPbpEndgameSubmitPayload()
