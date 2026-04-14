@@ -266,6 +266,22 @@
     color: rgba(243, 250, 255, 0.76);
 }
 
+#MultiplayerPanel .multiplayer-game-card.multiplayer-game-card--archived {
+    background-color: rgba(120, 130, 146, 0.42);
+    border-top-color: rgba(255, 255, 255, 0.18);
+    border-right-color: rgba(255, 255, 255, 0.18);
+    border-bottom-color: rgba(0, 0, 0, 0.16);
+    border-left-color: rgba(255, 255, 255, 0.18);
+}
+
+#MultiplayerPanel .multiplayer-game-card-title.multiplayer-game-card-title--archived {
+    color: rgba(236, 240, 245, 0.86);
+}
+
+#MultiplayerPanel .multiplayer-game-card-status.multiplayer-game-card-status--archived {
+    color: rgba(236, 240, 245, 0.72);
+}
+
 #MultiplayerPanel .multiplayer-empty-state {
     flex-grow: 1;
     align-self: stretch;

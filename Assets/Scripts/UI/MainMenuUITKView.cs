@@ -35,6 +35,19 @@ public class MainMenuUITKView : MonoBehaviour
     private const float PullToRefreshTopScrollTolerance = 1f;
     private const float DetailsGameIdFontSize = 30f;
     private const int RefreshCountdownTickMs = 1000;
+    private const string ArchivedCardStatusText = "Archived";
+    private const string DetailsArchiveButtonText = "Archive game";
+    private const string DetailsDeleteLocalCopyButtonText = "Delete";
+    private const string DetailsResignButtonText = "Resign";
+    private const string ConfirmArchiveTitleText = "Archive Game";
+    private const string ConfirmArchiveBodyText = "Archive this finished game on this device? You can still delete the local copy later.";
+    private const string ConfirmArchiveAcceptText = "Archive";
+    private const string ConfirmDeleteTitleText = "Delete Local Copy";
+    private const string ConfirmDeleteBodyText = "Delete this archived game from this device? This only removes the local copy.";
+    private const string ConfirmDeleteAcceptText = "Delete";
+    private const string ConfirmResignTitleText = "Confirm Resign";
+    private const string ConfirmResignBodyText = "Are you sure you want to resign from this game?";
+    private const string ConfirmResignAcceptText = "Resign";
     private static readonly Color ProfileScreenBackgroundColor = Color.black;
 
     [Header("Trial Toggle")]
@@ -2310,7 +2323,7 @@ public class MainMenuUITKView : MonoBehaviour
     {
         if (hasSelectedGame)
         {
-            ShowResignConfirmPanel();
+            ShowDetailsPrimaryActionConfirmPanel();
         }
     }
 
@@ -2333,13 +2346,40 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HandleResignConfirmAcceptClicked()
     {
-        if (mainMenuController != null && hasSelectedGame)
+        if (mainMenuController == null || !hasSelectedGame || string.IsNullOrWhiteSpace(selectedDetailsGameId))
         {
-            mainMenuController.GameDetails_ResignLocal();
+            return;
+        }
+
+        if (!TryFindVisibleGameSummary(selectedDetailsGameId, out SaveManifestService.ManifestGameSummary summary))
+        {
             SetDetailsConfirmState(false);
             HideDetailsPanel();
             RefreshGamesList();
+            return;
         }
+
+        if (summary.isArchivedLocally)
+        {
+            mainMenuController.GameDetails_DeleteLocalCopy();
+            SetDetailsConfirmState(false);
+            HideDetailsPanel();
+            RefreshGamesList();
+            return;
+        }
+
+        if (summary.isFinished)
+        {
+            mainMenuController.GameDetails_ArchiveFinishedLocal();
+            SetDetailsConfirmState(false);
+            RefreshGamesList();
+            return;
+        }
+
+        mainMenuController.GameDetails_ResignLocal();
+        SetDetailsConfirmState(false);
+        HideDetailsPanel();
+        RefreshGamesList();
     }
 
     private void HandleDetailsGameIdClicked(ClickEvent evt)
@@ -2369,15 +2409,17 @@ public class MainMenuUITKView : MonoBehaviour
             return;
         }
 
-        IReadOnlyList<SaveManifestService.ManifestGameSummary> games = mainMenuController.ActivePbpGames;
-        bool isSingleGame = games != null && games.Count == 1;
-        bool hasMultipleGames = games != null && games.Count > 1;
+        IReadOnlyList<SaveManifestService.ManifestGameSummary> activeGames = mainMenuController.ActivePbpGames;
+        IReadOnlyList<SaveManifestService.ManifestGameSummary> archivedGames = mainMenuController.ArchivedPbpGames;
+        int totalVisibleGames = (activeGames != null ? activeGames.Count : 0) + (archivedGames != null ? archivedGames.Count : 0);
+        bool isSingleGame = totalVisibleGames == 1;
+        bool hasMultipleGames = totalVisibleGames > 1;
         activeGamesList.EnableInClassList("multiplayer-games-list--single", isSingleGame);
         activeGamesList.EnableInClassList("multiplayer-games-list--multi", hasMultipleGames);
 
-        if (games == null || games.Count == 0)
+        if (totalVisibleGames <= 0)
         {
-            AddInfoRow("No active games");
+            AddInfoRow("No games");
             RefreshMultiplayerRefreshCountdown();
             return;
         }
@@ -2387,9 +2429,9 @@ public class MainMenuUITKView : MonoBehaviour
         List<SaveManifestService.ManifestGameSummary> waitingGames = new List<SaveManifestService.ManifestGameSummary>();
         List<string> waitingSubtitles = new List<string>();
 
-        for (int i = 0; i < games.Count; i++)
+        for (int i = 0; i < activeGames.Count; i++)
         {
-            SaveManifestService.ManifestGameSummary summary = games[i];
+            SaveManifestService.ManifestGameSummary summary = activeGames[i];
             string subtitle = BuildActiveGameSubtitle(summary);
             bool isYourTurn = mainMenuController != null &&
                               mainMenuController.GetPlayByPostTurnStateKindForMenu(summary) ==
@@ -2406,30 +2448,102 @@ public class MainMenuUITKView : MonoBehaviour
             }
         }
 
-        int totalGameCount = games.Count;
         int renderedGameCount = 0;
 
         for (int i = 0; i < yourTurnGames.Count; i++)
         {
-            bool isLastGame = renderedGameCount == totalGameCount - 1;
-            activeGamesList.Add(CreateGameCard(yourTurnGames[i], yourTurnSubtitles[i], isSingleGame, isLastGame, waitingStyle: false));
+            bool isLastGame = renderedGameCount == totalVisibleGames - 1;
+            activeGamesList.Add(CreateGameCard(yourTurnGames[i], yourTurnSubtitles[i], isSingleGame, isLastGame, waitingStyle: false, archivedStyle: false));
             renderedGameCount++;
         }
 
         bool showWaitingHeader = waitingGames.Count > 0;
         if (showWaitingHeader)
         {
-            AddSectionHeader("Waiting for opponent");
+            AddSectionHeader("Waiting");
         }
 
         for (int i = 0; i < waitingGames.Count; i++)
         {
-            bool isLastGame = renderedGameCount == totalGameCount - 1;
-            activeGamesList.Add(CreateGameCard(waitingGames[i], waitingSubtitles[i], isSingleGame, isLastGame, waitingStyle: true));
+            bool isLastGame = renderedGameCount == totalVisibleGames - 1 && (archivedGames == null || archivedGames.Count == 0);
+            activeGamesList.Add(CreateGameCard(waitingGames[i], waitingSubtitles[i], isSingleGame, isLastGame, waitingStyle: true, archivedStyle: false));
             renderedGameCount++;
         }
 
+        if (archivedGames != null && archivedGames.Count > 0)
+        {
+            AddSectionHeader("Archived");
+            for (int i = 0; i < archivedGames.Count; i++)
+            {
+                bool isLastGame = renderedGameCount == totalVisibleGames - 1;
+                activeGamesList.Add(CreateGameCard(archivedGames[i], ArchivedCardStatusText, isSingleGame, isLastGame, waitingStyle: false, archivedStyle: true));
+                renderedGameCount++;
+            }
+        }
+
+        RefreshSelectedDetailsPanelFromCurrentData();
         RefreshMultiplayerRefreshCountdown();
+    }
+
+    private void RefreshSelectedDetailsPanelFromCurrentData()
+    {
+        if (!hasSelectedGame ||
+            string.IsNullOrWhiteSpace(selectedDetailsGameId) ||
+            !IsVisible(detailsPanel))
+        {
+            return;
+        }
+
+        if (!TryFindVisibleGameSummary(selectedDetailsGameId, out SaveManifestService.ManifestGameSummary summary))
+        {
+            HideDetailsPanel();
+            return;
+        }
+
+        ApplyGameDetails(summary);
+    }
+
+    private bool TryFindVisibleGameSummary(string gameId, out SaveManifestService.ManifestGameSummary summary)
+    {
+        summary = default;
+        if (mainMenuController == null || string.IsNullOrWhiteSpace(gameId))
+        {
+            return false;
+        }
+
+        IReadOnlyList<SaveManifestService.ManifestGameSummary> activeGames = mainMenuController.ActivePbpGames;
+        if (activeGames != null)
+        {
+            for (int i = 0; i < activeGames.Count; i++)
+            {
+                if (!string.Equals(activeGames[i].gameId, gameId, System.StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                summary = activeGames[i];
+                return true;
+            }
+        }
+
+        IReadOnlyList<SaveManifestService.ManifestGameSummary> archivedGames = mainMenuController.ArchivedPbpGames;
+        if (archivedGames == null)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < archivedGames.Count; i++)
+        {
+            if (!string.Equals(archivedGames[i].gameId, gameId, System.StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            summary = archivedGames[i];
+            return true;
+        }
+
+        return false;
     }
 
     private string BuildActiveGameSubtitle(SaveManifestService.ManifestGameSummary summary)
@@ -2462,6 +2576,12 @@ public class MainMenuUITKView : MonoBehaviour
             mainMenuController.SelectPlayByPostGameForUITK(summary);
         }
 
+        ApplyGameDetails(summary);
+        SetVisible(detailsPanel, true);
+    }
+
+    private void ApplyGameDetails(SaveManifestService.ManifestGameSummary summary)
+    {
         if (detailsTitleLabel != null)
         {
             detailsTitleLabel.text = BuildGameTitle(summary);
@@ -2490,7 +2610,7 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         RefreshDetailsReminderButton(summary);
-        SetVisible(detailsPanel, true);
+        RefreshDetailsPrimaryAction(summary);
     }
 
     private static string BuildGameTitle(SaveManifestService.ManifestGameSummary summary)
@@ -2541,28 +2661,56 @@ public class MainMenuUITKView : MonoBehaviour
         detailsSendReminderButton.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
     }
 
+    private void RefreshDetailsPrimaryAction(SaveManifestService.ManifestGameSummary summary)
+    {
+        if (detailsResignButton == null)
+        {
+            return;
+        }
+
+        if (summary.isArchivedLocally)
+        {
+            detailsResignButton.text = DetailsDeleteLocalCopyButtonText;
+            detailsResignButton.style.display = DisplayStyle.Flex;
+            return;
+        }
+
+        if (summary.isFinished)
+        {
+            detailsResignButton.text = DetailsArchiveButtonText;
+            detailsResignButton.style.display = DisplayStyle.Flex;
+            return;
+        }
+
+        detailsResignButton.style.display = DisplayStyle.None;
+    }
+
     private VisualElement CreateGameCard(
         SaveManifestService.ManifestGameSummary summary,
         string subtitle,
         bool isSingleGame,
         bool isLastGame,
-        bool waitingStyle)
+        bool waitingStyle,
+        bool archivedStyle)
     {
         VisualElement card = new VisualElement();
         card.AddToClassList("multiplayer-game-card");
         card.EnableInClassList("multiplayer-game-card--single", isSingleGame);
         card.EnableInClassList("multiplayer-game-card--last", isLastGame);
         card.EnableInClassList("multiplayer-game-card--waiting", waitingStyle);
+        card.EnableInClassList("multiplayer-game-card--archived", archivedStyle);
         card.RegisterCallback<ClickEvent>(_ => HandleGameRowClicked(summary));
 
         Label title = new Label(BuildGameTitle(summary));
         title.AddToClassList("multiplayer-game-card-title");
         title.EnableInClassList("multiplayer-game-card-title--waiting", waitingStyle);
+        title.EnableInClassList("multiplayer-game-card-title--archived", archivedStyle);
         card.Add(title);
 
         Label status = new Label(subtitle);
         status.AddToClassList("multiplayer-game-card-status");
         status.EnableInClassList("multiplayer-game-card-status--waiting", waitingStyle);
+        status.EnableInClassList("multiplayer-game-card-status--archived", archivedStyle);
         card.Add(status);
 
         return card;
@@ -2771,9 +2919,100 @@ public class MainMenuUITKView : MonoBehaviour
         }
     }
 
-    private void ShowResignConfirmPanel()
+    private void ShowDetailsPrimaryActionConfirmPanel()
     {
+        ConfigureDetailsConfirmPresentation();
         SetDetailsConfirmState(true);
+    }
+
+    private void ConfigureDetailsConfirmPresentation()
+    {
+        bool isArchivedGame = false;
+        bool isFinishedGame = false;
+        if (mainMenuController != null &&
+            !string.IsNullOrWhiteSpace(selectedDetailsGameId) &&
+            TryFindVisibleGameSummary(selectedDetailsGameId, out SaveManifestService.ManifestGameSummary summary))
+        {
+            isArchivedGame = summary.isArchivedLocally;
+            isFinishedGame = summary.isFinished;
+        }
+
+        Label confirmTitleLabel = detailsResignConfirmContent != null
+            ? detailsResignConfirmContent.Q<Label>(className: "multiplayer-confirm-title")
+            : null;
+        Label confirmBodyLabel = detailsResignConfirmContent != null
+            ? detailsResignConfirmContent.Q<Label>(className: "multiplayer-confirm-body")
+            : null;
+
+        if (isArchivedGame)
+        {
+            if (detailsResignButton != null)
+            {
+                detailsResignButton.text = DetailsDeleteLocalCopyButtonText;
+            }
+
+            if (confirmTitleLabel != null)
+            {
+                confirmTitleLabel.text = ConfirmDeleteTitleText;
+            }
+
+            if (confirmBodyLabel != null)
+            {
+                confirmBodyLabel.text = ConfirmDeleteBodyText;
+            }
+
+            if (resignConfirmAcceptButton != null)
+            {
+                resignConfirmAcceptButton.text = ConfirmDeleteAcceptText;
+            }
+
+            return;
+        }
+
+        if (isFinishedGame)
+        {
+            if (detailsResignButton != null)
+            {
+                detailsResignButton.text = DetailsArchiveButtonText;
+            }
+
+            if (confirmTitleLabel != null)
+            {
+                confirmTitleLabel.text = ConfirmArchiveTitleText;
+            }
+
+            if (confirmBodyLabel != null)
+            {
+                confirmBodyLabel.text = ConfirmArchiveBodyText;
+            }
+
+            if (resignConfirmAcceptButton != null)
+            {
+                resignConfirmAcceptButton.text = ConfirmArchiveAcceptText;
+            }
+
+            return;
+        }
+
+        if (detailsResignButton != null)
+        {
+            detailsResignButton.text = DetailsResignButtonText;
+        }
+
+        if (confirmTitleLabel != null)
+        {
+            confirmTitleLabel.text = ConfirmResignTitleText;
+        }
+
+        if (confirmBodyLabel != null)
+        {
+            confirmBodyLabel.text = ConfirmResignBodyText;
+        }
+
+        if (resignConfirmAcceptButton != null)
+        {
+            resignConfirmAcceptButton.text = ConfirmResignAcceptText;
+        }
     }
 
     private void SetDetailsConfirmState(bool confirmVisible)

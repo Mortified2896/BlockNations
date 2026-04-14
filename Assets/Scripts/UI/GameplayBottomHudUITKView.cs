@@ -18,6 +18,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private const string PlayByPostEndgameShareText = "Well played! Want to play again?";
     private const string SettingsButtonText = "Settings";
     private const string PbpSettingsTitleText = "Settings";
+    private const string PbpSettingsResignButtonText = "Resign";
     private const string PbpSettingsCloseButtonText = "Close";
     private const string MessageAfterTurnEndToggleLabel = "Message after Turn End";
     private const string ToggleOnText = "ON";
@@ -56,6 +57,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private VisualElement pbpSettingsOverlay;
     private Label pbpMessageAfterTurnEndLabel;
     private UnityEngine.UIElements.Button pbpMessageAfterTurnEndToggleButton;
+    private UnityEngine.UIElements.Button pbpSettingsResignButton;
     private UnityEngine.UIElements.Button pbpSettingsCloseButton;
     private VisualElement gameOverOverlay;
     private Label gameOverTitleLabel;
@@ -428,6 +430,11 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             pbpSettingsCloseButton.clicked += HandlePbpSettingsCloseClicked;
         }
 
+        if (pbpSettingsResignButton != null)
+        {
+            pbpSettingsResignButton.clicked += HandlePbpSettingsResignClicked;
+        }
+
         if (pbpMessageAfterTurnEndToggleButton != null)
         {
             pbpMessageAfterTurnEndToggleButton.clicked += HandleMessageAfterTurnEndToggleClicked;
@@ -486,6 +493,11 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         if (pbpSettingsCloseButton != null)
         {
             pbpSettingsCloseButton.clicked -= HandlePbpSettingsCloseClicked;
+        }
+
+        if (pbpSettingsResignButton != null)
+        {
+            pbpSettingsResignButton.clicked -= HandlePbpSettingsResignClicked;
         }
 
         if (pbpMessageAfterTurnEndToggleButton != null)
@@ -566,6 +578,17 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
     private void HandlePbpSettingsCloseClicked()
     {
         HidePlayByPostSettingsOverlay();
+    }
+
+    private void HandlePbpSettingsResignClicked()
+    {
+        if (turnManager == null)
+        {
+            return;
+        }
+
+        HidePlayByPostSettingsOverlay();
+        turnManager.RequestPlayByPostResignationFromSettingsForUi();
     }
 
     private void HandleMessageAfterTurnEndToggleClicked()
@@ -892,10 +915,12 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         pbpSettingsOverlay = root.Q<VisualElement>("PbpSettingsOverlay");
         pbpMessageAfterTurnEndLabel = root.Q<Label>("PbpMessageAfterTurnEndLabel");
         pbpMessageAfterTurnEndToggleButton = root.Q<UnityEngine.UIElements.Button>("PbpMessageAfterTurnEndToggleButton");
+        pbpSettingsResignButton = root.Q<UnityEngine.UIElements.Button>("PbpSettingsResignButton");
         pbpSettingsCloseButton = root.Q<UnityEngine.UIElements.Button>("PbpSettingsCloseButton");
         if (pbpSettingsOverlay != null &&
             pbpMessageAfterTurnEndLabel != null &&
             pbpMessageAfterTurnEndToggleButton != null &&
+            pbpSettingsResignButton != null &&
             pbpSettingsCloseButton != null)
         {
             RefreshPlayByPostSettingsToggleState();
@@ -1011,6 +1036,19 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         pbpMessageAfterTurnEndToggleButton.style.borderBottomLeftRadius = 39f;
         pbpMessageAfterTurnEndToggleButton.style.borderBottomRightRadius = 39f;
 
+        pbpSettingsResignButton = new UnityEngine.UIElements.Button
+        {
+            name = "PbpSettingsResignButton",
+            text = PbpSettingsResignButtonText,
+            pickingMode = PickingMode.Position
+        };
+        pbpSettingsResignButton.style.height = 78f;
+        pbpSettingsResignButton.style.fontSize = 28f;
+        pbpSettingsResignButton.style.unityFontStyleAndWeight = FontStyle.Bold;
+        pbpSettingsResignButton.style.color = Color.white;
+        pbpSettingsResignButton.style.backgroundColor = new Color(0.66f, 0.18f, 0.16f, 0.95f);
+        pbpSettingsResignButton.style.marginBottom = 20f;
+
         pbpSettingsCloseButton = new UnityEngine.UIElements.Button
         {
             name = "PbpSettingsCloseButton",
@@ -1027,6 +1065,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         settingRow.Add(pbpMessageAfterTurnEndToggleButton);
         card.Add(title);
         card.Add(settingRow);
+        card.Add(pbpSettingsResignButton);
         card.Add(pbpSettingsCloseButton);
         pbpSettingsOverlay.Add(card);
         RefreshPlayByPostSettingsToggleState();
@@ -1311,6 +1350,12 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
             pbpSettingsCloseButton.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
             pbpSettingsCloseButton.SetEnabled(enabled);
         }
+
+        if (pbpSettingsResignButton != null)
+        {
+            pbpSettingsResignButton.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
+            pbpSettingsResignButton.SetEnabled(enabled && turnManager != null && turnManager.CanUsePlayByPostResignInSettingsForUi());
+        }
     }
 
     private void RefreshPlayByPostSettingsToggleState()
@@ -1330,6 +1375,13 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         pbpMessageAfterTurnEndToggleButton.style.backgroundColor = enabled
             ? new Color(0.22f, 0.62f, 0.36f, 0.98f)
             : new Color(0.34f, 0.38f, 0.46f, 0.98f);
+
+        if (pbpSettingsResignButton != null)
+        {
+            bool showResign = turnManager != null && turnManager.ShouldShowPlayByPostResignInSettingsForUi();
+            pbpSettingsResignButton.style.display = showResign ? DisplayStyle.Flex : DisplayStyle.None;
+            pbpSettingsResignButton.SetEnabled(showResign && turnManager.CanUsePlayByPostResignInSettingsForUi());
+        }
     }
 
     private void RefreshGameOverOverlayState()
@@ -1590,6 +1642,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         pbpSettingsOverlay = null;
         pbpMessageAfterTurnEndLabel = null;
         pbpMessageAfterTurnEndToggleButton = null;
+        pbpSettingsResignButton = null;
         pbpSettingsCloseButton = null;
         gameOverOverlay = null;
         gameOverTitleLabel = null;

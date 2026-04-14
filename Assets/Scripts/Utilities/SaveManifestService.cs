@@ -35,6 +35,7 @@ public static class SaveManifestService
         public string createdUtc;
         public string lastPlayedUtc;
         public bool isFinished;
+        public bool isArchivedLocally;
         public string transportType;
         public string opponentLabel;
         public bool hasLastKnownTurnState;
@@ -54,6 +55,7 @@ public static class SaveManifestService
         public string slotType;
         public string lastPlayedUtc;
         public bool isFinished;
+        public bool isArchivedLocally;
         public string transportType;
         public bool hasLastKnownTurnState;
         public int lastKnownRoundTurn;
@@ -206,7 +208,7 @@ public static class SaveManifestService
                     continue;
 
                 Debug.Log(
-                    $"[SaveManifest] entryKey={entry.entryKey} mode={entry.mode} savePath={entry.savePath} folderPath={entry.folderPath} lastPlayedUtc={entry.lastPlayedUtc} isFinished={entry.isFinished} " +
+                    $"[SaveManifest] entryKey={entry.entryKey} mode={entry.mode} savePath={entry.savePath} folderPath={entry.folderPath} lastPlayedUtc={entry.lastPlayedUtc} isFinished={entry.isFinished} isArchivedLocally={entry.isArchivedLocally} " +
                     $"lastKnownRoundTurn={entry.lastKnownRoundTurn} lastKnownIsPlayerTurn={entry.lastKnownIsPlayerTurn} lastKnownCurrentTurnSeatIndex={entry.lastKnownCurrentTurnSeatIndex} lastKnownSeatCount={entry.lastKnownSeatCount} lastKnownTransportSeq={entry.lastKnownTransportSeq} hasLastKnownTurnState={entry.hasLastKnownTurnState}");
             }
         }
@@ -246,28 +248,39 @@ public static class SaveManifestService
                 if (!string.Equals(entry.slotType, "PlayByPost", StringComparison.Ordinal))
                     continue;
 
-                if (entry.isFinished)
+                if (entry.isFinished || entry.isArchivedLocally)
                     continue;
 
-                results.Add(new ManifestGameSummary
-                {
-                    entryKey = entry.entryKey,
-                    gameId = entry.gameId,
-                    displayName = entry.displayName,
-                    mode = entry.mode,
-                    slotType = entry.slotType,
-                    lastPlayedUtc = entry.lastPlayedUtc,
-                    isFinished = entry.isFinished,
-                    transportType = entry.transportType,
-                    hasLastKnownTurnState = entry.hasLastKnownTurnState,
-                    lastKnownRoundTurn = entry.lastKnownRoundTurn,
-                    lastKnownIsPlayerTurn = entry.lastKnownIsPlayerTurn,
-                    lastKnownCurrentTurnSeatIndex = entry.lastKnownCurrentTurnSeatIndex,
-                    lastKnownSeatCount = entry.lastKnownSeatCount > 0
-                        ? entry.lastKnownSeatCount
-                        : PlayByPostSeatUtility.MinSeatCount,
-                    lastKnownTransportSeq = entry.lastKnownTransportSeq
-                });
+                results.Add(BuildManifestGameSummary(entry));
+            }
+
+            results.Sort((a, b) => string.CompareOrdinal(b.lastPlayedUtc ?? string.Empty, a.lastPlayedUtc ?? string.Empty));
+            return results;
+        }
+    }
+
+    public static List<ManifestGameSummary> GetArchivedPlayByPostGames()
+    {
+        lock (Sync)
+        {
+            EnsureLoaded();
+            List<ManifestGameSummary> results = new List<ManifestGameSummary>();
+            if (cachedManifest == null || cachedManifest.entries == null)
+                return results;
+
+            for (int i = 0; i < cachedManifest.entries.Count; i++)
+            {
+                SaveEntry entry = cachedManifest.entries[i];
+                if (entry == null)
+                    continue;
+
+                if (!string.Equals(entry.slotType, "PlayByPost", StringComparison.Ordinal))
+                    continue;
+
+                if (!entry.isArchivedLocally)
+                    continue;
+
+                results.Add(BuildManifestGameSummary(entry));
             }
 
             results.Sort((a, b) => string.CompareOrdinal(b.lastPlayedUtc ?? string.Empty, a.lastPlayedUtc ?? string.Empty));
@@ -309,6 +322,85 @@ public static class SaveManifestService
             }
 
             if (!updated)
+                return false;
+
+            WriteManifest(cachedManifest);
+            DumpManifestToLog();
+            return true;
+        }
+    }
+
+    public static bool SetPlayByPostGameArchivedLocally(string gameId, bool isArchivedLocally)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+            return false;
+
+        lock (Sync)
+        {
+            EnsureLoaded();
+            if (cachedManifest == null || cachedManifest.entries == null)
+                return false;
+
+            bool updated = false;
+            string nowUtc = UtcNowIso();
+            for (int i = 0; i < cachedManifest.entries.Count; i++)
+            {
+                SaveEntry entry = cachedManifest.entries[i];
+                if (entry == null)
+                    continue;
+
+                if (!string.Equals(entry.slotType, "PlayByPost", StringComparison.Ordinal))
+                    continue;
+
+                if (!string.Equals(entry.gameId, gameId, StringComparison.Ordinal))
+                    continue;
+
+                if (entry.isArchivedLocally == isArchivedLocally)
+                    continue;
+
+                entry.isArchivedLocally = isArchivedLocally;
+                entry.lastPlayedUtc = nowUtc;
+                updated = true;
+            }
+
+            if (!updated)
+                return false;
+
+            WriteManifest(cachedManifest);
+            DumpManifestToLog();
+            return true;
+        }
+    }
+
+    public static bool RemovePlayByPostGame(string gameId)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+            return false;
+
+        lock (Sync)
+        {
+            EnsureLoaded();
+            if (cachedManifest == null || cachedManifest.entries == null)
+                return false;
+
+            bool removedAny = false;
+            for (int i = cachedManifest.entries.Count - 1; i >= 0; i--)
+            {
+                SaveEntry entry = cachedManifest.entries[i];
+                if (entry == null)
+                    continue;
+
+                if (!string.Equals(entry.slotType, "PlayByPost", StringComparison.Ordinal))
+                    continue;
+
+                if (!string.Equals(entry.gameId, gameId, StringComparison.Ordinal))
+                    continue;
+
+                cachedManifest.entries.RemoveAt(i);
+                removedAny = true;
+            }
+
+            if (!removedAny)
                 return false;
 
             WriteManifest(cachedManifest);
@@ -450,6 +542,30 @@ public static class SaveManifestService
             WriteManifest(cachedManifest);
             DumpManifestToLog();
         }
+    }
+
+    private static ManifestGameSummary BuildManifestGameSummary(SaveEntry entry)
+    {
+        return new ManifestGameSummary
+        {
+            entryKey = entry.entryKey,
+            gameId = entry.gameId,
+            displayName = entry.displayName,
+            mode = entry.mode,
+            slotType = entry.slotType,
+            lastPlayedUtc = entry.lastPlayedUtc,
+            isFinished = entry.isFinished,
+            isArchivedLocally = entry.isArchivedLocally,
+            transportType = entry.transportType,
+            hasLastKnownTurnState = entry.hasLastKnownTurnState,
+            lastKnownRoundTurn = entry.lastKnownRoundTurn,
+            lastKnownIsPlayerTurn = entry.lastKnownIsPlayerTurn,
+            lastKnownCurrentTurnSeatIndex = entry.lastKnownCurrentTurnSeatIndex,
+            lastKnownSeatCount = entry.lastKnownSeatCount > 0
+                ? entry.lastKnownSeatCount
+                : PlayByPostSeatUtility.MinSeatCount,
+            lastKnownTransportSeq = entry.lastKnownTransportSeq
+        };
     }
 
     private static SaveEntry FindEntry(SaveManifest manifest, string entryKey, string gameId, string folderPath)
