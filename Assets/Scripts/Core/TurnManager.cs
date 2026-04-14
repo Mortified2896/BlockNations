@@ -1703,10 +1703,13 @@ public class TurnManager : MonoBehaviour
             return GetCurrentSideName();
         }
 
-        return PlayByPostSeatUtility.BuildPlayerLabel(GetAuthoritativeCurrentTurnSeatIndex());
+        return ResolvePlayByPostTurnOwnerLabelForUi(GetAuthoritativeCurrentTurnSeatIndex());
     }
 
-    public string GetNextPlayByPostTurnOwnerLabelForUi()
+    // Used only for the post-submit HUD override before the next authoritative
+    // fetched snapshot is applied locally. This predicts the next waiting seat
+    // from the local seat handoff, then normalizes past resigned/eliminated seats.
+    public string GetPredictedPostSubmitPlayByPostTurnOwnerLabelForUi()
     {
         if (currentMode != GameMode.PlayByPost || string.IsNullOrWhiteSpace(currentGameId))
         {
@@ -1719,8 +1722,26 @@ public class TurnManager : MonoBehaviour
         }
 
         int seatCount = GetConfiguredPlayByPostSeatCount();
-        int nextSeatIndex = (localSeat + 1) % seatCount;
-        return PlayByPostSeatUtility.BuildPlayerLabel(nextSeatIndex);
+        return ResolvePlayByPostTurnOwnerLabelForUi((localSeat + 1) % seatCount);
+    }
+
+    private string ResolvePlayByPostTurnOwnerLabelForUi(int seatIndex)
+    {
+        int seatCount = GetConfiguredPlayByPostSeatCount();
+        int waitingSeatIndex = PlayByPostSeatUtility.ResolveEffectiveWaitingSeatIndex(
+            runtimePlayByPostSeatMetadata,
+            seatIndex,
+            seatCount);
+        if (waitingSeatIndex < 0)
+        {
+            return string.Empty;
+        }
+
+        string typedDisplayName =
+            waitingSeatIndex < runtimePlayByPostSeatMetadata.Count
+                ? runtimePlayByPostSeatMetadata[waitingSeatIndex].typedDisplayName
+                : null;
+        return PlayByPostSeatUtility.ResolveSeatDisplayNameOrFallback(waitingSeatIndex, typedDisplayName);
     }
 
     private void ApplyPlayByPostSeatMetadata(GameSave save, bool refreshLocalSeatTypedDisplayName = false)

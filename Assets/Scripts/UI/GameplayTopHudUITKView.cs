@@ -650,7 +650,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         if (ok)
         {
             string currentPbpGameId = turnManager.GetCurrentPlayByPostGameIdForUi();
-            string nextPlayerDisplayName = turnManager.GetNextPlayByPostTurnOwnerLabelForUi();
+            string nextPlayerDisplayName = turnManager.GetPredictedPostSubmitPlayByPostTurnOwnerLabelForUi();
             if (string.IsNullOrWhiteSpace(currentPbpGameId) || string.IsNullOrWhiteSpace(nextPlayerDisplayName))
             {
                 ClearPbpSubmitStatusOverride();

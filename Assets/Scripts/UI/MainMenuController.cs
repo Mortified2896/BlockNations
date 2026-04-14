@@ -1821,24 +1821,20 @@ public class MainMenuController : MonoBehaviour
         int seatCount = GetMenuSeatCount(summary, localHeader);
         if (seatCount > 2)
         {
-            if (turnState.CurrentTurnSeatIndex < 0)
+            int waitingSeatIndex = ResolveEffectiveWaitingSeatIndexForMenu(localHeader, turnState, seatCount);
+            if (waitingSeatIndex < 0)
             {
                 return turnState.Kind == PlayByPostMenuTurnStateKind.YourTurn
                     ? "Your turn"
                     : "Waiting";
             }
 
-            string waitingSeatLabel = GetSeatDisplayNameOrFallbackForMenu(localHeader, turnState.CurrentTurnSeatIndex);
-            if (TryResolveSeatStateForMenu(localHeader, summary, turnState, turnState.CurrentTurnSeatIndex, out string waitingSeatState))
+            string waitingSeatLabel = GetSeatDisplayNameOrFallbackForMenu(localHeader, waitingSeatIndex);
+            if (TryResolveSeatStateForMenu(localHeader, summary, turnState, waitingSeatIndex, out string waitingSeatState))
             {
                 if (string.Equals(waitingSeatState, PlayByPostSeatUtility.SeatStateUnclaimed, StringComparison.Ordinal))
                 {
-                    return $"Waiting for {PlayByPostSeatUtility.BuildPlayerLabel(turnState.CurrentTurnSeatIndex)} to join";
-                }
-
-                if (string.Equals(waitingSeatState, PlayByPostSeatUtility.SeatStateResigned, StringComparison.Ordinal))
-                {
-                    return "Waiting";
+                    return $"Waiting for {PlayByPostSeatUtility.BuildPlayerLabel(waitingSeatIndex)} to join";
                 }
             }
 
@@ -2022,25 +2018,21 @@ public class MainMenuController : MonoBehaviour
                 return "Your turn";
 
             default:
-                if (turnState.CurrentTurnSeatIndex < 0)
+                int waitingSeatIndex = ResolveEffectiveWaitingSeatIndexForMenu(header, turnState, GetMenuSeatCount(summary, header));
+                if (waitingSeatIndex < 0)
                 {
                     return "Waiting";
                 }
 
-                if (TryResolveSeatStateForMenu(header, summary, turnState, turnState.CurrentTurnSeatIndex, out string waitingSeatState))
+                if (TryResolveSeatStateForMenu(header, summary, turnState, waitingSeatIndex, out string waitingSeatState))
                 {
                     if (string.Equals(waitingSeatState, PlayByPostSeatUtility.SeatStateUnclaimed, StringComparison.Ordinal))
                     {
-                        return $"Waiting for {PlayByPostSeatUtility.BuildPlayerLabel(turnState.CurrentTurnSeatIndex)} to join";
-                    }
-
-                    if (string.Equals(waitingSeatState, PlayByPostSeatUtility.SeatStateResigned, StringComparison.Ordinal))
-                    {
-                        return "Waiting";
+                        return $"Waiting for {PlayByPostSeatUtility.BuildPlayerLabel(waitingSeatIndex)} to join";
                     }
                 }
 
-                return $"Waiting for {GetSeatDisplayNameOrFallbackForMenu(header, turnState.CurrentTurnSeatIndex)}";
+                return $"Waiting for {GetSeatDisplayNameOrFallbackForMenu(header, waitingSeatIndex)}";
         }
     }
 
@@ -2125,7 +2117,10 @@ public class MainMenuController : MonoBehaviour
 
         if (string.Equals(seatState, PlayByPostSeatUtility.SeatStateResigned, StringComparison.Ordinal))
         {
-            return $"{seatLabel}: Resigned";
+            string resignedDisplayName = GetSeatDisplayNameOrFallbackForMenu(header, seatIndex);
+            return string.Equals(resignedDisplayName, seatLabel, StringComparison.Ordinal)
+                ? $"{seatLabel}: Resigned"
+                : $"{seatLabel}: {resignedDisplayName} (Resigned)";
         }
 
         if (string.Equals(seatState, PlayByPostSeatUtility.SeatStateUnclaimed, StringComparison.Ordinal))
@@ -2210,6 +2205,17 @@ public class MainMenuController : MonoBehaviour
             ? PlayByPostSeatUtility.SeatStateActive
             : PlayByPostSeatUtility.SeatStateUnclaimed;
         return true;
+    }
+
+    private static int ResolveEffectiveWaitingSeatIndexForMenu(
+        MinimalSaveHeader header,
+        PlayByPostMenuTurnStateResult turnState,
+        int seatCount)
+    {
+        return PlayByPostSeatUtility.ResolveEffectiveWaitingSeatIndex(
+            header != null ? header.seats : null,
+            turnState.CurrentTurnSeatIndex,
+            seatCount);
     }
 
     private int GetMenuKnownTransportSeq(

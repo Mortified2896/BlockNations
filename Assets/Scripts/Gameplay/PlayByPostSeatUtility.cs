@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 [Serializable]
@@ -66,5 +67,49 @@ public static class PlayByPostSeatUtility
         return string.IsNullOrWhiteSpace(normalized)
             ? BuildPlayerLabel(seatIndex)
             : normalized;
+    }
+
+    public static bool IsSeatEligibleForTurnProgression(PlayByPostSeatMetadata seatMetadata)
+    {
+        string normalizedState = NormalizeSeatState(seatMetadata != null ? seatMetadata.state : null);
+        return !string.Equals(normalizedState, SeatStateResigned, StringComparison.Ordinal) &&
+               !string.Equals(normalizedState, SeatStateEliminated, StringComparison.Ordinal);
+    }
+
+    public static int ResolveEffectiveWaitingSeatIndex(
+        IReadOnlyList<PlayByPostSeatMetadata> seats,
+        int currentTurnSeatIndex,
+        int seatCount)
+    {
+        if (currentTurnSeatIndex < 0)
+        {
+            return -1;
+        }
+
+        int normalizedSeatCount = NormalizeSeatCount(seatCount);
+        int normalizedCurrentSeatIndex = NormalizeSeatIndex(currentTurnSeatIndex, normalizedSeatCount);
+        PlayByPostSeatMetadata currentSeatMetadata =
+            seats != null && normalizedCurrentSeatIndex < seats.Count
+                ? seats[normalizedCurrentSeatIndex]
+                : null;
+        if (IsSeatEligibleForTurnProgression(currentSeatMetadata))
+        {
+            return normalizedCurrentSeatIndex;
+        }
+
+        for (int step = 1; step <= normalizedSeatCount; step++)
+        {
+            int candidateSeatIndex = (normalizedCurrentSeatIndex + step) % normalizedSeatCount;
+            PlayByPostSeatMetadata candidateSeatMetadata =
+                seats != null && candidateSeatIndex < seats.Count
+                    ? seats[candidateSeatIndex]
+                    : null;
+            if (IsSeatEligibleForTurnProgression(candidateSeatMetadata))
+            {
+                return candidateSeatIndex;
+            }
+        }
+
+        return normalizedCurrentSeatIndex;
     }
 }
