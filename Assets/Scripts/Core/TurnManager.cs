@@ -2724,7 +2724,7 @@ public class TurnManager : MonoBehaviour
         List<SaveManifestService.ManifestGameSummary> archivedGames = SaveManifestService.GetArchivedPlayByPostGames();
         for (int i = 0; i < archivedGames.Count; i++)
         {
-            if (string.Equals(archivedGames[i].gameId, currentGameId, StringComparison.Ordinal))
+            if (string.Equals(archivedGames[i].gameId, currentGameId, System.StringComparison.Ordinal))
             {
                 return true;
             }

@@ -12,4 +12,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 96c0d0f74daf4e859e1634f73e4e2c92, type: 3}
   m_Name: PbpTransportSettings
   m_EditorClassIdentifier: Assembly-CSharp::PbpTransportSettings
-  playByPostBaseUrl: https://staging.blocknations.moneymattersmedia.com
+  playByPostBaseUrl: https://blocknations.moneymattersmedia.com
+  releaseMobileApiKey: wlrwnDxyIynqTumpdywh_5_5bfIj1wf7RndV_2toTPw

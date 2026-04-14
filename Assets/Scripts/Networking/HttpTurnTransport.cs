@@ -705,6 +705,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
             out provisionedMacDevelopmentEmpty,
             out provisionedMacDevelopmentStatus);
         bool selectedProvisionedMacDevelopment = !string.IsNullOrEmpty(fromProvisionedMacDevelopment);
+        string fromConfiguredMobileRelease = GetConfiguredReleaseMobileApiKey();
 
         if (ShouldUseProvisionedMacDevelopmentApiKeyOnly())
         {
@@ -727,6 +728,12 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
                 provisionedMacDevelopmentEmpty,
                 provisionedMacDevelopmentStatus);
             return string.Empty;
+        }
+
+        if (ShouldPreferConfiguredReleaseMobileApiKey() &&
+            !string.IsNullOrEmpty(fromConfiguredMobileRelease))
+        {
+            return fromConfiguredMobileRelease;
         }
 
         string fromEnv = NormalizeApiKeyCandidate(Environment.GetEnvironmentVariable(ApiKeyEnvVarName));
@@ -934,6 +941,26 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 #else
         return false;
 #endif
+    }
+
+    private static bool ShouldPreferConfiguredReleaseMobileApiKey()
+    {
+#if !UNITY_EDITOR && !DEVELOPMENT_BUILD && (UNITY_IOS || UNITY_ANDROID)
+        return true;
+#else
+        return false;
+#endif
+    }
+
+    private static string GetConfiguredReleaseMobileApiKey()
+    {
+        PbpTransportSettings sharedSettings = LoadTransportSettings();
+        if (sharedSettings == null)
+        {
+            return string.Empty;
+        }
+
+        return NormalizeApiKeyCandidate(sharedSettings.releaseMobileApiKey);
     }
 
     private static string TryReadApiKeyAtAbsolutePath(
@@ -1198,10 +1225,15 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
     private string ResolveConfiguredBaseUrl()
     {
-        PbpTransportSettings sharedSettings = Resources.Load<PbpTransportSettings>("PbpTransportSettings");
+        PbpTransportSettings sharedSettings = LoadTransportSettings();
         return sharedSettings != null
             ? NormalizeBaseUrl(sharedSettings.playByPostBaseUrl)
             : null;
+    }
+
+    private static PbpTransportSettings LoadTransportSettings()
+    {
+        return Resources.Load<PbpTransportSettings>("PbpTransportSettings");
     }
 
     private string BuildUrl(string path)
