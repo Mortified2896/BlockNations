@@ -7,8 +7,11 @@ using UnityEngine;
 
 public sealed class MacDevelopmentPbpSecretProvisionPostProcess : IPostprocessBuildWithReport
 {
-    private const string SourceSecretRelativePath = "UserSettings/pbp-api-key.staging";
+    private const string StagingSecretRelativePath = "UserSettings/pbp-api-key.staging";
+    private const string DefaultSecretRelativePath = "UserSettings/pbp-api-key.default";
     private const string ProvisionedSecretFileName = "pbp-api-key.staging";
+    private const string TransportSettingsResourcePath = "PbpTransportSettings";
+    private const string PbpStagingBaseUrl = "https://staging.blocknations.moneymattersmedia.com";
 
     public int callbackOrder => 1000;
 
@@ -24,18 +27,13 @@ public sealed class MacDevelopmentPbpSecretProvisionPostProcess : IPostprocessBu
             return;
         }
 
-        if ((report.summary.options & BuildOptions.Development) == 0)
-        {
-            return;
-        }
-
-        string sourcePath = GetProjectRelativePath(SourceSecretRelativePath);
+        string sourcePath = GetProjectRelativePath(ResolveSourceSecretRelativePath());
         string destinationPath = GetProvisionedSecretPath(report.summary.outputPath);
         if (string.IsNullOrWhiteSpace(sourcePath) || string.IsNullOrWhiteSpace(destinationPath))
         {
             DeleteProvisionedSecretIfPresent(destinationPath);
             Debug.LogError(
-                $"PBp Mac DEVELOPMENT_BUILD secret provisioning failed: sourcePath={sourcePath} " +
+                $"PBp Mac standalone secret provisioning failed: sourcePath={sourcePath} " +
                 $"destinationPath={destinationPath} exists=unknown empty=unknown value=missing status=path-resolution-failed");
             return;
         }
@@ -46,7 +44,7 @@ public sealed class MacDevelopmentPbpSecretProvisionPostProcess : IPostprocessBu
             {
                 DeleteProvisionedSecretIfPresent(destinationPath);
                 Debug.LogError(
-                    $"PBp Mac DEVELOPMENT_BUILD secret provisioning failed: sourcePath={sourcePath} " +
+                    $"PBp Mac standalone secret provisioning failed: sourcePath={sourcePath} " +
                     $"destinationPath={destinationPath} exists=false empty=unknown value=missing");
                 return;
             }
@@ -57,7 +55,7 @@ public sealed class MacDevelopmentPbpSecretProvisionPostProcess : IPostprocessBu
             {
                 DeleteProvisionedSecretIfPresent(destinationPath);
                 Debug.LogError(
-                    $"PBp Mac DEVELOPMENT_BUILD secret provisioning failed: sourcePath={sourcePath} " +
+                    $"PBp Mac standalone secret provisioning failed: sourcePath={sourcePath} " +
                     $"destinationPath={destinationPath} exists=true empty=true value=missing");
                 return;
             }
@@ -67,7 +65,7 @@ public sealed class MacDevelopmentPbpSecretProvisionPostProcess : IPostprocessBu
             {
                 DeleteProvisionedSecretIfPresent(destinationPath);
                 Debug.LogError(
-                    $"PBp Mac DEVELOPMENT_BUILD secret provisioning failed: sourcePath={sourcePath} " +
+                    $"PBp Mac standalone secret provisioning failed: sourcePath={sourcePath} " +
                     $"destinationPath={destinationPath} exists=unknown empty=unknown value=missing status=destination-directory-missing");
                 return;
             }
@@ -79,13 +77,13 @@ public sealed class MacDevelopmentPbpSecretProvisionPostProcess : IPostprocessBu
             {
                 DeleteProvisionedSecretIfPresent(destinationPath);
                 Debug.LogError(
-                    $"PBp Mac DEVELOPMENT_BUILD secret provisioning failed: sourcePath={sourcePath} " +
+                    $"PBp Mac standalone secret provisioning failed: sourcePath={sourcePath} " +
                     $"destinationPath={destinationPath} exists=true empty=true value=missing status=copy-produced-empty-file");
                 return;
             }
 
             Debug.Log(
-                $"PBp Mac DEVELOPMENT_BUILD secret provisioned: sourcePath={sourcePath} " +
+                $"PBp Mac standalone secret provisioned: sourcePath={sourcePath} " +
                 $"destinationPath={destinationPath} exists={File.Exists(destinationPath)} " +
                 $"empty={string.IsNullOrEmpty(provisioned)} value={DescribeSecretCandidate(provisioned)}");
         }
@@ -93,7 +91,7 @@ public sealed class MacDevelopmentPbpSecretProvisionPostProcess : IPostprocessBu
         {
             DeleteProvisionedSecretIfPresent(destinationPath);
             Debug.LogError(
-                $"PBp Mac DEVELOPMENT_BUILD secret provisioning failed: sourcePath={sourcePath} destinationPath={destinationPath} " +
+                $"PBp Mac standalone secret provisioning failed: sourcePath={sourcePath} destinationPath={destinationPath} " +
                 $"exceptionType={ex.GetType().Name} message={ex.Message}");
         }
     }
@@ -116,6 +114,16 @@ public sealed class MacDevelopmentPbpSecretProvisionPostProcess : IPostprocessBu
         }
     }
 
+    private static string ResolveSourceSecretRelativePath()
+    {
+        PbpTransportSettings settings = Resources.Load<PbpTransportSettings>(TransportSettingsResourcePath);
+        string configuredBaseUrl = NormalizeBaseUrl(settings != null ? settings.playByPostBaseUrl : string.Empty);
+        string normalizedStagingBaseUrl = NormalizeBaseUrl(PbpStagingBaseUrl);
+        return string.Equals(configuredBaseUrl, normalizedStagingBaseUrl, StringComparison.OrdinalIgnoreCase)
+            ? StagingSecretRelativePath
+            : DefaultSecretRelativePath;
+    }
+
     private static string GetProvisionedSecretPath(string appBundlePath)
     {
         if (string.IsNullOrWhiteSpace(appBundlePath))
@@ -124,6 +132,22 @@ public sealed class MacDevelopmentPbpSecretProvisionPostProcess : IPostprocessBu
         }
 
         return Path.Combine(appBundlePath, "Contents", "Resources", ProvisionedSecretFileName);
+    }
+
+    private static string NormalizeBaseUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return string.Empty;
+        }
+
+        string trimmed = url.Trim();
+        while (trimmed.EndsWith("/", StringComparison.Ordinal))
+        {
+            trimmed = trimmed.Substring(0, trimmed.Length - 1);
+        }
+
+        return trimmed;
     }
 
     private static void DeleteProvisionedSecretIfPresent(string path)

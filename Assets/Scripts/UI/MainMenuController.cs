@@ -392,7 +392,7 @@ public class MainMenuController : MonoBehaviour
         if (!isLandscape && Screen.height >= 1200)
             return;
 
-        VerticalLayoutGroup[] groups = UnityEngine.Object.FindObjectsByType<VerticalLayoutGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        VerticalLayoutGroup[] groups = UnityEngine.Object.FindObjectsByType<VerticalLayoutGroup>(FindObjectsInactive.Include);
         VerticalLayoutGroup best = null;
         int bestActiveButtons = 0;
 
@@ -1565,7 +1565,7 @@ public class MainMenuController : MonoBehaviour
     {
         if (cachedHttpTransport == null)
         {
-            cachedHttpTransport = UnityEngine.Object.FindFirstObjectByType<HttpTurnTransport>();
+            cachedHttpTransport = UnityEngine.Object.FindAnyObjectByType<HttpTurnTransport>();
         }
     }
 
@@ -1747,7 +1747,7 @@ public class MainMenuController : MonoBehaviour
         HttpTurnTransport httpTransport = cachedHttpTransport;
         if (httpTransport == null)
         {
-            cachedHttpTransport = httpTransport = UnityEngine.Object.FindFirstObjectByType<HttpTurnTransport>();
+            cachedHttpTransport = httpTransport = UnityEngine.Object.FindAnyObjectByType<HttpTurnTransport>();
         }
 
         if (httpTransport == null)
