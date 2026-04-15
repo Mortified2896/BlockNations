@@ -348,6 +348,7 @@ public class TurnManager : MonoBehaviour
                 localSeat,
                 profile.PlayerId,
                 profile.TypedDisplayName,
+                goldPerCity,
                 out string resignedJson,
                 out int exportTurnNumber,
                 out bool exportIsPlayerTurn,
@@ -7782,7 +7783,7 @@ public class TurnManager : MonoBehaviour
         return clampedRoundTurn * normalizedSeatCount + normalizedSeatIndex;
     }
 
-    private int ResolveAIGoldIncome(int baseIncome, int roundTurnNumber)
+    private static int ResolveAIGoldIncome(int baseIncome, int roundTurnNumber)
     {
         return Mathf.Max(0, baseIncome);
     }
@@ -8555,17 +8556,15 @@ private void PBpDebugSyncNow_Context()
 
     /// <summary>
     /// Mutates the given save so that it represents the start
-    /// of the next side's turn for Play-by-Post exports.
+    /// of the next side's turn for a Play-by-Post snapshot.
     /// </summary>
-    private void PreparePlayByPostNextTurnSnapshot(GameSave save)
+    private static void AdvancePlayByPostSnapshotToNextTurn(
+        GameSave save,
+        List<PlayByPostSeatMetadata> normalizedSeats,
+        int seatCount,
+        int activeSeatIndex,
+        int goldPerCity)
     {
-        int seatCount = PlayByPostSeatUtility.NormalizeSeatCount(save.seatCount);
-        int activeSeatIndex = ResolveCurrentTurnSeatIndex(save, seatCount);
-        List<PlayByPostSeatMetadata> normalizedSeats = BuildNormalizedPlayByPostSeatMetadata(
-            save.seats,
-            seatCount,
-            save.playerOneTypedDisplayName,
-            save.playerTwoTypedDisplayName);
         ResolveAdvancedPlayByPostTurnState(
             save,
             normalizedSeats,
@@ -8590,7 +8589,6 @@ private void PBpDebugSyncNow_Context()
 
         if (save.gameOver)
         {
-            ApplyPlayByPostSeatMetadata(save, refreshLocalSeatTypedDisplayName: true);
             return;
         }
 
@@ -8635,6 +8633,23 @@ private void PBpDebugSyncNow_Context()
 
         save.playerGold = save.seatGold.Count > 0 ? save.seatGold[0] : 0;
         save.aiGold = save.seatGold.Count > 1 ? save.seatGold[1] : 0;
+    }
+
+    private void PreparePlayByPostNextTurnSnapshot(GameSave save)
+    {
+        int seatCount = PlayByPostSeatUtility.NormalizeSeatCount(save.seatCount);
+        int activeSeatIndex = ResolveCurrentTurnSeatIndex(save, seatCount);
+        List<PlayByPostSeatMetadata> normalizedSeats = BuildNormalizedPlayByPostSeatMetadata(
+            save.seats,
+            seatCount,
+            save.playerOneTypedDisplayName,
+            save.playerTwoTypedDisplayName);
+        AdvancePlayByPostSnapshotToNextTurn(
+            save,
+            normalizedSeats,
+            seatCount,
+            activeSeatIndex,
+            goldPerCity);
         ApplyPlayByPostSeatMetadata(save, refreshLocalSeatTypedDisplayName: true);
     }
 
@@ -8644,6 +8659,37 @@ private void PBpDebugSyncNow_Context()
         int localSeatIndex,
         string claimedPlayerId,
         string typedDisplayName,
+        out string resignedJson,
+        out int exportTurnNumber,
+        out bool exportIsPlayerTurn,
+        out int exportCurrentTurnSeatIndex,
+        out int exportTransportSeq,
+        out int exportSeatCount,
+        out bool exportGameOver)
+    {
+        return TryBuildPlayByPostResignationJson(
+            json,
+            expectedGameId,
+            localSeatIndex,
+            claimedPlayerId,
+            typedDisplayName,
+            1,
+            out resignedJson,
+            out exportTurnNumber,
+            out exportIsPlayerTurn,
+            out exportCurrentTurnSeatIndex,
+            out exportTransportSeq,
+            out exportSeatCount,
+            out exportGameOver);
+    }
+
+    public static bool TryBuildPlayByPostResignationJson(
+        string json,
+        string expectedGameId,
+        int localSeatIndex,
+        string claimedPlayerId,
+        string typedDisplayName,
+        int goldPerCity,
         out string resignedJson,
         out int exportTurnNumber,
         out bool exportIsPlayerTurn,
@@ -8733,15 +8779,12 @@ private void PBpDebugSyncNow_Context()
             localSeat.typedDisplayName = normalizedTypedDisplayName;
         }
 
-        ResolveAdvancedPlayByPostTurnState(
+        AdvancePlayByPostSnapshotToNextTurn(
             save,
             normalizedSeats,
             seatCount,
             activeSeatIndex,
-            out int nextSeatIndex,
-            out int nextTurnNumber,
-            out _,
-            out int eligibleSeatCount);
+            goldPerCity);
 
         save.seatCount = seatCount;
         save.seats = normalizedSeats;
@@ -8751,10 +8794,6 @@ private void PBpDebugSyncNow_Context()
         save.playerTwoTypedDisplayName = normalizedSeats.Count > 1
             ? NormalizeTypedDisplayNameMetadataValue(normalizedSeats[1].typedDisplayName)
             : null;
-        save.currentTurnSeatIndex = nextSeatIndex;
-        save.isPlayerTurn = nextSeatIndex == 0;
-        save.turnNumber = nextTurnNumber;
-        save.gameOver = eligibleSeatCount <= 1;
         save.hasWinnerSeatIndex = false;
         save.winnerSeatIndex = -1;
         if (save.gameOver)
