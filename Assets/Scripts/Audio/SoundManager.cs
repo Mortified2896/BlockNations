@@ -92,7 +92,6 @@ public class SoundManager : MonoBehaviour
             DontDestroyOnLoad(gameObject);
         }
 
-        EnsureSources();
     }
 
     void EnsureSources()
@@ -123,6 +122,8 @@ public class SoundManager : MonoBehaviour
 
     AudioSource GetSource(AudioSource preferred)
     {
+        EnsureSources();
+
         if (preferred != null)
         {
             return preferred;

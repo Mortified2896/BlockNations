@@ -1748,6 +1748,7 @@ public class MainMenuController : MonoBehaviour
         if (httpTransport == null)
         {
             cachedHttpTransport = httpTransport = UnityEngine.Object.FindAnyObjectByType<HttpTurnTransport>();
+
         }
 
         if (httpTransport == null)
