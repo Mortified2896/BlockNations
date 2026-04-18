@@ -81,6 +81,11 @@ UI work policy
 - For MVP PBp display metadata, prefer latest locally known snapshot/header data over widening lightweight polling or server payloads unless live freshness is explicitly required
 - Preserve requested wording exactly for text/copy changes unless a technical or layout issue makes that impossible
 - Current PBp playtesting rule: keep the random username generator implemented but hidden in the Profile panel, and require a manually entered recognizable typed name before entering Multiplayer
+- For menu-pane screenshots, use the custom screenshot tool in `Assets/Editor/TakeScreenshotMenu.cs`, not Unity camera capture
+- Menu screenshots require Play Mode with the Game view active/visible
+- After changing panes, allow a short settle delay before triggering the screenshot
+- Menu screenshots save into the project-local `Screenshots` folder
+- Capture panes one at a time and verify each file before moving on
 
 Default behavior when writing a Codex prompt
 - Outside the copy-paste box:

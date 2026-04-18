@@ -43,6 +43,7 @@ GeneratedAssets_deleted/
 data/PlayByPost/Turns/
 data/PlayByPost/Turns/**
 data/PlayByPost/Turns/**/*.json
+Screenshots/
 node_modules/
 Library/
 Temp/
