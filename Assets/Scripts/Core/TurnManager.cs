@@ -4953,7 +4953,7 @@ public class TurnManager : MonoBehaviour
 
         if (chosenCandidate.requiresAttack)
         {
-            MoveAIUnitOneStep(unit, chosenCandidate.targetPosition, tileSize, aiHasPerfectInfo);
+            MoveAIUnitOneStep(unit, chosenCandidate.targetPosition, tileSize, visibleTiles, aiHasPerfectInfo);
             return gameOver;
         }
 
@@ -5601,7 +5601,7 @@ public class TurnManager : MonoBehaviour
             return;
         }
 
-        if (TryAttackVisibleEnemyFromCurrentPosition(unit, visibleEnemyUnits))
+        if (TryAttackVisibleEnemyFromCurrentPosition(unit, visibleTiles))
         {
             return;
         }
@@ -5624,7 +5624,7 @@ public class TurnManager : MonoBehaviour
         int maxBaselineMoveActions = unitTypeId == UnitRegistry.RiderTypeId ? Mathf.Max(1, unit.GetRemainingMoveRangeThisTurn()) : 1;
         for (int moveIndex = 0; moveIndex < maxBaselineMoveActions && unit.CanMoveThisTurn(); moveIndex++)
         {
-            if (TryAttackVisibleEnemyFromCurrentPosition(unit, visibleEnemyUnits))
+            if (TryAttackVisibleEnemyFromCurrentPosition(unit, visibleTiles))
             {
                 return;
             }
@@ -5637,7 +5637,7 @@ public class TurnManager : MonoBehaviour
 
             Vector3 startPosition = unit.transform.position;
             int attacksUsedBeforeMove = unit.attacksUsedThisTurn;
-            MoveAIUnitOneStep(unit, chosenTarget.Value, tileSize, aiHasPerfectInfo);
+            MoveAIUnitOneStep(unit, chosenTarget.Value, tileSize, visibleTiles, aiHasPerfectInfo);
             if (gameOver)
                 return;
 
@@ -5731,7 +5731,7 @@ public class TurnManager : MonoBehaviour
                     Unit occupant = GridUtils.GetUnitAtPosition(targetPosition, unit);
                     if (occupant == null)
                     {
-                        MoveAIUnitOneStep(unit, targetPosition, tileSize, aiHasPerfectInfo);
+                        MoveAIUnitOneStep(unit, targetPosition, tileSize, visibleTiles, aiHasPerfectInfo);
                     }
                     else if (occupant.ownerSeatIndex == unit.ownerSeatIndex)
                     {
@@ -5750,14 +5750,15 @@ public class TurnManager : MonoBehaviour
         return isOnProtectedCity;
     }
 
-    private bool TryAttackVisibleEnemyFromCurrentPosition(Unit unit, List<Unit> visibleEnemyUnits)
+    private bool TryAttackVisibleEnemyFromCurrentPosition(Unit unit, HashSet<TileVisibility> visibleTiles)
     {
-        if (unit == null || visibleEnemyUnits == null || !unit.CanAttackThisTurn() || gridManager == null)
+        if (unit == null || !unit.CanAttackThisTurn() || gridManager == null)
         {
             return false;
         }
 
-        Unit bestEnemy = SelectBestLocalAttackTarget(unit, visibleEnemyUnits);
+        List<Unit> legalAttackTargets = GetLegalAIUnitAttackTargets(unit, visibleTiles);
+        Unit bestEnemy = SelectBestLocalAttackTarget(unit, legalAttackTargets);
         if (bestEnemy == null)
         {
             return false;
@@ -5781,6 +5782,48 @@ public class TurnManager : MonoBehaviour
         }
 
         return true;
+    }
+
+    private List<LegalTurnAction> GetLegalAIUnitActions(Unit unit, HashSet<TileVisibility> visibleTiles)
+    {
+        if (unit == null)
+        {
+            return new List<LegalTurnAction>();
+        }
+
+        return LegalActionService.GetLegalActionsForUnit(this, unit, unit.ownerSeatIndex, visibleTiles);
+    }
+
+    private List<Unit> GetLegalAIUnitAttackTargets(Unit unit, HashSet<TileVisibility> visibleTiles)
+    {
+        List<LegalTurnAction> legalActions = GetLegalAIUnitActions(unit, visibleTiles);
+        List<Unit> targets = new List<Unit>();
+        for (int i = 0; i < legalActions.Count; i++)
+        {
+            LegalTurnAction action = legalActions[i];
+            if (action.ActionType == LegalActionType.UnitAttack && action.TargetUnit != null)
+            {
+                targets.Add(action.TargetUnit);
+            }
+        }
+
+        return targets;
+    }
+
+    private List<LegalTurnAction> GetLegalAIUnitMoveActions(Unit unit, HashSet<TileVisibility> visibleTiles)
+    {
+        List<LegalTurnAction> legalActions = GetLegalAIUnitActions(unit, visibleTiles);
+        List<LegalTurnAction> moveActions = new List<LegalTurnAction>();
+        for (int i = 0; i < legalActions.Count; i++)
+        {
+            LegalTurnAction action = legalActions[i];
+            if (action.ActionType == LegalActionType.UnitMove && action.TargetTile != null)
+            {
+                moveActions.Add(action);
+            }
+        }
+
+        return moveActions;
     }
 
     private List<Vector3> BuildUnitPositionList(List<Unit> units)
@@ -5840,46 +5883,19 @@ public class TurnManager : MonoBehaviour
         if (delta.sqrMagnitude < 0.01f)
             return;
 
-        List<Vector3> candidatePositions = new List<Vector3>(8);
-        float primaryStepX = Mathf.Abs(delta.x) > 0.1f ? Mathf.Sign(delta.x) * tileSize : 0f;
-        float primaryStepY = Mathf.Abs(delta.y) > 0.1f ? Mathf.Sign(delta.y) * tileSize : 0f;
-        Vector3 primaryCandidate = new Vector3(from.x + primaryStepX, from.y + primaryStepY, from.z);
-        candidatePositions.Add(primaryCandidate);
-
-        for (int ox = -1; ox <= 1; ox++)
-        {
-            for (int oy = -1; oy <= 1; oy++)
-            {
-                if (ox == 0 && oy == 0)
-                    continue;
-
-                Vector3 alternateCandidate = from + new Vector3(ox * tileSize, oy * tileSize, 0f);
-                bool alreadyAdded = false;
-                for (int index = 0; index < candidatePositions.Count; index++)
-                {
-                    if ((candidatePositions[index] - alternateCandidate).sqrMagnitude < 0.0001f)
-                    {
-                        alreadyAdded = true;
-                        break;
-                    }
-                }
-
-                if (!alreadyAdded)
-                {
-                    candidatePositions.Add(alternateCandidate);
-                }
-            }
-        }
-
+        List<LegalTurnAction> legalMoveActions = GetLegalAIUnitMoveActions(unit, visibleTiles);
         List<AIPostCalculusLocalDecisionHelper.MoveCandidate> candidates =
-            new List<AIPostCalculusLocalDecisionHelper.MoveCandidate>(candidatePositions.Count);
+            new List<AIPostCalculusLocalDecisionHelper.MoveCandidate>(legalMoveActions.Count);
         AILocalDecisionFeatures enabledFeatures = GetAILocalDecisionFeaturesForSide(unit.isPlayerOwned);
-        for (int i = 0; i < candidatePositions.Count; i++)
+        for (int i = 0; i < legalMoveActions.Count; i++)
         {
-            Vector3 candidatePosition = candidatePositions[i];
-            if (!gridManager.TryGetTileAtWorldPosition(candidatePosition, out TileVisibility candidateTile) || candidateTile == null)
+            LegalTurnAction moveAction = legalMoveActions[i];
+            TileVisibility candidateTile = moveAction.TargetTile;
+            if (candidateTile == null)
                 continue;
 
+            Vector3 candidatePosition = candidateTile.transform.position;
+            candidatePosition.z = unit.transform.position.z;
             Unit occupyingUnit = GridUtils.GetUnitAtPosition(candidatePosition, unit);
             if (occupyingUnit != null)
                 continue;
@@ -5928,7 +5944,12 @@ public class TurnManager : MonoBehaviour
         }
     }
 
-    void MoveAIUnitOneStep(Unit unit, Vector3 targetPosition, float tileSize, bool aiHasPerfectInfo = false)
+    void MoveAIUnitOneStep(
+        Unit unit,
+        Vector3 targetPosition,
+        float tileSize,
+        HashSet<TileVisibility> aiVisibleTiles,
+        bool aiHasPerfectInfo = false)
     {
         if (!unit.CanMoveThisTurn())
             return;
@@ -5958,13 +5979,6 @@ public class TurnManager : MonoBehaviour
         if (move.sqrMagnitude < 0.01f)
             return;
 
-        // If the unit was stationed in a city, clear that link when it moves away
-        if (unit.currentCity != null)
-        {
-            unit.currentCity.stationedUnit = null;
-            unit.currentCity = null;
-        }
-
         Vector3 newPos = from + move;
         newPos.z = from.z;
 
@@ -5980,6 +5994,29 @@ public class TurnManager : MonoBehaviour
             if (!unit.CanAttackThisTurn() || unit.AttackRange > 1)
             {
                 return;
+            }
+
+            bool hasLegalAttack = false;
+            List<LegalTurnAction> legalActions = GetLegalAIUnitActions(unit, aiVisibleTiles);
+            for (int i = 0; i < legalActions.Count; i++)
+            {
+                LegalTurnAction action = legalActions[i];
+                if (action.ActionType == LegalActionType.UnitAttack && action.TargetUnit == targetUnit)
+                {
+                    hasLegalAttack = true;
+                    break;
+                }
+            }
+
+            if (!hasLegalAttack)
+            {
+                return;
+            }
+
+            if (unit.currentCity != null)
+            {
+                unit.currentCity.stationedUnit = null;
+                unit.currentCity = null;
             }
 
             // Enemy: attack
@@ -5999,6 +6036,33 @@ public class TurnManager : MonoBehaviour
         }
         else
         {
+            bool hasLegalMove = false;
+            List<LegalTurnAction> legalMoveActions = GetLegalAIUnitMoveActions(unit, aiVisibleTiles);
+            for (int i = 0; i < legalMoveActions.Count; i++)
+            {
+                LegalTurnAction action = legalMoveActions[i];
+                Vector3 legalTargetPosition = action.TargetTile.transform.position;
+                legalTargetPosition.z = newPos.z;
+                if ((legalTargetPosition - newPos).sqrMagnitude < 0.0001f)
+                {
+                    newPos = legalTargetPosition;
+                    hasLegalMove = true;
+                    break;
+                }
+            }
+
+            if (!hasLegalMove)
+            {
+                return;
+            }
+
+            // If the unit was stationed in a city, clear that link when it moves away.
+            if (unit.currentCity != null)
+            {
+                unit.currentCity.stationedUnit = null;
+                unit.currentCity = null;
+            }
+
             // Empty tile: move normally
             unit.transform.position = newPos;
             unit.RegisterMove();
@@ -6013,13 +6077,8 @@ public class TurnManager : MonoBehaviour
         // look for an enemy within attack range (move-then-attack).
         if (unit.CanAttackThisTurn())
         {
-            IList<Unit> perceivedEnemyUnits = aiHasPerfectInfo
-                ? (IList<Unit>)Object.FindObjectsByType<Unit>()
-                : BuildPerceivedEnemyUnitsForSide(
-                    unit.isPlayerOwned,
-                    ComputeVisibilityForSide(unit.isPlayerOwned),
-                    aiHasPerfectInfo: false);
-            Unit bestEnemy = SelectBestLocalAttackTarget(unit, perceivedEnemyUnits);
+            List<Unit> legalAttackTargets = GetLegalAIUnitAttackTargets(unit, aiVisibleTiles);
+            Unit bestEnemy = SelectBestLocalAttackTarget(unit, legalAttackTargets);
 
             if (bestEnemy != null)
             {
