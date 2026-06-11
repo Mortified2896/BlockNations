@@ -5303,19 +5303,31 @@ public class TurnManager : MonoBehaviour
         City primaryControlledCity = FindPrimaryControlledCity(allCities, actingSideIsPlayerOwned);
 
         // 1) Recruit from each controlled city (one unit per city per turn, if the city is empty)
+        int actingSeatIndex = actingSideIsPlayerOwned ? 0 : 1;
+        Dictionary<City, List<LegalTurnAction>> legalRecruitActionsByCity = BuildLegalAIRecruitActionsByCity(
+            actingSeatIndex,
+            aiVisibleTiles);
         foreach (City city in allCities)
         {
             if (city == null)
                 continue;
 
-            if (city.isPlayerOwned == actingSideIsPlayerOwned && city.CanRecruit())
+            if (city.ownerSeatIndex == actingSeatIndex &&
+                legalRecruitActionsByCity.TryGetValue(city, out List<LegalTurnAction> legalRecruitActions) &&
+                legalRecruitActions.Count > 0)
             {
-                if (TryRecruitVariantOverride(city))
+                if (TryRecruitVariantOverride(city, legalRecruitActions, GetAIRecruitVariantForSide(actingSideIsPlayerOwned)))
                 {
                 }
                 else
                 {
-                    TryRecruitBaselineUnit(city, actingSideIsPlayerOwned, allCities, unitsBeforeRecruitment, aiVisibleTiles);
+                    TryRecruitBaselineUnit(
+                        city,
+                        actingSeatIndex,
+                        allCities,
+                        unitsBeforeRecruitment,
+                        aiVisibleTiles,
+                        legalRecruitActions);
                 }
             }
         }
@@ -5414,12 +5426,42 @@ public class TurnManager : MonoBehaviour
         }
     }
 
+    private Dictionary<City, List<LegalTurnAction>> BuildLegalAIRecruitActionsByCity(
+        int actingSeatIndex,
+        HashSet<TileVisibility> aiVisibleTiles)
+    {
+        Dictionary<City, List<LegalTurnAction>> legalRecruitActionsByCity = new Dictionary<City, List<LegalTurnAction>>();
+        List<LegalTurnAction> legalActions = LegalActionService.GetLegalActionsForSeat(this, actingSeatIndex, aiVisibleTiles);
+        for (int i = 0; i < legalActions.Count; i++)
+        {
+            LegalTurnAction action = legalActions[i];
+            if (action.ActionType != LegalActionType.CityRecruit ||
+                action.SeatIndex != actingSeatIndex ||
+                action.City == null ||
+                string.IsNullOrEmpty(action.RecruitUnitTypeId))
+            {
+                continue;
+            }
+
+            if (!legalRecruitActionsByCity.TryGetValue(action.City, out List<LegalTurnAction> cityActions))
+            {
+                cityActions = new List<LegalTurnAction>();
+                legalRecruitActionsByCity.Add(action.City, cityActions);
+            }
+
+            cityActions.Add(action);
+        }
+
+        return legalRecruitActionsByCity;
+    }
+
     private void TryRecruitBaselineUnit(
         City city,
-        bool actingSideIsPlayerOwned,
+        int actingSeatIndex,
         City[] allCities,
         Unit[] existingUnits,
-        HashSet<TileVisibility> aiVisibleTiles)
+        HashSet<TileVisibility> aiVisibleTiles,
+        List<LegalTurnAction> legalRecruitActions)
     {
         if (city == null)
             return;
@@ -5433,7 +5475,7 @@ public class TurnManager : MonoBehaviour
         for (int i = 0; i < allCities.Length; i++)
         {
             City otherCity = allCities[i];
-            if (otherCity != null && otherCity.isPlayerOwned == actingSideIsPlayerOwned)
+            if (otherCity != null && otherCity.ownerSeatIndex == actingSeatIndex)
             {
                 controlledCityCount++;
             }
@@ -5442,7 +5484,7 @@ public class TurnManager : MonoBehaviour
         for (int i = 0; i < existingUnits.Length; i++)
         {
             Unit existingUnit = existingUnits[i];
-            if (existingUnit == null || existingUnit.isPlayerOwned != actingSideIsPlayerOwned)
+            if (existingUnit == null || existingUnit.ownerSeatIndex != actingSeatIndex)
                 continue;
 
             switch (existingUnit.UnitTypeId)
@@ -5468,7 +5510,7 @@ public class TurnManager : MonoBehaviour
             for (int i = 0; i < existingUnits.Length; i++)
             {
                 Unit enemyUnit = existingUnits[i];
-                if (enemyUnit == null || enemyUnit.isPlayerOwned == actingSideIsPlayerOwned)
+                if (enemyUnit == null || enemyUnit.ownerSeatIndex == actingSeatIndex)
                     continue;
 
                 if (aiVisibleTiles == null || aiVisibleTiles.Count == 0)
@@ -5559,21 +5601,49 @@ public class TurnManager : MonoBehaviour
 
         for (int i = 0; i < recruitPriority.Count; i++)
         {
-            if (city.TrySpawnUnit(recruitPriority[i]))
+            if (HasLegalRecruitActionForUnitType(legalRecruitActions, recruitPriority[i]) &&
+                city.TrySpawnUnit(recruitPriority[i]))
             {
                 return;
             }
         }
     }
 
-    private bool TryRecruitVariantOverride(City city)
+    private bool TryRecruitVariantOverride(
+        City city,
+        List<LegalTurnAction> legalRecruitActions,
+        AIRecruitVariant recruitVariant)
     {
-        if (city == null || GetAIRecruitVariantForSide(city.isPlayerOwned) != AIRecruitVariant.RiderFocus)
+        if (city == null || recruitVariant != AIRecruitVariant.RiderFocus)
         {
             return false;
         }
 
-        return city.TrySpawnUnit(UnitRegistry.RiderTypeId);
+        return HasLegalRecruitActionForUnitType(legalRecruitActions, UnitRegistry.RiderTypeId) &&
+               city.TrySpawnUnit(UnitRegistry.RiderTypeId);
+    }
+
+    private static bool HasLegalRecruitActionForUnitType(
+        List<LegalTurnAction> legalRecruitActions,
+        string unitTypeId)
+    {
+        if (legalRecruitActions == null || string.IsNullOrEmpty(unitTypeId))
+        {
+            return false;
+        }
+
+        for (int i = 0; i < legalRecruitActions.Count; i++)
+        {
+            if (string.Equals(
+                legalRecruitActions[i].RecruitUnitTypeId,
+                unitTypeId,
+                System.StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void ExecuteBaselineUnitTurn(
