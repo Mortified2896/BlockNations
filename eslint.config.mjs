@@ -12,7 +12,7 @@ export default defineConfig([
   },
   { files: ["**/*.js"], languageOptions: { sourceType: "commonjs" } },
   {
-    files: ["server.js"],
+    files: ["server.js", "server.prod.js"],
     languageOptions: {
       sourceType: "commonjs",
       globals: {

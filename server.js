@@ -528,7 +528,7 @@ async function readLatestTurnSnapshot(gameId) {
   const latestSeq = seqs[seqs.length - 1];
   const latestPath = path.join(gameDir, `turn_${latestSeq}.json`);
   const json = await fsp.readFile(latestPath, "utf8");
-  let snapshot = null;
+  let snapshot;
   try {
     snapshot = JSON.parse(json);
   } catch (err) {

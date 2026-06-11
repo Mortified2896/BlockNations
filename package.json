@@ -4,6 +4,8 @@
   "private": true,
   "main": "server.js",
   "scripts": {
+    "check": "npm run lint && node --check server.js && node --check server.prod.js",
+    "lint": "eslint server.js server.prod.js",
     "start": "node server.js"
   },
   "dependencies": {
