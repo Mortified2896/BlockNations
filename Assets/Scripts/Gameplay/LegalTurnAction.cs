@@ -3,7 +3,9 @@ using System.Collections.Generic;
 public enum LegalActionType
 {
     UnitMove,
-    UnitAttack
+    UnitAttack,
+    CityRecruit,
+    EndTurn
 }
 
 public enum LegalActionVisibilityMode
@@ -20,7 +22,10 @@ public readonly struct LegalTurnAction
         TileVisibility originTile,
         TileVisibility targetTile,
         Unit targetUnit,
-        IReadOnlyList<TileVisibility> path)
+        IReadOnlyList<TileVisibility> path,
+        City city = null,
+        string recruitUnitTypeId = null,
+        int recruitCost = 0)
     {
         ActionType = actionType;
         SeatIndex = seatIndex;
@@ -29,6 +34,9 @@ public readonly struct LegalTurnAction
         TargetTile = targetTile;
         TargetUnit = targetUnit;
         Path = path;
+        City = city;
+        RecruitUnitTypeId = recruitUnitTypeId;
+        RecruitCost = recruitCost;
     }
 
     public LegalActionType ActionType { get; }
@@ -38,4 +46,7 @@ public readonly struct LegalTurnAction
     public TileVisibility TargetTile { get; }
     public Unit TargetUnit { get; }
     public IReadOnlyList<TileVisibility> Path { get; }
+    public City City { get; }
+    public string RecruitUnitTypeId { get; }
+    public int RecruitCost { get; }
 }
