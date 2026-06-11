@@ -73,6 +73,7 @@ Keep these separate:
 
 Important:
 - `isPlayerTurn` is NOT a POV signal in PBp; it is turn-side only
+- Future AI/legal-action code must be seat-based. Use explicit `seatIndex`, `currentTurnSeatIndex`, `IsTurnOwnedBySeat(int)`, and `ownerSeatIndex`; do not use `isPlayerTurn`, `isPlayerOwned`, `IsHumanTurn`, `CanControlUnit`, or `CanLocalPlayerIssueCommands()` as AI/legal-action legality inputs.
 
 UI work policy
 - If UI requires new buttons/labels/panels: describe what to add and where to wire it, but do not auto-wire via hacks

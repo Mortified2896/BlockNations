@@ -72,7 +72,10 @@ public class TurnManager : MonoBehaviour
     public GameMode currentMode = GameMode.None;
 
     [Header("Turn State")]
+    // Legacy two-side bridge for VsAI, save/load, manifests, and PBp compatibility.
+    // New seat-based systems should use currentTurnSeatIndex/GetCurrentTurnSeatIndexForRuntime instead.
     public bool isPlayerTurn = true;
+    // Authoritative runtime turn owner. Keep this as seat ownership, separate from local viewer/input readiness.
     public int currentTurnSeatIndex = 0;
     public int turnNumber = 1;
     public bool gameOver = false;
@@ -1469,6 +1472,24 @@ public class TurnManager : MonoBehaviour
             : (isPlayerTurn ? 0 : 1);
     }
 
+    /// <summary>
+    /// Returns the canonical current turn owner for runtime systems.
+    /// This is pure turn ownership and does not imply local command/input readiness.
+    /// </summary>
+    public int GetCurrentTurnSeatIndexForRuntime()
+    {
+        return GetAuthoritativeCurrentTurnSeatIndex();
+    }
+
+    /// <summary>
+    /// Pure seat-ownership check for the active turn. Use this for future AI/legal-action enumeration.
+    /// </summary>
+    public bool IsTurnOwnedBySeat(int seatIndex)
+    {
+        int normalizedSeatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(seatIndex, GetRuntimeSeatCount());
+        return GetCurrentTurnSeatIndexForRuntime() == normalizedSeatIndex;
+    }
+
     public int GetViewerSeatIndexForRuntime()
     {
         if (currentMode == GameMode.PlayByPost)
@@ -1664,6 +1685,8 @@ public class TurnManager : MonoBehaviour
 
     public bool IsCurrentSideOwner(int ownerSeatIndex)
     {
+        // Legacy/input-facing gate. In PBp this also depends on local command readiness,
+        // so future AI/legal-action enumeration should use IsTurnOwnedBySeat instead.
         if (currentMode == GameMode.PlayByPost)
         {
             return CanLocalPlayerIssueCommands() &&
@@ -1942,6 +1965,7 @@ public class TurnManager : MonoBehaviour
 
     public bool IsCurrentSideOwner(bool isPlayerOwned)
     {
+        // Legacy/input-facing two-side bridge. Future seat-based systems should use explicit seat indices.
         if (currentMode == GameMode.PlayByPost)
         {
             if (!TryGetLocalSeatIndexForPbp(currentGameId, out int localSeat))
@@ -1957,6 +1981,7 @@ public class TurnManager : MonoBehaviour
 
     public bool CanLocalPlayerIssueCommands()
     {
+        // Local human command gate only. Do not use this as an AI/legal-action legality helper.
         if (currentMode != GameMode.PlayByPost)
             return true;
 
