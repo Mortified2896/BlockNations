@@ -61,6 +61,10 @@ public class UnitSelectionManager : MonoBehaviour
         TileHighlighter[] tiles = Object.FindObjectsByType<TileHighlighter>(FindObjectsSortMode.None);
         bool canMove = unit.CanMoveThisTurn();
         bool canAttack = unit.CanAttackThisTurn();
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        HashSet<TileVisibility> debugMoveHighlights = LegalActionDebugComparer.Enabled ? new HashSet<TileVisibility>() : null;
+        HashSet<TileVisibility> debugAttackHighlights = LegalActionDebugComparer.Enabled ? new HashSet<TileVisibility>() : null;
+#endif
 
         foreach (TileHighlighter tile in tiles)
         {
@@ -81,12 +85,22 @@ public class UnitSelectionManager : MonoBehaviour
                 unit.IsTargetInAttackRange(stepDistance))
             {
                 tile.SetAttackable(true);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                debugAttackHighlights?.Add(targetTile);
+#endif
             }
             else if (!hasVisibleOccupant && canMove && reachablePaths.ContainsKey(targetTile))
             {
                 tile.SetReachable(true);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                debugMoveHighlights?.Add(targetTile);
+#endif
             }
         }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        LegalActionDebugComparer.CompareUnitHighlights(turnManager, unit, debugMoveHighlights, debugAttackHighlights);
+#endif
     }
 
     public Unit SelectedUnit => selectedUnit;
