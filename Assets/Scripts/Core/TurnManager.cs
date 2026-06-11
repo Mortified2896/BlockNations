@@ -4891,7 +4891,7 @@ public class TurnManager : MonoBehaviour
         for (int cityIndex = 0; cityIndex < allCities.Length; cityIndex++)
         {
             City city = allCities[cityIndex];
-            if (city == null || city.isPlayerOwned == unit.isPlayerOwned)
+            if (city == null || city.ownerSeatIndex == unit.ownerSeatIndex)
             {
                 continue;
             }
@@ -4957,23 +4957,50 @@ public class TurnManager : MonoBehaviour
             return gameOver;
         }
 
-        return TryExecuteImmediateEmptyCityCapture(unit, chosenCandidate.targetPosition);
+        return TryExecuteImmediateEmptyCityCaptureFromLegalMove(unit, chosenCandidate.targetPosition, visibleTiles);
     }
 
-    private bool TryExecuteImmediateEmptyCityCapture(Unit unit, Vector3 targetPosition)
+    private bool TryExecuteImmediateEmptyCityCaptureFromLegalMove(
+        Unit unit,
+        Vector3 targetPosition,
+        HashSet<TileVisibility> visibleTiles)
     {
-        if (unit == null || !unit.CanMoveThisTurn())
+        if (unit == null || !unit.CanMoveThisTurn() || gridManager == null)
         {
             return false;
         }
 
         City targetCity = GridUtils.GetCityAtPosition(targetPosition);
-        if (targetCity == null || targetCity.isPlayerOwned == unit.isPlayerOwned)
+        if (targetCity == null || targetCity.ownerSeatIndex == unit.ownerSeatIndex)
         {
             return false;
         }
 
-        Unit occupyingUnit = GridUtils.GetUnitAtPosition(targetPosition, unit);
+        LegalTurnAction? legalCaptureMove = null;
+        List<LegalTurnAction> legalMoveActions = GetLegalAIUnitMoveActions(unit, visibleTiles);
+        for (int i = 0; i < legalMoveActions.Count; i++)
+        {
+            LegalTurnAction moveAction = legalMoveActions[i];
+            TileVisibility targetTile = moveAction.TargetTile;
+            if (targetTile == null ||
+                targetTile.gridX != targetCity.x ||
+                targetTile.gridY != targetCity.y)
+            {
+                continue;
+            }
+
+            legalCaptureMove = moveAction;
+            break;
+        }
+
+        if (!legalCaptureMove.HasValue)
+        {
+            return false;
+        }
+
+        Vector3 destination = legalCaptureMove.Value.TargetTile.transform.position;
+        destination.z = unit.transform.position.z;
+        Unit occupyingUnit = GridUtils.GetUnitAtPosition(destination, unit);
         if (occupyingUnit != null)
         {
             return false;
@@ -4985,8 +5012,6 @@ public class TurnManager : MonoBehaviour
             unit.currentCity = null;
         }
 
-        Vector3 destination = targetPosition;
-        destination.z = unit.transform.position.z;
         unit.transform.position = destination;
         unit.RegisterMove();
 
