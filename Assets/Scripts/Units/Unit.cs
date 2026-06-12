@@ -240,7 +240,6 @@ public class Unit : MonoBehaviour
 
         if (mitigatedDamageUnits <= 0)
         {
-            Debug.Log(name + " attacked " + target.name + " but did no damage.");
             return false;
         }
 
@@ -251,9 +250,6 @@ public class Unit : MonoBehaviour
         }
 
         target.SetCurrentHealthUnits(target.currentHealthUnits - mitigatedDamageUnits);
-        Debug.Log(
-            name + " attacked " + target.name + " for " + CombatValues.FormatUnits(mitigatedDamageUnits) +
-            " damage. Target HP: " + CombatValues.FormatRatio(target.currentHealthUnits, target.maxHealthUnits));
 
         if (target.currentHealthUnits <= 0)
         {
@@ -279,8 +275,6 @@ public class Unit : MonoBehaviour
                 currentCity.stationedUnit = null;
             }
         }
-
-        Debug.Log(name + " has died.");
 
         if (healthLabel == null)
         {

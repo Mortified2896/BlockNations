@@ -79,6 +79,7 @@ public class TurnManager : MonoBehaviour
     public int currentTurnSeatIndex = 0;
     public int turnNumber = 1;
     public bool gameOver = false;
+    private bool isExecutingTacticalCityCapturePlan;
 
     [Header("Economy")]
     // Base starting gold; income from cities adds on top at game start.
@@ -5481,33 +5482,42 @@ public class TurnManager : MonoBehaviour
             return false;
         }
 
-        for (int i = 0; i < plan.Steps.Count; i++)
+        bool wasExecutingTacticalCityCapturePlan = isExecutingTacticalCityCapturePlan;
+        isExecutingTacticalCityCapturePlan = true;
+        try
         {
-            AICityCaptureTacticalPlanner.PlanStep step = plan.Steps[i];
-            if (step.Unit == null || !step.Unit.gameObject.activeInHierarchy)
+            for (int i = 0; i < plan.Steps.Count; i++)
             {
-                Debug.LogWarning($"[AI Tactics] Aborting city capture plan; step {i + 1} unit is no longer available. {plan.Summary}");
-                return false;
+                AICityCaptureTacticalPlanner.PlanStep step = plan.Steps[i];
+                if (step.Unit == null || !step.Unit.gameObject.activeInHierarchy)
+                {
+                    Debug.LogWarning($"[AI Tactics] Aborting city capture plan; step {i + 1} unit is no longer available. {plan.Summary}");
+                    return false;
+                }
+
+                bool executed = step.StepType == AICityCaptureTacticalPlanner.StepType.Move
+                    ? TryExecuteTacticalMoveStep(step, visibleTiles)
+                    : TryExecuteTacticalAttackStep(step, visibleTiles);
+                if (!executed)
+                {
+                    Debug.LogWarning($"[AI Tactics] Aborting city capture plan; step {i + 1} is no longer legal. {plan.Summary}");
+                    return false;
+                }
+
+                if (gameOver)
+                {
+                    Debug.Log($"[AI Tactics] Executed city capture plan. {plan.Summary}");
+                    return true;
+                }
             }
 
-            bool executed = step.StepType == AICityCaptureTacticalPlanner.StepType.Move
-                ? TryExecuteTacticalMoveStep(step, visibleTiles)
-                : TryExecuteTacticalAttackStep(step, visibleTiles);
-            if (!executed)
-            {
-                Debug.LogWarning($"[AI Tactics] Aborting city capture plan; step {i + 1} is no longer legal. {plan.Summary}");
-                return false;
-            }
-
-            if (gameOver)
-            {
-                Debug.Log($"[AI Tactics] Executed city capture plan. {plan.Summary}");
-                return true;
-            }
+            Debug.LogWarning($"[AI Tactics] City capture plan completed without game over. {plan.Summary}");
+            return false;
         }
-
-        Debug.LogWarning($"[AI Tactics] City capture plan completed without game over. {plan.Summary}");
-        return false;
+        finally
+        {
+            isExecutingTacticalCityCapturePlan = wasExecutingTacticalCityCapturePlan;
+        }
     }
 
     private bool TryExecuteTacticalMoveStep(
@@ -6381,6 +6391,16 @@ public class TurnManager : MonoBehaviour
                 cityOwnerVisual.SetOwnerSeatIndex(capturedBySeatIndex);
             }
         }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (IsAIVsAIDebugModeActive() && currentMode == GameMode.VsAI && !isExecutingTacticalCityCapturePlan)
+        {
+            string cityLabel = capturedCity != null ? $"({capturedCity.x},{capturedCity.y})" : "<unknown>";
+            Debug.LogError(
+                $"[AI Tactics] City capture game over bypassed tactical capture planner. " +
+                $"winnerSeat={capturedBySeatIndex} city={cityLabel} turn={turnNumber}");
+        }
+#endif
 
         gameOver = true;
 
