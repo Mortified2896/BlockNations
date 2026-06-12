@@ -5413,10 +5413,31 @@ public class TurnManager : MonoBehaviour
 
         foreach (Unit unit in allUnits)
         {
+            if (unit != null && unit.isPlayerOwned == actingSideIsPlayerOwned)
+            {
+                unit.ResetMovementForTurn();
+            }
+        }
+
+        int actingSeatIndexForTactics = actingSideIsPlayerOwned ? 0 : 1;
+        if (AICityCaptureTacticalPlanner.TryFindPlan(
+                this,
+                gridManager,
+                actingSeatIndexForTactics,
+                allCities,
+                allUnits,
+                aiVisibleTiles,
+                out AICityCaptureTacticalPlanner.Plan tacticalCityCapturePlan) &&
+            TryExecuteTacticalCityCapturePlan(tacticalCityCapturePlan, aiVisibleTiles))
+        {
+            if (gameOver)
+                return;
+        }
+
+        foreach (Unit unit in allUnits)
+        {
             if (unit == null || unit.isPlayerOwned != actingSideIsPlayerOwned)
                 continue;
-
-            unit.ResetMovementForTurn();
 
             if (TryExecuteImmediateCityWin(unit, allCities, aiVisibleTiles, aiHasPerfectInfo, stepSize))
             {
@@ -5449,6 +5470,156 @@ public class TurnManager : MonoBehaviour
             if (gameOver)
                 return;
         }
+    }
+
+    private bool TryExecuteTacticalCityCapturePlan(
+        AICityCaptureTacticalPlanner.Plan plan,
+        HashSet<TileVisibility> visibleTiles)
+    {
+        if (plan == null || plan.Steps == null || plan.Steps.Count == 0)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < plan.Steps.Count; i++)
+        {
+            AICityCaptureTacticalPlanner.PlanStep step = plan.Steps[i];
+            if (step.Unit == null || !step.Unit.gameObject.activeInHierarchy)
+            {
+                Debug.LogWarning($"[AI Tactics] Aborting city capture plan; step {i + 1} unit is no longer available. {plan.Summary}");
+                return false;
+            }
+
+            bool executed = step.StepType == AICityCaptureTacticalPlanner.StepType.Move
+                ? TryExecuteTacticalMoveStep(step, visibleTiles)
+                : TryExecuteTacticalAttackStep(step, visibleTiles);
+            if (!executed)
+            {
+                Debug.LogWarning($"[AI Tactics] Aborting city capture plan; step {i + 1} is no longer legal. {plan.Summary}");
+                return false;
+            }
+
+            if (gameOver)
+            {
+                Debug.Log($"[AI Tactics] Executed city capture plan. {plan.Summary}");
+                return true;
+            }
+        }
+
+        Debug.LogWarning($"[AI Tactics] City capture plan completed without game over. {plan.Summary}");
+        return false;
+    }
+
+    private bool TryExecuteTacticalMoveStep(
+        AICityCaptureTacticalPlanner.PlanStep step,
+        HashSet<TileVisibility> visibleTiles)
+    {
+        Unit unit = step.Unit;
+        TileVisibility targetTile = step.TargetTile;
+        if (unit == null || targetTile == null || !unit.CanMoveThisTurn())
+        {
+            return false;
+        }
+
+        List<LegalTurnAction> legalMoveActions = GetLegalAIUnitMoveActions(unit, visibleTiles);
+        LegalTurnAction? legalMove = null;
+        for (int i = 0; i < legalMoveActions.Count; i++)
+        {
+            LegalTurnAction action = legalMoveActions[i];
+            if (action.TargetTile == targetTile)
+            {
+                legalMove = action;
+                break;
+            }
+        }
+
+        if (!legalMove.HasValue)
+        {
+            return false;
+        }
+
+        Vector3 destination = targetTile.transform.position;
+        destination.z = unit.transform.position.z;
+        if (GridUtils.GetUnitAtPosition(destination, unit) != null)
+        {
+            return false;
+        }
+
+        if (unit.currentCity != null)
+        {
+            unit.currentCity.stationedUnit = null;
+            unit.currentCity = null;
+        }
+
+        unit.transform.position = destination;
+        int consumedMoveCount = legalMove.Value.Path != null ? Mathf.Max(1, legalMove.Value.Path.Count) : 1;
+        unit.RegisterMove(consumedMoveCount);
+
+        if (SoundManager.Instance != null && !ShouldSuppressAIVsAIAudio())
+        {
+            SoundManager.Instance.PlayMove();
+        }
+
+        City city = GridUtils.GetCityAtPosition(unit.transform.position);
+        if (city != null && city.ownerSeatIndex != unit.ownerSeatIndex)
+        {
+            OnCityCaptured(unit.ownerSeatIndex, city);
+        }
+
+        return true;
+    }
+
+    private bool TryExecuteTacticalAttackStep(
+        AICityCaptureTacticalPlanner.PlanStep step,
+        HashSet<TileVisibility> visibleTiles)
+    {
+        Unit unit = step.Unit;
+        Unit target = step.TargetUnit;
+        if (unit == null ||
+            target == null ||
+            !target.gameObject.activeInHierarchy ||
+            !unit.CanAttackThisTurn())
+        {
+            return false;
+        }
+
+        List<LegalTurnAction> legalActions = GetLegalAIUnitActions(unit, visibleTiles);
+        bool hasLegalAttack = false;
+        for (int i = 0; i < legalActions.Count; i++)
+        {
+            LegalTurnAction action = legalActions[i];
+            if (action.ActionType == LegalActionType.UnitAttack && action.TargetUnit == target)
+            {
+                hasLegalAttack = true;
+                break;
+            }
+        }
+
+        if (!hasLegalAttack)
+        {
+            return false;
+        }
+
+        Vector3 targetPosition = target.transform.position;
+        targetPosition.z = unit.transform.position.z;
+        unit.RegisterAttack();
+        bool killed = unit.Attack(target);
+        if (killed && unit.AdvancesIntoDefenderTileOnKill)
+        {
+            unit.transform.position = targetPosition;
+            if (SoundManager.Instance != null && !ShouldSuppressAIVsAIAudio())
+            {
+                SoundManager.Instance.PlayMove();
+            }
+        }
+
+        City city = GridUtils.GetCityAtPosition(unit.transform.position);
+        if (city != null && city.ownerSeatIndex != unit.ownerSeatIndex)
+        {
+            OnCityCaptured(unit.ownerSeatIndex, city);
+        }
+
+        return true;
     }
 
     private Dictionary<City, List<LegalTurnAction>> BuildLegalAIRecruitActionsByCity(
