@@ -102,12 +102,12 @@ public static class AICityCaptureTacticalPlanner
         }
     }
 
-    private const int CandidateUnitLimitPerCity = 6;
-    private const int MaxPlanDepth = 6;
-    private const int MaxBranchesPerState = 18;
-    private const int MaxVisitedStatesPerCity = 450;
-    private const int MaxSearchMilliseconds = 45;
-    private const int UsefulTileSlack = 2;
+    private const int CandidateUnitLimitPerCity = 10;
+    private const int MaxPlanDepth = 8;
+    private const int MaxBranchesPerState = 48;
+    private const int MaxVisitedStatesPerCity = 3000;
+    private const int MaxSearchMilliseconds = 250;
+    private const int UsefulTileSlack = 3;
 
     public static bool TryFindPlan(
         TurnManager turnManager,

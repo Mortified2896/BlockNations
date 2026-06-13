@@ -66,6 +66,7 @@ public class MainMenuUITKView : MonoBehaviour
     private VisualElement leftGutterMask;
     private VisualElement rightGutterMask;
     private VisualElement mainPanel;
+    private VisualElement puzzleModePanel;
     private VisualElement multiplayerPanel;
     private VisualElement profilePanel;
     private VisualElement detailsPanel;
@@ -107,6 +108,9 @@ public class MainMenuUITKView : MonoBehaviour
 
     private Button continueButton;
     private Button playVsAiButton;
+    private Button puzzleModeButton;
+    private Button puzzleModeBackButton;
+    private Label puzzleModeStatusLabel;
     private Button multiplayerButton;
     private Button profileButton;
     private Button quitButton;
@@ -506,6 +510,10 @@ public class MainMenuUITKView : MonoBehaviour
 
         continueButton = root.Q<Button>("ContinueButton");
         playVsAiButton = root.Q<Button>("PlayVsAIButton");
+        puzzleModeButton = root.Q<Button>("PuzzleModeButton");
+        puzzleModeBackButton = root.Q<Button>("PuzzleModeBackButton");
+        puzzleModeStatusLabel = root.Q<Label>("PuzzleModeStatusLabel");
+        puzzleModePanel = root.Q<VisualElement>("PuzzleModePanel");
         multiplayerButton = root.Q<Button>("MultiplayerButton");
         multiplayerBadge = root.Q<VisualElement>("MultiplayerBadge");
         profileButton = root.Q<Button>("ProfileButton");
@@ -978,6 +986,16 @@ public class MainMenuUITKView : MonoBehaviour
             playVsAiButton.clicked += HandlePlayVsAiClicked;
         }
 
+        if (puzzleModeButton != null)
+        {
+            puzzleModeButton.clicked += HandlePuzzleModeClicked;
+        }
+
+        if (puzzleModeBackButton != null)
+        {
+            puzzleModeBackButton.clicked += HandlePuzzleModeBackClicked;
+        }
+
         if (multiplayerButton != null)
         {
             multiplayerButton.clicked += HandleMultiplayerClicked;
@@ -1321,6 +1339,16 @@ public class MainMenuUITKView : MonoBehaviour
         if (playVsAiButton != null)
         {
             playVsAiButton.clicked -= HandlePlayVsAiClicked;
+        }
+
+        if (puzzleModeButton != null)
+        {
+            puzzleModeButton.clicked -= HandlePuzzleModeClicked;
+        }
+
+        if (puzzleModeBackButton != null)
+        {
+            puzzleModeBackButton.clicked -= HandlePuzzleModeBackClicked;
         }
 
         if (multiplayerButton != null)
@@ -1711,6 +1739,16 @@ public class MainMenuUITKView : MonoBehaviour
     private void HandlePlayVsAiClicked()
     {
         ShowGeneralSettingsPanel(PendingGeneralSettingsMode.VsAI);
+    }
+
+    private void HandlePuzzleModeClicked()
+    {
+        ShowPuzzleModePanel();
+    }
+
+    private void HandlePuzzleModeBackClicked()
+    {
+        ShowMainPanel();
     }
 
     private bool TryOpenPendingAIVsAISettingsReturn()
@@ -2818,6 +2856,24 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         FitMainMenuTitleToWidth();
+    }
+
+    private void ShowPuzzleModePanel()
+    {
+        SetVisible(puzzleModePanel, true);
+        SetVisible(mainPanel, false);
+        SetVisible(multiplayerPanel, false);
+        SetVisible(profilePanel, false);
+        UpdateRootScreenClass(profileVisible: false);
+        NotifyControllerVisiblePaneChanged(multiplayerVisible: false);
+
+        if (puzzleModeStatusLabel != null)
+        {
+            puzzleModeStatusLabel.text =
+                "Puzzle Mode is a manual debug/inspection entry. " +
+                "Run Unity Test Framework tests (PlayMode tab) for AI correctness. " +
+                "Puzzle mode does not start a VsAI match.";
+        }
     }
 
     private void ShowMultiplayerPanel()
@@ -4493,6 +4549,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsBackgroundPane = GeneralSettingsBackgroundPane.None;
         root = null;
         mainPanel = null;
+        puzzleModePanel = null;
         multiplayerPanel = null;
         profilePanel = null;
         detailsPanel = null;
@@ -4538,6 +4595,9 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAIVsAiTournamentMatchesPerPairingLabel = null;
         continueButton = null;
         playVsAiButton = null;
+        puzzleModeButton = null;
+        puzzleModeBackButton = null;
+        puzzleModeStatusLabel = null;
         multiplayerButton = null;
         multiplayerBadge = null;
         profileButton = null;

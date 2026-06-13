@@ -4,22 +4,6 @@ using UnityEngine;
 
 public static class AIPostCalculusLocalDecisionHelper
 {
-    public readonly struct ImmediateCityWinCandidate
-    {
-        public readonly Vector3 targetPosition;
-        public readonly int targetX;
-        public readonly int targetY;
-        public readonly bool requiresAttack;
-
-        public ImmediateCityWinCandidate(Vector3 targetPosition, int targetX, int targetY, bool requiresAttack)
-        {
-            this.targetPosition = targetPosition;
-            this.targetX = targetX;
-            this.targetY = targetY;
-            this.requiresAttack = requiresAttack;
-        }
-    }
-
     public readonly struct AttackCandidate
     {
         public readonly Unit target;
@@ -89,37 +73,6 @@ public static class AIPostCalculusLocalDecisionHelper
         AppendFeatureToken(builder, enabledFeatures, AILocalDecisionFeatures.DefensiveVeto, "defense");
         AppendFeatureToken(builder, enabledFeatures, AILocalDecisionFeatures.ExchangeScoring, "exchange");
         return builder.Length > 0 ? builder.ToString() : "none";
-    }
-
-    public static bool TryChooseImmediateCityWin(
-        AILocalDecisionFeatures enabledFeatures,
-        IList<ImmediateCityWinCandidate> candidates,
-        out ImmediateCityWinCandidate chosenCandidate)
-    {
-        chosenCandidate = default;
-        if (!HasFeature(enabledFeatures, AILocalDecisionFeatures.OffensiveObviousWin) ||
-            candidates == null ||
-            candidates.Count == 0)
-        {
-            return false;
-        }
-
-        int bestIndex = -1;
-        for (int i = 0; i < candidates.Count; i++)
-        {
-            if (bestIndex < 0 || IsBetterImmediateCityWinCandidate(candidates[i], candidates[bestIndex]))
-            {
-                bestIndex = i;
-            }
-        }
-
-        if (bestIndex < 0)
-        {
-            return false;
-        }
-
-        chosenCandidate = candidates[bestIndex];
-        return true;
     }
 
     public static Unit ChooseAttackTarget(
@@ -208,23 +161,6 @@ public static class AIPostCalculusLocalDecisionHelper
         }
 
         builder.Append(token);
-    }
-
-    private static bool IsBetterImmediateCityWinCandidate(
-        ImmediateCityWinCandidate candidate,
-        ImmediateCityWinCandidate currentBest)
-    {
-        if (candidate.requiresAttack != currentBest.requiresAttack)
-        {
-            return !candidate.requiresAttack;
-        }
-
-        if (candidate.targetX != currentBest.targetX)
-        {
-            return candidate.targetX < currentBest.targetX;
-        }
-
-        return candidate.targetY < currentBest.targetY;
     }
 
     private static bool IsBetterAttackCandidate(

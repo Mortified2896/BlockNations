@@ -4,11 +4,17 @@
         <ui:VisualElement name="MainPanel" class="panel">
             <ui:Label name="TitleLabel" text="Block Nations" class="title" />
             <ui:Button name="PlayVsAIButton" text="Play vs AI" class="menu-button" />
+            <ui:Button name="PuzzleModeButton" text="Puzzle Mode" class="menu-button" style="display: none;" />
             <ui:Button name="ContinueButton" text="Continue" class="menu-button" />
             <ui:Button name="MultiplayerButton" text="Multiplayer" class="menu-button">
                 <ui:VisualElement name="MultiplayerBadge" class="multiplayer-button-badge" style="display: none;" />
             </ui:Button>
             <ui:Button name="ProfileButton" text="Profile" class="menu-button" />
+        </ui:VisualElement>
+        <ui:VisualElement name="PuzzleModePanel" class="panel puzzle-mode-panel" style="display: none;">
+            <ui:Label name="PuzzleModeTitleLabel" text="Puzzle Mode" class="title" />
+            <ui:Label name="PuzzleModeStatusLabel" text="Puzzle Mode is a manual debug/inspection entry. Run Unity Test Framework tests for AI correctness." class="puzzle-mode-status" />
+            <ui:Button name="PuzzleModeBackButton" text="Back to Main Menu" class="menu-button" />
         </ui:VisualElement>
 
         <ui:VisualElement name="MultiplayerPanel" class="multiplayer-pane" style="display: none;">

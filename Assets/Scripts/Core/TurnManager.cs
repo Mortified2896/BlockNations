@@ -37,7 +37,8 @@ public class TurnManager : MonoBehaviour
 
     public enum AIDebugProfile
     {
-        Baseline
+        Baseline,
+        TacticalPuzzle
     }
 
     public enum AIVsAIBatchSpeedPreset
@@ -4856,192 +4857,18 @@ public class TurnManager : MonoBehaviour
 
     private AIDebugProfile GetAIDebugProfileForSide(bool actingSideIsPlayerOwned)
     {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (IsAIVsAIDebugModeActive())
+        {
+            return actingSideIsPlayerOwned ? aiVsAiSideAProfile : aiVsAiSideBProfile;
+        }
+#endif
         return AIDebugProfile.Baseline;
     }
 
     private string BuildAIConfigLabelForSide(bool actingSideIsPlayerOwned)
     {
         return $"recruitVariant={GetAIRecruitVariantForSide(actingSideIsPlayerOwned)};localFeatures={AIPostCalculusLocalDecisionHelper.ToConfigValue(GetAILocalDecisionFeaturesForSide(actingSideIsPlayerOwned))};profile={GetAIDebugProfileForSide(actingSideIsPlayerOwned)}";
-    }
-
-    private bool TryExecuteImmediateCityWin(
-        Unit unit,
-        City[] allCities,
-        HashSet<TileVisibility> visibleTiles,
-        bool aiHasPerfectInfo,
-        float tileSize)
-    {
-        if (unit == null ||
-            allCities == null ||
-            gridManager == null ||
-            !AIPostCalculusLocalDecisionHelper.HasFeature(
-                GetAILocalDecisionFeaturesForSide(unit.isPlayerOwned),
-                AILocalDecisionFeatures.OffensiveObviousWin))
-        {
-            return false;
-        }
-
-        if (!gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility unitTile) || unitTile == null)
-        {
-            return false;
-        }
-
-        List<AIPostCalculusLocalDecisionHelper.ImmediateCityWinCandidate> candidates =
-            new List<AIPostCalculusLocalDecisionHelper.ImmediateCityWinCandidate>();
-
-        for (int cityIndex = 0; cityIndex < allCities.Length; cityIndex++)
-        {
-            City city = allCities[cityIndex];
-            if (city == null || city.ownerSeatIndex == unit.ownerSeatIndex)
-            {
-                continue;
-            }
-
-            if (!IsCityTileVisibleToSide(city, visibleTiles, aiHasPerfectInfo))
-            {
-                continue;
-            }
-
-            int distanceToCity = Mathf.Max(Mathf.Abs(unitTile.gridX - city.x), Mathf.Abs(unitTile.gridY - city.y));
-            if (distanceToCity != 1)
-            {
-                continue;
-            }
-
-            Unit visibleOccupant = GetPerceivedEnemyUnitAtCity(city, unit.isPlayerOwned, visibleTiles, aiHasPerfectInfo);
-            if (visibleOccupant == null)
-            {
-                if (unit.CanMoveThisTurn())
-                {
-                    candidates.Add(new AIPostCalculusLocalDecisionHelper.ImmediateCityWinCandidate(
-                        city.transform.position,
-                        city.x,
-                        city.y,
-                        requiresAttack: false));
-                }
-
-                continue;
-            }
-
-            if (!unit.CanMoveThisTurn() ||
-                !unit.CanAttackThisTurn() ||
-                unit.AttackRange > 1 ||
-                !unit.AdvancesIntoDefenderTileOnKill)
-            {
-                continue;
-            }
-
-            int predictedDamage = Mathf.Max(0, unit.attackUnits - visibleOccupant.defenseUnits);
-            if (predictedDamage < visibleOccupant.currentHealthUnits)
-            {
-                continue;
-            }
-
-            candidates.Add(new AIPostCalculusLocalDecisionHelper.ImmediateCityWinCandidate(
-                city.transform.position,
-                city.x,
-                city.y,
-                requiresAttack: true));
-        }
-
-        if (!AIPostCalculusLocalDecisionHelper.TryChooseImmediateCityWin(
-                GetAILocalDecisionFeaturesForSide(unit.isPlayerOwned),
-                candidates,
-                out AIPostCalculusLocalDecisionHelper.ImmediateCityWinCandidate chosenCandidate))
-        {
-            return false;
-        }
-
-        if (chosenCandidate.requiresAttack)
-        {
-            MoveAIUnitOneStep(unit, chosenCandidate.targetPosition, tileSize, visibleTiles, aiHasPerfectInfo);
-            return gameOver;
-        }
-
-        return TryExecuteImmediateEmptyCityCaptureFromLegalMove(unit, chosenCandidate.targetPosition, visibleTiles);
-    }
-
-    private bool TryExecuteImmediateEmptyCityCaptureFromLegalMove(
-        Unit unit,
-        Vector3 targetPosition,
-        HashSet<TileVisibility> visibleTiles)
-    {
-        if (unit == null || !unit.CanMoveThisTurn() || gridManager == null)
-        {
-            return false;
-        }
-
-        City targetCity = GridUtils.GetCityAtPosition(targetPosition);
-        if (targetCity == null || targetCity.ownerSeatIndex == unit.ownerSeatIndex)
-        {
-            return false;
-        }
-
-        LegalTurnAction? legalCaptureMove = null;
-        List<LegalTurnAction> legalMoveActions = GetLegalAIUnitMoveActions(unit, visibleTiles);
-        for (int i = 0; i < legalMoveActions.Count; i++)
-        {
-            LegalTurnAction moveAction = legalMoveActions[i];
-            TileVisibility targetTile = moveAction.TargetTile;
-            if (targetTile == null ||
-                targetTile.gridX != targetCity.x ||
-                targetTile.gridY != targetCity.y)
-            {
-                continue;
-            }
-
-            legalCaptureMove = moveAction;
-            break;
-        }
-
-        if (!legalCaptureMove.HasValue)
-        {
-            return false;
-        }
-
-        Vector3 destination = legalCaptureMove.Value.TargetTile.transform.position;
-        destination.z = unit.transform.position.z;
-        Unit occupyingUnit = GridUtils.GetUnitAtPosition(destination, unit);
-        if (occupyingUnit != null)
-        {
-            return false;
-        }
-
-        if (unit.currentCity != null)
-        {
-            unit.currentCity.stationedUnit = null;
-            unit.currentCity = null;
-        }
-
-        unit.transform.position = destination;
-        unit.RegisterMove();
-
-        if (SoundManager.Instance != null && !ShouldSuppressAIVsAIAudio())
-        {
-            SoundManager.Instance.PlayMove();
-        }
-
-        OnCityCaptured(unit.ownerSeatIndex, targetCity);
-        return gameOver;
-    }
-
-    private bool IsCityTileVisibleToSide(City city, HashSet<TileVisibility> visibleTiles, bool aiHasPerfectInfo)
-    {
-        if (city == null)
-        {
-            return false;
-        }
-
-        if (aiHasPerfectInfo)
-        {
-            return true;
-        }
-
-        return gridManager != null &&
-               visibleTiles != null &&
-               gridManager.TryGetTile(city.x, city.y, out TileVisibility cityTile) &&
-               cityTile != null &&
-               visibleTiles.Contains(cityTile);
     }
 
     private Unit SelectBestLocalAttackTarget(Unit attacker, IList<Unit> potentialTargets)
@@ -5194,40 +5021,6 @@ public class TurnManager : MonoBehaviour
         }
     }
 
-    private Unit GetPerceivedEnemyUnitAtCity(
-        City city,
-        bool actingSideIsPlayerOwned,
-        HashSet<TileVisibility> visibleTiles,
-        bool aiHasPerfectInfo)
-    {
-        if (city == null)
-        {
-            return null;
-        }
-
-        Unit occupant = GridUtils.GetUnitAtPosition(city.transform.position);
-        if (occupant == null || occupant.isPlayerOwned == actingSideIsPlayerOwned)
-        {
-            return null;
-        }
-
-        if (aiHasPerfectInfo)
-        {
-            return occupant;
-        }
-
-        if (gridManager == null ||
-            visibleTiles == null ||
-            !gridManager.TryGetTile(city.x, city.y, out TileVisibility cityTile) ||
-            cityTile == null ||
-            !visibleTiles.Contains(cityTile))
-        {
-            return null;
-        }
-
-        return occupant;
-    }
-
     private int CountImmediateThreatSourcesNearCity(
         City city,
         Unit[] allUnits,
@@ -5328,6 +5121,33 @@ public class TurnManager : MonoBehaviour
         HashSet<TileVisibility> aiVisibleTiles = ComputeVisibilityForSide(actingSideIsPlayerOwned);
         City primaryControlledCity = FindPrimaryControlledCity(allCities, actingSideIsPlayerOwned);
 
+        foreach (Unit unit in unitsBeforeRecruitment)
+        {
+            if (unit != null && unit.isPlayerOwned == actingSideIsPlayerOwned)
+            {
+                unit.ResetMovementForTurn();
+            }
+        }
+
+        int actingSeatIndexForTactics = actingSideIsPlayerOwned ? 0 : 1;
+        AILocalDecisionFeatures enabledFeaturesForTactics = GetAILocalDecisionFeaturesForSide(actingSideIsPlayerOwned);
+        if (AIPostCalculusLocalDecisionHelper.HasFeature(
+                enabledFeaturesForTactics,
+                AILocalDecisionFeatures.OffensiveObviousWin) &&
+            AICityCaptureTacticalPlanner.TryFindPlan(
+                this,
+                gridManager,
+                actingSeatIndexForTactics,
+                allCities,
+                unitsBeforeRecruitment,
+                aiVisibleTiles,
+                out AICityCaptureTacticalPlanner.Plan tacticalCityCapturePlan) &&
+            TryExecuteTacticalCityCapturePlan(tacticalCityCapturePlan, aiVisibleTiles))
+        {
+            if (gameOver)
+                return;
+        }
+
         // 1) Recruit from each controlled city (one unit per city per turn, if the city is empty)
         int actingSeatIndex = actingSideIsPlayerOwned ? 0 : 1;
         Dictionary<City, List<LegalTurnAction>> legalRecruitActionsByCity = BuildLegalAIRecruitActionsByCity(
@@ -5414,38 +5234,8 @@ public class TurnManager : MonoBehaviour
 
         foreach (Unit unit in allUnits)
         {
-            if (unit != null && unit.isPlayerOwned == actingSideIsPlayerOwned)
-            {
-                unit.ResetMovementForTurn();
-            }
-        }
-
-        int actingSeatIndexForTactics = actingSideIsPlayerOwned ? 0 : 1;
-        if (AICityCaptureTacticalPlanner.TryFindPlan(
-                this,
-                gridManager,
-                actingSeatIndexForTactics,
-                allCities,
-                allUnits,
-                aiVisibleTiles,
-                out AICityCaptureTacticalPlanner.Plan tacticalCityCapturePlan) &&
-            TryExecuteTacticalCityCapturePlan(tacticalCityCapturePlan, aiVisibleTiles))
-        {
-            if (gameOver)
-                return;
-        }
-
-        foreach (Unit unit in allUnits)
-        {
             if (unit == null || unit.isPlayerOwned != actingSideIsPlayerOwned)
                 continue;
-
-            if (TryExecuteImmediateCityWin(unit, allCities, aiVisibleTiles, aiHasPerfectInfo, stepSize))
-            {
-                if (gameOver)
-                    return;
-                continue;
-            }
 
             if (combatDefenseAssignments.TryGetValue(unit, out AITurnLogic.CityDefensePlan combatPlan))
             {
@@ -5473,7 +5263,9 @@ public class TurnManager : MonoBehaviour
         }
     }
 
-    private bool TryExecuteTacticalCityCapturePlan(
+    // Test seam: internal so BlockNations.Tests.PlayMode (via [InternalsVisibleTo]) can drive
+    // the immediate-win executor directly. Production callers remain in Assembly-CSharp.
+    internal bool TryExecuteTacticalCityCapturePlan(
         AICityCaptureTacticalPlanner.Plan plan,
         HashSet<TileVisibility> visibleTiles)
     {
@@ -6393,7 +6185,13 @@ public class TurnManager : MonoBehaviour
         }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-        if (IsAIVsAIDebugModeActive() && currentMode == GameMode.VsAI && !isExecutingTacticalCityCapturePlan)
+        bool capturedSideUsesTacticalPlanner = AIPostCalculusLocalDecisionHelper.HasFeature(
+            GetAILocalDecisionFeaturesForSide(capturedBySeatIndex == 0),
+            AILocalDecisionFeatures.OffensiveObviousWin);
+        if (capturedSideUsesTacticalPlanner &&
+            IsAIVsAIDebugModeActive() &&
+            currentMode == GameMode.VsAI &&
+            !isExecutingTacticalCityCapturePlan)
         {
             string cityLabel = capturedCity != null ? $"({capturedCity.x},{capturedCity.y})" : "<unknown>";
             Debug.LogError(
