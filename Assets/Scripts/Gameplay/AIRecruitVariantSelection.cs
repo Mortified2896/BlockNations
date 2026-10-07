@@ -17,14 +17,31 @@ public static class AIRecruitVariantSelection
         return true;
     }
 
-    // A development-only opponent can appear in a local VsAI save. Shipping
-    // builds resolve it to the local policy without adding/changing save fields.
-    public static TurnManager.AIRecruitVariant ForCurrentBuild(TurnManager.AIRecruitVariant variant)
+    // Value 3 belonged to a retired development opponent. Never reuse it: old
+    // serialized selections resolve to local Hard without changing save fields.
+    public static TurnManager.AIRecruitVariant ForCurrentRuntime(TurnManager.AIRecruitVariant variant)
     {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        return variant;
-#else
-        return variant == TurnManager.AIRecruitVariant.LunaPlaytest ? TurnManager.AIRecruitVariant.HardTactician : variant;
-#endif
+        switch (variant)
+        {
+            case TurnManager.AIRecruitVariant.Default:
+            case TurnManager.AIRecruitVariant.RiderFocus:
+            case TurnManager.AIRecruitVariant.HardTactician:
+                return variant;
+            case (TurnManager.AIRecruitVariant)3:
+                return TurnManager.AIRecruitVariant.HardTactician;
+            default:
+                return TurnManager.AIRecruitVariant.Default;
+        }
+    }
+
+    public static TurnManager.AIRecruitVariant FromSavedValue(string value)
+    {
+        // Saves stored the opponent's enum name. This compatibility alias is
+        // the only remaining reference to the removed model experiment.
+        if (string.Equals(value, "LunaPlaytest", System.StringComparison.Ordinal))
+            return TurnManager.AIRecruitVariant.HardTactician;
+        return System.Enum.TryParse(value, out TurnManager.AIRecruitVariant variant)
+            ? ForCurrentRuntime(variant)
+            : TurnManager.AIRecruitVariant.Default;
     }
 }

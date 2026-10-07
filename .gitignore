@@ -59,7 +59,3 @@ Screenshots/
 
 # Node server dependencies
 node_modules/
-
-# Local Python helper bytecode
-__pycache__/
-*.pyc

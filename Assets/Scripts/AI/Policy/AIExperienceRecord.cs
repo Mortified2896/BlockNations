@@ -33,7 +33,6 @@ namespace BlockNations.AI
         public AIObservation Observation, NextObservation;
         public AICandidateRecord[] Candidates;
         public bool HasSelectedAction, TerminalAfterAction, RootOnly, Deterministic;
-        public AIExternalActionResponse ExternalResponse;
         public AIAction SelectedAction;
         public AIExecutionResult ExecutionResult;
 
@@ -47,8 +46,7 @@ namespace BlockNations.AI
                 PolicyVersion = policyVersion, EvaluatorVersion = search.EvaluatorVersion, Turn = turn,
                 WorkBudget = search.WorkBudget, WorkCompleted = search.WorkCompleted, ReplyWorkCompleted = search.ReplyWorkCompleted,
                 SearchDepth = search.Depth, StopReason = search.StopReason, RootOnly = search.IsRootOnly, Observation = observation,
-                Deterministic = !(search is AIExternalActionDecision),
-                ExternalResponse = (search as AIExternalActionDecision)?.Response,
+                Deterministic = true,
                 NextObservation = nextObservation, ExecutionResult = execution, TerminalAfterAction = terminal,
                 Candidates = new AICandidateRecord[search.Candidates.Count] };
             AICandidatePlan best = search.Best;
@@ -68,7 +66,7 @@ namespace BlockNations.AI
         public IAIDecision BeginReplay(IAIActionPolicy policy)
         {
             if (!Deterministic)
-                throw new InvalidOperationException("External choices must be inspected from the recorded response; a new model request is not deterministic replay.");
+                throw new InvalidOperationException("Only deterministic decision records support replay.");
             if (RecordSchemaVersion != CurrentSchemaVersion || ObservationSchemaVersion != AIObservation.SchemaVersion ||
                 FeatureSchemaVersion != AIPositionFeatures.SchemaVersion || RulesVersion != AIActionRules.RulesVersion)
                 throw new InvalidOperationException("Decision record schema/rules are incompatible with this replay.");

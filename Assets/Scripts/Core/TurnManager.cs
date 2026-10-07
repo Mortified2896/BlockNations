@@ -31,10 +31,9 @@ public class TurnManager : MonoBehaviour
 
     public enum AIRecruitVariant
     {
-        Default,
-        RiderFocus,
-        HardTactician,
-        LunaPlaytest = 3
+        Default = 0,
+        RiderFocus = 1,
+        HardTactician = 2
     }
 
     public enum AIDebugProfile
@@ -167,7 +166,6 @@ public class TurnManager : MonoBehaviour
     private float playByPostLastNoTurnLogTime = -999f;
     private Coroutine aiVsAiDebugRoutine;
     private readonly HardAIRuntime hardAIRuntime = new HardAIRuntime();
-    private readonly LocalLunaPlaytestPolicy lunaPlaytestPolicy = new LocalLunaPlaytestPolicy();
     private AIRecruitVariant aiVsAiSideARecruitVariant = AIRecruitVariant.Default;
     private AIRecruitVariant aiVsAiSideBRecruitVariant = AIRecruitVariant.Default;
     private bool aiVsAiDebugPaused = false;
@@ -3801,7 +3799,7 @@ public class TurnManager : MonoBehaviour
 
         if (AIRecruitVariantSelection.TryConsume(out AIRecruitVariant pendingRecruitVariant))
         {
-            aiRecruitVariant = AIRecruitVariantSelection.ForCurrentBuild(pendingRecruitVariant);
+            aiRecruitVariant = AIRecruitVariantSelection.ForCurrentRuntime(pendingRecruitVariant);
         }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -4155,11 +4153,6 @@ public class TurnManager : MonoBehaviour
         if (variant == AIRecruitVariant.HardTactician)
         {
             IEnumerator turn = hardAIRuntime.RunTurn(this, seatIndex);
-            while (turn.MoveNext()) yield return turn.Current;
-        }
-        else if (variant == AIRecruitVariant.LunaPlaytest)
-        {
-            IEnumerator turn = hardAIRuntime.RunTurnWithPolicy(this, seatIndex, lunaPlaytestPolicy);
             while (turn.MoveNext()) yield return turn.Current;
         }
         else
@@ -8293,12 +8286,7 @@ private void PBpDebugSyncNow_Context()
                 ? PlayByPostSeatUtility.NormalizeSeatCount(save.seatCount)
                 : PlayByPostSeatUtility.MinSeatCount;
 
-            aiRecruitVariant = AIRecruitVariant.Default;
-            if (!string.IsNullOrEmpty(save.aiRecruitVariant) &&
-                System.Enum.TryParse(save.aiRecruitVariant, out AIRecruitVariant loadedRecruitVariant))
-            {
-                aiRecruitVariant = AIRecruitVariantSelection.ForCurrentBuild(loadedRecruitVariant);
-            }
+            aiRecruitVariant = AIRecruitVariantSelection.FromSavedValue(save.aiRecruitVariant);
 
             SetCurrentGameId(string.IsNullOrEmpty(save.gameId) ? System.Guid.NewGuid().ToString() : save.gameId);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD

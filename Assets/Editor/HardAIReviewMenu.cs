@@ -12,27 +12,19 @@ public static class HardAIReviewMenu
 
     static HardAIReviewMenu() => EditorApplication.playModeStateChanged += RestoreBackgroundExecution;
 
-    [MenuItem("Tools/Block Nations/Prepare Luna Playtest")]
-    public static void PrepareLunaPlaytest()
+    [MenuItem("Tools/Block Nations/Use Laptop Game View")]
+    public static void UseLaptopGameView()
     {
-        if (!EditorApplication.isPlaying || SceneManager.GetActiveScene().path != "Assets/Scenes/MainMenu.unity")
-            throw new InvalidOperationException("Enter Play Mode in MainMenu before preparing a playtest.");
-        MainMenuUITKView view = UnityEngine.Object.FindFirstObjectByType<MainMenuUITKView>();
-        if (view == null) throw new InvalidOperationException("Main menu view is unavailable.");
-        view.PrepareLunaPlaytest();
-        if (!SessionState.GetBool(BackgroundScopeKey, false))
-        {
-            SessionState.SetBool(OriginalBackgroundKey, Application.runInBackground);
-            SessionState.SetBool(BackgroundScopeKey, true);
-        }
-        Application.runInBackground = true;
-        HardAIInspectorWindow.Open();
+        // Device simulation overrides Screen dimensions. Close competing preview
+        // windows before returning to the ordinary laptop Game view.
+        foreach (EditorWindow window in Resources.FindObjectsOfTypeAll<EditorWindow>())
+            if (window.GetType().FullName == "UnityEditor.DeviceSimulation.SimulatorWindow")
+                window.Close();
         EditorApplication.ExecuteMenuItem("Window/General/Game");
         Type gameViewType = typeof(Editor).Assembly.GetType("UnityEditor.GameView");
         EditorWindow gameView = EditorWindow.GetWindow(gameViewType);
         gameView.maximized = true;
         gameView.Focus();
-        Debug.Log("[Luna playtest] Prepared human VsAI, 11x11, Luna 6 Maximum. Start the local bridge first. Start Game has NOT been pressed.");
     }
 
     [MenuItem("Tools/Block Nations/Prepare Hard AI Playtest")]
@@ -44,11 +36,7 @@ public static class HardAIReviewMenu
         if (view == null) throw new InvalidOperationException("Main menu view is unavailable.");
         view.PrepareHardAIPlaytest();
         HardAIInspectorWindow.Open();
-        EditorApplication.ExecuteMenuItem("Window/General/Game");
-        Type gameViewType = typeof(Editor).Assembly.GetType("UnityEditor.GameView");
-        EditorWindow gameView = EditorWindow.GetWindow(gameViewType);
-        gameView.maximized = true;
-        gameView.Focus();
+        UseLaptopGameView();
         Debug.Log("[Hard AI playtest] Prepared normal human VsAI, 11x11, Hard Tactician; Start Game has NOT been pressed.");
     }
 
@@ -67,11 +55,7 @@ public static class HardAIReviewMenu
         }
         Application.runInBackground = true;
         HardAIInspectorWindow.Open();
-        EditorApplication.ExecuteMenuItem("Window/General/Game");
-        Type gameViewType = typeof(Editor).Assembly.GetType("UnityEditor.GameView");
-        EditorWindow gameView = EditorWindow.GetWindow(gameViewType);
-        gameView.maximized = true;
-        gameView.Focus();
+        UseLaptopGameView();
         VisualElement root = view.GetComponent<UIDocument>().rootVisualElement;
         Debug.Log($"[Hard AI review] Prepared 11x11, three opponents, six seat-swapped games, {AIVsAIBatchRunController.MatchRoundLimit}-round limit, Ultra Fast, no loop; Game view maximized for laptop inspection. Background execution is scoped to this Play Mode session. Human Hard selector display={root.Q<Button>("GeneralSettingsAiStyleHardButton").resolvedStyle.display}. Start has NOT been pressed.");
     }

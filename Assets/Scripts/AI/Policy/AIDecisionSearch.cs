@@ -70,7 +70,6 @@ namespace BlockNations.AI
         public int ReplyWorkCompleted { get; private set; }
         public string EvaluatorVersion => evaluator.Version;
         public bool IsRootOnly => depthLimit == 1;
-        public bool WaitingForExternalResult => false;
         public void Cancel() { if (!Complete) Finish("Decision cancelled"); }
         public int Depth { get; private set; }
         public bool Complete { get; private set; }

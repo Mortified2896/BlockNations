@@ -13,21 +13,12 @@ public static class HardAIValidation
 
     [MenuItem("Tools/Block Nations/Validate Hard AI/Edit Mode")]
     public static void RunEditMode() => Run(TestMode.EditMode,
-        new[] { "HardTacticianPolicyTests", "AIExternalActionDecisionTests", "LocalAIPlaytestSetupTests", "AIVsAIMatchHandoffTests", "MultiplayerScrollViewTests", "UITKResponsiveSizeTierControllerTests" });
+        new[] { "HardTacticianPolicyTests", "LocalAIOpponentCompatibilityTests", "AIVsAIMatchHandoffTests", "MultiplayerScrollViewTests", "UITKResponsiveSizeTierControllerTests" });
 
     [MenuItem("Tools/Block Nations/Validate Hard AI/Play Mode")]
     public static void RunPlayMode() => Run(TestMode.PlayMode, new[] { "AdjacentEmptyEnemyCityCaptureTests" });
 
-    [MenuItem("Tools/Block Nations/Luna Bridge/Verify one real Luna action")]
-    public static void RunLiveLunaCheck()
-    {
-        if (EditorApplication.isPlaying || EditorApplication.isCompiling)
-            throw new InvalidOperationException("Run the live check while the Editor is idle.");
-        SessionState.SetBool("BlockNations.Luna.LiveCheck", true);
-        Run(TestMode.PlayMode, null, new[] { "AdjacentEmptyEnemyCityCaptureTests.LiveLunaChoosesAndExecutesAWinningLegalAction" });
-    }
-
-    private static void Run(TestMode mode, string[] groups, string[] names = null)
+    private static void Run(TestMode mode, string[] groups)
     {
         if (EditorApplication.isPlaying || EditorApplication.isCompiling)
             throw new InvalidOperationException("Run validation while the Editor is idle and compilation is complete.");
@@ -35,7 +26,7 @@ public static class HardAIValidation
         Directory.CreateDirectory(directory);
         SessionState.SetString(ResultPathKey, Path.Combine(directory, mode + "-results.xml"));
         TestRunnerApi api = ScriptableObject.CreateInstance<TestRunnerApi>();
-        api.Execute(new ExecutionSettings(new Filter { testMode = mode, groupNames = groups, testNames = names }));
+        api.Execute(new ExecutionSettings(new Filter { testMode = mode, groupNames = groups }));
     }
 
     private sealed class Results : ICallbacks
@@ -49,7 +40,6 @@ public static class HardAIValidation
             if (string.IsNullOrEmpty(path)) return;
             TestRunnerApi.SaveResultToFile(result, path);
             SessionState.EraseString(ResultPathKey);
-            SessionState.EraseBool("BlockNations.Luna.LiveCheck");
             Debug.Log($"[Hard AI validation] {result.TestStatus}: passed={result.PassCount}, failed={result.FailCount}; results={path}");
         }
     }

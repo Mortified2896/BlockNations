@@ -58,7 +58,7 @@ public sealed class HardAIRuntime
                 if (!CanRun(manager, seatIndex) || generation != KnowledgeGeneration) yield break;
                 Stopwatch slice = Stopwatch.StartNew();
                 do { search.AdvanceOnce(); }
-                while (!search.Complete && !search.WaitingForExternalResult && slice.Elapsed.TotalMilliseconds < 4);
+                while (!search.Complete && slice.Elapsed.TotalMilliseconds < 4);
                 HardAIDiagnostics.ElapsedSeconds = elapsed.Elapsed.TotalSeconds;
                 if (!search.Complete) yield return null;
             }
@@ -67,8 +67,6 @@ public sealed class HardAIRuntime
             AICandidatePlan best = search.Best;
             if (best == null || best.Actions.Length == 0 || best.Actions[0].Kind == AIActionKind.EndTurn)
             {
-                if (search is AIExternalActionDecision && best == null)
-                    UnityEngine.Debug.LogWarning("[Luna playtest] AI turn stopped: " + search.StopReason);
                 if (HardAIExperienceRecorder.Enabled) HardAIExperienceRecorder.Append(AIExperienceRecord.Create(
                     context.Observation, search, actionPolicy.Version, manager.turnNumber, AIExecutionResult.EndTurn));
                 yield break;

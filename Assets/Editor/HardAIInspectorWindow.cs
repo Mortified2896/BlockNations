@@ -34,10 +34,7 @@ public sealed class HardAIInspectorWindow : EditorWindow
 
     private void OnGUI()
     {
-        bool external = HardAIDiagnostics.Search is AIExternalActionDecision;
-        EditorGUILayout.HelpBox(external
-            ? "Luna chooses one legal action from its fair observation. The explanation is a short model-written summary; it is not a search trace or a win probability. Each next action uses fresh information."
-            : "Development analysis. Scores are heuristic values, not win probabilities. Plans use only the acting seat's observation; later steps are predictions and are rechecked before execution.", MessageType.Info);
+        EditorGUILayout.HelpBox("Development analysis. Scores are heuristic values, not win probabilities. Plans use only the acting seat's observation; later steps are predictions and are rechecked before execution.", MessageType.Info);
         bool record = EditorGUILayout.Toggle("Record decisions locally", HardAIExperienceRecorder.Enabled);
         if (record != HardAIExperienceRecorder.Enabled)
         {
@@ -59,32 +56,17 @@ public sealed class HardAIInspectorWindow : EditorWindow
             return;
         }
         EditorGUILayout.LabelField($"{HardAIDiagnostics.PolicyVersion} · seat {observation.Seat + 1} · turn {HardAIDiagnostics.Turn}");
-        if (search is AIExternalActionDecision modelDecision)
-        {
-            EditorGUILayout.LabelField($"{modelDecision.RequestedModel} · {modelDecision.RequestedReasoningEffort} · {HardAIDiagnostics.ElapsedSeconds:F2} s waiting/elapsed");
-            AIExternalActionResponse response = modelDecision.Response;
-            if (response != null)
-            {
-                EditorGUILayout.LabelField($"Model: {response.Model} · effort: {response.ReasoningEffort} · bridge time {response.Seconds:F2} s");
-                EditorGUILayout.LabelField($"Tokens: {response.InputTokens} input / {response.OutputTokens} output · session calls left: {(response.CallsRemaining < 0 ? "no request" : response.CallsRemaining.ToString())}");
-                if (!string.IsNullOrEmpty(response.Summary)) EditorGUILayout.LabelField(response.Summary, EditorStyles.wordWrappedLabel);
-                if (!string.IsNullOrEmpty(response.Error)) EditorGUILayout.HelpBox(response.Error, MessageType.Warning);
-            }
-        }
-        else
-        {
-            EditorGUILayout.LabelField($"Work {search.WorkCompleted}/{search.WorkBudget} · enemy reply work {search.ReplyWorkCompleted} · completed depth {search.Depth} · {HardAIDiagnostics.ElapsedSeconds:F2} s");
-            EditorGUILayout.LabelField($"Evaluator: {search.EvaluatorVersion}");
-        }
-        EditorGUILayout.LabelField(search.Complete ? search.StopReason : external ? "Waiting for the local Luna response" : "Searching; candidates are provisional");
+        EditorGUILayout.LabelField($"Work {search.WorkCompleted}/{search.WorkBudget} · enemy reply work {search.ReplyWorkCompleted} · completed depth {search.Depth} · {HardAIDiagnostics.ElapsedSeconds:F2} s");
+        EditorGUILayout.LabelField($"Evaluator: {search.EvaluatorVersion}");
+        EditorGUILayout.LabelField(search.Complete ? search.StopReason : "Searching; candidates are provisional");
         EditorGUILayout.LabelField($"Last executed: {HardAIDiagnostics.LastAction ?? "none"}");
         scroll = EditorGUILayout.BeginScrollView(scroll);
         for (int i = 0; i < search.Candidates.Count; i++)
         {
             AICandidatePlan plan = search.Candidates[i];
-            string label = external ? "Selected action" : $"#{i + 1} · score {plan.Score} · {plan.Actions.Length} actions";
+            string label = $"#{i + 1} · score {plan.Score} · {plan.Actions.Length} actions";
             if (GUILayout.Toggle(selectedCandidate == i, label, "Button")) selectedCandidate = i;
-            if (!external) EditorGUILayout.LabelField(plan.Evaluation.ToString(), EditorStyles.wordWrappedLabel);
+            EditorGUILayout.LabelField(plan.Evaluation.ToString(), EditorStyles.wordWrappedLabel);
             StringBuilder sequence = new StringBuilder();
             for (int step = 0; step < plan.Actions.Length; step++)
                 sequence.Append(step + 1).Append(". ").Append(HardAIRuntime.Describe(observation, plan.Actions[step])).Append('\n');

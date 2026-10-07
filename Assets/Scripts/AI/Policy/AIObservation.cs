@@ -65,7 +65,6 @@ namespace BlockNations.AI
         int ReplyWorkCompleted { get; }
         string EvaluatorVersion { get; }
         bool IsRootOnly { get; }
-        bool WaitingForExternalResult { get; }
         int Depth { get; }
         bool Complete { get; }
         string StopReason { get; }
