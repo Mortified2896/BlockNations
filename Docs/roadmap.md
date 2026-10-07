@@ -1,54 +1,57 @@
 # Block Nations Roadmap
 
-This roadmap is the current planning view for the live MVP path in this repo. For a short factual snapshot of current architecture and scope, see `Docs/MVP_Current_State.md`.
+Resume development through documentation cleanup, separately requested AI improvements, and renewed hosted playtesting. Keep each change bounded while preserving the ability to expand players and teams. [Current state](MVP_Current_State.md) describes implemented behavior; [development follow-ups](Development_Followups.md) records unresolved work and its validation.
 
-## Direction
+Last reviewed: 2026-10-07.
 
-- MVP modes are `VsAI` and `PlayByPost` only.
-- Multiplayer remains Play-by-Post first.
-- Gameplay UI is UITK-based for the MVP path.
-- `Tutorial` and `Hotseat` were removed and are out of current scope.
-- Keep planning grounded in the active build scenes: `MainMenu.unity` and `SampleScene.unity`.
+## Product direction
 
-## Done
+- Product modes remain `VsAI` and `PlayByPost`, with mobile touch input and UITK UI.
+- Multiplayer remains turn-based Play-by-Post. Active scenes are `MainMenu.unity` and `SampleScene.unity`.
+- The intended near-term player range is **4 or 5**, currently without teams. PBp implementation presently supports **2–4**; five players is future work.
+- Design for as many participants and teams as gameplay and performance can practically support. Keep player identity, seats/ownership, team relationships, turn ownership, viewer visibility, and transport state separate.
+- Joining/leaving and team switching are intended future capabilities. Shared vision, friendly fire, replacement/reconnection, control of departed players' assets, team victory, and when membership changes take effect remain design decisions.
 
-- Turn-based core loop, grid gameplay, combat, cities, fog-of-war, and save/load are in place.
-- `VsAI` is supported as the main single-player mode.
-- Live AI runtime has been simplified back to the Baseline path, with `Rider Focus` remaining as the current alternate per-side AI model option for AI-vs-AI setup.
-- `PlayByPost` is supported via HTTP transport and the Node/Express relay server.
-- Main menu flow is UITK-based.
-- Gameplay HUD/UI for the MVP path is on UITK:
-  - top HUD
-  - bottom HUD
-  - unit panel
-  - city panel
-- Legacy gameplay UI ownership was cleaned up after the UITK migration.
-- `Tutorial`, `Hotseat`, and `BottomStripController` were removed from the active product path.
+## Implemented foundation
 
-## Before MVP
+- Grid gameplay, turn progression, cities/recruitment, combat, visibility/exploration, and save/load.
+- Baseline/Rider Focus AI presets with local decision features and a tactical city-capture planner.
+- Seat-based legal-action queries, alongside older two-side AI helpers still needing transition.
+- Development AI-vs-AI batch/tournament evaluation and CSV logging.
+- HTTP PBp relay with turn storage, seat claims, and batched menu status.
+- Protocol 5 snapshots, protocol 4 migration, and per-seat ownership/metadata/gold/visibility support.
+- UITK main menu and gameplay top/bottom HUD, unit panel, and city panel.
 
-- Stabilize the current `VsAI` and `PlayByPost` flows without reopening scope.
-- Finish docs cleanup so repo guidance matches the live codebase and scene setup.
-- Do targeted UITK gameplay regression testing across supported gameplay flows and device layouts.
-- Tighten PBp runtime behavior where current code and docs still diverge.
-- Keep scene/setup changes focused on MVP reliability, not feature expansion.
+## Phase 1 documentation cleanup
 
-## After MVP
+Completed 2026-10-07: active instructions, compatibility documents, local/deployment setup, and test guidance now match the reviewed source. Planner preferences are separate from repository implementation rules. Known risks and future team direction are recorded without changing gameplay, server behavior, scenes/prefabs, serialized assets, credentials, or compatibility support.
 
-- Improve PBp UX and runtime robustness if MVP feedback shows it is needed.
-- Revisit player identity and ownership modeling beyond the current bool-based setup.
-- Consider PBp transport/server upgrades only after MVP needs are clear.
-- Expand telemetry/analytics beyond the current MVP baseline.
-- Revisit broader feature additions only after MVP is stable.
+## Phase 2 AI work
 
-## Explicitly Out Of Scope For Current MVP
+Start after the user requests phase 2. Plan the core-system boundary before implementation:
 
-- Tutorial reintroduction
-- Hotseat or other local pass-and-play modes
-- Re-opening the legacy gameplay UI path
-- Reintroducing `BottomStripController`
-- Reintroducing `Calculus` into live AI runtime behavior
-- Real-time multiplayer
-- Broad architecture refactors that do not directly support MVP stability
+- Extract AI orchestration/decisions from `TurnManager` in a bounded, behavior-preserving step.
+- Pass an explicit acting seat and its visibility through new AI paths, completing the transition from boolean side assumptions.
+- Introduce an explicit relationship boundary that preserves current free-for-all behavior and can later support allies. Do not infer hostility from different ownership once teams are supported.
+- Keep authoritative action validation/execution consistent with the seat-based legal-action service.
+- Improve tactics/recruitment after establishing a regression baseline, using existing evaluation tooling and mobile performance checks.
 
-Last reviewed: 2026-04-08
+This phase does not automatically authorize a complete team system, more player slots, or save-format changes.
+
+## Hosted playtesting preparation
+
+- Fix the confirmed concurrent-submit overwrite bug before reopening the relay to testers.
+- Verify the actual deployed entry point/revision before retiring the divergent `server.prod.js` copy.
+- Resolve the current public TLS/availability issue and validate create/claim/submit/fetch with supported client versions.
+- Review distributed playtest credentials and rate limiting behind the selected proxy/tunnel.
+- Choose between keeping the persistent Node relay behind Cloudflare and a separately designed Workers/storage migration.
+- If browser play is desired, build and validate Unity WebGL separately from relay hosting.
+
+## Later cleanup and decisions
+
+- Decompose oversized menu controllers when the approved feature requires it.
+- Decide existing-match retention before retiring protocol 4 or the missing-app-version bridge.
+- Implement additional capacity, teams, and membership changes only after rules, limits, compatibility, and tests are agreed.
+- Keep local transports and AI evaluation tools unless their removal is explicitly justified.
+
+Tutorial/Hotseat reintroduction, real-time multiplayer, broad unrelated refactors, and reopening legacy UI/Calculus profiles remain outside the current work.

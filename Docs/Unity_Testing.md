@@ -1,49 +1,70 @@
 # Unity Test Runner Notes
 
-Block Nations uses Unity 6000.4.0f1. Local command-line test runs should use the Unity Editor binary installed by Unity Hub.
+Use the Unity Hub Editor matching `ProjectSettings/ProjectVersion.txt` (currently 6000.4.0f1). PlayMode gameplay tests and UITK Editor tests have different graphics requirements.
 
-## Hermes/macOS CLI licensing caveat
+Last reviewed: 2026-10-07.
 
-When running Unity batchmode from Hermes on Jo's macOS machine, set `HOME=/Users/Jo` so Unity can see the normal Unity Hub / Personal license state.
+## Project and licensing
 
-Hermes profile shells may otherwise use a profile-local home such as:
+Do not start a batch run against this checkout while another Unity Editor instance is using it. Finish the run before opening the project interactively.
 
-```text
-/Users/Jo/.hermes/profiles/block-nations/home
-```
+Run under the normal licensed macOS user environment. A Hermes profile shell may resolve its user home to `/Users/Jo/.hermes/profiles/block-nations/home`, which can prevent Unity from finding Jo's normal Hub/Personal license state. Check the execution user/environment if licensing fails rather than changing project files or resetting licenses.
 
-That profile-local home can cause Unity CLI licensing failures even when Unity Hub and the Editor are activated normally.
+Do not pass `-quit` with `-runTests` in this setup: the test runner exits when complete, and the extra flag can quit after import before results are written.
 
-## PlayMode test command
+## PlayMode city capture test
 
-Do not pass `-quit` with `-runTests` in this setup; Unity exits after the test run. Including `-quit` can make Unity quit after import before writing test results.
-
-Example filtered PlayMode run:
+This targeted gameplay test supports `-nographics`:
 
 ```bash
 cd /Users/Jo/GitHub/BlockNations
+BN_UNITY_BIN="/Applications/Unity/Hub/Editor/6000.4.0f1/Unity.app/Contents/MacOS/Unity"
+BN_CHECK_OUT="$PWD/Logs/Validation/$(date +%Y%m%dT%H%M%S)"
+mkdir -p "$BN_CHECK_OUT"
 
-UNITY_BIN="/Applications/Unity/Hub/Editor/6000.4.0f1/Unity.app/Contents/MacOS/Unity"
-OUT_DIR="/Users/Jo/GitHub/BlockNations/Logs/HermesValidation"
-mkdir -p "$OUT_DIR"
-rm -f "$OUT_DIR/playmode-results.xml" "$OUT_DIR/unity-test.log"
-
-HOME=/Users/Jo "$UNITY_BIN" -batchmode -nographics \
-  -projectPath "/Users/Jo/GitHub/BlockNations" \
+"$BN_UNITY_BIN" -batchmode -nographics \
+  -projectPath "$PWD" \
   -runTests \
   -testPlatform PlayMode \
-  -testResults "$OUT_DIR/playmode-results.xml" \
   -testFilter "AdjacentEmptyEnemyCityCaptureTests" \
-  -logFile "$OUT_DIR/unity-test.log"
+  -testResults "$BN_CHECK_OUT/playmode-results.xml" \
+  -logFile "$BN_CHECK_OUT/playmode.log"
 ```
 
-Expected success indicators:
+The test exercises both acting seats and adjacent positions for capturing an empty enemy city. It is a regression check, not complete AI correctness/balance coverage.
 
-- Unity exits with code `0`.
-- `Logs/HermesValidation/playmode-results.xml` is created.
-- The XML root reports `result="Passed"` with `failed="0"`.
+## EditMode tests with graphics
 
-## Notes
+`MultiplayerScrollViewTests` opens an EditorWindow for UITK layout. It requires a graphics device even for the parameterized helper cases because they share the same setup fixture. Do not use `-nographics` for this suite.
 
-- `Logs/HermesValidation/` is for local validation output and should remain untracked.
-- If `dotnet build --no-restore` reports a missing `Temp/obj/.../project.assets.json`, run `dotnet restore` for the relevant generated Unity `.csproj` first.
+```bash
+cd /Users/Jo/GitHub/BlockNations
+BN_UNITY_BIN="/Applications/Unity/Hub/Editor/6000.4.0f1/Unity.app/Contents/MacOS/Unity"
+BN_CHECK_OUT="$PWD/Logs/Validation/$(date +%Y%m%dT%H%M%S)"
+mkdir -p "$BN_CHECK_OUT"
+
+"$BN_UNITY_BIN" -batchmode \
+  -projectPath "$PWD" \
+  -runTests \
+  -testPlatform EditMode \
+  -testResults "$BN_CHECK_OUT/editmode-results.xml" \
+  -logFile "$BN_CHECK_OUT/editmode.log"
+```
+
+The current 11 EditMode cases cover responsive size tiers and multiplayer scroll behavior. If graphical batch execution is unavailable, run them through the Editor Test Runner; failures during graphics initialization do not establish a gameplay regression.
+
+## Interpret results
+
+Successful validation requires exit code 0 and a fresh XML result with `result="Passed"` and `failed="0"`. Inspect the XML/log on failure; do not rely on a stale result file.
+
+On 2026-10-07 at source revision `0d510b3`, the filtered PlayMode test passed and all 11 EditMode tests passed with graphics enabled. An earlier EditMode attempt with `-nographics` failed in fixture setup with "No graphic device is available to initialize the view." Local results are in ignored `Logs/RestartAudit/`.
+
+`Logs/` and generated Unity project files are local validation artifacts and should remain untracked. A generated `.csproj`/dotnet build can help diagnose compilation but does not replace Unity import/runtime tests. If `dotnet build --no-restore` reports missing generated project assets, restore the relevant generated project first.
+
+## Validation scope
+
+- Documentation-only changes: check source claims, links, commands, and diff scope; do not rerun Unity solely for prose edits.
+- AI changes: targeted tactical/legal-action/visibility checks plus existing evaluation tooling and device responsiveness.
+- PBp changes: supported seats, claims, progression/resignation/elimination, compatibility, and independent POV/turn/transport state.
+- Scene/prefab/UI behavior changes: add a focused manual checklist for the affected flow/device layouts; report which checks were actually executed.
+- Menu screenshots: use `Assets/Editor/TakeScreenshotMenu.cs` in Play Mode with the Game view active/visible. Settle after switching panes, capture one pane into `Screenshots/`, and verify it before moving on.

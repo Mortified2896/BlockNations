@@ -1,20 +1,24 @@
-# PbP Migration Ledger
+# PBp Migration Ledger
 
-## Versioning Rules
+The current snapshot protocol is **5**, with **4** as the supported migration source. This ledger records representation changes separately from app-version gating. See [compatibility policy](PBp-Compatibility.md) for the current load rules.
 
-- Bump `appVersion` when mixed-build PbP play should be blocked for safety.
-- Bump PbP `protocolVersion` when serialized payload meaning or load semantics change.
-- Support at most one explicit migration source at a time unless there is a strong reason to carry more.
+Last reviewed: 2026-10-07, against source revision `0d510b3`.
 
-## Migration History
+## Migration history
 
-| App Version | PbP Protocol | Migrates From | Main Change | Status | Cleanup Note |
-| --- | --- | --- | --- | --- | --- |
-| Pre-current typed-units step | 3 | None | Warrior/Scout typed-unit payloads with legacy whole-number health; some older saves may omit `appVersion`. | Legacy migration source still accepted. | Remove support when protocol 4 migration window closes. |
-| Current build line | 4 | 3 | Persist scaled combat health via `currentHealthUnits`; accept protocol 3 on load; bridge missing `appVersion` for supported legacy saves; rebuild migrated snapshots as protocol 4. | Active. | Drop protocol 3 load support and the missing-`appVersion` bridge together. |
+| Protocol | Representation | Current status | Follow-up |
+| --- | --- | --- | --- |
+| 3 | Typed Warrior/Scout units with legacy whole-number health and two-side fields; some saves omit `appVersion`. | Historical; rejected by the current PBp protocol gate. | Keep only as historical context or explicit fixtures. |
+| 4 | Scaled combat health persisted as `currentHealthUnits`; legacy two-side snapshot representation. | Single supported migration source into 5, subject to app-version gating. | Retire only after an explicit decision about existing saves/matches. |
+| 5 | Explicit seat count/current turn seat/transport sequence, seat metadata and gold, unit/city owner seats, and explored-seat data, alongside legacy bridges. | Current write/load protocol; PBp currently supports 2–4 seats. | Future capacity/team/membership changes need a separately approved design and compatibility review. |
 
-## Update Rule For Future Releases
+The current project app version is `1.0.3`; this does not date the introduction of every historical protocol. A present `appVersion` must match the client even for a supported migration source. Missing/blank `appVersion` still passes the temporary bridge. The source TODO tying that bridge to protocol 3 retirement is stale and awaits a policy decision.
 
-- Add one row when a PbP-relevant release changes version gating, protocol, or migration support.
-- Update the current row when the migration bridge or cleanup note changes.
-- When dropping the old migration source, remove or mark the obsolete row clearly so the ledger still reflects the live support window.
+## Versioning and update rules
+
+- Bump `appVersion` when mixed-build PBp play should be blocked.
+- Bump `protocolVersion` when serialized meaning or load semantics change.
+- Support at most one explicit migration source unless a broader window is justified and approved.
+- Add a row for a new representation and update existing status/retirement notes when the support window changes.
+- Keep the compatibility policy, factual current state, code gates, and release notes consistent.
+- Retirement of old data and the missing-app-version bridge is unresolved; phase 1 documentation cleanup changes neither.

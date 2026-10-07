@@ -1,55 +1,51 @@
 # PBp Compatibility Policy
 
-This note records the current Play-by-Post compatibility/versioning policy for the repo.
+Current PBp snapshots use protocol **5**. The current client also accepts protocol **4** as its single migration source. Preserve these supported paths until a release decision explicitly retires them.
 
-## Current Protocol Version
+Last reviewed: 2026-10-07. Source authority: the protocol/app-version gates and snapshot build/load paths in `Assets/Scripts/Core/TurnManager.cs`.
 
-- Current PBp game/snapshot protocol baseline: `3`
-- Legacy migration source still accepted during rollout: `2`
-- Separate transport-contract reference: `Docs/HTTP_PBp_Transport_Contract_v0.md`
+## Version fields
 
-Game/snapshot protocol governs save/load and cross-client compatibility.
-The HTTP transport contract doc describes request/response shape only.
+| Field | Current meaning |
+| --- | --- |
+| `protocolVersion` | Snapshot meaning/load compatibility: writes 5, accepts 5 or 4 for PBp loads. |
+| `appVersion` | Application build version (`1.0.3` in current project settings). If present, it must match `TurnManager.CurrentAppVersion`. |
+| `version` | Legacy save-schema string (`"3"` in `GameSave`), separate from PBp protocol. |
 
-## Protocol History / Upgrade Notes
+The [HTTP contract](HTTP_PBp_Transport_Contract.md) describes request/response shapes. Transport success is not proof that a snapshot will pass client compatibility gates.
 
-- `3`: current game/snapshot protocol baseline.
-- `2`: temporary migration source retained for legacy save compatibility.
-- Any future PBp game/snapshot upgrade must be called out in code, commit messages, and changelog notes.
+## Current load and migration behavior
 
-## Combat Scale Note
+- Missing/invalid PBp protocol and protocols outside 4/5 are rejected.
+- Protocol 4 is normalized through the current load path and rebuilt as protocol 5 on subsequent save/export. Existing legacy two-side ownership/turn/name/visibility fields provide fallback data.
+- Protocol 5 carries explicit seats, current turn seat, owner seats, per-seat metadata/gold, explored-seat data, and transport sequence.
+- A present nonblank `appVersion` must match the current app, including on protocol 4. Protocol acceptance does not bypass app-version gating.
+- A missing/blank `appVersion` is still accepted by a temporary bridge for an otherwise supported PBp load. The code comment referring to dropping protocol 3 is stale; it does not describe a restriction enforced by this bridge.
+- Forward migration does not promise that an older client can read the newly saved game.
 
-- Combat values are now represented internally as scaled integers with `CombatScale = 10`.
-- Player-facing rule values remain decimal values such as `1.0`, `0.5`, and `0.1`; the wire/save representation may store the scaled integer equivalents `10`, `5`, and `1`.
-- Treat this as PBp protocol-relevant data representation. Any future change to combat scaling or serialized combat number semantics should be treated as a compatibility/versioning change.
+## Combat representation
 
-## Migration Policy
+Protocol 4 introduced persisted `currentHealthUnits` using `CombatScale = 10`. Protocol 5 retains this representation. Displayed rule values `1.0`, `0.5`, and `0.1` correspond to stored `10`, `5`, and `1`. Changes to combat scaling or wire/save number meaning require compatibility review.
 
-- Prefer forward-only migration for supported PBp content and snapshot formats.
-- Newer typed-unit games do not need to remain backward compatible with older protocols.
-- If a game is saved or migrated into a newer PBp format, the newer format is the only supported path for continued play.
+## Future releases and retirement
 
-## Temporary Migration Support
+- Bump `appVersion` when mixed-build PBp play should be blocked for safety.
+- Bump `protocolVersion` when serialized payload meaning or load semantics change.
+- Keep at most one explicit migration source unless a broader window is justified and approved.
+- Keep a reference build/fixture from the preceding supported protocol for migration checks.
+- Existing local saves and PBp matches have not been approved for disposal. Do not remove a compatibility branch because a document or comment calls it old.
+- Decide protocol 4 retirement and the missing-app-version bridge explicitly, then update code, [the migration ledger](PbP_Migration_Ledger.md), and release notes together.
+- Additional players, team relationships, or membership changes may require protocol work. They are future requirements, not permission to change the current format during cleanup.
 
-- Legacy migration rules may exist only for the active rollout window.
-- Remove temporary compatibility paths after rollout completes.
-- Do not leave old migration branches in place once the new protocol is stable.
+## Upgrade validation
 
-## Old Build Retention
+Use a targeted checklist for a compatibility change:
 
-- Keep the last build from the previous PBp protocol era for regression testing and recovery checks.
-- Treat that build as the reference client for compatibility verification during upgrades.
+- Current client loads a supported old fixture with the required app version and migrates it.
+- Migrated data saves as the current protocol and continues after a turn without re-triggering migration.
+- Explicit incompatible app versions and unsupported older/newer protocols are rejected with appropriate UI.
+- Missing-app-version fixtures follow the explicitly chosen bridge policy.
+- Legacy two-side fixtures preserve ownership, turn state, combat health, explored state, and transport progress.
+- Current 2-, 3-, and 4-seat games preserve viewer POV, turn ownership, and submitted/applied sequence independently, including eliminated/resigned seats.
 
-## Compatibility Test Checklist
-
-Use this checklist for future PBp upgrades:
-
-- Old client opens new game.
-- New client opens old game.
-- Migrated game continues after one turn.
-- Local snapshot does not re-trigger the legacy path.
-- Block/upgrade UX is clear to the player.
-
-## Change Notes
-
-- Future protocol or content upgrades should be explicitly mentioned in commit messages and changelog entries.
+Check an old client against a new snapshot for safe rejection or an explicitly supported path; do not assume backward compatibility is required.

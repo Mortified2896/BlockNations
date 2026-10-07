@@ -1,153 +1,71 @@
-Block Nations – Project Prompt
+# Block Nations repository instructions
 
-You are assisting on Block Nations, a turn-based, tile-based strategy game built in Unity 6000.4.0f1, targeting mobile first (iOS and Android).
+Block Nations is a turn-based, tile-based Unity game targeting iOS and Android first. Touch interaction is core; Editor mouse input should approximate touch behavior. The project uses the New Input System. Read the required Editor version from `ProjectSettings/ProjectVersion.txt` (currently Unity 6000.4.0f1).
 
-Platform & Input
-- Mobile-first (iOS and Android)
-- Touch interaction is core (camera drag, tap selection, UI interaction)
-- Editor mouse behavior should approximate mobile touch behavior
-- Project input is now based on the New Input System
+## Project context
 
-Game focus
-- Supported MVP gameplay modes are `VsAI` and `PlayByPost`
-- Current development focus is `PlayByPost`
+- Supported product modes are `VsAI` and `PlayByPost`. AI-vs-AI simulation is development tooling.
+- Active build scenes are `Assets/Scenes/MainMenu.unity` and `Assets/Scenes/SampleScene.unity`.
+- Main menu and active gameplay UI use UI Toolkit (UITK).
+- Design references are The Battle of Polytopia for clarity, pacing, and mobile UX, and Civilization for broader strategy ambitions.
+- The restart sequence is phase 1 documentation cleanup (completed 2026-10-07), phase 2 separately requested AI work, and preparation for renewed hosted playtesting. Phase 1 completion does not authorize gameplay changes or deployment.
+- Start with [the documentation index](Docs/README.md), [current state](Docs/MVP_Current_State.md), and [development follow-ups](Docs/Development_Followups.md). Older audits under `Docs/archive/` are historical references.
 
-Design reference
-- Inspired by The Battle of Polytopia for clarity, pacing, and mobile-first UX, with broader strategy ambitions closer to Civilization
+## Scope and workflow
 
-Development philosophy
-- Prefer small, incremental changes
-- Assume systems are already in use and must remain stable
-- Always consider timing: “Is this the right moment to do this?”
-- Prefer explicit explanations
-- Prefer concise, decision-oriented responses by default
-- Prefer spending Codex usage on implementation, not repeated planning, unless the task is risky or unclear
-- Prefer minimal safe scope, but do not choose an inferior architecture just to keep file count low
+- Prefer small, incremental changes. Assume existing systems are in use and must remain stable.
+- Implement small, clear, low-risk requests directly. For risky, unclear, or core-system changes, investigate and present a plan before patching unless the user already approved that plan or implementation scope.
+- A core-system plan should identify likely causes, the recommended solution, exact files likely to change, tradeoffs, risks, assumptions, relevant edge cases, and a minimal manual test checklist. Offer alternatives only when they help the decision.
+- Do not touch unrelated code or perform opportunistic cleanup.
+- No scene (`.unity`) changes, prefab edits, or UI layout redesign unless explicitly requested.
+- No broad refactors unless explicitly requested. Extract responsibilities in bounded steps when justified by the approved task.
+- Avoid changing persistent data formats unless clearly necessary and explicitly approved. Preserve supported saves and PBp migration paths until a retirement decision is made.
+- Follow existing patterns unless there is a strong reason to change them. A low file count is a preference, not a reason to keep growing oversized files or choose an inferior architecture. Explain broader scope when needed for correctness or maintainability.
+- Follow [the Git workflow](Docs/BlockNations_Git_Workflow.md) for completed, validated changes. Keep unrelated local changes out of commits.
+- For OmniRoute operations, read the relevant OmniRoute Agent Skill first and prefer its API/CLI/MCP workflow. Use a browser only when the supported workflow genuinely requires it.
 
-Roles
-- Codex: implementation (full codebase access)
-- You (ChatGPT): primary planner, architectural reviewer, sanity checker, and long-term vision guard
+## Behavior and compatibility
 
-Workflow
-- ChatGPT is the default planner/reviewer
-- For small, clear, low-risk tasks, ChatGPT may send Codex directly to implementation
-- For risky, unclear, or core-system tasks, plan first and wait for approval before patching
+- If behavior changes, state what changes, why, and how it will be tested.
+- Prefer additive changes. Changes to core systems should remain clean and consistent rather than patch around limitations.
+- Identify temporary workarounds explicitly.
+- Use stable state for logic; do not infer state from rendered UI strings.
+- PBp snapshot protocol is currently `5`, with `4` as the supported migration source. See [compatibility policy](Docs/PBp-Compatibility.md) and [migration ledger](Docs/PbP_Migration_Ledger.md).
+- Treat the source code as authoritative for implemented behavior. Distinguish implemented features, verified behavior, future requirements, and unresolved decisions in documentation.
 
-For plan-first tasks, provide:
-- likely root cause(s)
-- recommended solution
-- alternative options only when they meaningfully help the decision
-- if there is clearly only one sensible option, do not invent extra alternatives
-- exact files likely to change
-- tradeoffs
-- what could go wrong
-- assumptions
-- MVP-relevant edge cases
-- minimal manual test checklist
+## Players, teams, and PBp truth
 
-Scope constraints
-- Prefer small, incremental changes and low file count by default
-- Do not touch unrelated code or do opportunistic cleanup
-- No scene (.unity) changes, prefab edits, or UI layout redesign unless explicitly requested
-- No broad refactors unless explicitly requested
-- Avoid changing persistent data formats unless clearly necessary and explicitly approved
-- Follow existing code patterns unless there is a strong reason not to
-- Touching more than 2 files is acceptable when clearly justified by correctness, clarity, maintainability, or keeping oversized/high-risk files from growing further
-- If broader scope is justified, explain why it is the better MVP choice
+Keep these concepts separate:
 
-Behavior guardrails
-- If behavior changes, explicitly state:
-  - what changes
-  - why it is necessary
-  - how we will test it
-- Prefer additive changes over modifying existing flows
-- If modifying a core system, prefer a clean and consistent approach over patching around limitations
-- Explicitly state if a change is a temporary workaround vs a proper solution
-- Do not use rendered UI strings as logic when stable state already exists
+1. Player identity: who participates.
+2. Match seat and ownership: a participant's seat and the units/cities it owns.
+3. Team membership and relationships: alliances and hostility, independent of ownership.
+4. Viewer POV and visibility: what the local viewer can see.
+5. Turn ownership: which seat may act.
+6. Transport state: last applied/submitted sequence and polling state.
 
-PBp truth separation
-Keep these separate:
-1) viewer POV / visibility (local seat)
-2) turn ownership (whose turn it is)
-3) transport state (lastApplied seq / submitted seq / polling state)
+- Current PBp code supports 2–4 seats without a team model. The user's near-term player-count direction is 4 or 5; five-player support is not implemented. Neither number is a permanent architectural cap.
+- Preserve a path to as many players and teams as the game can practically support, including joining/leaving and switching teams. Do not implement those rules or choose their timing during an unrelated cleanup.
+- Future AI and legal-action code must use explicit `seatIndex`, `currentTurnSeatIndex`, `IsTurnOwnedBySeat(int)`, and `ownerSeatIndex`. Do not use `isPlayerTurn`, `isPlayerOwned`, `IsHumanTurn`, `CanControlUnit`, or `CanLocalPlayerIssueCommands()` as AI/legal-action legality inputs.
+- `isPlayerTurn` is a legacy turn-side bridge, not a PBp POV signal. Existing boolean AI paths are migration work, not patterns to copy into new code.
+- As teams are introduced, determine hostility/cooperation through explicit relationships. Different owners alone do not establish hostility. A relationship boundary must preserve today's free-for-all behavior until team rules are approved.
+- Reconnecting, claiming an unused seat, resignation, elimination, and a new player joining or replacing another player are distinct operations. Do not assume current seat claiming implements all of them.
 
-Important:
-- `isPlayerTurn` is NOT a POV signal in PBp; it is turn-side only
-- Future AI/legal-action code must be seat-based. Use explicit `seatIndex`, `currentTurnSeatIndex`, `IsTurnOwnedBySeat(int)`, and `ownerSeatIndex`; do not use `isPlayerTurn`, `isPlayerOwned`, `IsHumanTurn`, `CanControlUnit`, or `CanLocalPlayerIssueCommands()` as AI/legal-action legality inputs.
+## UI work
 
-UI work policy
-- If UI requires new buttons/labels/panels: describe what to add and where to wire it, but do not auto-wire via hacks
-- Prefer explicit serialized references and inspector wiring
-- If proposing UI flow changes, list player-facing implications clearly
-- For MVP PBp display metadata, prefer latest locally known snapshot/header data over widening lightweight polling or server payloads unless live freshness is explicitly required
-- Preserve requested wording exactly for text/copy changes unless a technical or layout issue makes that impossible
-- Current PBp playtesting rule: keep the random username generator implemented but hidden in the Profile panel, and require a manually entered recognizable typed name before entering Multiplayer
-- For menu-pane screenshots, use the custom screenshot tool in `Assets/Editor/TakeScreenshotMenu.cs`, not Unity camera capture
-- Menu screenshots require Play Mode with the Game view active/visible
-- After changing panes, allow a short settle delay before triggering the screenshot
-- Menu screenshots save into the project-local `Screenshots` folder
-- Capture panes one at a time and verify each file before moving on
+- Use explicit serialized references and inspector wiring. Describe new buttons/labels/panels and where to wire them; do not auto-wire through hacks.
+- List player-facing implications of UI flow changes.
+- For MVP PBp display metadata, prefer the latest locally known snapshot/header over widening lightweight polling or server payloads unless live freshness is explicitly required.
+- Preserve requested wording exactly unless a technical or layout issue prevents it.
+- Keep the random username generator implemented but hidden in the Profile panel. Multiplayer requires a manually entered recognizable typed name.
+- For menu-pane screenshots, use `Assets/Editor/TakeScreenshotMenu.cs`, not Unity camera capture. Enter Play Mode with the Game view active/visible, allow a short settle delay after changing panes, capture one pane at a time into `Screenshots/`, and verify each file before continuing.
 
-Default behavior when writing a Codex prompt
-- Outside the copy-paste box:
-  - state the recommended Codex model and reasoning level briefly
-  - mention whether the same Codex chat can be continued
-  - only suggest a new Codex chat when there is a real reason, such as a major topic shift, model change, or context cleanliness concern
-- Inside the copy-paste box:
-  1) start with the problem/goal in plain English
-  2) ask for a separate planning pass only if the task is risky, unclear, or core-system related
-  3) otherwise instruct implementation directly
-  4) require minimal changes and scope limits
-  5) require unified diff only when appropriate
-- Prompts to Codex should always be output in a copy-paste-ready box
-- Do not mention model choice or chat-window guidance inside the copy-paste box
-- Assume the same Codex chat continues while the topic is still meaningfully the same
-- If I say “copy paste box”, output only the box content
+## Validation and communication
 
-Available models
-- GPT-5.4
-- GPT-5.4-Mini
-- GPT-5.3-Codex
-- GPT-5.2-Codex
-- GPT-5.2
-- GPT-5.1-Codex-Max
-- GPT-5.1-Codex-Mini
-
-Available reasoning levels
-- Low
-- Medium
-- High
-- Extra High
-
-Model / reasoning guidance
-- Prefer the lowest-cost model and reasoning level that is still safe for the task
-- Use lighter settings for small, explicit, low-risk work
-- Use stronger settings for PBp core logic, TurnManager, save/load, input, or ambiguous regression-sensitive work
-- Avoid switching models mid same VS Code coding chat unless necessary
-
-Response style
-- Prefer short, decision-oriented responses by default
-- Be explicit but concise
-- Only expand when the task is risky, ambiguous, or I ask for more detail
-- Do not repeat already established context unless needed for correctness
-
-Definition of done
-For non-trivial changes, prefer:
-- compile/build result when relevant
-- targeted manual test checklist when code/scene/prefab/behavior-affecting files changed
-- rollback guidance when useful
-- unified diff when appropriate for the type of change
-- one copy-paste-ready commit message when the patch is likely ready and appropriate to commit
-
-Testing depth
-- Always prefer practical, relevant checks over exhaustive verification
-- Do not require broad smoke testing for every small patch
-- Use heavier validation only when the change is risky, touches core systems, or is likely to cause UI/flow regressions
-- Manual smoke checks should usually be listed for me to run, not assumed to have been executed by Codex
-
-End-of-message behavior
-- In most cases, end with a copy-paste-ready prompt for Codex unless I say not to
-- Put the recommended Codex model and reasoning level above the copy-paste box, not inside it
-- Assume the same Codex chat continues unless there is a clear reason to switch
-- If a new Codex chat is recommended, say so explicitly and briefly explain why
-- For small, clear, low-risk tasks, prefer a direct implementation prompt rather than a separate planning prompt
+- Prefer practical checks relevant to the change. Documentation-only changes need source/link/diff checks, not new gameplay tests.
+- For non-trivial code changes, report compilation/test results when relevant, a targeted manual checklist, and material limitations. Manual smoke checks are normally for the user to run; do not imply they were executed.
+- Follow [Unity testing notes](Docs/Unity_Testing.md); UITK Editor tests require graphics.
+- Provide rollback guidance and a unified diff when useful. Supply a copy-paste-ready commit message when a patch is ready to commit.
+- Keep secrets and private runtime data out of output and new commits.
+- Respond concisely and explain decisions explicitly. Spend effort on implementation rather than repeating established plans.
+- Separate ChatGPT planner/prompt preferences are preserved in [Planner Workflow](Docs/Planner_Workflow.md); prompt-writing conventions are not mandatory endings for implementation reports.
