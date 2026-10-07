@@ -557,6 +557,48 @@ public class AdjacentEmptyEnemyCityCaptureTests
     }
 
     [Test]
+    public void TrainerEpisodeResetDiscardsInFlightBufferAndAcceptsFreshDecision()
+    {
+        SetMember(_turnManager, "externallyDrivenMatch", true);
+        SetMember(_turnManager, "ExternalMatchReady", true);
+        SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "VsAI"));
+        SetMember(_turnManager, "currentTurnSeatIndex", 0);
+        InvokeMethod(_city, "SetOwnerSeatIndex", new object[] { 0 });
+
+        var arenaObject = new GameObject("ResetTestArena");
+        arenaObject.SetActive(false);
+        var arena = arenaObject.AddComponent(FindType("TrainingArena"));
+        _sceneObjects.Add(arenaObject);
+        SetMember(arena, "turnManager", _turnManager);
+        SetMember(arena, "ready", true);
+
+        var agentObject = new GameObject("ResetTestAgent");
+        agentObject.SetActive(false);
+        var agent = agentObject.AddComponent(FindType("TrainingSeatAgent"));
+        _sceneObjects.Add(agentObject);
+        SetMember(agent, "arena", arena);
+        SetMember(agent, "seatIndex", 0);
+        object source = Activator.CreateInstance(FindType("SeatAIObservationSource"));
+        object context = InvokeMethod(source, "Observe", new object[] { _turnManager, 0, true, null });
+        Type bufferType = FindType("Unity.MLAgents.Actuators.ActionBuffers");
+        object cleared = Activator.CreateInstance(bufferType, new object[] { Array.Empty<float>(), new[] { 0 } });
+        InvokeMethod(agent, "PrepareDecision", new[] { context });
+        InvokeMethod(agent, "OnEpisodeBegin", Array.Empty<object>());
+        InvokeMethod(agent, "OnActionReceived", new[] { cleared });
+        Assert.That(GetMember(arena, "Failure"), Is.Null);
+        Assert.That(GetMember(arena, "Rejections"), Is.EqualTo(0));
+        Assert.That(GetMember(_turnManager, "currentTurnSeatIndex"), Is.EqualTo(0));
+
+        int endTurn = (int)FindType("BlockNations.AI.LearnedActionSchema").GetField("EndTurn").GetValue(null);
+        object fresh = Activator.CreateInstance(bufferType, new object[] { Array.Empty<float>(), new[] { endTurn } });
+        InvokeMethod(agent, "PrepareDecision", new[] { context });
+        InvokeMethod(agent, "OnActionReceived", new[] { fresh });
+        Assert.That(GetMember(_turnManager, "currentTurnSeatIndex"), Is.EqualTo(1));
+        Assert.That(GetMember(arena, "Actions"), Is.EqualTo(1L));
+        Assert.That(GetMember(arena, "Rejections"), Is.EqualTo(0));
+    }
+
+    [Test]
     public void VsAITurnAuthorityUsesSeatAndRejectsInvalidSeatAliases()
     {
         SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "VsAI"));

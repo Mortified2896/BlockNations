@@ -14,6 +14,7 @@ public sealed class TrainingSeatAgent : Agent
     private Dictionary<int, AIAction> choices;
     private float[] observations;
     private int selectedSource = -1;
+    private bool awaitingDecision;
     public int SeatIndex => seatIndex;
     public int SelectedSource => selectedSource;
 
@@ -23,6 +24,7 @@ public sealed class TrainingSeatAgent : Agent
         context = null;
         choices = null;
         observations = null;
+        awaitingDecision = false;
     }
 
     public void PrepareDecision(SeatAIObservationSource.Context snapshot)
@@ -30,6 +32,7 @@ public sealed class TrainingSeatAgent : Agent
         context = snapshot;
         choices = LearnedActionSchema.Choices(snapshot.Observation, selectedSource);
         observations = LearnedActionSchema.Encode(snapshot.Observation, selectedSource);
+        awaitingDecision = true;
         RequestDecision();
     }
 
@@ -47,7 +50,10 @@ public sealed class TrainingSeatAgent : Agent
 
     public override void OnActionReceived(ActionBuffers actions)
     {
-        if (arena == null || !arena.CanAct(seatIndex)) return;
+        // Academy can reset both agents while an RPC decision is in flight.
+        // A cleared/replayed buffer after that reset is not a game action.
+        if (!awaitingDecision || arena == null || !arena.CanAct(seatIndex)) return;
+        awaitingDecision = false;
         int encoded = actions.DiscreteActions[0];
         if (choices == null || !choices.TryGetValue(encoded, out AIAction selected))
         {

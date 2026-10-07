@@ -380,12 +380,13 @@ def main() -> int:
         output_thread.join(timeout=5)
         checkpoints = list(run.rglob("*.pt"))
         exports = list(run.rglob("*.onnx"))
-        state.update({"state": "stopped" if process.returncode == 0 else "failed", "stopReason": reason,
+        failed = process.returncode != 0 or reason == "arena_failure"
+        state.update({"state": "failed" if failed else "stopped", "stopReason": reason,
                       "exitCode": process.returncode, "elapsedSeconds": time.monotonic() - started,
                       "usedBytes": size(root), "freeBytes": shutil.disk_usage(root).free,
                       "checkpointCount": len(checkpoints), "exportCount": len(exports)})
         atomic_json(run / "supervisor-status.json", state)
-        return process.returncode or 0
+        return process.returncode or (1 if failed else 0)
     finally:
         if process is not None and process.poll() is None:
             interrupt_trainer(process)

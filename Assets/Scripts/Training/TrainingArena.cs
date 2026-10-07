@@ -38,6 +38,7 @@ public sealed class TrainingArena : MonoBehaviour
     public int Captures { get; private set; }
     public int Interruptions { get; private set; }
     public int Rejections { get; private set; }
+    public int TrainerResets { get; private set; }
     public string LastAction { get; private set; } = "Waiting for trainer";
     public string Failure { get; private set; }
     public int Round => turnManager != null ? turnManager.turnNumber : 0;
@@ -94,6 +95,7 @@ public sealed class TrainingArena : MonoBehaviour
         Application.runInBackground = true;
         previousAutomaticStepping = Academy.Instance.AutomaticSteppingEnabled;
         Academy.Instance.AutomaticSteppingEnabled = false;
+        Academy.Instance.OnEnvironmentReset += TrainerReset;
         if (requireTrainer && !Academy.Instance.IsCommunicatorOn)
         {
             Fail("Python trainer is not connected. Start from the Local ML Training window.");
@@ -133,6 +135,18 @@ public sealed class TrainingArena : MonoBehaviour
         SeatAIActionExecutor.CanAct(turnManager, seat);
 
     public void RecordDecision() { Decisions++; matchDecisions++; }
+
+    private void TrainerReset()
+    {
+        if (!ready) return; // The SDK's initial handshake precedes the first match.
+        TrainerResets++;
+        // A self-play team switch discards the in-flight partial match. The SDK
+        // resets its agents after this callback; start a fresh board next frame.
+        // Do not issue EndEpisode/reward RPCs from inside the reset exchange.
+        needsReset = true;
+        LastAction = "Trainer reset; preparing a fresh match";
+        Academy.Instance.StatsRecorder.Add("Match/TrainerReset", 1);
+    }
 
     public bool Execute(LegalTurnAction action)
     {
@@ -236,7 +250,7 @@ public sealed class TrainingArena : MonoBehaviour
     [Serializable] public sealed class ArenaStatus
     {
         public long decisions, actions;
-        public int games, captures, interruptions, rejections, round, seat, curriculumDistance, seed, roundLimit;
+        public int games, captures, interruptions, rejections, trainerResets, round, seat, curriculumDistance, seed, roundLimit;
         public double elapsedSeconds, decisionsPerSecond;
         public bool paused, trainerConnected;
         public string lastAction, failure;
@@ -250,6 +264,7 @@ public sealed class TrainingArena : MonoBehaviour
         double elapsed = Math.Max(0, now - startedAt);
         var state = new ArenaStatus { decisions = Decisions, actions = Actions, games = Games, captures = Captures,
             interruptions = Interruptions, rejections = Rejections, round = Round, seat = ActingSeat,
+            trainerResets = TrainerResets,
             curriculumDistance = curriculumDistance, seed = seed, elapsedSeconds = elapsed,
             roundLimit = matchRoundLimit,
             decisionsPerSecond = elapsed > 0 ? Decisions / elapsed : 0, paused = Paused,
@@ -285,6 +300,10 @@ public sealed class TrainingArena : MonoBehaviour
         if (registeredTrainerFactory) CommunicatorFactory.ClearCreator();
         CommunicatorFactory.Enabled = previousCommunicatorEnabled;
         Application.runInBackground = previousBackground;
-        if (Academy.IsInitialized) Academy.Instance.AutomaticSteppingEnabled = previousAutomaticStepping;
+        if (Academy.IsInitialized)
+        {
+            Academy.Instance.OnEnvironmentReset -= TrainerReset;
+            Academy.Instance.AutomaticSteppingEnabled = previousAutomaticStepping;
+        }
     }
 }
