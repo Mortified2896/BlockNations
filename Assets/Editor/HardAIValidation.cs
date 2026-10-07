@@ -13,7 +13,7 @@ public static class HardAIValidation
 
     [MenuItem("Tools/Block Nations/Validate Hard AI/Edit Mode")]
     public static void RunEditMode() => Run(TestMode.EditMode,
-        new[] { "HardTacticianPolicyTests", "MultiplayerScrollViewTests", "UITKResponsiveSizeTierControllerTests" });
+        new[] { "HardTacticianPolicyTests", "AIVsAIMatchHandoffTests", "MultiplayerScrollViewTests", "UITKResponsiveSizeTierControllerTests" });
 
     [MenuItem("Tools/Block Nations/Validate Hard AI/Play Mode")]
     public static void RunPlayMode() => Run(TestMode.PlayMode, new[] { "AdjacentEmptyEnemyCityCaptureTests" });

@@ -577,6 +577,55 @@ public class AdjacentEmptyEnemyCityCaptureTests
         }
     }
 
+    [UnityTest]
+    public IEnumerator ScheduledHardPolicyReachesSearchThroughTurnManagerForBothSeats()
+    {
+        SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "VsAI"));
+        SetMember(_turnManager, "enableAIVsAIDebugMode", true);
+        Type variant = FindType("TurnManager+AIRecruitVariant");
+        Type diagnostics = FindType("HardAIDiagnostics");
+        diagnostics.GetField("PauseBeforeAction").SetValue(null, false);
+        for (int seat = 0; seat < 2; seat++)
+        {
+            SetMember(_turnManager, "currentTurnSeatIndex", seat);
+            SetMember(_turnManager, "isPlayerTurn", seat == 0);
+            SetMember(_turnManager, "gameOver", false);
+            SetMember(_turnManager, "aiVsAiSideARecruitVariant", Enum.Parse(variant, seat == 0 ? "HardTactician" : "Default"));
+            SetMember(_turnManager, "aiVsAiSideBRecruitVariant", Enum.Parse(variant, seat == 1 ? "HardTactician" : "Default"));
+            InvokeMethod(_city, "SetOwnerSeatIndex", new object[] { seat });
+            CreateUnit(seat, 2, 3);
+            yield return (IEnumerator)InvokeMethod(_turnManager, "RunAITurnForSeat", new object[] { seat });
+            Assert.That(diagnostics.GetProperty("PolicyVersion").GetValue(null), Is.EqualTo("hard-tactician-v1"));
+            object observation = diagnostics.GetProperty("Observation").GetValue(null);
+            Assert.That(GetMember(observation, "Seat"), Is.EqualTo(seat));
+            Assert.That((bool)GetMember(_turnManager, "gameOver"), Is.False);
+            foreach (var go in _caseObjects) UnityEngine.Object.DestroyImmediate(go);
+            _caseObjects.Clear();
+        }
+        SetMember(_turnManager, "enableAIVsAIDebugMode", false);
+    }
+
+    [Test]
+    public void LiveReviewSpeedPreservesPoliciesAndRejectsChangesOutsideReview()
+    {
+        SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "VsAI"));
+        Type speed = FindType("TurnManager+AIVsAIBatchSpeedPreset");
+        Type variant = FindType("TurnManager+AIRecruitVariant");
+        SetMember(_turnManager, "aiVsAiSideBRecruitVariant", Enum.Parse(variant, "HardTactician"));
+        object ultra = Enum.Parse(speed, "UltraFast");
+        Assert.That(InvokeMethod(_turnManager, "TrySetAIVsAIDebugSpeed", new[] { ultra }), Is.False);
+        SetMember(_turnManager, "enableAIVsAIDebugMode", true);
+        SetMember(_turnManager, "gameOver", false);
+        Assert.That(InvokeMethod(_turnManager, "TrySetAIVsAIDebugSpeed", new[] { ultra }), Is.True);
+        object settings = InvokeMethod(_turnManager, "GetAIVsAIDebugSettings", Array.Empty<object>());
+        Assert.That(GetMember(settings, "batchSpeedPreset"), Is.EqualTo(ultra));
+        Assert.That(GetMember(settings, "sideBRecruitVariant").ToString(), Is.EqualTo("HardTactician"));
+        object invalid = Enum.ToObject(speed, 999);
+        Assert.That(InvokeMethod(_turnManager, "TrySetAIVsAIDebugSpeed", new[] { invalid }), Is.False);
+        Assert.That(GetMember(_turnManager, "aiVsAiBatchSpeedPreset"), Is.EqualTo(ultra));
+        SetMember(_turnManager, "enableAIVsAIDebugMode", false);
+    }
+
     [Test]
     public void HardObservationIgnoresHiddenSceneChangesAndViewerFog()
     {

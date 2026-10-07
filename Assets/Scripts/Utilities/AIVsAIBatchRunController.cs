@@ -809,6 +809,11 @@ public static class AIVsAIBatchRunController
         sideBRecruitVariant = context.runtimeSideB.baseModel;
         sideAFeatures = context.runtimeSideA.localFeatures;
         sideBFeatures = context.runtimeSideB.localFeatures;
+        if (activeRun.settings.mode != SimulationMode.Tournament)
+        {
+            sideAProfile = context.seatsWereSwapped ? activeRun.baseSideBProfile : activeRun.baseSideAProfile;
+            sideBProfile = context.seatsWereSwapped ? activeRun.baseSideAProfile : activeRun.baseSideBProfile;
+        }
         return true;
     }
 
@@ -2380,6 +2385,7 @@ public static class AIVsAIBatchRunController
         }
 
         List<TournamentStanding> standings = BuildSortedTournamentStandings(participants, completedMatches);
+        standings.RemoveAll(standing => standing.games == 0);
         if (standings.Count <= 0)
         {
             return "Standings pending";
@@ -2425,6 +2431,7 @@ public static class AIVsAIBatchRunController
             participants,
             primaryCompletedMatches,
             secondaryCompletedMatches);
+        standings.RemoveAll(standing => standing.games == 0);
         if (standings.Count <= 0)
         {
             return "Standings pending";

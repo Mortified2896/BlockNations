@@ -1789,7 +1789,7 @@ public class MainMenuUITKView : MonoBehaviour
         selectedMapSizePreset = TurnManager.MapSizePreset.Small;
         selectedEnableAIVsAIDebugMode = true;
         selectedStoreSnapshotHistory = false;
-        selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.Normal;
+        selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.UltraFast;
         selectedAIVsAISimulationSettings = AIVsAIBatchRunController.GetDefaultSimulationSettings();
         selectedAIVsAISimulationSettings.mode = AIVsAIBatchRunController.SimulationMode.Tournament;
         selectedAIVsAISimulationSettings.tournamentParticipantMask = (1 << 7) | (1 << 9) | (1 << 16);

@@ -39,6 +39,8 @@ Open **Window → Block Nations → Hard AI Inspector** in Unity. It shows the t
 
 Enable **Pause before executing**, then use **Execute one action** to inspect decisions. Selecting a candidate draws numbered move/attack lines in the Scene view. This first inspector is an Editor tool; a development-build/browser overlay is a follow-up. Closing the inspector releases its pause.
 
+The review helper enables background execution for its current Play Mode session and restores the previous value on leaving Play Mode. This avoids silently freezing the simulation when Unity loses focus; it does not edit project settings. **Tools → Block Nations → AI Review Speed** changes a running review between Normal, Fast, Very Fast, and Ultra Fast. These controls change turn/restart pauses and development audio/snapshot behavior, not Hard's fixed search allocation. A turn pause already in progress finishes before the new speed applies.
+
 Run **Tools → Block Nations → Validate Hard AI** for EditMode or PlayMode regression checks in the open Editor. These commands never run tournaments. Results are written to ignored `Logs/Validation/HardAI/`. Coverage includes both acting seats, coordinated rider captures, archer/rider action semantics, root-mask enforcement, frame-chunk determinism, hidden-information isolation, stale city memory, hidden path blockers, cancellation of an obsolete paused decision, and canonical seat progression independent of a stale legacy boolean.
 
 Initial Editor validation on 2026-10-07 passed 24 EditMode and 12 PlayMode cases. The latter includes supported protocol 4/5 turn-owner conversion. The tournament menu was inspected and captured in a wide laptop Game window: portrait phone styling is excluded for landscape sizes, the three selected opponents are listed directly, and the full picker remains available. These checks do not establish playing strength or physical-device performance.
@@ -50,11 +52,19 @@ Ask the owner before starting. In MainMenu Play Mode, **Tools → Block Nations 
 1. Small board: **11×11**.
 2. Round-robin with three participants: Baseline with Offense/Exchange/Defense, Rider Focus with Offense, and Hard Tactician. These match the existing normal VsAI presets.
 3. One game per pairing, seat swapping enabled: **six matches** total.
-4. Normal speed, continuous looping disabled, inspector available. Inspect settings before confirming start.
+4. Ultra Fast, continuous looping disabled, inspector available. Inspect settings before confirming start. Switch to a slower live review speed or pause for inspection when needed.
 
 Existing pool indices 0–15 retain their meaning. Hard is appended at index 16. The three-participant mask is `66176` (indices 7, 9, 16). Do not automatically replace an existing saved participant selection.
 
 Record outcomes by seat, decision timing, avoidable tactical losses, and stalls. Six matches are an inspection/smoke comparison, not a statistical proof of general strength. Repeating identical deterministic starts is not independent evidence. Broader acceptance needs varied tactical scenarios and the owner's human playtest, after the watched review.
+
+### First watched review: invalid configuration
+
+The owner-authorized six-game review on 2026-10-07 completed at Normal speed but did not test Hard. The scene-restart helper selected the initial Normal-versus-Rider pairing on every restart, while the scheduler advanced the displayed labels. Each raw match row's actual configuration remained `Default` with all local features versus `RiderFocus` with offense, and no Hard search was recorded. The displayed 2–2 record for every participant is invalid as evidence about policy strength. Preserve these raw development logs as diagnostic evidence; do not use this review's standings for acceptance.
+
+`AIVsAIMatchHandoff` now separates a new run's initial pairing from an active run's upcoming pairing. It carries models, feature flags, profiles, and seat swaps through the scene transition. Before starting an AI batch match, the runtime checks these typed settings against the schedule; a mismatch becomes an aborted match rather than a mislabeled win/loss. Head-to-head profiles follow their swapped policies too. Ranked HUD previews omit opponents that have not played. Regression checks exercise all six scheduled handoffs without playing tournament games and verify that TurnManager actually dispatches Hard search for either seat. The corrected owner-watched review remains pending; it must be authorized before starting.
+
+Validation after the handoff correction passed 28 EditMode and 14 PlayMode cases on 2026-10-07. These are regression checks, not tournament results or playing-strength evidence.
 
 ## Future learning and hosting
 

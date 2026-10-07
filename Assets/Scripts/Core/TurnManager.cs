@@ -4259,6 +4259,29 @@ public class TurnManager : MonoBehaviour
         return IsAIVsAIDebugModeActive();
     }
 
+    public AIVsAIDebugSelection.Settings GetAIVsAIDebugSettings()
+    {
+        return new AIVsAIDebugSelection.Settings
+        {
+            enabled = IsAIVsAIDebugModeActive(),
+            sideARecruitVariant = aiVsAiSideARecruitVariant,
+            sideBRecruitVariant = aiVsAiSideBRecruitVariant,
+            sideAFeatures = aiVsAiSideAFeatures,
+            sideBFeatures = aiVsAiSideBFeatures,
+            sideAProfile = aiVsAiSideAProfile,
+            sideBProfile = aiVsAiSideBProfile,
+            batchSpeedPreset = aiVsAiBatchSpeedPreset
+        };
+    }
+
+    public bool TrySetAIVsAIDebugSpeed(AIVsAIBatchSpeedPreset speed)
+    {
+        if (!IsAIVsAIDebugModeActive() || gameOver ||
+            !System.Enum.IsDefined(typeof(AIVsAIBatchSpeedPreset), speed)) return false;
+        aiVsAiBatchSpeedPreset = speed;
+        return true;
+    }
+
     public bool IsAIVsAIDebugPausedForUi()
     {
         return currentMode == GameMode.VsAI && aiVsAiDebugPaused;
@@ -4621,6 +4644,15 @@ public class TurnManager : MonoBehaviour
 
         if (aiVsAiDebugRoutine != null)
             return;
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (IsAIVsAIBatchModeActive() && !AIVsAIMatchHandoff.MatchesUpcoming(GetAIVsAIDebugSettings()))
+        {
+            // A mislabeled pairing cannot contribute a win/loss to the scheduled policies.
+            TryHandleAbortedAIVsAIDebugMatch("ScheduledPolicyMismatch");
+            return;
+        }
+#endif
 
         aiVsAiDebugRoutine = StartCoroutine(RunAIVsAIDebugLoop());
     }
@@ -6863,37 +6895,17 @@ public class TurnManager : MonoBehaviour
         AIDebugProfile fallbackSideAProfile,
         AIDebugProfile fallbackSideBProfile)
     {
-        AIRecruitVariant pendingSideARecruitVariant = fallbackSideARecruitVariant;
-        AIRecruitVariant pendingSideBRecruitVariant = fallbackSideBRecruitVariant;
-        AILocalDecisionFeatures pendingSideAFeatures = fallbackSideAFeatures;
-        AILocalDecisionFeatures pendingSideBFeatures = fallbackSideBFeatures;
-        AIDebugProfile pendingSideAProfile = fallbackSideAProfile;
-        AIDebugProfile pendingSideBProfile = fallbackSideBProfile;
-
-        AIVsAIBatchRunController.SimulationSettings sanitizedSettings =
-            AIVsAIBatchRunController.SanitizeSimulationSettings(simulationSettings);
-        AIVsAIBatchRunController.SetPendingSimulationSettings(sanitizedSettings);
-        if (sanitizedSettings.mode == AIVsAIBatchRunController.SimulationMode.Tournament)
+        AIVsAIMatchHandoff.Queue(simulationSettings, new AIVsAIDebugSelection.Settings
         {
-            AIVsAIBatchRunController.TryGetInitialTournamentMatchSettings(
-                sanitizedSettings,
-                out pendingSideARecruitVariant,
-                out pendingSideBRecruitVariant,
-                out pendingSideAFeatures,
-                out pendingSideBFeatures,
-                out pendingSideAProfile,
-                out pendingSideBProfile);
-        }
-
-        AIVsAIDebugSelection.SetPending(
-            enabled: true,
-            sideARecruitVariant: pendingSideARecruitVariant,
-            sideBRecruitVariant: pendingSideBRecruitVariant,
-            sideAFeatures: pendingSideAFeatures,
-            sideBFeatures: pendingSideBFeatures,
-            sideAProfile: pendingSideAProfile,
-            sideBProfile: pendingSideBProfile,
-            batchSpeedPreset: aiVsAiBatchSpeedPreset);
+            enabled = true,
+            sideARecruitVariant = fallbackSideARecruitVariant,
+            sideBRecruitVariant = fallbackSideBRecruitVariant,
+            sideAFeatures = fallbackSideAFeatures,
+            sideBFeatures = fallbackSideBFeatures,
+            sideAProfile = fallbackSideAProfile,
+            sideBProfile = fallbackSideBProfile,
+            batchSpeedPreset = aiVsAiBatchSpeedPreset
+        }, startingNewRun: !AIVsAIBatchRunController.HasActiveRun);
     }
 #endif
 
