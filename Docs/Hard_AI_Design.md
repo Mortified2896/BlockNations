@@ -10,7 +10,7 @@ Movement range/commitment, attack availability, damage, and distance primitives 
 
 `currentTurnSeatIndex` is the runtime turn authority in both VsAI and PBp. VsAI handoffs and simulation use the same seat progression and seat-based turn initialization; `isPlayerTurn` is updated as a compatibility bridge. Invalid queried seats are rejected rather than normalized into another participant. Existing VsAI saves still import their legacy turn boolean at the load boundary; PBp keeps its supported protocol migration paths. These changes do not enable extra VsAI seats or teams.
 
-Hard uses selective beam search over coordinated move/attack/recruit sequences, scored for captures, material, visible next-turn threats, positioning, exploration, and economy. It reassesses after every executed action. This version predicts threats from observed enemies; it does not yet search a complete opposing turn tree. Capturing a hostile city ends current VsAI immediately, so an observed winning capture terminates search early.
+Hard uses selective beam search over coordinated move/attack/recruit sequences, scored for captures, material, visible next-turn threats, positioning, exploration, and economy. Version 2 builds terrain-distance fields from observed hostile cities, observed enemies, and exploration targets once per decision. On an explored map without city memory it searches currently unseen areas again. Support is bounded per unit, replacing the pairwise cohesion reward that caused large armies to camp. Material distinguishes attack power, range, and mobility; threat estimates allocate each observed enemy's attack slots once and recognize combined melee threats to a guarded city. It reassesses after every executed action. This version predicts threats from observed enemies; it does not yet search a complete opposing turn tree. Capturing a hostile city ends current VsAI immediately, so an observed winning capture terminates search early.
 
 ## Information rules
 
@@ -25,7 +25,7 @@ The existing opponents still read enemy city positions outside their visibility.
 
 ## Workload and responsiveness
 
-Version `hard-tactician-v1` uses a beam width of 24, depth limit of 8 actions, up to 2,048 candidate transitions per decision, and a shared turn search allocation of 8,192 transitions. Once the allocation is exhausted, remaining actions use a deterministic one-ply pass over the current legal mask. Terminal captures and exhausted frontiers can finish earlier.
+Version `hard-tactician-v2` uses a beam width of 24, depth limit of 8 actions, up to 2,048 candidate transitions per decision, and a shared turn search allocation of 8,192 transitions. Every legal root action is considered unless a winning capture terminates the search first or the work budget is exhausted. Later nodes keep at most 12 ordered successors, with move alternatives bounded per actor to leave room for coordinated actions. Ordering uses cheap observed features rather than evaluating additional unmetered child states. Once the allocation is exhausted, remaining actions use a deterministic one-ply pass over the current legal mask. Terminal captures and exhausted frontiers can finish earlier.
 
 The scheduler yields after approximately 4 ms of work, checked between candidate evaluations. This is a scheduling target, not a guaranteed frame-time ceiling: observation capture and an individual evaluation are still atomic. There is no wall-clock search cutoff. A slower device performs the same analysis over more frames. Deterministic candidate ordering, integer evaluation, and tie-breaking make frame chunking independent of the chosen result.
 
@@ -52,7 +52,7 @@ Ask the owner before starting. In MainMenu Play Mode, **Tools → Block Nations 
 1. Small board: **11×11**.
 2. Round-robin with three participants: Baseline with Offense/Exchange/Defense, Rider Focus with Offense, and Hard Tactician. These match the existing normal VsAI presets.
 3. One game per pairing, seat swapping enabled: **six matches** total.
-4. Ultra Fast, continuous looping disabled, inspector available. Inspect settings before confirming start. Switch to a slower live review speed or pause for inspection when needed.
+4. Ultra Fast, continuous looping disabled, inspector available. The match fuse is **100 complete rounds**: both seats get their round-100 turn, and a game still running afterward is recorded as an abort at round 100. Aborts count as attempts but contribute no score and no draw; rankings and score percentages use completed results only. Inspect settings before confirming start. Switch to a slower live review speed or pause for inspection when needed.
 
 Existing pool indices 0–15 retain their meaning. Hard is appended at index 16. The three-participant mask is `66176` (indices 7, 9, 16). Do not automatically replace an existing saved participant selection.
 
@@ -62,9 +62,21 @@ Record outcomes by seat, decision timing, avoidable tactical losses, and stalls.
 
 The owner-authorized six-game review on 2026-10-07 completed at Normal speed but did not test Hard. The scene-restart helper selected the initial Normal-versus-Rider pairing on every restart, while the scheduler advanced the displayed labels. Each raw match row's actual configuration remained `Default` with all local features versus `RiderFocus` with offense, and no Hard search was recorded. The displayed 2–2 record for every participant is invalid as evidence about policy strength. Preserve these raw development logs as diagnostic evidence; do not use this review's standings for acceptance.
 
-`AIVsAIMatchHandoff` now separates a new run's initial pairing from an active run's upcoming pairing. It carries models, feature flags, profiles, and seat swaps through the scene transition. Before starting an AI batch match, the runtime checks these typed settings against the schedule; a mismatch becomes an aborted match rather than a mislabeled win/loss. Head-to-head profiles follow their swapped policies too. Ranked HUD previews omit opponents that have not played. Regression checks exercise all six scheduled handoffs without playing tournament games and verify that TurnManager actually dispatches Hard search for either seat. The corrected owner-watched review remains pending; it must be authorized before starting.
+`AIVsAIMatchHandoff` now separates a new run's initial pairing from an active run's upcoming pairing. It carries models, feature flags, profiles, and seat swaps through the scene transition. Before starting an AI batch match, the runtime checks these typed settings against the schedule; a mismatch becomes an aborted match rather than a mislabeled win/loss. Head-to-head profiles follow their swapped policies too. Ranked HUD previews omit opponents that have not played. Regression checks exercise all six scheduled handoffs without playing tournament games and verify that TurnManager actually dispatches Hard search for either seat. The corrected review was then explicitly authorized and started; its failed result is recorded below.
 
 Validation after the handoff correction passed 28 EditMode and 14 PlayMode cases on 2026-10-07. These are regression checks, not tournament results or playing-strength evidence.
+
+### Corrected watched review: version 1 failed
+
+The second owner-authorized run used the actual scheduled policies. Normal won both games against Rider Focus (rounds 21 and 26) and both games against Hard version 1 (rounds 36 and 16). The first Rider-versus-Hard game aborted at the old 200-round fuse; the old code advanced the counter before stopping, so its raw row says 201. The final Hard-versus-Rider game was stopped during round 166 after the owner reported stalled armies. This is a partial five-result review, not a completed six-game result. Hard version 1 failed acceptance; do not enable its human selector based on this review.
+
+The fair observation from the stalled game is preserved as `Assets/Editor/Tests/Fixtures/HardAI_CrowdedHome.json`. It contains 28 own units, 80 legal moves, no currently observed enemies, and 12 unexplored tiles. Version 1 preferred ending the turn because pairwise army cohesion outweighed exploration; a regression test reproduced that exact failure before the fix. Its broad successor enumeration also used the 2,048-transition decision allocation at only two completed depths. Version 2 chooses an advancing legal move and reaches seven completed depths with the same allocation on this observation. These are position-specific checks, not evidence that version 2 beats the controls.
+
+The old tournament calculation also awarded a half-point for an abort, yielding the misleading 17% score with no wins/draws in the screenshot. Tournament standings, seat rates, pairing summaries, and ranked previews now exclude aborts from their score denominators while retaining the abort counts. True draws still score half a point. Raw historical CSV rows are preserved.
+
+The revised watched tournament must be authorized before it starts. Keep the human-play gate closed until the owner reviews actual version-2 games. Physical-phone/browser timing and broader playing strength remain unverified.
+
+Validation after the version-2 correction passed 41 EditMode and 15 PlayMode cases on 2026-10-07. New checks cover the captured crowded position, terrain-connected exploration, an explored map without city memory, deeper coordinated captures in a larger army, bounded enemy attack accounting, combined rider threats to a guarded capital, round-100 seat fairness, and abort-versus-draw scoring. The isolated PlayMode crowded-position check executes one own turn through the actual adapter and verifies that several units move and new tiles are explored. No opposing policy or tournament runs in these checks.
 
 ## Future learning and hosting
 

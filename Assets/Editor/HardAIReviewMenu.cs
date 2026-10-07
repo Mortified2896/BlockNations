@@ -33,7 +33,7 @@ public static class HardAIReviewMenu
         gameView.maximized = true;
         gameView.Focus();
         VisualElement root = view.GetComponent<UIDocument>().rootVisualElement;
-        Debug.Log($"[Hard AI review] Prepared 11x11, three opponents, six seat-swapped games, Ultra Fast, no loop; Game view maximized for laptop inspection. Background execution is scoped to this Play Mode session. Human Hard selector display={root.Q<Button>("GeneralSettingsAiStyleHardButton").resolvedStyle.display}. Start has NOT been pressed.");
+        Debug.Log($"[Hard AI review] Prepared 11x11, three opponents, six seat-swapped games, {AIVsAIBatchRunController.MatchRoundLimit}-round limit, Ultra Fast, no loop; Game view maximized for laptop inspection. Background execution is scoped to this Play Mode session. Human Hard selector display={root.Q<Button>("GeneralSettingsAiStyleHardButton").resolvedStyle.display}. Start has NOT been pressed.");
     }
 
     [MenuItem("Tools/Block Nations/AI Review Speed/Normal")]

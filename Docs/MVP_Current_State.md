@@ -15,7 +15,7 @@ Last reviewed: 2026-10-07, against source revision `0d510b3`.
 
 ## AI runtime
 
-Experimental Hard Tactician is implemented behind a development review gate; see [Hard AI design](Hard_AI_Design.md). It has a separate seat-observation/policy boundary, fair visibility, incremental fixed-work search, and an Editor analysis inspector. It is available for development comparisons; the human-play selector stays hidden until the owner watches the comparison tournament. Its strength, phone timing, and browser acceptance remain unverified.
+Experimental Hard Tactician is implemented behind a development review gate; see [Hard AI design](Hard_AI_Design.md). It has a separate seat-observation/policy boundary, fair visibility, incremental fixed-work search, and an Editor analysis inspector. It is available for development comparisons; the human-play selector stays hidden until the owner watches the comparison tournament. The corrected version-1 tournament failed the strength review; version 2 addresses the reproduced army stall and awaits a newly authorized watched comparison. Phone timing and browser acceptance remain unverified.
 
 The runtime uses the Baseline profile with `Default` and `RiderFocus` recruit variants, presented as Baseline and Rider Focus. In `VsAI`, the Default preset enables `OffensiveObviousWin`, `ExchangeScoring`, and `DefensiveVeto`; Rider Focus enables `OffensiveObviousWin`. Development AI-vs-AI settings can vary local feature combinations and compare them through batch/tournament tooling and CSV logs.
 

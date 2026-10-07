@@ -187,7 +187,6 @@ public class TurnManager : MonoBehaviour
     private const string BottomRightControlBatchStopLabel = "Stop";
     private const string BottomRightControlBatchContinueTournamentLabel = "Continue Tournament";
     private const string AIVsAIDebugAbortWinner = "Abort";
-    private const int AIVsAIBatchTurnLimit = 200;
     private const float AIVsAIFastTurnDelaySeconds = 0.2f;
     private const float AIVsAIFastRestartDelaySeconds = 0.15f;
     private const float AIVsAIVeryFastTurnDelaySeconds = 0.05f;
@@ -4603,14 +4602,17 @@ public class TurnManager : MonoBehaviour
         }
     }
 
-    private bool TryHandleAIVsAIBatchTurnLimitReached()
+    private bool TryHandleAIVsAIBatchTurnLimitReached(int completedSeatIndex = -1)
     {
-        if (!IsAIVsAIBatchModeActive() || turnNumber <= AIVsAIBatchTurnLimit)
+        bool reached = completedSeatIndex < 0
+            ? turnNumber > AIVsAIBatchRunController.MatchRoundLimit
+            : AIVsAIBatchRunController.HasReachedMatchRoundLimit(turnNumber, completedSeatIndex, GetRuntimeSeatCount());
+        if (!IsAIVsAIBatchModeActive() || !reached)
         {
             return false;
         }
 
-        return TryHandleAbortedAIVsAIDebugMatch($"TurnLimit:{AIVsAIBatchTurnLimit}");
+        return TryHandleAbortedAIVsAIDebugMatch($"TurnLimit:{AIVsAIBatchRunController.MatchRoundLimit}");
     }
 #else
     private float GetAIVsAIDebugTurnDelaySeconds()
@@ -4623,7 +4625,7 @@ public class TurnManager : MonoBehaviour
         return 1.25f;
     }
 
-    private bool TryHandleAIVsAIBatchTurnLimitReached()
+    private bool TryHandleAIVsAIBatchTurnLimitReached(int completedSeatIndex = -1)
     {
         return false;
     }
@@ -4715,6 +4717,7 @@ public class TurnManager : MonoBehaviour
                     aiGeneration != hardAIRuntime.KnowledgeGeneration)
                     yield break;
 
+                if (TryHandleAIVsAIBatchTurnLimitReached(actingSeatIndex)) yield break;
                 AdvanceVsAITurnAfterSeat(actingSeatIndex);
                 if (gameOver)
                     yield break;
@@ -4927,7 +4930,7 @@ public class TurnManager : MonoBehaviour
     {
         string label = $"recruitVariant={GetAIRecruitVariantForSide(actingSideIsPlayerOwned)};localFeatures={AIPostCalculusLocalDecisionHelper.ToConfigValue(GetAILocalDecisionFeaturesForSide(actingSideIsPlayerOwned))};profile={GetAIDebugProfileForSide(actingSideIsPlayerOwned)}";
         if (GetAIRecruitVariantForSide(actingSideIsPlayerOwned) == AIRecruitVariant.HardTactician)
-            label += $";policy=hard-tactician-v1;searchWork={BlockNations.AI.HardTacticianPolicy.TurnWorkBudget}";
+            label += $";policy={BlockNations.AI.HardTacticianPolicy.PolicyVersion};searchWork={BlockNations.AI.HardTacticianPolicy.TurnWorkBudget}";
         return label;
     }
 

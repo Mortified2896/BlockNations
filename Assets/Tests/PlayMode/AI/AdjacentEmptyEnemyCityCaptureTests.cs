@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
@@ -578,6 +579,42 @@ public class AdjacentEmptyEnemyCityCaptureTests
     }
 
     [UnityTest]
+    public IEnumerator CrowdedReviewArmyActuallyMovesAndExploresThroughTheRuntime()
+    {
+        // Exercise one isolated own turn, with no opposing policy or tournament running.
+        Type observationType = FindType("BlockNations.AI.AIObservation");
+        string path = Path.Combine(Application.dataPath, "Editor/Tests/Fixtures/HardAI_CrowdedHome.json");
+        object observation = JsonUtility.FromJson(File.ReadAllText(path), observationType);
+        SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "VsAI"));
+        SetMember(_turnManager, "currentTurnSeatIndex", 0);
+        SetMember(_turnManager, "isPlayerTurn", true);
+        SetMember(_turnManager, "playerGold", GetMember(observation, "Gold"));
+        InvokeMethod(_city, "SetOwnerSeatIndex", new object[] { 0 });
+        SetMember(_city, "x", 1); SetMember(_city, "y", 1);
+        ((Component)_city).transform.position = new Vector3(1, 1);
+        bool[] seen = (bool[])GetMember(observation, "Seen");
+        Array grid = (Array)GetMember(_gridManager, "tileGrid");
+        for (int p = 0; p < seen.Length; p++)
+            if (seen[p]) InvokeMethod(grid.GetValue(p % 11, p / 11), "RecordSeenBySeat", new object[] { 0 });
+        var originalPositions = new Dictionary<Component, Vector3>();
+        foreach (object state in (Array)GetMember(observation, "Units"))
+        {
+            Component unit = (Component)CreateUnit(0, (int)GetMember(state, "X"), (int)GetMember(state, "Y"), (string)GetMember(state, "Type"));
+            originalPositions.Add(unit, unit.transform.position);
+        }
+        FindType("HardAIDiagnostics").GetField("PauseBeforeAction").SetValue(null, false);
+        yield return (IEnumerator)InvokeMethod(CreateHardRuntime(), "RunTurn", new object[] { _turnManager, 0 });
+        int moved = 0, newlyExplored = 0;
+        foreach (var entry in originalPositions) if (entry.Key.transform.position != entry.Value) moved++;
+        for (int p = 0; p < seen.Length; p++)
+            if (!seen[p] && (bool)InvokeMethod(grid.GetValue(p % 11, p / 11), "HasBeenSeenBySeat", new object[] { 0 })) newlyExplored++;
+        Assert.That(moved, Is.GreaterThanOrEqualTo(4), "The execution adapter should advance the army, not stop after one diagnostic move.");
+        Assert.That(newlyExplored, Is.GreaterThan(0));
+        Assert.That(GetMember(_turnManager, "currentTurnSeatIndex"), Is.EqualTo(0), "The policy cannot take over turn progression.");
+        Assert.That(GetMember(_turnManager, "gameOver"), Is.False);
+    }
+
+    [UnityTest]
     public IEnumerator ScheduledHardPolicyReachesSearchThroughTurnManagerForBothSeats()
     {
         SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "VsAI"));
@@ -595,7 +632,7 @@ public class AdjacentEmptyEnemyCityCaptureTests
             InvokeMethod(_city, "SetOwnerSeatIndex", new object[] { seat });
             CreateUnit(seat, 2, 3);
             yield return (IEnumerator)InvokeMethod(_turnManager, "RunAITurnForSeat", new object[] { seat });
-            Assert.That(diagnostics.GetProperty("PolicyVersion").GetValue(null), Is.EqualTo("hard-tactician-v1"));
+            Assert.That(diagnostics.GetProperty("PolicyVersion").GetValue(null), Is.EqualTo("hard-tactician-v2"));
             object observation = diagnostics.GetProperty("Observation").GetValue(null);
             Assert.That(GetMember(observation, "Seat"), Is.EqualTo(seat));
             Assert.That((bool)GetMember(_turnManager, "gameOver"), Is.False);

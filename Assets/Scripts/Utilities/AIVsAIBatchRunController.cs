@@ -5,6 +5,11 @@ using UnityEngine;
 
 public static class AIVsAIBatchRunController
 {
+    // Development comparison fuse: both seats finish round 100 before it is aborted.
+    public const int MatchRoundLimit = 100;
+    public static bool HasReachedMatchRoundLimit(int round, int completedSeatIndex, int seatCount) =>
+        round >= MatchRoundLimit && seatCount > 1 && completedSeatIndex == seatCount - 1;
+
     public enum EvaluationMethod
     {
         Bayesian = 0
@@ -389,6 +394,8 @@ public static class AIVsAIBatchRunController
         public int aborts;
         public int games;
         public double scoreSum;
+        public int ScoredGames => games - aborts;
+        public double ScoreRate => ScoredGames > 0 ? scoreSum / ScoredGames : 0d;
     }
 
     private sealed class TournamentPairingAggregate
@@ -403,6 +410,7 @@ public static class AIVsAIBatchRunController
         public int games;
         public int swappedGames;
         public double logicalVariantAScoreSum;
+        public int ScoredGames => games - aborts;
     }
 
     public static bool HasActiveRun => activeRun != null;
@@ -2058,32 +2066,35 @@ public static class AIVsAIBatchRunController
         for (int i = 0; i < run.completedMatches.Count; i++)
         {
             ActiveRun.CompletedMatchRecord record = run.completedMatches[i];
-            summary.seat1GameCount++;
-            summary.seat2GameCount++;
-            if (record.player1Score >= 0.999d)
+            if (!record.isAbort)
             {
-                seat1Wins++;
-            }
-            else if (record.player1Score <= 0.001d)
-            {
-                seat1Losses++;
-            }
-            else
-            {
-                seat1Draws++;
-            }
+                summary.seat1GameCount++;
+                summary.seat2GameCount++;
+                if (record.player1Score >= 0.999d)
+                {
+                    seat1Wins++;
+                }
+                else if (record.player1Score <= 0.001d)
+                {
+                    seat1Losses++;
+                }
+                else
+                {
+                    seat1Draws++;
+                }
 
-            if (record.player2Score >= 0.999d)
-            {
-                seat2Wins++;
-            }
-            else if (record.player2Score <= 0.001d)
-            {
-                seat2Losses++;
-            }
-            else
-            {
-                seat2Draws++;
+                if (record.player2Score >= 0.999d)
+                {
+                    seat2Wins++;
+                }
+                else if (record.player2Score <= 0.001d)
+                {
+                    seat2Losses++;
+                }
+                else
+                {
+                    seat2Draws++;
+                }
             }
 
             if (!pairings.TryGetValue(record.pairingIndex, out TournamentPairingAggregate aggregate))
@@ -2098,7 +2109,7 @@ public static class AIVsAIBatchRunController
             }
 
             aggregate.games++;
-            aggregate.logicalVariantAScoreSum += record.logicalVariantAScore;
+            if (!record.isAbort) aggregate.logicalVariantAScoreSum += record.logicalVariantAScore;
             if (record.seatsWereSwapped)
             {
                 aggregate.swappedGames++;
@@ -2142,12 +2153,12 @@ public static class AIVsAIBatchRunController
 
         summary.seatEffectSize = summary.seat1ScoreRate - summary.seat2ScoreRate;
 
-        if (standings.Count > 0)
+        if (standings.Count > 0 && standings[0].ScoredGames > 0)
         {
             TournamentStanding winner = standings[0];
             summary.tournamentWinnerLabel = winner.label;
-            summary.sideAWinRate = winner.games > 0 ? winner.wins / (float)winner.games : 0f;
-            summary.sideAScoreRate = winner.games > 0 ? (float)(winner.scoreSum / winner.games) : 0f;
+            summary.sideAWinRate = winner.wins / (float)winner.ScoredGames;
+            summary.sideAScoreRate = (float)winner.ScoreRate;
             summary.sideAEffectSize = summary.sideAScoreRate - 0.5f;
         }
 
@@ -2155,13 +2166,13 @@ public static class AIVsAIBatchRunController
         for (int i = 0; i < standings.Count; i++)
         {
             TournamentStanding standing = standings[i];
-            double scoreRate = standing.games > 0 ? standing.scoreSum / standing.games : 0d;
+            double scoreRate = standing.ScoreRate;
             if (i > 0)
             {
                 standingsBuilder.Append('\n');
             }
 
-            standingsBuilder.Append(i + 1);
+            standingsBuilder.Append(standing.ScoredGames > 0 ? (i + 1).ToString() : "--");
             standingsBuilder.Append(". ");
             standingsBuilder.Append(standing.label);
             standingsBuilder.Append(" | W");
@@ -2176,7 +2187,7 @@ public static class AIVsAIBatchRunController
                 standingsBuilder.Append(standing.aborts);
             }
             standingsBuilder.Append(" | Score ");
-            standingsBuilder.Append(scoreRate.ToString("P1"));
+            standingsBuilder.Append(standing.ScoredGames > 0 ? scoreRate.ToString("P1") : "--");
         }
 
         summary.tournamentStandingsSummary = standingsBuilder.ToString();
@@ -2192,7 +2203,7 @@ public static class AIVsAIBatchRunController
                 pairingsBuilder.Append('\n');
             }
 
-            double scoreRate = aggregate.games > 0 ? aggregate.logicalVariantAScoreSum / aggregate.games : 0d;
+            double scoreRate = aggregate.ScoredGames > 0 ? aggregate.logicalVariantAScoreSum / aggregate.ScoredGames : 0d;
             pairingsBuilder.Append(aggregate.pairingLabel);
             pairingsBuilder.Append(": ");
             pairingsBuilder.Append(aggregate.logicalVariantALabel);
@@ -2210,7 +2221,7 @@ public static class AIVsAIBatchRunController
                 pairingsBuilder.Append(aggregate.aborts);
             }
             pairingsBuilder.Append(" | Score ");
-            pairingsBuilder.Append(scoreRate.ToString("P1"));
+            pairingsBuilder.Append(aggregate.ScoredGames > 0 ? scoreRate.ToString("P1") : "--");
             if (summary.tournamentSeatSwapEnabled)
             {
                 pairingsBuilder.Append(" | Swapped ");
@@ -2279,8 +2290,11 @@ public static class AIVsAIBatchRunController
             TournamentStanding standingB = standings[record.logicalVariantBIndex];
             standingA.games++;
             standingB.games++;
-            standingA.scoreSum += record.logicalVariantAScore;
-            standingB.scoreSum += record.logicalVariantBScore;
+            if (!record.isAbort)
+            {
+                standingA.scoreSum += record.logicalVariantAScore;
+                standingB.scoreSum += record.logicalVariantBScore;
+            }
 
             if (record.isAbort)
             {
@@ -2311,8 +2325,11 @@ public static class AIVsAIBatchRunController
             TournamentStanding standingB = standings[record.logicalVariantBIndex];
             standingA.games++;
             standingB.games++;
-            standingA.scoreSum += record.logicalVariantAScore;
-            standingB.scoreSum += record.logicalVariantBScore;
+            if (!record.isAbort)
+            {
+                standingA.scoreSum += record.logicalVariantAScore;
+                standingB.scoreSum += record.logicalVariantBScore;
+            }
 
             if (record.isAbort)
             {
@@ -2338,8 +2355,9 @@ public static class AIVsAIBatchRunController
 
         standings.Sort((left, right) =>
         {
-            double leftScoreRate = left.games > 0 ? left.scoreSum / left.games : 0d;
-            double rightScoreRate = right.games > 0 ? right.scoreSum / right.games : 0d;
+            if ((left.ScoredGames > 0) != (right.ScoredGames > 0)) return left.ScoredGames > 0 ? -1 : 1;
+            double leftScoreRate = left.ScoreRate;
+            double rightScoreRate = right.ScoreRate;
             int comparison = rightScoreRate.CompareTo(leftScoreRate);
             if (comparison != 0)
             {
@@ -2385,7 +2403,7 @@ public static class AIVsAIBatchRunController
         }
 
         List<TournamentStanding> standings = BuildSortedTournamentStandings(participants, completedMatches);
-        standings.RemoveAll(standing => standing.games == 0);
+        standings.RemoveAll(standing => standing.ScoredGames == 0);
         if (standings.Count <= 0)
         {
             return "Standings pending";
@@ -2396,7 +2414,7 @@ public static class AIVsAIBatchRunController
         for (int i = 0; i < previewCount; i++)
         {
             TournamentStanding standing = standings[i];
-            double scoreRate = standing.games > 0 ? standing.scoreSum / standing.games : 0d;
+            double scoreRate = standing.ScoreRate;
             if (i > 0)
             {
                 builder.Append(" | ");
@@ -2431,7 +2449,7 @@ public static class AIVsAIBatchRunController
             participants,
             primaryCompletedMatches,
             secondaryCompletedMatches);
-        standings.RemoveAll(standing => standing.games == 0);
+        standings.RemoveAll(standing => standing.ScoredGames == 0);
         if (standings.Count <= 0)
         {
             return "Standings pending";
@@ -2442,7 +2460,7 @@ public static class AIVsAIBatchRunController
         for (int i = 0; i < previewCount; i++)
         {
             TournamentStanding standing = standings[i];
-            double scoreRate = standing.games > 0 ? standing.scoreSum / standing.games : 0d;
+            double scoreRate = standing.ScoreRate;
             if (i > 0)
             {
                 builder.Append(" | ");
@@ -2475,7 +2493,7 @@ public static class AIVsAIBatchRunController
         for (int i = 0; i < standings.Count; i++)
         {
             TournamentStanding standing = standings[i];
-            if (standing.games > 0)
+            if (standing.ScoredGames > 0)
             {
                 playedStandings.Add(standing);
             }
@@ -2494,7 +2512,7 @@ public static class AIVsAIBatchRunController
         for (int i = 0; i < playedStandings.Count; i++)
         {
             TournamentStanding standing = playedStandings[i];
-            double scoreRate = standing.scoreSum / standing.games;
+            double scoreRate = standing.ScoreRate;
             snapshots.Add(new TournamentStandingSnapshot(
                 rank: i + 1,
                 isRanked: isRanked,

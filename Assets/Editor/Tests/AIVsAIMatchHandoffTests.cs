@@ -118,4 +118,53 @@ public class AIVsAIMatchHandoffTests
         Assert.That(hard.games, Is.Zero);
         Assert.That(hard.isRanked, Is.False);
     }
+
+    [TestCase(99, 0, false)]
+    [TestCase(99, 1, false)]
+    [TestCase(100, 0, false)]
+    [TestCase(100, 1, true)]
+    public void RoundLimitGivesBothSeatsTheirHundredthTurn(int round, int completedSeat, bool stop)
+    {
+        Assert.That(AIVsAIBatchRunController.MatchRoundLimit, Is.EqualTo(100));
+        Assert.That(AIVsAIBatchRunController.HasReachedMatchRoundLimit(round, completedSeat, 2), Is.EqualTo(stop));
+    }
+
+    [Test]
+    public void AbortedRiderHardGameDoesNotAwardHalfPointsOrAlterTheirLossRates()
+    {
+        Begin(Review(), Fallback());
+        for (int match = 0; match < 4; match++)
+            Assert.That(AIVsAIBatchRunController.TryRecordMatch(new AIVsAIMatchCsvLogger.MatchResult {
+                winner = match % 2 == 0 ? "SideA" : "SideB", totalTurnCount = 20 }, out _, out _), Is.True);
+        Assert.That(AIVsAIBatchRunController.TryRecordMatch(new AIVsAIMatchCsvLogger.MatchResult {
+            winner = "Abort", totalTurnCount = 100 }, out _, out _), Is.True);
+        Assert.That(AIVsAIBatchRunController.TryGetTournamentStandingsSnapshot(out var standings), Is.True);
+        var normal = standings.Find(standing => standing.label.StartsWith("Baseline"));
+        var hard = standings.Find(standing => standing.label.StartsWith("Hard Tactician"));
+        Assert.That(normal.wins, Is.EqualTo(4));
+        Assert.That(normal.scoreRate, Is.EqualTo(1));
+        Assert.That(hard.losses, Is.EqualTo(2));
+        Assert.That(hard.aborts, Is.EqualTo(1));
+        Assert.That(hard.draws, Is.Zero);
+        Assert.That(hard.scoreRate, Is.Zero);
+    }
+
+    [Test]
+    public void AbortOnlyOpponentIsUnrankedButTrueDrawStillScoresHalfPoint()
+    {
+        Begin(Review(), Fallback());
+        Assert.That(AIVsAIBatchRunController.TryRecordMatch(new AIVsAIMatchCsvLogger.MatchResult {
+            winner = "Abort", totalTurnCount = 100 }, out _, out _), Is.True);
+        Assert.That(AIVsAIBatchRunController.TryGetTournamentStandingsSnapshot(out var standings), Is.True);
+        var rider = standings.Find(standing => standing.label.StartsWith("Rider Focus"));
+        Assert.That(rider.aborts, Is.EqualTo(1));
+        Assert.That(rider.isRanked, Is.False);
+        Assert.That(rider.scoreRate, Is.Zero);
+        Assert.That(AIVsAIBatchRunController.TryRecordMatch(new AIVsAIMatchCsvLogger.MatchResult {
+            winner = "Draw", totalTurnCount = 30 }, out _, out _), Is.True);
+        Assert.That(AIVsAIBatchRunController.TryGetTournamentStandingsSnapshot(out standings), Is.True);
+        rider = standings.Find(standing => standing.label.StartsWith("Rider Focus"));
+        Assert.That(rider.draws, Is.EqualTo(1));
+        Assert.That(rider.scoreRate, Is.EqualTo(0.5));
+    }
 }

@@ -9,7 +9,9 @@ namespace BlockNations.AI
         public const int DecisionWorkBudget = 2048;
         public const int BeamWidth = 24;
         public const int DepthLimit = 8;
-        public string Version => "hard-tactician-v1";
+        public const int SuccessorsPerNode = 12;
+        public const string PolicyVersion = "hard-tactician-v2";
+        public string Version => PolicyVersion;
         public IAIDecision BeginDecision(AIObservation observation, int workBudget) =>
             workBudget > 0 ? new AIDecisionSearch(observation, workBudget) :
             new AIDecisionSearch(observation, Math.Max(1, observation.LegalActions.Length), 1);
@@ -72,10 +74,11 @@ namespace BlockNations.AI
                 Node parent = frontier[nodeIndex];
                 if (actions == null)
                 {
-                    actions = parent.Plan.Actions.Length == 0
+                    bool isRoot = parent.Plan.Actions.Length == 0;
+                    actions = isRoot
                         ? new List<AIAction>(observation.LegalActions)
                         : parent.State.Actions();
-                    actions.Sort((a, b) => string.CompareOrdinal(a.Key, b.Key));
+                    actions = AIActionOrdering.Order(parent.State, actions, selective: !isRoot);
                     actionIndex = 0;
                 }
                 if (actionIndex >= actions.Count) { nodeIndex++; actions = null; continue; }

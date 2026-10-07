@@ -11,6 +11,7 @@ namespace BlockNations.AI
         private static readonly int[] Dx = { 1, 0, -1, 0, 1, 1, -1, -1 };
         private static readonly int[] Dy = { 0, 1, 0, -1, 1, -1, 1, -1 };
         public readonly AIObservation Observation;
+        internal readonly AIStrategicGoals Goals;
         public AIUnitState[] Units;
         public AICityState[] Cities;
         public bool[] Seen;
@@ -20,6 +21,7 @@ namespace BlockNations.AI
         public AITacticalState(AIObservation observation)
         {
             Observation = observation;
+            Goals = new AIStrategicGoals(observation);
             Units = (AIUnitState[])observation.Units.Clone();
             Cities = (AICityState[])observation.Cities.Clone();
             Seen = (bool[])observation.Seen.Clone();
@@ -29,6 +31,7 @@ namespace BlockNations.AI
         private AITacticalState(AITacticalState other)
         {
             Observation = other.Observation;
+            Goals = other.Goals;
             Units = (AIUnitState[])other.Units.Clone();
             Cities = (AICityState[])other.Cities.Clone();
             Seen = (bool[])other.Seen.Clone();
@@ -181,49 +184,26 @@ namespace BlockNations.AI
             AIEvaluation value = new AIEvaluation();
             if (CapturedCity) { value.Capture = 1000000; return value; }
             int[] occupants = Occupants();
-            Dictionary<int, int[]> enemyReach = new Dictionary<int, int[]>();
-            for (int i = 0; i < Units.Length; i++)
-                if (Units[i].Health > 0 && Observation.IsHostileSeat(Units[i].Seat))
-                    enemyReach[i] = Reachable(Units[i].X, Units[i].Y, Units[i].MaxMoves, occupants);
+            AITacticalThreats threats = new AITacticalThreats(this, occupants);
             int friendlyCombat = 0, scouts = 0;
             for (int i = 0; i < Units.Length; i++)
             {
                 AIUnitState unit = Units[i];
                 if (unit.Health <= 0) continue;
-                int material = unit.Cost * 170 + unit.Health * 180 / Math.Max(1, unit.MaxHealth);
-                if (unit.Attack > 0) material += 100;
+                int material = AIUnitValue.Material(unit);
                 if (unit.Seat != Observation.Seat) { if (Observation.IsHostileSeat(unit.Seat)) value.Material -= material; continue; }
                 value.Material += material;
                 if (unit.Attack > 0) friendlyCombat++; else scouts++;
 
-                int incoming = 0;
-                for (int enemyIndex = 0; enemyIndex < Units.Length; enemyIndex++)
-                {
-                    AIUnitState enemy = Units[enemyIndex];
-                    if (enemy.Health <= 0 || !Observation.IsHostileSeat(enemy.Seat) || enemy.Attack <= unit.Defense || enemy.MaxAttacks == 0) continue;
-                    int distance = Distance(unit, enemy);
-                    bool canReach = distance <= enemy.Range;
-                    if (!canReach && enemy.AttackAfterMoving)
-                    {
-                        int[] reachable = enemyReach[enemyIndex];
-                        for (int p = 0; p < reachable.Length && !canReach; p++)
-                            if (reachable[p] > 0 && PositionDistance(p, unit.X, unit.Y) <= enemy.Range) canReach = true;
-                    }
-                    if (canReach) incoming += AIActionRules.Damage(enemy.Attack, unit.Defense) * enemy.MaxAttacks;
-                }
+                int incoming = threats.IncomingDamage[i];
                 if (incoming >= unit.Health) value.Safety -= material + 140;
                 else value.Safety -= incoming * 120 / Math.Max(1, unit.MaxHealth);
 
-                int objectiveDistance = int.MaxValue;
-                for (int c = 0; c < Cities.Length; c++)
-                    if (Observation.IsHostileSeat(Cities[c].Seat))
-                        objectiveDistance = Math.Min(objectiveDistance, AIActionRules.Distance(unit.X, unit.Y, Cities[c].X, Cities[c].Y));
-                if (objectiveDistance != int.MaxValue && unit.Attack > 0)
-                    value.Positioning += Math.Max(0, Observation.Width + Observation.Height - objectiveDistance) * 12;
-                if (unit.Attack > 0)
-                    for (int j = i + 1; j < Units.Length; j++)
-                        if (Units[j].Health > 0 && Units[j].Seat == unit.Seat && Units[j].Attack > 0 && Distance(unit, Units[j]) <= 2)
-                            value.Positioning += 12;
+                value.Positioning += Goals.Progress(unit, unit.Position(Observation.Width)) * (unit.Attack > 0 ? 48 : 64);
+                if (unit.Attack > 0 && Goals.HasCombatObjective)
+                    for (int j = 0; j < Units.Length; j++)
+                        if (j != i && Units[j].Health > 0 && Units[j].Seat == unit.Seat && Units[j].Attack > 0 && Distance(unit, Units[j]) <= 2)
+                        { value.Positioning += 16; break; } // Bounded per-unit support, never pairwise army-size growth.
             }
             // Penalize leaving an owned city capturable on the next observed enemy turn.
             for (int c = 0; c < Cities.Length; c++)
@@ -232,35 +212,13 @@ namespace BlockNations.AI
                 if (city.Seat != Observation.Seat) continue;
                 value.Capture += 12000;
                 int defenderIndex = occupants[city.Position(Observation.Width)];
-                for (int e = 0; e < Units.Length; e++)
-                {
-                    AIUnitState enemy = Units[e];
-                    if (enemy.Health <= 0 || !Observation.IsHostileSeat(enemy.Seat)) continue;
-                    int distance = AIActionRules.Distance(enemy.X, enemy.Y, city.X, city.Y);
-                    if (defenderIndex < 0)
-                    {
-                        int[] reachable = enemyReach[e];
-                        if (reachable[city.Position(Observation.Width)] > 0) value.Safety -= 40000;
-                    }
-                    else if (enemy.Range <= 1 && enemy.MaxAttacks > 0 &&
-                        AIActionRules.Damage(enemy.Attack, Units[defenderIndex].Defense) >= Units[defenderIndex].Health &&
-                        (distance <= enemy.Range || (enemy.AttackAfterMoving && distance <= enemy.MaxMoves + enemy.Range)))
-                        value.Safety -= 40000;
-                }
+                if (friendlyCombat > 1 && defenderIndex >= 0 && Units[defenderIndex].Attack > 0)
+                    value.Positioning += 400;
+                if (threats.CityAtRisk[c]) value.Safety -= 40000;
             }
             int unseen = 0;
             for (int i = 0; i < Seen.Length; i++)
-                if (Observation.Tiles[i]) { if (Seen[i]) value.Exploration += 7; else unseen++; }
-            // Each unit approaches the nearest frontier, even before discovering an enemy city.
-            for (int i = 0; i < Units.Length; i++)
-            {
-                AIUnitState unit = Units[i];
-                if (unit.Seat != Observation.Seat || unit.Health <= 0 || unseen == 0) continue;
-                int frontier = int.MaxValue;
-                for (int p = 0; p < Seen.Length; p++)
-                    if (Observation.Tiles[p] && !Seen[p]) frontier = Math.Min(frontier, PositionDistance(p, unit.X, unit.Y));
-                value.Exploration -= frontier * (unit.Attack == 0 ? 16 : 5);
-            }
+                if (Observation.Tiles[i]) { if (Seen[i]) value.Exploration += 14; else unseen++; }
             // Gold remains useful, but an appropriate recruit usually outweighs hoarding.
             value.Economy = Gold * 130;
             if (scouts > 1 || (unseen == 0 && scouts > 0)) value.Economy -= scouts * 220;
@@ -285,7 +243,6 @@ namespace BlockNations.AI
         }
 
         private bool InBounds(int x, int y) => x >= 0 && y >= 0 && x < Observation.Width && y < Observation.Height;
-        private int PositionDistance(int p, int x, int y) => AIActionRules.Distance(p % Observation.Width, p / Observation.Width, x, y);
         private static int Distance(AIUnitState a, AIUnitState b) => AIActionRules.Distance(a.X, a.Y, b.X, b.Y);
     }
 

@@ -3636,7 +3636,8 @@ public class MainMenuUITKView : MonoBehaviour
                 ? "Runtime depends on device speed and Hard AI analysis."
                 : $"Approx {FormatDurationEstimate(estimate.estimatedRuntimeSeconds)} (estimate only).";
             generalSettingsAIVsAiTournamentEstimateLabel.text =
-                $"{estimate.participantCount} variants | {estimate.totalPairings} pairings | {actualMatchesPerPairing} matches/pairing | {estimate.totalGames} games\n{runtimeDescription}";
+                $"{estimate.participantCount} variants | {estimate.totalPairings} pairings | {actualMatchesPerPairing} matches/pairing | {estimate.totalGames} games\n" +
+                $"Round limit: {AIVsAIBatchRunController.MatchRoundLimit} (both sides play each round). {runtimeDescription}";
         }
 
         if (generalSettingsAIVsAiTournamentMatchesPerPairingLabel != null)
