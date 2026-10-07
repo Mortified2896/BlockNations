@@ -59,3 +59,12 @@ Screenshots/
 
 # Node server dependencies
 node_modules/
+
+# Imported local training exports (source checkpoints stay in the owned training root)
+Assets/TrainingModels/
+Assets/TrainingModels.meta
+Tools/Training/__pycache__/
+# ML-Agents' generated, overwritten per-scene timing diagnostics
+Assets/ML-Agents.meta
+Assets/ML-Agents/Timers/
+Assets/ML-Agents/Timers.meta

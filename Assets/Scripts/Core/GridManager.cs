@@ -12,6 +12,8 @@ public class GridManager : MonoBehaviour
     private const string PlayByPostPerGameSavePrefix = "pbp_";
     private static string PlayByPostGameIdKey => DevClientInstanceScope.ScopePlayerPrefsKey(PlayByPostGameIdKeyRaw);
 
+    [SerializeField] private bool externallyDrivenBoard;
+
     [Header("Grid Settings")]
     public int width = 15;      // Number of tiles in X direction
     public int height = 15;     // Number of tiles in Y direction
@@ -38,6 +40,11 @@ public class GridManager : MonoBehaviour
 
     void Start()
     {
+        if (externallyDrivenBoard)
+        {
+            RebuildGrid(width, height);
+            return;
+        }
         int initialWidth = width;
         int initialHeight = height;
         if (!SaveLoadRequest.HasPendingRequest &&
@@ -109,6 +116,7 @@ public class GridManager : MonoBehaviour
 
     private int ResolveStartingSeatCount()
     {
+        if (externallyDrivenBoard) return 2;
         if (GameModeSelection.TryPeek(out TurnManager.GameMode pendingMode))
         {
             if (pendingMode != TurnManager.GameMode.PlayByPost)

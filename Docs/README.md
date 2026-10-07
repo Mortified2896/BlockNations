@@ -10,6 +10,7 @@ Start with the current state, then use the relevant implementation/setup referen
 | [MVP Current State](MVP_Current_State.md) | Implemented modes, UI, AI, PBp, known validation limits. |
 | [Roadmap](roadmap.md) | Phase 1, phase 2 AI direction, hosted playtesting, future capacity/teams. |
 | [Experimental Hard AI](Hard_AI_Design.md) | Fair local tactical policy, generic evaluator/replies, deterministic work, decision records, inspector, and watched comparisons. |
+| [Local ML Training MVP](ML_Training_MVP.md) | Mac self-play controls, storage/sleep limits, saved/resumed checkpoints, local model playtesting, schema and validation limits. |
 | [Development Follow-ups](Development_Followups.md) | Known issues, proposed boundaries, unresolved decisions, targeted checks. |
 | [PBp Compatibility Policy](PBp-Compatibility.md) | Current protocol/app-version gates and retirement policy. |
 | [PBp Migration Ledger](PbP_Migration_Ledger.md) | Protocol 3/4/5 history and current migration window. |

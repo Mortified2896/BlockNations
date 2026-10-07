@@ -1,0 +1,4 @@
+# Unity's release_23_tag allows grpcio through 1.53.2. The PyPI 1.1.0
+# metadata retains the older 1.48.2 ceiling, which lacks an arm64 macOS wheel.
+# Use the official release's supported ceiling for a native Apple Silicon setup.
+grpcio==1.53.2

@@ -502,6 +502,61 @@ public class AdjacentEmptyEnemyCityCaptureTests
     private object CreateHardRuntime() => Activator.CreateInstance(FindType("HardAIRuntime"));
 
     [Test]
+    public void ExternalArenaDisablesHumanCommandsAndFileSaving()
+    {
+        SetMember(_turnManager, "externallyDrivenMatch", true);
+        SetMember(_turnManager, "externalHumanSeatIndex", -1);
+        SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "VsAI"));
+        SetMember(_turnManager, "currentTurnSeatIndex", 0);
+        Assert.That(InvokeMethod(_turnManager, "CanLocalPlayerIssueCommands", Array.Empty<object>()), Is.False);
+        Assert.That(InvokeMethod(_turnManager, "CanAdvanceTurn", Array.Empty<object>()), Is.False);
+        string temporary = Path.Combine(Application.temporaryCachePath, "external-match-must-not-save-" + Guid.NewGuid() + ".json");
+        InvokeMethod(_turnManager, "SaveToFile", new object[] { temporary });
+        Assert.That(File.Exists(temporary), Is.False);
+    }
+
+    [Test]
+    public void ExternalSeatProgressionResetsActionsAndCollectsIncomeWithoutUiManagers()
+    {
+        SetMember(_turnManager, "externallyDrivenMatch", true);
+        SetMember(_turnManager, "ExternalMatchReady", true);
+        SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "VsAI"));
+        SetMember(_turnManager, "currentTurnSeatIndex", 0);
+        InvokeMethod(_turnManager, "SetSeatGoldFromLegacyBridges", new object[] { 2, 2, 2 });
+        InvokeMethod(_city, "SetOwnerSeatIndex", new object[] { 1 });
+        SetMember(_city, "hasRecruitedThisTurn", true);
+        object unit = CreateUnit(1, 2, 3);
+        SetMember(unit, "movesUsedThisTurn", 1);
+        SetMember(unit, "attacksUsedThisTurn", 1);
+        Assert.That(InvokeMethod(_turnManager, "TryAdvanceExternalMatchTurn", new object[] { 0 }), Is.True);
+        Assert.That((int)GetMember(_turnManager, "currentTurnSeatIndex"), Is.EqualTo(1));
+        Assert.That((int)GetMember(unit, "movesUsedThisTurn"), Is.Zero);
+        Assert.That((int)GetMember(unit, "attacksUsedThisTurn"), Is.Zero);
+        Assert.That((bool)GetMember(_city, "hasRecruitedThisTurn"), Is.False);
+        Assert.That(InvokeMethod(_turnManager, "GetGoldForSeat", new object[] { 1 }), Is.EqualTo(3));
+        Assert.That(InvokeMethod(_turnManager, "TryAdvanceExternalMatchTurn", new object[] { 0 }), Is.False);
+    }
+
+    [Test]
+    public void ExternalSpectatorDoesNotRevealUnseenTilesToPolicy()
+    {
+        SetMember(_turnManager, "externallyDrivenMatch", true);
+        SetMember(_turnManager, "externalHumanSeatIndex", -1);
+        SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "VsAI"));
+        SetMember(_turnManager, "currentTurnSeatIndex", 0);
+        InvokeMethod(_city, "SetOwnerSeatIndex", new object[] { 0 });
+        CreateUnit(0, 2, 3);
+        CreateUnit(1, 9, 9);
+        InvokeMethod(_turnManager, "RecalculatePlayerVisibility", Array.Empty<object>());
+        object source = Activator.CreateInstance(FindType("SeatAIObservationSource"));
+        object context = InvokeMethod(source, "Observe", new object[] { _turnManager, 0, true, null });
+        object observation = GetMember(context, "Observation");
+        Assert.That(((Array)GetMember(observation, "Units")).Length, Is.EqualTo(1));
+        Assert.That(((bool[])GetMember(observation, "Seen"))[9 * 11 + 9], Is.False);
+        Assert.That(((bool[])GetMember(observation, "Visible"))[9 * 11 + 9], Is.False);
+    }
+
+    [Test]
     public void VsAITurnAuthorityUsesSeatAndRejectsInvalidSeatAliases()
     {
         SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "VsAI"));

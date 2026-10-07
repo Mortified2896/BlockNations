@@ -11,7 +11,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 
-public class TurnManager : MonoBehaviour
+public partial class TurnManager : MonoBehaviour
 {
     [System.Serializable]
     public sealed class OfficialUnitRegistration
@@ -698,6 +698,7 @@ public class TurnManager : MonoBehaviour
 
     public bool IsHumanTurn()
     {
+        if (externallyDrivenMatch) return !gameOver && externalHumanSeatIndex >= 0 && IsTurnOwnedBySeat(externalHumanSeatIndex);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (IsAIVsAIDebugModeActive())
             return false;
@@ -716,6 +717,7 @@ public class TurnManager : MonoBehaviour
 
     public bool CanAdvanceTurn()
     {
+        if (externallyDrivenMatch) return IsHumanTurn();
         if (gameOver)
             return false;
 
@@ -1985,6 +1987,7 @@ public class TurnManager : MonoBehaviour
 
     public bool CanLocalPlayerIssueCommands()
     {
+        if (externallyDrivenMatch) return externalHumanSeatIndex >= 0 && IsTurnOwnedBySeat(externalHumanSeatIndex);
         // Local human command gate only. Do not use this as an AI/legal-action legality helper.
         if (currentMode != GameMode.PlayByPost)
             return true;
@@ -2245,6 +2248,11 @@ public class TurnManager : MonoBehaviour
 
     void Start()
     {
+        if (externallyDrivenMatch)
+        {
+            StartCoroutine(StartupSequence());
+            return;
+        }
         ResetPlayByPostRuntimeState();
         ResetGameOverUiState();
         ResolveTurnTransport();
@@ -2258,7 +2266,7 @@ public class TurnManager : MonoBehaviour
 
     void Update()
     {
-        if (gameOver)
+        if (externallyDrivenMatch || gameOver)
             return;
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -2866,6 +2874,11 @@ public class TurnManager : MonoBehaviour
     {
         if (!CanAdvanceTurn())
             return;
+        if (externallyDrivenMatch)
+        {
+            if (CanLocalPlayerIssueCommands()) TryAdvanceExternalMatchTurn(externalHumanSeatIndex);
+            return;
+        }
 
         if (userInitiated)
         {
@@ -3609,6 +3622,12 @@ public class TurnManager : MonoBehaviour
 
     System.Collections.IEnumerator StartupSequence()
     {
+        if (externallyDrivenMatch)
+        {
+            yield return WaitForGridReady();
+            ExternalMatchReady = true;
+            yield break;
+        }
         if (TryConsumeForceNewPlayByPostRequest(out string forcedNewGameId))
         {
             pbpCreatorBootstrapGameId = forcedNewGameId;
@@ -3905,6 +3924,7 @@ public class TurnManager : MonoBehaviour
 
     public void ScheduleAutoEndTurnCheck()
     {
+        if (externallyDrivenMatch) return;
         if (!autoEndTurnWhenNoActions)
             return;
 
@@ -4219,6 +4239,10 @@ public class TurnManager : MonoBehaviour
         }
 
         ResetRecruitmentForSeat(seatIndex);
+
+        if (externallyDrivenMatch)
+            foreach (Unit unit in Object.FindObjectsByType<Unit>())
+                if (unit.ownerSeatIndex == seatIndex) unit.ResetMovementForTurn();
 
         if (UnitSelectionManager.Instance != null)
         {
@@ -4643,6 +4667,7 @@ public class TurnManager : MonoBehaviour
 
     private void StartAIVsAIDebugLoopIfNeeded()
     {
+        if (externallyDrivenMatch) return;
         if (!IsAIVsAIDebugModeActive() || currentMode != GameMode.VsAI || gameOver)
             return;
 
@@ -4745,6 +4770,7 @@ public class TurnManager : MonoBehaviour
 
     public bool ShouldSuppressAIVsAIAudio()
     {
+        if (externallyDrivenMatch && externalHumanSeatIndex < 0) return true;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         return IsAIVsAIDebugModeActive() && aiVsAiBatchSpeedPreset == AIVsAIBatchSpeedPreset.UltraFast;
 #else
@@ -6266,6 +6292,11 @@ public class TurnManager : MonoBehaviour
 #endif
 
         gameOver = true;
+        if (externallyDrivenMatch)
+        {
+            ExternalWinnerSeatIndex = capturedBySeatIndex;
+            return;
+        }
 
         if (UnitSelectionManager.Instance != null)
         {
@@ -7026,6 +7057,11 @@ public class TurnManager : MonoBehaviour
     {
         if (gridManager == null)
             return;
+        if (externallyDrivenMatch && externalHumanSeatIndex < 0)
+        {
+            RefreshExternalSpectatorVisibility();
+            return;
+        }
 
         int viewerSeatIndex = GetViewerSeatIndexForRuntime();
 
@@ -7309,6 +7345,7 @@ public class TurnManager : MonoBehaviour
 
     public void AutoSaveIfEnabled()
     {
+        if (externallyDrivenMatch) return;
         if (!autoSaveEnabled || isLoadingFromSave)
             return;
 
@@ -7317,6 +7354,7 @@ public class TurnManager : MonoBehaviour
 
     public void SaveToFile(string path = null)
     {
+        if (externallyDrivenMatch) return;
         string targetPath = path;
         if (string.IsNullOrWhiteSpace(targetPath))
         {
