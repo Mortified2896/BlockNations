@@ -74,9 +74,27 @@ The fair observation from the stalled game is preserved as `Assets/Editor/Tests/
 
 The old tournament calculation also awarded a half-point for an abort, yielding the misleading 17% score with no wins/draws in the screenshot. Tournament standings, seat rates, pairing summaries, and ranked previews now exclude aborts from their score denominators while retaining the abort counts. True draws still score half a point. Raw historical CSV rows are preserved.
 
-The revised watched tournament must be authorized before it starts. Keep the human-play gate closed until the owner reviews actual version-2 games. Physical-phone/browser timing and broader playing strength remain unverified.
+The revised watched tournament was explicitly authorized and completed; its result is recorded below. The human-play selector remains gated while the owner reviews these results. Physical-phone/browser timing and broader playing strength remain unverified.
 
 Validation after the version-2 correction passed 41 EditMode and 15 PlayMode cases on 2026-10-07. New checks cover the captured crowded position, terrain-connected exploration, an explored map without city memory, deeper coordinated captures in a larger army, bounded enemy attack accounting, combined rider threats to a guarded capital, round-100 seat fairness, and abort-versus-draw scoring. The isolated PlayMode crowded-position check executes one own turn through the actual adapter and verifies that several units move and new tiles are explored. No opposing policy or tournament runs in these checks.
+
+
+### Version-2 watched review: three wins, one unresolved game
+
+The owner explicitly approved the revised six-match tournament on 2026-10-07. It ran in the fullscreen laptop Game view at Ultra Fast and completed in 59.73 seconds of Editor runtime. All six raw rows have an 11×11 board; all four Hard appearances identify `hard-tactician-v2` with a turn search allocation of 8,192. No additional tournament was started.
+
+| Runtime seat A | Runtime seat B | Outcome | Round |
+| --- | --- | --- | --- |
+| Normal (all local features) | Rider Focus (offense) | Normal wins | 66 |
+| Rider Focus (offense) | Normal (all local features) | Normal wins | 26 |
+| Normal (all local features) | Hard v2 | Hard wins | 22 |
+| Hard v2 | Normal (all local features) | Hard wins | 27 |
+| Rider Focus (offense) | Hard v2 | Aborted at the round cap | 100 |
+| Hard v2 | Rider Focus (offense) | Hard wins | 19 |
+
+Hard finished with **3 wins, 0 losses, 0 draws, and 1 abort**. Normal finished 2–2, and Rider Focus had 0 wins, 3 losses, and 1 abort. The displayed Hard score is 100% over its three scored games; it is not four wins and does not establish an overall win probability. The aborted Rider/Hard game had 3 Rider units and 4 Hard units remaining; the cap stopped it exactly at round 100. Its cause needs position-level investigation rather than being counted as a draw or a success.
+
+This is encouraging evidence compared with version 1, which lost both Normal pairings, but one tournament does not establish broad strength or smart play against humans. The current human-play gate remains closed pending the owner's review. Further tournaments require explicit authorization. Phone/browser timing is still unmeasured.
 
 ## Future learning and hosting
 
