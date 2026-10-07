@@ -28,6 +28,8 @@ Reviewed: 2026-10-07, against source revision `0d510b3`.
 
 ## Phase 2 AI boundary and improvements
 
+Hard Tactician now has a separate engine-independent policy and Unity adapter; see [implementation and review gate](Hard_AI_Design.md). Watch the owner-approved comparison before enabling its human-play selector. Next checks are real phone/browser timing, varied-position strength, richer fair observation memory, and transition parity toward a complete headless simulator. The legacy opponents' two-side coupling remains separate work.
+
 This is recommended core-system work for a separately requested phase 2. Plan before patching; choose exact extraction files during that pass.
 
 - Primary source: `Assets/Scripts/Core/TurnManager.cs`, especially `RunAIForSide` and adjacent recruit/target/move/attack/defense helpers.

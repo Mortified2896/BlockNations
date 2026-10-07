@@ -84,6 +84,7 @@ public class MainMenuUITKView : MonoBehaviour
     private VisualElement generalSettingsAIVsAiHeadToHeadSection;
     private VisualElement generalSettingsAIVsAiTournamentSection;
     private VisualElement generalSettingsAIVsAiTournamentParticipantPool;
+    private Foldout generalSettingsAIVsAiTournamentParticipantFoldout;
     private ScrollView activeGamesList;
     private Label detailsTitleLabel;
     private Label detailsSubtitleLabel;
@@ -105,6 +106,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Label generalSettingsStoreSnapshotHistoryHelperLabel;
     private Label generalSettingsAIVsAiTournamentEstimateLabel;
     private Label generalSettingsAIVsAiTournamentMatchesPerPairingLabel;
+    private Label generalSettingsAIVsAiTournamentLineupLabel;
 
     private Button continueButton;
     private Button playVsAiButton;
@@ -127,17 +129,20 @@ public class MainMenuUITKView : MonoBehaviour
     private Button generalSettingsPbpPlayerCount4Button;
     private Button generalSettingsAiStyleDefaultButton;
     private Button generalSettingsAiStyleRiderFocusButton;
+    private Button generalSettingsAiStyleHardButton;
     private Button generalSettingsStoreSnapshotHistoryButton;
     private Button generalSettingsWatchAIVsAIButton;
     private Button generalSettingsAIVsAiModeHeadToHeadButton;
     private Button generalSettingsAIVsAiModeTournamentButton;
     private Button generalSettingsSideAAiStyleDefaultButton;
     private Button generalSettingsSideAAiStyleRiderFocusButton;
+    private Button generalSettingsSideAAiStyleHardButton;
     private Button generalSettingsSideAFeatureOffenseButton;
     private Button generalSettingsSideAFeatureExchangeButton;
     private Button generalSettingsSideAFeatureDefenseButton;
     private Button generalSettingsSideBAiStyleDefaultButton;
     private Button generalSettingsSideBAiStyleRiderFocusButton;
+    private Button generalSettingsSideBAiStyleHardButton;
     private Button generalSettingsSideBFeatureOffenseButton;
     private Button generalSettingsSideBFeatureExchangeButton;
     private Button generalSettingsSideBFeatureDefenseButton;
@@ -478,6 +483,8 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAIVsAiHeadToHeadSection = root.Q<VisualElement>("GeneralSettingsAIVsAiHeadToHeadSection");
         generalSettingsAIVsAiTournamentSection = root.Q<VisualElement>("GeneralSettingsAIVsAiTournamentSection");
         generalSettingsAIVsAiTournamentParticipantPool = root.Q<VisualElement>("GeneralSettingsAIVsAiTournamentParticipantPool");
+        generalSettingsAIVsAiTournamentParticipantFoldout = root.Q<Foldout>("GeneralSettingsAIVsAiTournamentParticipantFoldout");
+        generalSettingsAIVsAiTournamentLineupLabel = root.Q<Label>("GeneralSettingsAIVsAiTournamentLineupLabel");
         clearLocalPbpConfirmOverlay = root.Q<VisualElement>("ClearLocalPbpConfirmOverlay");
         activeGamesList = root.Q<ScrollView>("ActiveGamesList");
         detailsTitleLabel = root.Q<Label>("DetailsTitleLabel");
@@ -532,17 +539,20 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsPbpPlayerCount4Button = root.Q<Button>("GeneralSettingsPbpPlayerCount4Button");
         generalSettingsAiStyleDefaultButton = root.Q<Button>("GeneralSettingsAiStyleDefaultButton");
         generalSettingsAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsAiStyleRiderFocusButton");
+        generalSettingsAiStyleHardButton = root.Q<Button>("GeneralSettingsAiStyleHardButton");
         generalSettingsStoreSnapshotHistoryButton = root.Q<Button>("GeneralSettingsStoreSnapshotHistoryButton");
         generalSettingsWatchAIVsAIButton = root.Q<Button>("GeneralSettingsWatchAIVsAIButton");
         generalSettingsAIVsAiModeHeadToHeadButton = root.Q<Button>("GeneralSettingsAIVsAiModeHeadToHeadButton");
         generalSettingsAIVsAiModeTournamentButton = root.Q<Button>("GeneralSettingsAIVsAiModeTournamentButton");
         generalSettingsSideAAiStyleDefaultButton = root.Q<Button>("GeneralSettingsSideAAiStyleDefaultButton");
         generalSettingsSideAAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsSideAAiStyleRiderFocusButton");
+        generalSettingsSideAAiStyleHardButton = root.Q<Button>("GeneralSettingsSideAAiStyleHardButton");
         generalSettingsSideAFeatureOffenseButton = root.Q<Button>("GeneralSettingsSideAFeatureOffenseButton");
         generalSettingsSideAFeatureExchangeButton = root.Q<Button>("GeneralSettingsSideAFeatureExchangeButton");
         generalSettingsSideAFeatureDefenseButton = root.Q<Button>("GeneralSettingsSideAFeatureDefenseButton");
         generalSettingsSideBAiStyleDefaultButton = root.Q<Button>("GeneralSettingsSideBAiStyleDefaultButton");
         generalSettingsSideBAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsSideBAiStyleRiderFocusButton");
+        generalSettingsSideBAiStyleHardButton = root.Q<Button>("GeneralSettingsSideBAiStyleHardButton");
         generalSettingsSideBFeatureOffenseButton = root.Q<Button>("GeneralSettingsSideBFeatureOffenseButton");
         generalSettingsSideBFeatureExchangeButton = root.Q<Button>("GeneralSettingsSideBFeatureExchangeButton");
         generalSettingsSideBFeatureDefenseButton = root.Q<Button>("GeneralSettingsSideBFeatureDefenseButton");
@@ -1076,6 +1086,11 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsAiStyleRiderFocusButton.clicked += HandleGeneralSettingsAiStyleRiderFocusClicked;
         }
 
+        if (generalSettingsAiStyleHardButton != null)
+        {
+            generalSettingsAiStyleHardButton.clicked += HandleGeneralSettingsAiStyleHardClicked;
+        }
+
         if (generalSettingsSideAAiStyleDefaultButton != null)
         {
             generalSettingsSideAAiStyleDefaultButton.clicked += HandleGeneralSettingsSideAAiStyleDefaultClicked;
@@ -1084,6 +1099,11 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsSideAAiStyleRiderFocusButton != null)
         {
             generalSettingsSideAAiStyleRiderFocusButton.clicked += HandleGeneralSettingsSideAAiStyleRiderFocusClicked;
+        }
+
+        if (generalSettingsSideAAiStyleHardButton != null)
+        {
+            generalSettingsSideAAiStyleHardButton.clicked += HandleGeneralSettingsSideAAiStyleHardClicked;
         }
 
         if (generalSettingsSideAFeatureOffenseButton != null)
@@ -1109,6 +1129,11 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsSideBAiStyleRiderFocusButton != null)
         {
             generalSettingsSideBAiStyleRiderFocusButton.clicked += HandleGeneralSettingsSideBAiStyleRiderFocusClicked;
+        }
+
+        if (generalSettingsSideBAiStyleHardButton != null)
+        {
+            generalSettingsSideBAiStyleHardButton.clicked += HandleGeneralSettingsSideBAiStyleHardClicked;
         }
 
         if (generalSettingsSideBFeatureOffenseButton != null)
@@ -1431,6 +1456,11 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsAiStyleRiderFocusButton.clicked -= HandleGeneralSettingsAiStyleRiderFocusClicked;
         }
 
+        if (generalSettingsAiStyleHardButton != null)
+        {
+            generalSettingsAiStyleHardButton.clicked -= HandleGeneralSettingsAiStyleHardClicked;
+        }
+
         if (generalSettingsSideAAiStyleDefaultButton != null)
         {
             generalSettingsSideAAiStyleDefaultButton.clicked -= HandleGeneralSettingsSideAAiStyleDefaultClicked;
@@ -1439,6 +1469,11 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsSideAAiStyleRiderFocusButton != null)
         {
             generalSettingsSideAAiStyleRiderFocusButton.clicked -= HandleGeneralSettingsSideAAiStyleRiderFocusClicked;
+        }
+
+        if (generalSettingsSideAAiStyleHardButton != null)
+        {
+            generalSettingsSideAAiStyleHardButton.clicked -= HandleGeneralSettingsSideAAiStyleHardClicked;
         }
 
         if (generalSettingsSideAFeatureOffenseButton != null)
@@ -1464,6 +1499,11 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsSideBAiStyleRiderFocusButton != null)
         {
             generalSettingsSideBAiStyleRiderFocusButton.clicked -= HandleGeneralSettingsSideBAiStyleRiderFocusClicked;
+        }
+
+        if (generalSettingsSideBAiStyleHardButton != null)
+        {
+            generalSettingsSideBAiStyleHardButton.clicked -= HandleGeneralSettingsSideBAiStyleHardClicked;
         }
 
         if (generalSettingsSideBFeatureOffenseButton != null)
@@ -1741,6 +1781,26 @@ public class MainMenuUITKView : MonoBehaviour
         ShowGeneralSettingsPanel(PendingGeneralSettingsMode.VsAI);
     }
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    // Prepare a concrete review configuration without persisting settings or starting a match.
+    public void PrepareHardAIComparisonReview()
+    {
+        ShowGeneralSettingsPanel(PendingGeneralSettingsMode.VsAI);
+        selectedMapSizePreset = TurnManager.MapSizePreset.Small;
+        selectedEnableAIVsAIDebugMode = true;
+        selectedStoreSnapshotHistory = false;
+        selectedAIVsAIBatchSpeedPreset = TurnManager.AIVsAIBatchSpeedPreset.Normal;
+        selectedAIVsAISimulationSettings = AIVsAIBatchRunController.GetDefaultSimulationSettings();
+        selectedAIVsAISimulationSettings.mode = AIVsAIBatchRunController.SimulationMode.Tournament;
+        selectedAIVsAISimulationSettings.tournamentParticipantMask = (1 << 7) | (1 << 9) | (1 << 16);
+        selectedAIVsAISimulationSettings.tournamentGamesPerPairing = 1;
+        selectedAIVsAISimulationSettings.tournamentSeatSwap = true;
+        selectedAIVsAISimulationSettings.tournamentRunContinuously = false;
+        generalSettingsAIVsAiTournamentParticipantFoldout?.SetValueWithoutNotify(false);
+        RefreshGeneralSettingsSelectionState();
+    }
+#endif
+
     private void HandlePuzzleModeClicked()
     {
         ShowPuzzleModePanel();
@@ -1829,9 +1889,25 @@ public class MainMenuUITKView : MonoBehaviour
         RefreshGeneralSettingsSelectionState();
     }
 
+    private static void SetLegacyFeatureButtonsEnabled(bool enabled, params Button[] buttons)
+    {
+        foreach (Button button in buttons)
+        {
+            if (button == null) continue;
+            button.SetEnabled(enabled);
+            button.tooltip = enabled ? string.Empty : "Hard Tactician uses its own search and evaluation.";
+        }
+    }
+
     private void HandleGeneralSettingsAiStyleDefaultClicked()
     {
         selectedAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAiStyleHardClicked()
+    {
+        selectedAIRecruitVariant = TurnManager.AIRecruitVariant.HardTactician;
         RefreshGeneralSettingsSelectionState();
     }
 
@@ -1844,6 +1920,12 @@ public class MainMenuUITKView : MonoBehaviour
     private void HandleGeneralSettingsSideAAiStyleDefaultClicked()
     {
         selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsSideAAiStyleHardClicked()
+    {
+        selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.HardTactician;
         RefreshGeneralSettingsSelectionState();
     }
 
@@ -1871,6 +1953,12 @@ public class MainMenuUITKView : MonoBehaviour
     private void HandleGeneralSettingsSideBAiStyleDefaultClicked()
     {
         selectedSideBAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsSideBAiStyleHardClicked()
+    {
+        selectedSideBAIRecruitVariant = TurnManager.AIRecruitVariant.HardTactician;
         RefreshGeneralSettingsSelectionState();
     }
 
@@ -3197,13 +3285,6 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsTitleLabel.text = "General Settings";
         }
 
-        if (generalSettingsSubtitleLabel != null)
-        {
-            generalSettingsSubtitleLabel.text = isVsAi
-                ? "Choose your map size and AI level."
-                : "Choose your map size and player count for this new play-by-post match.";
-        }
-
         if (generalSettingsAiSection != null)
         {
             generalSettingsAiSection.style.display = isVsAi ? DisplayStyle.Flex : DisplayStyle.None;
@@ -3217,11 +3298,6 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsDevSection != null)
         {
             generalSettingsDevSection.style.display = IsDevBuild() ? DisplayStyle.Flex : DisplayStyle.None;
-        }
-
-        if (generalSettingsConfirmButton != null)
-        {
-            generalSettingsConfirmButton.text = isVsAi ? "Start Game" : "Create Match";
         }
 
         RefreshGeneralSettingsSelectionState();
@@ -3306,6 +3382,13 @@ public class MainMenuUITKView : MonoBehaviour
         bool disableSnapshotHistory = isVsAi && selectedEnableAIVsAIDebugMode;
         bool hideGlobalAiStyle = isVsAi && selectedEnableAIVsAIDebugMode;
 
+        if (generalSettingsAiSection != null)
+        {
+            generalSettingsAiSection.style.display = isVsAi && !hideGlobalAiStyle
+                ? DisplayStyle.Flex
+                : DisplayStyle.None;
+        }
+
         if (generalSettingsAiStyleSection != null)
         {
             generalSettingsAiStyleSection.style.display = hideGlobalAiStyle
@@ -3378,6 +3461,16 @@ public class MainMenuUITKView : MonoBehaviour
             AIVsAIBatchRunController.SanitizeSimulationSettings(selectedAIVsAISimulationSettings);
         bool isTournamentMode =
             selectedAIVsAISimulationSettings.mode == AIVsAIBatchRunController.SimulationMode.Tournament;
+        bool isSimulation = isVsAi && selectedEnableAIVsAIDebugMode;
+        if (generalSettingsSubtitleLabel != null)
+            generalSettingsSubtitleLabel.text = isSimulation
+                ? "Choose the map and opponents for this simulation."
+                : isVsAi ? "Choose your map size and AI level."
+                : "Choose your map size and player count for this new play-by-post match.";
+        if (generalSettingsConfirmButton != null)
+            generalSettingsConfirmButton.text = isSimulation
+                ? (isTournamentMode ? "Start Tournament" : "Start Simulation")
+                : isVsAi ? "Start Game" : "Create Match";
 
         UpdateGeneralSettingsSelectionButton(
             generalSettingsMapSmallButton,
@@ -3385,12 +3478,17 @@ public class MainMenuUITKView : MonoBehaviour
         UpdateGeneralSettingsSelectionButton(
             generalSettingsMapLargeButton,
             selectedMapSizePreset == TurnManager.MapSizePreset.Large);
+        if (generalSettingsAiStyleHardButton != null)
+            generalSettingsAiStyleHardButton.style.display = HardAIRuntime.PlayerPlaytestApproved ? DisplayStyle.Flex : DisplayStyle.None;
+        SetLegacyFeatureButtonsEnabled(selectedSideAAIRecruitVariant != TurnManager.AIRecruitVariant.HardTactician, generalSettingsSideAFeatureOffenseButton, generalSettingsSideAFeatureExchangeButton, generalSettingsSideAFeatureDefenseButton);
+        SetLegacyFeatureButtonsEnabled(selectedSideBAIRecruitVariant != TurnManager.AIRecruitVariant.HardTactician, generalSettingsSideBFeatureOffenseButton, generalSettingsSideBFeatureExchangeButton, generalSettingsSideBFeatureDefenseButton);
         UpdateGeneralSettingsSelectionButton(
             generalSettingsAiStyleDefaultButton,
             selectedAIRecruitVariant == TurnManager.AIRecruitVariant.Default);
         UpdateGeneralSettingsSelectionButton(
             generalSettingsAiStyleRiderFocusButton,
             selectedAIRecruitVariant == TurnManager.AIRecruitVariant.RiderFocus);
+        UpdateGeneralSettingsSelectionButton(generalSettingsAiStyleHardButton, selectedAIRecruitVariant == TurnManager.AIRecruitVariant.HardTactician);
         UpdateGeneralSettingsSelectionButton(
             generalSettingsAIVsAiModeHeadToHeadButton,
             !isTournamentMode);
@@ -3417,6 +3515,7 @@ public class MainMenuUITKView : MonoBehaviour
         UpdateGeneralSettingsSelectionButton(
             generalSettingsSideAAiStyleRiderFocusButton,
             selectedSideAAIRecruitVariant == TurnManager.AIRecruitVariant.RiderFocus);
+        UpdateGeneralSettingsSelectionButton(generalSettingsSideAAiStyleHardButton, selectedSideAAIRecruitVariant == TurnManager.AIRecruitVariant.HardTactician);
         UpdateGeneralSettingsSelectionButton(
             generalSettingsSideAFeatureOffenseButton,
             (selectedSideAFeatures & AILocalDecisionFeatures.OffensiveObviousWin) != 0);
@@ -3432,6 +3531,7 @@ public class MainMenuUITKView : MonoBehaviour
         UpdateGeneralSettingsSelectionButton(
             generalSettingsSideBAiStyleRiderFocusButton,
             selectedSideBAIRecruitVariant == TurnManager.AIRecruitVariant.RiderFocus);
+        UpdateGeneralSettingsSelectionButton(generalSettingsSideBAiStyleHardButton, selectedSideBAIRecruitVariant == TurnManager.AIRecruitVariant.HardTactician);
         UpdateGeneralSettingsSelectionButton(
             generalSettingsSideBFeatureOffenseButton,
             (selectedSideBFeatures & AILocalDecisionFeatures.OffensiveObviousWin) != 0);
@@ -3496,17 +3596,33 @@ public class MainMenuUITKView : MonoBehaviour
         bool usingFullTournamentPool =
             selectedAIVsAISimulationSettings.tournamentParticipantMask ==
             AIVsAIBatchRunController.GetDefaultTournamentParticipantMask();
+        int tournamentPoolCount = AIVsAIBatchRunController.GetGeneratedVariantCount();
+        if (generalSettingsAIVsAiTournamentSelectFullPoolButton != null)
+            generalSettingsAIVsAiTournamentSelectFullPoolButton.text = $"Use Full {tournamentPoolCount}-Variant Pool";
+        if (generalSettingsAIVsAiTournamentParticipantFoldout != null)
+            generalSettingsAIVsAiTournamentParticipantFoldout.text = $"Change Participants ({tournamentPoolCount} options)";
         UpdateGeneralSettingsSelectionButton(
             generalSettingsAIVsAiTournamentSelectFullPoolButton,
             usingFullTournamentPool);
 
         int selectedTournamentParticipants = AIVsAIBatchRunController.CountTournamentParticipants(
             selectedAIVsAISimulationSettings.tournamentParticipantMask);
+        var selectedLabels = new List<string>();
+        bool includesHard = false;
         for (int i = 0; i < generalSettingsAIVsAiTournamentParticipantButtons.Count; i++)
         {
             bool selected = (selectedAIVsAISimulationSettings.tournamentParticipantMask & (1 << i)) != 0;
             UpdateGeneralSettingsSelectionButton(generalSettingsAIVsAiTournamentParticipantButtons[i], selected);
+            if (selected)
+            {
+                selectedLabels.Add(AIVsAIBatchRunController.GetGeneratedVariantLabel(i));
+                includesHard |= AIVsAIBatchRunController.GetGeneratedVariant(i).baseModel == TurnManager.AIRecruitVariant.HardTactician;
+            }
         }
+        if (generalSettingsAIVsAiTournamentLineupLabel != null)
+            generalSettingsAIVsAiTournamentLineupLabel.text = selectedLabels.Count == 0
+                ? "Select at least two opponents to start a tournament."
+                : string.Join("\n", selectedLabels);
 
         if (generalSettingsAIVsAiTournamentEstimateLabel != null)
         {
@@ -3516,8 +3632,11 @@ public class MainMenuUITKView : MonoBehaviour
                 AIVsAIBatchRunController.EstimateTournament(
                     selectedAIVsAISimulationSettings,
                     selectedAIVsAIBatchSpeedPreset);
+            string runtimeDescription = includesHard
+                ? "Runtime depends on device speed and Hard AI analysis."
+                : $"Approx {FormatDurationEstimate(estimate.estimatedRuntimeSeconds)} (estimate only).";
             generalSettingsAIVsAiTournamentEstimateLabel.text =
-                $"Estimate only: {estimate.participantCount} variants | {estimate.totalPairings} pairings | {actualMatchesPerPairing} matches/pairing | {estimate.totalGames} games | approx {FormatDurationEstimate(estimate.estimatedRuntimeSeconds)}";
+                $"{estimate.participantCount} variants | {estimate.totalPairings} pairings | {actualMatchesPerPairing} matches/pairing | {estimate.totalGames} games\n{runtimeDescription}";
         }
 
         if (generalSettingsAIVsAiTournamentMatchesPerPairingLabel != null)
@@ -4518,8 +4637,8 @@ public class MainMenuUITKView : MonoBehaviour
     private static bool ShouldUseWidePhoneMenuLayout(Vector2 responsiveSize)
     {
         float shortestSide = Mathf.Min(responsiveSize.x, responsiveSize.y);
-        float usableHeight = Mathf.Max(responsiveSize.x, responsiveSize.y);
-        return shortestSide >= WidePhoneShortestSideMin && usableHeight >= WidePhoneHeightMin;
+        return responsiveSize.y > responsiveSize.x &&
+               shortestSide >= WidePhoneShortestSideMin && responsiveSize.y >= WidePhoneHeightMin;
     }
 
     private void ResetActiveGamesInteractionState()
@@ -4567,6 +4686,8 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAIVsAiHeadToHeadSection = null;
         generalSettingsAIVsAiTournamentSection = null;
         generalSettingsAIVsAiTournamentParticipantPool = null;
+        generalSettingsAIVsAiTournamentParticipantFoldout = null;
+        generalSettingsAIVsAiTournamentLineupLabel = null;
         activeGamesList = null;
         detailsTitleLabel = null;
         detailsSubtitleLabel = null;
@@ -4614,17 +4735,20 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsPbpPlayerCount4Button = null;
         generalSettingsAiStyleDefaultButton = null;
         generalSettingsAiStyleRiderFocusButton = null;
+        generalSettingsAiStyleHardButton = null;
         generalSettingsStoreSnapshotHistoryButton = null;
         generalSettingsWatchAIVsAIButton = null;
         generalSettingsAIVsAiModeHeadToHeadButton = null;
         generalSettingsAIVsAiModeTournamentButton = null;
         generalSettingsSideAAiStyleDefaultButton = null;
         generalSettingsSideAAiStyleRiderFocusButton = null;
+        generalSettingsSideAAiStyleHardButton = null;
         generalSettingsSideAFeatureOffenseButton = null;
         generalSettingsSideAFeatureExchangeButton = null;
         generalSettingsSideAFeatureDefenseButton = null;
         generalSettingsSideBAiStyleDefaultButton = null;
         generalSettingsSideBAiStyleRiderFocusButton = null;
+        generalSettingsSideBAiStyleHardButton = null;
         generalSettingsSideBFeatureOffenseButton = null;
         generalSettingsSideBFeatureExchangeButton = null;
         generalSettingsSideBFeatureDefenseButton = null;

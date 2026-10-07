@@ -20,6 +20,14 @@ public class TileVisibility : MonoBehaviour
     public bool isVisibleNow { get; private set; }
     public bool hasBeenSeen => seenBySeats.Contains(currentViewerSeatIndex);
 
+    public bool HasBeenSeenBySeat(int seatIndex) => seenBySeats.Contains(seatIndex);
+
+    // Record exploration without changing the human viewer's fog or presentation.
+    public void RecordSeenBySeat(int seatIndex)
+    {
+        if (seatIndex >= 0) seenBySeats.Add(seatIndex);
+    }
+
     private Color fogBaseColor = Color.black;
     private Color exploredBaseColor = new Color(0f, 0f, 0f, 0.5f);
 

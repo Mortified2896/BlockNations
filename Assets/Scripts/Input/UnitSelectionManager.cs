@@ -632,10 +632,15 @@ public class UnitSelectionManager : MonoBehaviour
     /// </summary>
     public void ResetMovementForSide(bool isPlayerOwnedSide, bool isActiveTurn)
     {
+        ResetMovementForSeat(isPlayerOwnedSide ? 0 : 1, isActiveTurn);
+    }
+
+    public void ResetMovementForSeat(int seatIndex, bool isActiveTurn)
+    {
         Unit[] units = Object.FindObjectsByType<Unit>(FindObjectsSortMode.None);
         foreach (Unit unit in units)
         {
-            bool matchesSide = unit.isPlayerOwned == isPlayerOwnedSide;
+            bool matchesSide = unit.ownerSeatIndex == seatIndex;
             if (matchesSide)
             {
                 unit.ResetMovementForTurn();

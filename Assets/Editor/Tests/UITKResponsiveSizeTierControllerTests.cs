@@ -33,6 +33,15 @@ public class UITKResponsiveSizeTierControllerTests
         Assert.IsTrue(ShouldUseWidePhoneMenuLayout(responsiveSize));
     }
 
+    [TestCase(1995f, 1133f, 255f)]
+    [TestCase(2880f, 1800f, 220f)]
+    [TestCase(1920f, 1080f, 110f)]
+    public void LaptopLandscapeResponsiveSize_DoesNotUsePortraitPhoneMenuLayout(float width, float height, float dpi)
+    {
+        Assert.IsFalse(ShouldUseWidePhoneMenuLayout(ComputeResponsiveSize(new Vector2(width, height), dpi)),
+            "A fullscreen laptop must retain bounded settings cards rather than portrait phone styling.");
+    }
+
     private static Vector2 ComputeResponsiveSize(Vector2 safeAreaSize, float dpi)
     {
         System.Type responsiveControllerType = typeof(MainMenuUITKView).Assembly.GetType(ResponsiveControllerTypeName);

@@ -177,7 +177,7 @@ public class AdjacentEmptyEnemyCityCaptureTests
 
         SetMember(_turnManager, "gridManager", _gridManager);
 
-        int size = 7;
+        int size = 11;
         SetMember(_gridManager, "width", size);
         SetMember(_gridManager, "height", size);
         SetMember(_gridManager, "tileSize", 1f);
@@ -496,6 +496,175 @@ public class AdjacentEmptyEnemyCityCaptureTests
                 yield return null;
             }
         }
+    }
+
+    private object CreateHardRuntime() => Activator.CreateInstance(FindType("HardAIRuntime"));
+
+    [Test]
+    public void VsAITurnAuthorityUsesSeatAndRejectsInvalidSeatAliases()
+    {
+        SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "VsAI"));
+        SetMember(_turnManager, "currentTurnSeatIndex", 1);
+        SetMember(_turnManager, "isPlayerTurn", true); // Deliberately stale legacy bridge.
+        Assert.That(InvokeMethod(_turnManager, "IsTurnOwnedBySeat", new object[] { 1 }), Is.True);
+        Assert.That(InvokeMethod(_turnManager, "IsTurnOwnedBySeat", new object[] { 0 }), Is.False);
+        Assert.That(InvokeMethod(_turnManager, "IsTurnOwnedBySeat", new object[] { -1 }), Is.False);
+        Assert.That(InvokeMethod(_turnManager, "IsTurnOwnedBySeat", new object[] { 3 }), Is.False);
+        Assert.That(InvokeMethod(_turnManager, "CanAdvanceTurn", Array.Empty<object>()), Is.False);
+    }
+
+    [Test]
+    public void VsAITurnProgressionSynchronizesBridgeAndIncrementsRoundAfterSeatOne()
+    {
+        SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "VsAI"));
+        SetMember(_turnManager, "turnNumber", 4);
+        SetMember(_turnManager, "currentTurnSeatIndex", 0);
+        InvokeMethod(_turnManager, "AdvanceVsAITurnAfterSeat", new object[] { 0 });
+        Assert.That((int)GetMember(_turnManager, "currentTurnSeatIndex"), Is.EqualTo(1));
+        Assert.That((bool)GetMember(_turnManager, "isPlayerTurn"), Is.False);
+        Assert.That((int)GetMember(_turnManager, "turnNumber"), Is.EqualTo(4));
+        InvokeMethod(_turnManager, "AdvanceVsAITurnAfterSeat", new object[] { 0 }); // Stale completion.
+        Assert.That((int)GetMember(_turnManager, "currentTurnSeatIndex"), Is.EqualTo(1));
+        InvokeMethod(_turnManager, "AdvanceVsAITurnAfterSeat", new object[] { 1 });
+        Assert.That((int)GetMember(_turnManager, "currentTurnSeatIndex"), Is.Zero);
+        Assert.That((bool)GetMember(_turnManager, "isPlayerTurn"), Is.True);
+        Assert.That((int)GetMember(_turnManager, "turnNumber"), Is.EqualTo(5));
+    }
+
+    [TestCase(4, 3, false, 1)]
+    [TestCase(4, 3, true, 0)]
+    [TestCase(5, 3, false, 3)]
+    [TestCase(5, 2, true, 2)]
+    public void SupportedPbpSaveTurnMigrationPreservesLegacyAndExplicitSeatRules(int protocol, int savedSeat, bool legacyPlayerTurn, int expectedSeat)
+    {
+        object save = Activator.CreateInstance(FindType("TurnManager+GameSave"), nonPublic: true);
+        SetMember(save, "protocolVersion", protocol);
+        SetMember(save, "currentTurnSeatIndex", savedSeat);
+        SetMember(save, "isPlayerTurn", legacyPlayerTurn);
+        Assert.That(InvokeStaticMethodCompatible(_turnManagerType, "ResolveCurrentTurnSeatIndex", new object[] { save, 4 }), Is.EqualTo(expectedSeat));
+    }
+
+    private object CreateUnit(int seat, int x, int y, string type = "warrior")
+    {
+        var go = new GameObject($"Test_{type}_{x}_{y}");
+        var unit = go.AddComponent(_unitType);
+        InvokeMethod(unit, "SetOwnerSeatIndex", new object[] { seat });
+        InvokeMethod(unit, "ApplyDefinition", new object[] { type, false });
+        go.transform.position = new Vector3(x, y);
+        _caseObjects.Add(go);
+        return unit;
+    }
+
+    [UnityTest]
+    public IEnumerator HardRuntimeCapturesForBothSeats()
+    {
+        SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "VsAI"));
+        for (int seat = 0; seat < 2; seat++)
+        {
+            SetMember(_turnManager, "currentTurnSeatIndex", seat);
+            SetMember(_turnManager, "isPlayerTurn", seat == 0);
+            SetMember(_turnManager, "gameOver", false);
+            SetMember(_turnManager, "aiRecruitVariant", Enum.Parse(FindType("TurnManager+AIRecruitVariant"), "HardTactician"));
+            InvokeMethod(_city, "SetOwnerSeatIndex", new object[] { 1 - seat });
+            object unit = CreateUnit(seat, 2, 3);
+            IEnumerator turn = (IEnumerator)InvokeMethod(CreateHardRuntime(), "RunTurn", new object[] { _turnManager, seat });
+            yield return turn;
+            Assert.That((int)GetMember(_city, "ownerSeatIndex"), Is.EqualTo(seat));
+            Assert.That((bool)GetMember(_turnManager, "gameOver"), Is.True);
+            Assert.That(((Component)unit).transform.position.x, Is.EqualTo(3));
+            foreach (var go in _caseObjects) UnityEngine.Object.DestroyImmediate(go);
+            _caseObjects.Clear();
+        }
+    }
+
+    [Test]
+    public void HardObservationIgnoresHiddenSceneChangesAndViewerFog()
+    {
+        SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "VsAI"));
+        SetMember(_turnManager, "currentTurnSeatIndex", 1);
+        SetMember(_turnManager, "isPlayerTurn", false);
+        InvokeMethod(_city, "SetOwnerSeatIndex", new object[] { 0 });
+        CreateUnit(1, 2, 3);
+        object hidden = CreateUnit(0, 9, 9);
+        object runtime = CreateHardRuntime();
+        object first = GetMember(InvokeMethod(runtime, "Observe", new object[] { _turnManager, 1 }), "Observation");
+        string before = JsonUtility.ToJson(first);
+        ((Component)hidden).transform.position = new Vector3(8, 8);
+        // Deliberately alter the human viewer's rendered visibility; Hard must ignore it.
+        foreach (object tile in (Array)GetMember(_gridManager, "tileGrid"))
+            InvokeMethod(tile, "SetVisibleForSeat", new object[] { true, 0 });
+        object second = GetMember(InvokeMethod(runtime, "Observe", new object[] { _turnManager, 1 }), "Observation");
+        Assert.That(JsonUtility.ToJson(second), Is.EqualTo(before));
+        Assert.That(((Array)GetMember(second, "Units")).Length, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void ResetKnowledgeCancelsPausedDecisionWithoutExecuting()
+    {
+        SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "VsAI"));
+        SetMember(_turnManager, "currentTurnSeatIndex", 1);
+        SetMember(_turnManager, "isPlayerTurn", false);
+        InvokeMethod(_city, "SetOwnerSeatIndex", new object[] { 0 });
+        object own = CreateUnit(1, 2, 3);
+        object runtime = CreateHardRuntime();
+        FieldInfo pause = FindType("HardAIDiagnostics").GetField("PauseBeforeAction");
+        pause.SetValue(null, true);
+        try
+        {
+            IEnumerator turn = (IEnumerator)InvokeMethod(runtime, "RunTurn", new object[] { _turnManager, 1 });
+            Assert.That(turn.MoveNext(), Is.True, "The inspector should pause before executing the winning move.");
+            InvokeMethod(runtime, "ResetKnowledge", Array.Empty<object>());
+            Assert.That(turn.MoveNext(), Is.False);
+            Assert.That((int)GetMember(_city, "ownerSeatIndex"), Is.Zero);
+            Assert.That(((Component)own).transform.position.x, Is.EqualTo(2));
+        }
+        finally { pause.SetValue(null, false); }
+    }
+
+    [Test]
+    public void HardCityMemoryRetainsLastObservedOwnership()
+    {
+        SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "VsAI"));
+        SetMember(_turnManager, "currentTurnSeatIndex", 1);
+        SetMember(_turnManager, "isPlayerTurn", false);
+        InvokeMethod(_city, "SetOwnerSeatIndex", new object[] { 0 });
+        object own = CreateUnit(1, 2, 3);
+        object runtime = CreateHardRuntime();
+        InvokeMethod(runtime, "Observe", new object[] { _turnManager, 1 });
+        ((Component)own).transform.position = new Vector3(0, 0);
+        InvokeMethod(_city, "SetOwnerSeatIndex", new object[] { 2 });
+        object observation = GetMember(InvokeMethod(runtime, "Observe", new object[] { _turnManager, 1 }), "Observation");
+        object remembered = ((Array)GetMember(observation, "Cities")).GetValue(0);
+        Assert.That((int)GetMember(remembered, "Seat"), Is.Zero);
+        Assert.That((bool)GetMember(remembered, "CurrentlyVisible"), Is.False);
+    }
+
+    [Test]
+    public void HardMoveStopsAtHiddenBlockerAndRejectsWrongSeat()
+    {
+        SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "VsAI"));
+        SetMember(_turnManager, "currentTurnSeatIndex", 1);
+        SetMember(_turnManager, "isPlayerTurn", false);
+        SetMember(_city, "x", 10); SetMember(_city, "y", 10);
+        ((Component)_city).transform.position = new Vector3(10, 10);
+        InvokeMethod(_city, "SetOwnerSeatIndex", new object[] { 0 });
+        object rider = CreateUnit(1, 1, 1, "rider");
+        object blocker = CreateUnit(0, 3, 3);
+        object runtime = CreateHardRuntime();
+        object context = InvokeMethod(runtime, "Observe", new object[] { _turnManager, 1 });
+        IEnumerable legal = (IEnumerable)InvokeStaticMethodCompatible(_legalActionServiceType, "GetLegalActionsForSeat",
+            new object[] { _turnManager, 1, GetMember(context, "Visible") });
+        object selected = null;
+        foreach (object action in legal)
+            if (GetMember(action, "ActionType").ToString() == "UnitMove" && ReferenceEquals(GetMember(action, "TargetTile"), _cityTile)) selected = action;
+        Assert.That(selected, Is.Not.Null);
+        SetMember(_turnManager, "currentTurnSeatIndex", 0); SetMember(_turnManager, "isPlayerTurn", true);
+        Assert.That(InvokeStaticMethodCompatible(FindType("HardAIRuntime"), "TryExecute", new object[] { _turnManager, selected }), Is.False);
+        SetMember(_turnManager, "currentTurnSeatIndex", 1); SetMember(_turnManager, "isPlayerTurn", false);
+        Assert.That(InvokeStaticMethodCompatible(FindType("HardAIRuntime"), "TryExecute", new object[] { _turnManager, selected }), Is.True);
+        Assert.That(((Component)rider).transform.position, Is.EqualTo(new Vector3(2, 2)));
+        Assert.That(((Component)blocker).transform.position, Is.EqualTo(new Vector3(3, 3)));
+        Assert.That((int)GetMember(rider, "movesUsedThisTurn"), Is.EqualTo(2));
     }
 
     private static int FlattenCityKey(int x, int y)

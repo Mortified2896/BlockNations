@@ -1,0 +1,7 @@
+{
+    "name": "BlockNations.AI",
+    "rootNamespace": "BlockNations.AI",
+    "references": [],
+    "autoReferenced": true,
+    "noEngineReferences": true
+}

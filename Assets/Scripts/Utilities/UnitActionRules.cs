@@ -31,10 +31,10 @@ internal static class UnitActionRules
     {
         if (UsesCommittedMoveActionThisTurn(unitTypeId))
         {
-            return movesUsedThisTurn > 0 ? 0 : Mathf.Max(0, maxMovesPerTurn);
+            return BlockNations.AI.AIActionRules.RemainingMoves(UnitRegistry.RiderTypeId, maxMovesPerTurn, movesUsedThisTurn);
         }
 
-        return Mathf.Max(0, maxMovesPerTurn - movesUsedThisTurn);
+        return BlockNations.AI.AIActionRules.RemainingMoves(unitTypeId, maxMovesPerTurn, movesUsedThisTurn);
     }
 
     public static bool CanAttackThisTurn(
@@ -43,17 +43,7 @@ internal static class UnitActionRules
         int attacksUsedThisTurn,
         int movesUsedThisTurn)
     {
-        if (attacksUsedThisTurn >= maxAttacksPerTurn)
-        {
-            return false;
-        }
-
-        if (!canAttackAfterMoving && movesUsedThisTurn > 0)
-        {
-            return false;
-        }
-
-        return true;
+        return BlockNations.AI.AIActionRules.CanAttack(canAttackAfterMoving, maxAttacksPerTurn, attacksUsedThisTurn, movesUsedThisTurn);
     }
 
     public static int RegisterMove(int movesUsedThisTurn, int maxMovesPerTurn)
@@ -88,7 +78,7 @@ internal static class UnitActionRules
 
     public static int ComputeMitigatedDamage(int attackUnits, int defenseUnits)
     {
-        return Mathf.Max(0, attackUnits - defenseUnits);
+        return BlockNations.AI.AIActionRules.Damage(attackUnits, defenseUnits);
     }
 
     public static bool IsTargetInAttackRange(int attackRange, int tileDistance)
@@ -113,7 +103,7 @@ internal static class UnitActionRules
 
     public static int GetChebyshevDistance(int fromX, int fromY, int toX, int toY)
     {
-        return Mathf.Max(Mathf.Abs(toX - fromX), Mathf.Abs(toY - fromY));
+        return BlockNations.AI.AIActionRules.Distance(fromX, fromY, toX, toY);
     }
 
     public static Dictionary<TileVisibility, List<TileVisibility>> BuildReachablePathMap(

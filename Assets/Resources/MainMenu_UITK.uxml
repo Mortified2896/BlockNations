@@ -184,6 +184,9 @@
                                 <ui:Button name="GeneralSettingsAiStyleDefaultButton" text="Default" class="menu-button general-settings-option-button" />
                                 <ui:Button name="GeneralSettingsAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                             </ui:VisualElement>
+                            <ui:VisualElement class="general-settings-option-row">
+                                <ui:Button name="GeneralSettingsAiStyleHardButton" text="Hard Tactician" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                            </ui:VisualElement>
                         </ui:VisualElement>
                     </ui:VisualElement>
 
@@ -212,6 +215,9 @@
                                     <ui:Button name="GeneralSettingsSideAAiStyleDefaultButton" text="Baseline" class="menu-button general-settings-option-button" />
                                     <ui:Button name="GeneralSettingsSideAAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                                 </ui:VisualElement>
+                                <ui:VisualElement class="general-settings-option-row">
+                                    <ui:Button name="GeneralSettingsSideAAiStyleHardButton" text="Hard Tactician" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                                </ui:VisualElement>
                                 <ui:Label text="Side A Local Features" class="general-settings-section-label" />
                                 <ui:VisualElement class="general-settings-option-grid">
                                     <ui:VisualElement class="general-settings-option-row general-settings-option-row--grid">
@@ -226,6 +232,9 @@
                                 <ui:VisualElement class="general-settings-option-row">
                                     <ui:Button name="GeneralSettingsSideBAiStyleDefaultButton" text="Baseline" class="menu-button general-settings-option-button" />
                                     <ui:Button name="GeneralSettingsSideBAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                                </ui:VisualElement>
+                                <ui:VisualElement class="general-settings-option-row">
+                                    <ui:Button name="GeneralSettingsSideBAiStyleHardButton" text="Hard Tactician" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                                 </ui:VisualElement>
                                 <ui:Label text="Side B Local Features" class="general-settings-section-label" />
                                 <ui:VisualElement class="general-settings-option-grid">
@@ -268,6 +277,8 @@
                                 </ui:VisualElement>
                             </ui:VisualElement>
                             <ui:VisualElement name="GeneralSettingsAIVsAiTournamentSection" style="display: none;">
+                                <ui:Label text="Selected Opponents" class="general-settings-section-label" />
+                                <ui:Label name="GeneralSettingsAIVsAiTournamentLineupLabel" text="" class="general-settings-help-text" />
                                 <ui:Label text="Tournament Type" class="general-settings-section-label" />
                                 <ui:VisualElement class="general-settings-option-row">
                                     <ui:Button name="GeneralSettingsAIVsAiTournamentTypeRoundRobinButton" text="Round Robin" class="menu-button general-settings-option-button" />
@@ -278,11 +289,12 @@
                                     <ui:Button name="GeneralSettingsAIVsAiTournamentRunContinuouslyButton" text="Run Continuously" class="menu-button general-settings-option-button" />
                                     <ui:Button name="GeneralSettingsAIVsAiTournamentSeatSwapButton" text="Seat Swap" class="menu-button general-settings-option-button" />
                                 </ui:VisualElement>
-                                <ui:VisualElement class="general-settings-option-row">
-                                    <ui:Button name="GeneralSettingsAIVsAiTournamentSelectFullPoolButton" text="Use Full 16-Variant Pool" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
-                                </ui:VisualElement>
-                                <ui:Label text="Participants" class="general-settings-section-label" />
-                                <ui:VisualElement name="GeneralSettingsAIVsAiTournamentParticipantPool" class="general-settings-option-grid" />
+                                <ui:Foldout name="GeneralSettingsAIVsAiTournamentParticipantFoldout" text="Change Participants" value="false" class="general-settings-participant-foldout">
+                                    <ui:VisualElement class="general-settings-option-row">
+                                        <ui:Button name="GeneralSettingsAIVsAiTournamentSelectFullPoolButton" text="Use Full Participant Pool" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                                    </ui:VisualElement>
+                                    <ui:VisualElement name="GeneralSettingsAIVsAiTournamentParticipantPool" class="general-settings-option-grid" />
+                                </ui:Foldout>
                                 <ui:Label name="GeneralSettingsAIVsAiTournamentEstimateLabel" text="" class="general-settings-help-text" />
                             </ui:VisualElement>
                             <ui:Label text="Batch Speed" class="general-settings-section-label" />

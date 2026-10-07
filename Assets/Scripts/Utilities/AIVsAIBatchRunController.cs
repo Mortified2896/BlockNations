@@ -200,7 +200,7 @@ public static class AIVsAIBatchRunController
     private const int MinPositiveValue = 1;
     private const int MinTournamentParticipantCount = 2;
     private const int DefaultTournamentGamesPerPairing = 1;
-    private const int GeneratedVariantPoolCount = 16;
+    private const int GeneratedVariantPoolCount = 17;
     private const int AllGeneratedVariantsMask = (1 << GeneratedVariantPoolCount) - 1;
     private const int BayesianNormalApproximationThreshold = 200;
     private const float DefaultNormalGamesPerSecond = 0.15f;
@@ -441,6 +441,7 @@ public static class AIVsAIBatchRunController
 
     public static string GetVariantLabel(AIVariant variant)
     {
+        if (variant.baseModel == TurnManager.AIRecruitVariant.HardTactician) return "Hard Tactician [Fixed Search]";
         string modelLabel = variant.baseModel == TurnManager.AIRecruitVariant.RiderFocus
             ? "Rider Focus"
             : "Baseline";
@@ -2922,6 +2923,8 @@ public static class AIVsAIBatchRunController
             }
         }
 
+        // Append once: existing participant indices/masks retain their meaning.
+        variants.Add(new AIVariant(TurnManager.AIRecruitVariant.HardTactician, AILocalDecisionFeatures.None));
         return variants.ToArray();
     }
 

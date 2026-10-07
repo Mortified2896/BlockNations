@@ -32,7 +32,8 @@ public class TurnManager : MonoBehaviour
     public enum AIRecruitVariant
     {
         Default,
-        RiderFocus
+        RiderFocus,
+        HardTactician
     }
 
     public enum AIDebugProfile
@@ -164,6 +165,7 @@ public class TurnManager : MonoBehaviour
     private bool playByPostLastFetchWasNoTurn = false;
     private float playByPostLastNoTurnLogTime = -999f;
     private Coroutine aiVsAiDebugRoutine;
+    private readonly HardAIRuntime hardAIRuntime = new HardAIRuntime();
     private AIRecruitVariant aiVsAiSideARecruitVariant = AIRecruitVariant.Default;
     private AIRecruitVariant aiVsAiSideBRecruitVariant = AIRecruitVariant.Default;
     private bool aiVsAiDebugPaused = false;
@@ -708,7 +710,7 @@ public class TurnManager : MonoBehaviour
             return false;
 
         if (currentMode == GameMode.VsAI)
-            return isPlayerTurn;
+            return IsTurnOwnedBySeat(0);
 
         return currentMode == GameMode.PlayByPost;
     }
@@ -729,7 +731,7 @@ public class TurnManager : MonoBehaviour
             return false;
 
         if (currentMode == GameMode.VsAI)
-            return isPlayerTurn;
+            return IsTurnOwnedBySeat(0);
 
         // Play-by-Post: only allow advancing when it's this local seat's turn.
         if (currentMode == GameMode.PlayByPost)
@@ -1380,6 +1382,9 @@ public class TurnManager : MonoBehaviour
             : PlayByPostSeatUtility.MinSeatCount;
     }
 
+    internal int RuntimeSeatCount => GetRuntimeSeatCount();
+    internal bool IsAIExecutionPaused => aiVsAiDebugPaused;
+
     private void EnsureSeatGoldCapacity(int seatCount)
     {
         int normalizedSeatCount = Mathf.Max(PlayByPostSeatUtility.MinSeatCount, seatCount);
@@ -1469,9 +1474,7 @@ public class TurnManager : MonoBehaviour
 
     private int GetAuthoritativeCurrentTurnSeatIndex()
     {
-        return currentMode == GameMode.PlayByPost
-            ? PlayByPostSeatUtility.NormalizeSeatIndex(currentTurnSeatIndex, GetConfiguredPlayByPostSeatCount())
-            : (isPlayerTurn ? 0 : 1);
+        return PlayByPostSeatUtility.NormalizeSeatIndex(currentTurnSeatIndex, GetRuntimeSeatCount());
     }
 
     /// <summary>
@@ -1488,8 +1491,8 @@ public class TurnManager : MonoBehaviour
     /// </summary>
     public bool IsTurnOwnedBySeat(int seatIndex)
     {
-        int normalizedSeatIndex = PlayByPostSeatUtility.NormalizeSeatIndex(seatIndex, GetRuntimeSeatCount());
-        return GetCurrentTurnSeatIndexForRuntime() == normalizedSeatIndex;
+        return seatIndex >= 0 && seatIndex < GetRuntimeSeatCount() &&
+               GetCurrentTurnSeatIndexForRuntime() == seatIndex;
     }
 
     public int GetViewerSeatIndexForRuntime()
@@ -1695,7 +1698,7 @@ public class TurnManager : MonoBehaviour
                    currentTurnSeatIndex == PlayByPostSeatUtility.NormalizeSeatIndex(ownerSeatIndex, GetConfiguredPlayByPostSeatCount());
         }
 
-        return isPlayerTurn && ownerSeatIndex == 0;
+        return IsTurnOwnedBySeat(0) && ownerSeatIndex == 0;
     }
 
     public int GetGoldForSeat(int seatIndex)
@@ -2887,7 +2890,7 @@ public class TurnManager : MonoBehaviour
 
         if (currentMode == GameMode.VsAI)
         {
-            isPlayerTurn = false;
+            AdvanceVsAITurnAfterSeat(0);
             AutoSaveIfEnabled();
             StartCoroutine(AITurn());
             return;
@@ -3568,6 +3571,7 @@ public class TurnManager : MonoBehaviour
     {
         if (gameOver || currentMode != GameMode.VsAI)
             yield break;
+        int aiGeneration = hardAIRuntime.KnowledgeGeneration;
 
         if (SoundManager.Instance != null && !ShouldSuppressAIVsAIAudio())
         {
@@ -3576,6 +3580,8 @@ public class TurnManager : MonoBehaviour
 
         // Simulate thinking time
         yield return new WaitForSeconds(aiTurnDelay);
+        if (aiGeneration != hardAIRuntime.KnowledgeGeneration || gameOver || currentMode != GameMode.VsAI || currentTurnSeatIndex != 1)
+            yield break;
 
         // Collect AI income at the start of its turn.
         CollectAIGold();
@@ -3585,20 +3591,20 @@ public class TurnManager : MonoBehaviour
         if (!disableAI)
         {
             TryCaptureAIDecisionSnapshot(false);
-            RunAITurnForSide(false);
+            yield return RunAITurnForSeat(1);
         }
 
-        if (gameOver)
+        if (gameOver || currentMode != GameMode.VsAI || !IsTurnOwnedBySeat(1) || aiGeneration != hardAIRuntime.KnowledgeGeneration)
             yield break;
 
         // Back to player
-        turnNumber++;
-        BeginSideTurn(true, playTurnStartSound: true);
+        AdvanceVsAITurnAfterSeat(1);
+        BeginSeatTurn(currentTurnSeatIndex, playTurnStartSound: true);
     }
 
     void BeginPlayerTurn()
     {
-        BeginSideTurn(true, playTurnStartSound: true);
+        BeginSeatTurn(0, playTurnStartSound: true);
     }
 
     System.Collections.IEnumerator StartupSequence()
@@ -3737,8 +3743,7 @@ public class TurnManager : MonoBehaviour
         gameOver = false;
         ResetGameOverUiState();
         turnNumber = 1;
-        currentTurnSeatIndex = 0;
-        SyncLegacyTurnOwnerBridge();
+        SetCurrentTurnSeatIndexForRuntime(0, PlayByPostSeatUtility.MinSeatCount);
         playerGold = startingGold;
         aiGold = startingGold;
         InitializeSeatGoldForNewGame(PlayByPostSeatUtility.MinSeatCount);
@@ -4141,6 +4146,18 @@ public class TurnManager : MonoBehaviour
         RunAIForSide(actingSideIsPlayerOwned);
     }
 
+    private IEnumerator RunAITurnForSeat(int seatIndex)
+    {
+        if (!IsTurnOwnedBySeat(seatIndex)) yield break;
+        if (GetAIRecruitVariantForSeat(seatIndex) == AIRecruitVariant.HardTactician)
+        {
+            IEnumerator turn = hardAIRuntime.RunTurn(this, seatIndex);
+            while (turn.MoveNext()) yield return turn.Current;
+        }
+        else
+            RunAITurnForSide(seatIndex == 0);
+    }
+
     private void ResetRecruitmentForSeat(int ownerSeatIndex)
     {
         City[] cities = Object.FindObjectsByType<City>();
@@ -4187,25 +4204,24 @@ public class TurnManager : MonoBehaviour
         CollectIncomeForSeat(sideIsPlayerOwned ? 0 : 1);
     }
 
-    private void BeginSideTurn(bool sideIsPlayerOwned, bool playTurnStartSound)
+    private void BeginSeatTurn(int seatIndex, bool playTurnStartSound)
     {
-        if (gameOver)
+        if (gameOver || seatIndex < 0 || seatIndex >= GetRuntimeSeatCount())
             return;
 
         autoEndTurnDisabledLoggedThisTurn = false;
-        isPlayerTurn = sideIsPlayerOwned;
-        currentTurnSeatIndex = sideIsPlayerOwned ? 0 : 1;
+        SetCurrentTurnSeatIndexForRuntime(seatIndex, GetRuntimeSeatCount());
 
         if (playTurnStartSound && SoundManager.Instance != null && !ShouldSuppressAIVsAIAudio())
         {
             SoundManager.Instance.PlayTurnStart();
         }
 
-        ResetRecruitmentForSide(sideIsPlayerOwned);
+        ResetRecruitmentForSeat(seatIndex);
 
         if (UnitSelectionManager.Instance != null)
         {
-            UnitSelectionManager.Instance.ResetMovementForSide(sideIsPlayerOwned, IsCurrentSideOwner(sideIsPlayerOwned));
+            UnitSelectionManager.Instance.ResetMovementForSeat(seatIndex, IsCurrentSideOwner(seatIndex));
             UnitSelectionManager.Instance.ClearSelection();
         }
 
@@ -4219,7 +4235,7 @@ public class TurnManager : MonoBehaviour
             CityUIManager.Instance.ClosePanel();
         }
 
-        CollectIncomeForSide(sideIsPlayerOwned);
+        CollectIncomeForSeat(seatIndex);
         RecalculatePlayerVisibility();
 
         ScheduleAutoEndTurnCheck();
@@ -4590,16 +4606,12 @@ public class TurnManager : MonoBehaviour
     }
 #endif
 
-    private void AdvanceVsAITurnAfterSide(bool completedSideWasPlayerOwned)
+    private void AdvanceVsAITurnAfterSeat(int completedSeatIndex)
     {
-        if (completedSideWasPlayerOwned)
-        {
-            isPlayerTurn = false;
-            return;
-        }
-
-        turnNumber++;
-        isPlayerTurn = true;
+        if (!IsTurnOwnedBySeat(completedSeatIndex)) return;
+        int nextSeatIndex = (completedSeatIndex + 1) % GetRuntimeSeatCount();
+        if (nextSeatIndex == 0) turnNumber++;
+        SetCurrentTurnSeatIndexForRuntime(nextSeatIndex, GetRuntimeSeatCount());
     }
 
     private void StartAIVsAIDebugLoopIfNeeded()
@@ -4619,6 +4631,7 @@ public class TurnManager : MonoBehaviour
         {
             while (currentMode == GameMode.VsAI && IsAIVsAIDebugModeActive() && !gameOver)
             {
+                int aiGeneration = hardAIRuntime.KnowledgeGeneration;
                 while (aiVsAiDebugPaused && currentMode == GameMode.VsAI && IsAIVsAIDebugModeActive() && !gameOver)
                 {
                     yield return null;
@@ -4629,7 +4642,8 @@ public class TurnManager : MonoBehaviour
                     yield break;
                 }
 
-                bool actingSideIsPlayerOwned = isPlayerTurn;
+                int actingSeatIndex = GetCurrentTurnSeatIndexForRuntime();
+                bool actingSideIsPlayerOwned = actingSeatIndex == 0;
                 float delaySeconds = GetAIVsAIDebugTurnDelaySeconds();
                 if (delaySeconds > 0f)
                 {
@@ -4641,35 +4655,39 @@ public class TurnManager : MonoBehaviour
                     yield return null;
                 }
 
-                if (currentMode != GameMode.VsAI || !IsAIVsAIDebugModeActive() || gameOver)
+                if (currentMode != GameMode.VsAI || !IsAIVsAIDebugModeActive() || gameOver ||
+                    !IsTurnOwnedBySeat(actingSeatIndex) || aiGeneration != hardAIRuntime.KnowledgeGeneration)
                     yield break;
 
-                try
+                TryCaptureAIDecisionSnapshot(actingSideIsPlayerOwned);
+                IEnumerator turn = RunAITurnForSeat(actingSeatIndex);
+                bool failed = false;
+                while (true)
                 {
-                    TryCaptureAIDecisionSnapshot(actingSideIsPlayerOwned);
-                    RunAITurnForSide(actingSideIsPlayerOwned);
-                }
-                catch (System.Exception ex)
-                {
-                    Debug.LogError(
-                        $"[AIVsAI] Turn execution failed. actingSideIsPlayerOwned={actingSideIsPlayerOwned} " +
-                        $"turnNumber={turnNumber} aiConfig={BuildAIConfigLabelForSide(actingSideIsPlayerOwned)} " +
-                        $"sideARecruitVariant={aiVsAiSideARecruitVariant} sideBRecruitVariant={aiVsAiSideBRecruitVariant}");
-                    Debug.LogException(ex);
-                    if (TryHandleAbortedAIVsAIDebugMatch($"Exception: {ex.GetType().Name}"))
+                    object pending = null;
+                    bool advanced = false;
+                    try { advanced = turn.MoveNext(); if (advanced) pending = turn.Current; }
+                    catch (System.Exception ex)
                     {
-                        yield break;
+                        Debug.LogError($"[AIVsAI] Turn failed. seat={currentTurnSeatIndex} turn={turnNumber} aiConfig={BuildAIConfigLabelForSide(actingSideIsPlayerOwned)}");
+                        Debug.LogException(ex);
+                        TryHandleAbortedAIVsAIDebugMatch($"Exception: {ex.GetType().Name}");
+                        failed = true;
                     }
+                    if (failed) yield break;
+                    if (!advanced) break;
+                    yield return pending;
                 }
 
+                if (gameOver || currentMode != GameMode.VsAI || !IsTurnOwnedBySeat(actingSeatIndex) ||
+                    aiGeneration != hardAIRuntime.KnowledgeGeneration)
+                    yield break;
+
+                AdvanceVsAITurnAfterSeat(actingSeatIndex);
                 if (gameOver)
                     yield break;
 
-                AdvanceVsAITurnAfterSide(actingSideIsPlayerOwned);
-                if (gameOver)
-                    yield break;
-
-                BeginSideTurn(isPlayerTurn, playTurnStartSound: true);
+                BeginSeatTurn(currentTurnSeatIndex, playTurnStartSound: true);
                 yield return null;
             }
         }
@@ -4815,10 +4833,15 @@ public class TurnManager : MonoBehaviour
 
     private AIRecruitVariant GetAIRecruitVariantForSide(bool actingSideIsPlayerOwned)
     {
+        return GetAIRecruitVariantForSeat(actingSideIsPlayerOwned ? 0 : 1);
+    }
+
+    private AIRecruitVariant GetAIRecruitVariantForSeat(int seatIndex)
+    {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (IsAIVsAIDebugModeActive())
         {
-            return actingSideIsPlayerOwned ? aiVsAiSideARecruitVariant : aiVsAiSideBRecruitVariant;
+            return seatIndex == 0 ? aiVsAiSideARecruitVariant : aiVsAiSideBRecruitVariant;
         }
 #endif
         return aiRecruitVariant;
@@ -4841,6 +4864,8 @@ public class TurnManager : MonoBehaviour
 
     private AILocalDecisionFeatures GetAILocalDecisionFeaturesForSide(bool actingSideIsPlayerOwned)
     {
+        if (GetAIRecruitVariantForSide(actingSideIsPlayerOwned) == AIRecruitVariant.HardTactician)
+            return AILocalDecisionFeatures.None;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (IsAIVsAIDebugModeActive())
         {
@@ -4868,7 +4893,10 @@ public class TurnManager : MonoBehaviour
 
     private string BuildAIConfigLabelForSide(bool actingSideIsPlayerOwned)
     {
-        return $"recruitVariant={GetAIRecruitVariantForSide(actingSideIsPlayerOwned)};localFeatures={AIPostCalculusLocalDecisionHelper.ToConfigValue(GetAILocalDecisionFeaturesForSide(actingSideIsPlayerOwned))};profile={GetAIDebugProfileForSide(actingSideIsPlayerOwned)}";
+        string label = $"recruitVariant={GetAIRecruitVariantForSide(actingSideIsPlayerOwned)};localFeatures={AIPostCalculusLocalDecisionHelper.ToConfigValue(GetAILocalDecisionFeaturesForSide(actingSideIsPlayerOwned))};profile={GetAIDebugProfileForSide(actingSideIsPlayerOwned)}";
+        if (GetAIRecruitVariantForSide(actingSideIsPlayerOwned) == AIRecruitVariant.HardTactician)
+            label += $";policy=hard-tactician-v1;searchWork={BlockNations.AI.HardTacticianPolicy.TurnWorkBudget}";
+        return label;
     }
 
     private Unit SelectBestLocalAttackTarget(Unit attacker, IList<Unit> potentialTargets)
@@ -6493,6 +6521,8 @@ public class TurnManager : MonoBehaviour
 
     private static string BuildAIVariantModelLabel(string profile, string recruitVariant, string fallbackLabel)
     {
+        if (string.Equals(recruitVariant, AIRecruitVariant.HardTactician.ToString(), System.StringComparison.Ordinal))
+            return "Hard Tactician";
         if (string.Equals(recruitVariant, AIRecruitVariant.RiderFocus.ToString(), System.StringComparison.Ordinal))
         {
             return "Rider Focus";
@@ -6914,7 +6944,7 @@ public class TurnManager : MonoBehaviour
     /// radius rules as the fog-of-war visuals.
     /// This does not mutate any TileVisibility state.
     /// </summary>
-    HashSet<TileVisibility> ComputeVisibilityForSeat(int ownerSeatIndex)
+    internal HashSet<TileVisibility> ComputeVisibilityForSeat(int ownerSeatIndex)
     {
         HashSet<TileVisibility> visibleTiles = new HashSet<TileVisibility>();
 
@@ -8167,6 +8197,12 @@ private void PBpDebugSyncNow_Context()
                 return false;
             }
 
+            if (!System.Enum.TryParse(save.mode, out GameMode loadedMode))
+            {
+                Debug.LogError($"Unsupported save mode '{save.mode}'. Load aborted.");
+                return false;
+            }
+
             bool loadedModeIsPbp = string.Equals(
                 save.mode,
                 GameMode.PlayByPost.ToString(),
@@ -8211,8 +8247,6 @@ private void PBpDebugSyncNow_Context()
             save.cities ??= new List<SavedCity>();
 
             ResolveBoardSizeFromSave(save, out _, out int savedBoardWidth, out int savedBoardHeight);
-            EnsureBoardDimensions(savedBoardWidth, savedBoardHeight);
-
             // Basic grid validation: ensure saved tiles fit current grid.
             int maxTileX = -1;
             int maxTileY = -1;
@@ -8221,19 +8255,15 @@ private void PBpDebugSyncNow_Context()
                 if (t.x > maxTileX) maxTileX = t.x;
                 if (t.y > maxTileY) maxTileY = t.y;
             }
-            if (maxTileX >= gridManager.width || maxTileY >= gridManager.height)
+            if (maxTileX >= savedBoardWidth || maxTileY >= savedBoardHeight)
             {
-                Debug.LogError($"Save grid ({maxTileX + 1}x{maxTileY + 1}) does not fit current grid ({gridManager.width}x{gridManager.height}). Aborting load.");
+                Debug.LogError($"Save grid ({maxTileX + 1}x{maxTileY + 1}) does not fit saved grid ({savedBoardWidth}x{savedBoardHeight}). Aborting load.");
                 return false;
             }
 
-            // Apply basic state.
-            if (!System.Enum.TryParse(save.mode, out GameMode loadedMode))
-            {
-                Debug.LogError($"Unsupported save mode '{save.mode}'. Load aborted.");
-                return false;
-            }
-
+            // Invalidate any in-flight decision only after incoming state passes the load gates.
+            hardAIRuntime.ResetKnowledge();
+            EnsureBoardDimensions(savedBoardWidth, savedBoardHeight);
             currentMode = loadedMode;
             configuredPlayByPostSeatCount = currentMode == GameMode.PlayByPost
                 ? PlayByPostSeatUtility.NormalizeSeatCount(save.seatCount)

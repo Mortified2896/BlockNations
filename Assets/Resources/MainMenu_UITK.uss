@@ -1861,6 +1861,24 @@
     flex-direction: column;
 }
 
+.general-settings-participant-foldout {
+    margin-bottom: 14px;
+    flex-shrink: 0;
+}
+
+.general-settings-participant-foldout > .unity-foldout__toggle {
+    min-height: 64px;
+    margin-bottom: 12px;
+    color: rgb(238, 244, 251);
+    font-size: 24px;
+    -unity-font-style: bold;
+    background-color: rgba(126, 146, 196, 0.52);
+}
+
+.general-settings-participant-foldout > .unity-foldout__content {
+    margin-left: 0;
+}
+
 .general-settings-help-text {
     margin-top: -2px;
     margin-bottom: 14px;
