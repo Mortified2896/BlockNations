@@ -17,9 +17,10 @@ Start with the current state, then use the relevant implementation/setup referen
 | [VPS Deployment](VPS_Deploy_MVP.md) | Supported Node entry point, deployment, platform credentials, hosting choices. |
 | [Unity Testing](Unity_Testing.md) | PlayMode/EditMode commands and graphics/licensing constraints. |
 | [Git Workflow](BlockNations_Git_Workflow.md) | Existing local Git identity, SSH, and completion workflow. |
-| [Planner Workflow](Planner_Workflow.md) | Preserved preferences for ChatGPT planning and separate Codex prompts. |
 
 ## Historical references
+
+[Historical Planner Workflow](Planner_Workflow.md) preserves the former ChatGPT-to-Codex handoff conventions and model catalogue. It is not active implementation guidance.
 
 [Pass 1 pre-UITK audit](archive/Pass1_Audit_pre_UITK.md) predates the current UI and mode removals. Keep it for history; its file list and refactor suggestions are not current implementation instructions.
 

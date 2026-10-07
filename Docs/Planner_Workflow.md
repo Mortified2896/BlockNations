@@ -1,8 +1,8 @@
-# Block Nations Planner Workflow
+# Block Nations Historical Planner Workflow
 
-These preferences apply when ChatGPT plans/reviews work or writes a prompt for a separate Codex implementation chat. Repository implementation rules live in [AGENTS.md](../AGENTS.md). Completing a task directly in Codex does not require a new implementation prompt.
+Historical reference only. These preferences describe the former workflow of ChatGPT planning/reviewing work and writing prompts for a separate Codex implementation chat. They are not active implementation instructions. Repository constraints live in [AGENTS.md](../AGENTS.md).
 
-Moved from the original project prompt on 2026-10-07. The model list below preserves the user's earlier tool choices; it is a historical catalogue, not a claim about currently available models. Check the destination tool's actual options when selecting a model.
+Moved from the original project prompt on 2026-10-07 and marked historical after the user approved removing generic guidance and prompt conventions from active instructions. The model list preserves earlier tool choices; it is not a claim about currently available models.
 
 ## Roles
 
