@@ -579,6 +579,55 @@ public class AdjacentEmptyEnemyCityCaptureTests
     }
 
     [UnityTest]
+    public IEnumerator LiveLunaChoosesAndExecutesAWinningLegalAction()
+    {
+#if UNITY_EDITOR
+        if (!UnityEditor.SessionState.GetBool("BlockNations.Luna.LiveCheck", false))
+            Assert.Ignore("This real model call runs only through the explicit Luna Bridge verification menu.");
+        SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "VsAI"));
+        SetMember(_turnManager, "currentTurnSeatIndex", 1);
+        SetMember(_turnManager, "isPlayerTurn", true); // Deliberately stale: seat ownership remains authoritative.
+        SetMember(_turnManager, "aiRecruitVariant", Enum.Parse(FindType("TurnManager+AIRecruitVariant"), "LunaPlaytest"));
+        SetMember(_turnManager, "autoSaveEnabled", false);
+        InvokeMethod(_city, "SetOwnerSeatIndex", new object[] { 0 });
+        object unit = CreateUnit(1, 2, 3);
+        bool originalBackground = Application.runInBackground;
+        Application.runInBackground = true;
+        try
+        {
+            string directory = Path.GetFullPath(Path.Combine(Application.dataPath, "../Logs/Validation/Luna"));
+            Directory.CreateDirectory(directory);
+            object response = null;
+            IEnumerator turn = (IEnumerator)InvokeMethod(_turnManager, "RunAITurnForSeat", new object[] { 1 });
+            while (turn.MoveNext())
+            {
+                object decision = FindType("HardAIDiagnostics").GetProperty("Search").GetValue(null);
+                object currentResponse = decision == null ? null : GetMember(decision, "Response");
+                if (currentResponse != null && GetMember(currentResponse, "Model")?.ToString() == "gpt-6-luna")
+                {
+                    response = currentResponse;
+                    File.WriteAllText(Path.Combine(directory, "unity-live-response.json"), JsonUtility.ToJson(response, true));
+                    object observation = FindType("HardAIDiagnostics").GetProperty("Observation").GetValue(null);
+                    File.WriteAllText(Path.Combine(directory, "unity-live-observation.json"), JsonUtility.ToJson(observation, true));
+                }
+                yield return turn.Current;
+            }
+            Assert.That(response, Is.Not.Null, "The turn did not complete a real Luna response.");
+            Assert.That(GetMember(response, "Error"), Is.Null.Or.Empty);
+            Assert.That(GetMember(response, "Model"), Is.EqualTo("gpt-6-luna"));
+            Assert.That(GetMember(response, "ReasoningEffort"), Is.EqualTo("max"));
+            Assert.That((int)GetMember(_city, "ownerSeatIndex"), Is.EqualTo(1));
+            Assert.That((bool)GetMember(_turnManager, "gameOver"), Is.True);
+            Assert.That(((Component)unit).transform.position, Is.EqualTo(new Vector3(3, 3)));
+        }
+        finally { Application.runInBackground = originalBackground; }
+#else
+        Assert.Ignore("The local Codex playtest is an Editor check.");
+        yield break;
+#endif
+    }
+
+    [UnityTest]
     public IEnumerator CrowdedReviewArmyActuallyMovesAndExploresThroughTheRuntime()
     {
         // Exercise one isolated own turn, with no opposing policy or tournament running.
@@ -632,7 +681,8 @@ public class AdjacentEmptyEnemyCityCaptureTests
             InvokeMethod(_city, "SetOwnerSeatIndex", new object[] { seat });
             CreateUnit(seat, 2, 3);
             yield return (IEnumerator)InvokeMethod(_turnManager, "RunAITurnForSeat", new object[] { seat });
-            Assert.That(diagnostics.GetProperty("PolicyVersion").GetValue(null), Is.EqualTo("hard-tactician-v2"));
+            Assert.That(diagnostics.GetProperty("PolicyVersion").GetValue(null),
+                Is.EqualTo(FindType("BlockNations.AI.HardTacticianPolicy").GetField("PolicyVersion").GetRawConstantValue()));
             object observation = diagnostics.GetProperty("Observation").GetValue(null);
             Assert.That(GetMember(observation, "Seat"), Is.EqualTo(seat));
             Assert.That((bool)GetMember(_turnManager, "gameOver"), Is.False);

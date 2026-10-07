@@ -1,6 +1,6 @@
 # Experimental Hard Tactician
 
-Implemented 2026-10-07 for development review. Normal/Default and Rider Focus retain their existing behavior. Hard is available in development AI-vs-AI selection and the tournament participant pool. Its human-play selector remains hidden until the owner watches and reviews the comparison tournament (`HardAIRuntime.PlayerPlaytestApproved`). No tournament is authorized to start automatically.
+Implemented 2026-10-07 for development playtesting. Normal/Default and Rider Focus retain their existing behavior. Hard is available in the regular VsAI setup, development AI-vs-AI selection, and the tournament participant pool. The owner watched the version-2 comparison and subsequently requested direct playtesting and more generic improvements. Version 3 is experimental; it has not had a watched tournament. Ask the owner before starting any further tournament. The separate [model opponent playtest](Model_AI_Playtest.md) uses the same fair observation and execution adapter.
 
 ## Decision architecture
 
@@ -10,7 +10,7 @@ Movement range/commitment, attack availability, damage, and distance primitives 
 
 `currentTurnSeatIndex` is the runtime turn authority in both VsAI and PBp. VsAI handoffs and simulation use the same seat progression and seat-based turn initialization; `isPlayerTurn` is updated as a compatibility bridge. Invalid queried seats are rejected rather than normalized into another participant. Existing VsAI saves still import their legacy turn boolean at the load boundary; PBp keeps its supported protocol migration paths. These changes do not enable extra VsAI seats or teams.
 
-Hard uses selective beam search over coordinated move/attack/recruit sequences, scored for captures, material, visible next-turn threats, positioning, exploration, and economy. Version 2 builds terrain-distance fields from observed hostile cities, observed enemies, and exploration targets once per decision. On an explored map without city memory it searches currently unseen areas again. Support is bounded per unit, replacing the pairwise cohesion reward that caused large armies to camp. Material distinguishes attack power, range, and mobility; threat estimates allocate each observed enemy's attack slots once and recognize combined melee threats to a guarded city. It reassesses after every executed action. This version predicts threats from observed enemies; it does not yet search a complete opposing turn tree. Capturing a hostile city ends current VsAI immediately, so an observed winning capture terminates search early.
+Hard uses selective beam search over coordinated move/attack/recruit sequences. Version 3 separates generic position features from the weighted evaluator through `IAIPositionEvaluator`; the default linear weights are hand-authored, not learned. Features use unit statistics and action capabilities, rather than opponent/unit-name matchup rules. Terrain-distance fields guide hostile-city progress, contact, and exploration; bounded support avoids the earlier army-camping incentive. After generating own continuations, a small reply search tests observed hostile units with reset turn resources, including ranged attacks followed by movement and coordinated attacks on guarded cities. It does not invent hidden units, enemy gold, or enemy recruitment. Reply work is charged to the same fixed work allocation. These are selective observed replies, not a complete opposing turn tree. The adapter reassesses after every executed action. Capturing a hostile city ends current VsAI immediately, so an observed winning capture terminates own search early.
 
 ## Information rules
 
@@ -25,7 +25,7 @@ The existing opponents still read enemy city positions outside their visibility.
 
 ## Workload and responsiveness
 
-Version `hard-tactician-v2` uses a beam width of 24, depth limit of 8 actions, up to 2,048 candidate transitions per decision, and a shared turn search allocation of 8,192 transitions. Every legal root action is considered unless a winning capture terminates the search first or the work budget is exhausted. Later nodes keep at most 12 ordered successors, with move alternatives bounded per actor to leave room for coordinated actions. Ordering uses cheap observed features rather than evaluating additional unmetered child states. Once the allocation is exhausted, remaining actions use a deterministic one-ply pass over the current legal mask. Terminal captures and exhausted frontiers can finish earlier.
+Version `hard-tactician-v3` uses a beam width of 24, depth limit of 8 actions, up to 2,048 candidate transitions per decision, and a shared turn search allocation of 8,192 transitions. Every legal root action is considered unless a winning capture terminates the search first or the work budget is exhausted. Later nodes keep at most 12 ordered successors, with move alternatives bounded per actor to leave room for coordinated actions. Ordering uses cheap observed features rather than evaluating additional unmetered child states. Once the allocation is exhausted, remaining actions use a deterministic one-ply pass over the current legal mask. Terminal captures and exhausted frontiers can finish earlier. Up to eight retained own candidates receive at most 32 observed-reply transitions each (reply beam width 2, depth 4, at most 4 ordered successors). The reserved reply allocation is capped at 256 transitions and one quarter of the available decision budget; it is included in `WorkCompleted`. Search scores use the worst found observed reply instead of adding the earlier rough threat estimate twice.
 
 The scheduler yields after approximately 4 ms of work, checked between candidate evaluations. This is a scheduling target, not a guaranteed frame-time ceiling: observation capture and an individual evaluation are still atomic. There is no wall-clock search cutoff. A slower device performs the same analysis over more frames. Deterministic candidate ordering, integer evaluation, and tie-breaking make frame chunking independent of the chosen result.
 
@@ -35,7 +35,7 @@ Loading another game invalidates incremental work before it can execute or advan
 
 ## Inspection and validation
 
-Open **Window → Block Nations → Hard AI Inspector** in Unity. It shows the top eight retained first-action candidates, their best found continuations, score components, search work, elapsed time, completed depth, and stop reason. Candidates are provisional during search. Scores are heuristic values, not win probabilities. Only eight candidates are retained; this is not a record of every visited state.
+Open **Window → Block Nations → Hard AI Inspector** in Unity. It shows the top eight retained first-action candidates, their best found continuations, feature/evaluation components, worst found observed reply, search and reply work, elapsed time, completed depth, and stop reason. Candidates are provisional during search. Scores are heuristic values, not win probabilities. Only eight candidates are retained; this is not a record of every visited state.
 
 Enable **Pause before executing**, then use **Execute one action** to inspect decisions. Selecting a candidate draws numbered move/attack lines in the Scene view. This first inspector is an Editor tool; a development-build/browser overlay is a follow-up. Closing the inspector releases its pause.
 
@@ -45,7 +45,7 @@ Run **Tools → Block Nations → Validate Hard AI** for EditMode or PlayMode re
 
 Initial Editor validation on 2026-10-07 passed 24 EditMode and 12 PlayMode cases. The latter includes supported protocol 4/5 turn-owner conversion. The tournament menu was inspected and captured in a wide laptop Game window: portrait phone styling is excluded for landscape sizes, the three selected opponents are listed directly, and the full picker remains available. These checks do not establish playing strength or physical-device performance.
 
-## Owner-watched comparison gate
+## Owner-watched comparisons
 
 Ask the owner before starting. In MainMenu Play Mode, **Tools → Block Nations → Prepare Hard AI Tournament Review** stages these settings without saving preferences or starting a match, then maximizes the Game view for laptop inspection. The selected lineup appears above a collapsible picker for the full 17-variant pool. Proposed first review:
 
@@ -74,7 +74,7 @@ The fair observation from the stalled game is preserved as `Assets/Editor/Tests/
 
 The old tournament calculation also awarded a half-point for an abort, yielding the misleading 17% score with no wins/draws in the screenshot. Tournament standings, seat rates, pairing summaries, and ranked previews now exclude aborts from their score denominators while retaining the abort counts. True draws still score half a point. Raw historical CSV rows are preserved.
 
-The revised watched tournament was explicitly authorized and completed; its result is recorded below. The human-play selector remains gated while the owner reviews these results. Physical-phone/browser timing and broader playing strength remain unverified.
+The revised watched tournament was explicitly authorized and completed; its result is recorded below. At that review the human-play selector was still gated. It was subsequently exposed for the owner's requested playtests. Physical-phone/browser timing and broader playing strength remain unverified.
 
 Validation after the version-2 correction passed 41 EditMode and 15 PlayMode cases on 2026-10-07. New checks cover the captured crowded position, terrain-connected exploration, an explored map without city memory, deeper coordinated captures in a larger army, bounded enemy attack accounting, combined rider threats to a guarded capital, round-100 seat fairness, and abort-versus-draw scoring. The isolated PlayMode crowded-position check executes one own turn through the actual adapter and verifies that several units move and new tiles are explored. No opposing policy or tournament runs in these checks.
 
@@ -94,11 +94,17 @@ The owner explicitly approved the revised six-match tournament on 2026-10-07. It
 
 Hard finished with **3 wins, 0 losses, 0 draws, and 1 abort**. Normal finished 2–2, and Rider Focus had 0 wins, 3 losses, and 1 abort. The displayed Hard score is 100% over its three scored games; it is not four wins and does not establish an overall win probability. The aborted Rider/Hard game had 3 Rider units and 4 Hard units remaining; the cap stopped it exactly at round 100. Its cause needs position-level investigation rather than being counted as a draw or a success.
 
-This is encouraging evidence compared with version 1, which lost both Normal pairings, but one tournament does not establish broad strength or smart play against humans. The current human-play gate remains closed pending the owner's review. Further tournaments require explicit authorization. Phone/browser timing is still unmeasured.
+This is encouraging evidence compared with version 1, which lost both Normal pairings, but one tournament does not establish broad strength or smart play against humans. The owner subsequently requested direct playtesting and generic improvements. The human selector is now available as an experimental option. Further tournaments require explicit authorization. Phone/browser timing is still unmeasured.
+
+## Version-3 generic evaluation and decision records
+
+The generic reply scenarios first reproduced three failures under version 2. The current Editor regression run passes all 60 EditMode cases, including existing handoff/UI checks, external-action transport behavior, model setup separation, generic ranged/custom-stat replies, injected evaluators, deterministic chunking, and decision-record replay. This establishes the tested invariants, not a win rate or human strength. All 15 ordinary PlayMode cases also pass; the opt-in live model check is skipped by the regular regression command and passed separately. No version-3 tournament has run.
+
+The Inspector can explicitly enable bounded local decision recording: at most 512 samples or 16 MiB per recording session under `Application.persistentDataPath/DevMatchResults/AIExperience/`. It defaults off. Each sample records versioned fair observations, the legal mask, selected action, candidate features, evaluator/policy versions, execution result, and the next observation when applicable. Deterministic Hard decisions can be replayed with matching policy/evaluator/schema versions. Model responses are recorded as external choices and cannot claim deterministic reinference. These samples are neither gameplay saves nor complete reinforcement-learning trajectories/rewards.
 
 ## Future learning and hosting
 
-The observation/action/policy interfaces are the integration seam for learned evaluators, imitation policies, or optional LLM guidance. Models must choose from the root action mask; the runtime remains authoritative. A remote policy must also handle stale state, errors, latency, and local fallback. Secrets must stay on a backend, never in a Web build.
+The observation/action/policy/evaluator interfaces and optional versioned decision samples are the integration seam for learned evaluators, imitation policies, or optional LLM opponents. Models must choose from the root action mask; the runtime remains authoritative. A remote policy must also handle stale state, errors, and latency. The current local model playtest cancels obsolete requests and ends the AI turn on an error; it does not silently switch to Hard. A public release needs an explicit retry/fallback policy. Secrets must stay on a backend, never in a Web build.
 
 This is not yet a complete reinforcement-learning environment. Remaining work includes a shared complete match simulator (turns, income, endgame, observations), reset/step APIs, richer information memory, versioned trajectories/rewards, and transition-parity tests. Train/evaluate offline; deploy a small local policy only after measuring size and inference cost on target browsers.
 

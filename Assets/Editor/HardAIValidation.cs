@@ -4,7 +4,7 @@ using UnityEditor;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
 
-// Run regression checks in the already-open, licensed Editor. This never starts AI matches.
+// Run checks in the already-open, licensed Editor. No tournaments are started.
 [InitializeOnLoad]
 public static class HardAIValidation
 {
@@ -13,12 +13,21 @@ public static class HardAIValidation
 
     [MenuItem("Tools/Block Nations/Validate Hard AI/Edit Mode")]
     public static void RunEditMode() => Run(TestMode.EditMode,
-        new[] { "HardTacticianPolicyTests", "AIVsAIMatchHandoffTests", "MultiplayerScrollViewTests", "UITKResponsiveSizeTierControllerTests" });
+        new[] { "HardTacticianPolicyTests", "AIExternalActionDecisionTests", "LocalAIPlaytestSetupTests", "AIVsAIMatchHandoffTests", "MultiplayerScrollViewTests", "UITKResponsiveSizeTierControllerTests" });
 
     [MenuItem("Tools/Block Nations/Validate Hard AI/Play Mode")]
     public static void RunPlayMode() => Run(TestMode.PlayMode, new[] { "AdjacentEmptyEnemyCityCaptureTests" });
 
-    private static void Run(TestMode mode, string[] groups)
+    [MenuItem("Tools/Block Nations/Luna Bridge/Verify one real Luna action")]
+    public static void RunLiveLunaCheck()
+    {
+        if (EditorApplication.isPlaying || EditorApplication.isCompiling)
+            throw new InvalidOperationException("Run the live check while the Editor is idle.");
+        SessionState.SetBool("BlockNations.Luna.LiveCheck", true);
+        Run(TestMode.PlayMode, null, new[] { "AdjacentEmptyEnemyCityCaptureTests.LiveLunaChoosesAndExecutesAWinningLegalAction" });
+    }
+
+    private static void Run(TestMode mode, string[] groups, string[] names = null)
     {
         if (EditorApplication.isPlaying || EditorApplication.isCompiling)
             throw new InvalidOperationException("Run validation while the Editor is idle and compilation is complete.");
@@ -26,7 +35,7 @@ public static class HardAIValidation
         Directory.CreateDirectory(directory);
         SessionState.SetString(ResultPathKey, Path.Combine(directory, mode + "-results.xml"));
         TestRunnerApi api = ScriptableObject.CreateInstance<TestRunnerApi>();
-        api.Execute(new ExecutionSettings(new Filter { testMode = mode, groupNames = groups }));
+        api.Execute(new ExecutionSettings(new Filter { testMode = mode, groupNames = groups, testNames = names }));
     }
 
     private sealed class Results : ICallbacks
@@ -40,6 +49,7 @@ public static class HardAIValidation
             if (string.IsNullOrEmpty(path)) return;
             TestRunnerApi.SaveResultToFile(result, path);
             SessionState.EraseString(ResultPathKey);
+            SessionState.EraseBool("BlockNations.Luna.LiveCheck");
             Debug.Log($"[Hard AI validation] {result.TestStatus}: passed={result.PassCount}, failed={result.FailCount}; results={path}");
         }
     }

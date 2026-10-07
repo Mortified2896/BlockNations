@@ -13,9 +13,16 @@ public sealed class HardAIRuntime
     private readonly IAIActionPolicy policy = new HardTacticianPolicy();
     private readonly Dictionary<int, Dictionary<int, AICityState>> cityMemory = new Dictionary<int, Dictionary<int, AICityState>>();
     private readonly HashSet<string> failedActions = new HashSet<string>(StringComparer.Ordinal);
-    public const bool PlayerPlaytestApproved = false; // Enable after the owner watches the comparison tournament.
+    private IAIDecision activeDecision;
     public int KnowledgeGeneration { get; private set; }
-    public void ResetKnowledge() { KnowledgeGeneration++; cityMemory.Clear(); failedActions.Clear(); }
+    public void ResetKnowledge()
+    {
+        KnowledgeGeneration++;
+        activeDecision?.Cancel();
+        activeDecision = null;
+        cityMemory.Clear();
+        failedActions.Clear();
+    }
 
     public sealed class DecisionContext
     {
@@ -26,7 +33,9 @@ public sealed class HardAIRuntime
         public readonly Dictionary<string, LegalTurnAction> RuntimeActions = new Dictionary<string, LegalTurnAction>(StringComparer.Ordinal);
     }
 
-    public IEnumerator RunTurn(TurnManager manager, int seatIndex)
+    public IEnumerator RunTurn(TurnManager manager, int seatIndex) => RunTurnWithPolicy(manager, seatIndex, policy);
+
+    public IEnumerator RunTurnWithPolicy(TurnManager manager, int seatIndex, IAIActionPolicy actionPolicy)
     {
         if (!CanRun(manager, seatIndex)) yield break;
         int generation = KnowledgeGeneration;
@@ -39,32 +48,45 @@ public sealed class HardAIRuntime
         for (int actionNumber = 0; actionNumber < actionLimit && CanRun(manager, seatIndex) && generation == KnowledgeGeneration; actionNumber++)
         {
             DecisionContext context = Observe(manager, seatIndex);
-            IAIDecision search = policy.BeginDecision(context.Observation, Math.Min(HardTacticianPolicy.DecisionWorkBudget, remainingWork));
+            IAIDecision search = actionPolicy.BeginDecision(context.Observation, Math.Min(HardTacticianPolicy.DecisionWorkBudget, remainingWork));
+            activeDecision = search;
             Stopwatch elapsed = Stopwatch.StartNew();
-            HardAIDiagnostics.Begin(context.Observation, search, policy.Version, manager.turnNumber);
+            HardAIDiagnostics.Begin(context.Observation, search, actionPolicy.Version, manager.turnNumber);
             while (!search.Complete && CanRun(manager, seatIndex) && generation == KnowledgeGeneration)
             {
                 while (manager.IsAIExecutionPaused && CanRun(manager, seatIndex) && generation == KnowledgeGeneration) yield return null;
                 if (!CanRun(manager, seatIndex) || generation != KnowledgeGeneration) yield break;
                 Stopwatch slice = Stopwatch.StartNew();
                 do { search.AdvanceOnce(); }
-                while (!search.Complete && slice.Elapsed.TotalMilliseconds < 4);
+                while (!search.Complete && !search.WaitingForExternalResult && slice.Elapsed.TotalMilliseconds < 4);
                 HardAIDiagnostics.ElapsedSeconds = elapsed.Elapsed.TotalSeconds;
                 if (!search.Complete) yield return null;
             }
             if (!CanRun(manager, seatIndex) || generation != KnowledgeGeneration) yield break;
             remainingWork = Math.Max(0, remainingWork - search.WorkCompleted);
             AICandidatePlan best = search.Best;
-            if (best == null || best.Actions.Length == 0 || best.Actions[0].Kind == AIActionKind.EndTurn) yield break;
+            if (best == null || best.Actions.Length == 0 || best.Actions[0].Kind == AIActionKind.EndTurn)
+            {
+                if (search is AIExternalActionDecision && best == null)
+                    UnityEngine.Debug.LogWarning("[Luna playtest] AI turn stopped: " + search.StopReason);
+                if (HardAIExperienceRecorder.Enabled) HardAIExperienceRecorder.Append(AIExperienceRecord.Create(
+                    context.Observation, search, actionPolicy.Version, manager.turnNumber, AIExecutionResult.EndTurn));
+                yield break;
+            }
             while ((HardAIDiagnostics.ShouldWait || manager.IsAIExecutionPaused) && CanRun(manager, seatIndex) && generation == KnowledgeGeneration) yield return null;
             if (!CanRun(manager, seatIndex) || generation != KnowledgeGeneration) yield break;
             HardAIDiagnostics.ConsumeStep();
             AIAction selected = best.Actions[0];
-            if (!context.RuntimeActions.TryGetValue(selected.Key, out LegalTurnAction action) || !TryExecute(manager, action))
+            bool executed = context.RuntimeActions.TryGetValue(selected.Key, out LegalTurnAction action) && TryExecute(manager, action);
+            if (!executed)
                 failedActions.Add(selected.Key);
             else failedActions.Clear();
-            HardAIDiagnostics.LastAction = Describe(context.Observation, selected);
+            HardAIDiagnostics.LastAction = (executed ? "" : "Rejected: ") + Describe(context.Observation, selected);
             manager.RecalculatePlayerVisibility();
+            if (HardAIExperienceRecorder.Enabled && generation == KnowledgeGeneration && manager.gridManager != null)
+                HardAIExperienceRecorder.Append(AIExperienceRecord.Create(context.Observation, search, actionPolicy.Version,
+                    manager.turnNumber, executed ? AIExecutionResult.Executed : AIExecutionResult.Rejected,
+                    Observe(manager, seatIndex).Observation, manager.gameOver));
             // Rebuild visibility and the root mask after EVERY action, including recruitment.
             yield return null;
         }
@@ -82,6 +104,7 @@ public sealed class HardAIRuntime
         int size = grid.width * grid.height;
         AIObservation observation = new AIObservation { Width = grid.width, Height = grid.height, Seat = seat,
             Gold = manager.GetGoldForSeat(seat), CityVision = manager.visibilityRadius,
+            Round = manager.turnNumber, IncomePerCity = manager.goldPerCity,
             Tiles = new bool[size], Seen = new bool[size], Visible = new bool[size] };
         foreach (TileVisibility tile in grid.GetAllTiles())
         {
@@ -199,13 +222,16 @@ public sealed class HardAIRuntime
         Defense = unit.defenseUnits, Range = unit.AttackRange, Vision = unit.VisionRange,
         MaxMoves = unit.maxMovesPerTurn, MovesUsed = unit.movesUsedThisTurn,
         MaxAttacks = unit.maxAttacksPerTurn, AttacksUsed = unit.attacksUsedThisTurn,
-        AttackAfterMoving = unit.CanAttackAfterMoving, Cost = UnitRegistry.GetDefinitionOrDefault(unit.UnitTypeId).RecruitCost };
+        AttackAfterMoving = unit.CanAttackAfterMoving,
+        CommittedMove = UnitActionRules.UsesCommittedMoveActionThisTurn(unit.UnitTypeId),
+        Cost = UnitRegistry.GetDefinitionOrDefault(unit.UnitTypeId).RecruitCost };
 
     private static AIUnitState RecruitState(UnitDefinition definition, int seat) => new AIUnitState {
         Seat = seat, Type = definition.TypeId, Health = definition.MaxHealthUnits, MaxHealth = definition.MaxHealthUnits,
         Attack = definition.AttackUnits, Defense = definition.DefenseUnits, Range = definition.AttackRange,
         Vision = definition.VisionRange, MaxMoves = definition.MaxMovesPerTurn, MaxAttacks = definition.MaxAttacksPerTurn,
-        AttackAfterMoving = definition.CanAttackAfterMoving, Cost = definition.RecruitCost };
+        AttackAfterMoving = definition.CanAttackAfterMoving,
+        CommittedMove = UnitActionRules.UsesCommittedMoveActionThisTurn(definition.TypeId), Cost = definition.RecruitCost };
 
     internal static bool TryExecute(TurnManager manager, LegalTurnAction proposed)
     {

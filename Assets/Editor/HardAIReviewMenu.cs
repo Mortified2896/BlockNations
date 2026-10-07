@@ -12,6 +12,46 @@ public static class HardAIReviewMenu
 
     static HardAIReviewMenu() => EditorApplication.playModeStateChanged += RestoreBackgroundExecution;
 
+    [MenuItem("Tools/Block Nations/Prepare Luna Playtest")]
+    public static void PrepareLunaPlaytest()
+    {
+        if (!EditorApplication.isPlaying || SceneManager.GetActiveScene().path != "Assets/Scenes/MainMenu.unity")
+            throw new InvalidOperationException("Enter Play Mode in MainMenu before preparing a playtest.");
+        MainMenuUITKView view = UnityEngine.Object.FindFirstObjectByType<MainMenuUITKView>();
+        if (view == null) throw new InvalidOperationException("Main menu view is unavailable.");
+        view.PrepareLunaPlaytest();
+        if (!SessionState.GetBool(BackgroundScopeKey, false))
+        {
+            SessionState.SetBool(OriginalBackgroundKey, Application.runInBackground);
+            SessionState.SetBool(BackgroundScopeKey, true);
+        }
+        Application.runInBackground = true;
+        HardAIInspectorWindow.Open();
+        EditorApplication.ExecuteMenuItem("Window/General/Game");
+        Type gameViewType = typeof(Editor).Assembly.GetType("UnityEditor.GameView");
+        EditorWindow gameView = EditorWindow.GetWindow(gameViewType);
+        gameView.maximized = true;
+        gameView.Focus();
+        Debug.Log("[Luna playtest] Prepared human VsAI, 11x11, Luna 6 Maximum. Start the local bridge first. Start Game has NOT been pressed.");
+    }
+
+    [MenuItem("Tools/Block Nations/Prepare Hard AI Playtest")]
+    public static void PreparePlaytest()
+    {
+        if (!EditorApplication.isPlaying || SceneManager.GetActiveScene().path != "Assets/Scenes/MainMenu.unity")
+            throw new InvalidOperationException("Enter Play Mode in MainMenu before preparing a playtest.");
+        MainMenuUITKView view = UnityEngine.Object.FindFirstObjectByType<MainMenuUITKView>();
+        if (view == null) throw new InvalidOperationException("Main menu view is unavailable.");
+        view.PrepareHardAIPlaytest();
+        HardAIInspectorWindow.Open();
+        EditorApplication.ExecuteMenuItem("Window/General/Game");
+        Type gameViewType = typeof(Editor).Assembly.GetType("UnityEditor.GameView");
+        EditorWindow gameView = EditorWindow.GetWindow(gameViewType);
+        gameView.maximized = true;
+        gameView.Focus();
+        Debug.Log("[Hard AI playtest] Prepared normal human VsAI, 11x11, Hard Tactician; Start Game has NOT been pressed.");
+    }
+
     [MenuItem("Tools/Block Nations/Prepare Hard AI Tournament Review")]
     public static void Prepare()
     {

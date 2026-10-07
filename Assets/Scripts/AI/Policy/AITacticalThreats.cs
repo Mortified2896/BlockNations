@@ -46,6 +46,12 @@ namespace BlockNations.AI
                 AICityState city = state.Cities[c];
                 if (city.Seat != observation.Seat) continue;
                 int p = city.Position(observation.Width), defender = occupants[p];
+                int[] cleared = null;
+                if (defender >= 0 && IncomingDamage[defender] >= units[defender].Health)
+                {
+                    cleared = (int[])occupants.Clone();
+                    cleared[p] = -1;
+                }
                 foreach (KeyValuePair<int, int[]> entry in reach)
                 {
                     AIUnitState enemy = units[entry.Key];
@@ -53,6 +59,10 @@ namespace BlockNations.AI
                     else if (defender >= 0 && IncomingDamage[defender] >= units[defender].Health && enemy.Range <= 1 &&
                         enemy.MaxAttacks > 0 && AIActionRules.Damage(enemy.Attack, units[defender].Defense) > 0 &&
                         CanAttack(enemy, units[defender], entry.Value, observation.Width)) CityAtRisk[c] = true;
+                    // Firing does not spend a move. Once a guard dies, any observed
+                    // hostile unit may walk through the opening, including an unarmed one.
+                    if (cleared != null && state.Reachable(enemy.X, enemy.Y, enemy.MaxMoves, cleared)[p] > 0)
+                        CityAtRisk[c] = true;
                 }
             }
         }

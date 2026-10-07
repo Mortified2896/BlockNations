@@ -29,12 +29,8 @@ internal static class UnitActionRules
 
     public static int GetRemainingMoveRangeThisTurn(string unitTypeId, int maxMovesPerTurn, int movesUsedThisTurn)
     {
-        if (UsesCommittedMoveActionThisTurn(unitTypeId))
-        {
-            return BlockNations.AI.AIActionRules.RemainingMoves(UnitRegistry.RiderTypeId, maxMovesPerTurn, movesUsedThisTurn);
-        }
-
-        return BlockNations.AI.AIActionRules.RemainingMoves(unitTypeId, maxMovesPerTurn, movesUsedThisTurn);
+        return BlockNations.AI.AIActionRules.RemainingMoves(
+            UsesCommittedMoveActionThisTurn(unitTypeId), maxMovesPerTurn, movesUsedThisTurn);
     }
 
     public static bool CanAttackThisTurn(

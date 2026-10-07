@@ -4,6 +4,7 @@
         <ui:VisualElement name="MainPanel" class="panel">
             <ui:Label name="TitleLabel" text="Block Nations" class="title" />
             <ui:Button name="PlayVsAIButton" text="Play vs AI" class="menu-button" />
+            <ui:Button name="PlayVsModelButton" text="Play vs Model AI" class="menu-button" style="display: none;" />
             <ui:Button name="PuzzleModeButton" text="Puzzle Mode" class="menu-button" style="display: none;" />
             <ui:Button name="ContinueButton" text="Continue" class="menu-button" />
             <ui:Button name="MultiplayerButton" text="Multiplayer" class="menu-button">
@@ -188,6 +189,12 @@
                                 <ui:Button name="GeneralSettingsAiStyleHardButton" text="Hard Tactician" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                             </ui:VisualElement>
                         </ui:VisualElement>
+                    </ui:VisualElement>
+
+                    <ui:VisualElement name="GeneralSettingsLlmSection" class="general-settings-section" style="display: none;">
+                        <ui:DropdownField name="GeneralSettingsLlmModelField" label="Model" class="general-settings-input-field" />
+                        <ui:DropdownField name="GeneralSettingsLlmEffortField" label="Reasoning" class="general-settings-input-field" />
+                        <ui:Label name="GeneralSettingsLlmStatusLabel" text="" class="general-settings-help-text" />
                     </ui:VisualElement>
 
                     <ui:VisualElement name="GeneralSettingsDevSection" class="general-settings-section" style="display: none;">

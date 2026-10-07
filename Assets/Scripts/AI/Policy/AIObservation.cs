@@ -12,7 +12,7 @@ namespace BlockNations.AI
         public int Seat, X, Y, Health, MaxHealth, Attack, Defense, Range, Vision;
         public int MaxMoves, MovesUsed, MaxAttacks, AttacksUsed, Cost;
         public string Type;
-        public bool AttackAfterMoving;
+        public bool AttackAfterMoving, CommittedMove;
         public int Position(int width) => Y * width + X;
     }
 
@@ -41,8 +41,8 @@ namespace BlockNations.AI
     [Serializable]
     public sealed class AIObservation
     {
-        public const int SchemaVersion = 1;
-        public int Width, Height, Seat, Gold, CityVision;
+        public const int SchemaVersion = 2;
+        public int Width, Height, Seat, Gold, CityVision, Round, IncomePerCity;
         public bool[] Tiles, Seen, Visible;
         public AIUnitState[] Units, RecruitTypes;
         public AICityState[] Cities;
@@ -62,19 +62,25 @@ namespace BlockNations.AI
     {
         int WorkCompleted { get; }
         int WorkBudget { get; }
+        int ReplyWorkCompleted { get; }
+        string EvaluatorVersion { get; }
+        bool IsRootOnly { get; }
+        bool WaitingForExternalResult { get; }
         int Depth { get; }
         bool Complete { get; }
         string StopReason { get; }
         AICandidatePlan Best { get; }
         System.Collections.Generic.IReadOnlyList<AICandidatePlan> Candidates { get; }
         void AdvanceOnce();
+        void Cancel();
     }
 
     // Shared primitive rules: runtime wrappers and prediction both call these functions.
     public static class AIActionRules
     {
-        public static int RemainingMoves(string type, int maximum, int used) =>
-            type == "rider" ? (used > 0 ? 0 : Math.Max(0, maximum)) : Math.Max(0, maximum - used);
+        public const string RulesVersion = "blocknations-actions-v1";
+        public static int RemainingMoves(bool committedMove, int maximum, int used) =>
+            committedMove ? (used > 0 ? 0 : Math.Max(0, maximum)) : Math.Max(0, maximum - used);
         public static bool CanAttack(bool afterMoving, int maximum, int used, int movesUsed) =>
             used < maximum && (afterMoving || movesUsed == 0);
         public static int Damage(int attack, int defense) => Math.Max(0, attack - defense);

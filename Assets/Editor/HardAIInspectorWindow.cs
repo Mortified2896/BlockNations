@@ -7,10 +7,11 @@ public sealed class HardAIInspectorWindow : EditorWindow
 {
     private Vector2 scroll;
     private int selectedCandidate;
+    private bool showLegalActions;
     private double lastRefresh;
 
     [MenuItem("Window/Block Nations/Hard AI Inspector")]
-    public static void Open() => GetWindow<HardAIInspectorWindow>("Hard AI Inspector");
+    public static void Open() => GetWindow<HardAIInspectorWindow>("AI Inspector");
 
     private void OnEnable()
     {
@@ -33,7 +34,20 @@ public sealed class HardAIInspectorWindow : EditorWindow
 
     private void OnGUI()
     {
-        EditorGUILayout.HelpBox("Development analysis. Scores are heuristic values, not win probabilities. Plans use only the acting seat's observation; later steps are predictions and are rechecked before execution.", MessageType.Info);
+        bool external = HardAIDiagnostics.Search is AIExternalActionDecision;
+        EditorGUILayout.HelpBox(external
+            ? "Luna chooses one legal action from its fair observation. The explanation is a short model-written summary; it is not a search trace or a win probability. Each next action uses fresh information."
+            : "Development analysis. Scores are heuristic values, not win probabilities. Plans use only the acting seat's observation; later steps are predictions and are rechecked before execution.", MessageType.Info);
+        bool record = EditorGUILayout.Toggle("Record decisions locally", HardAIExperienceRecorder.Enabled);
+        if (record != HardAIExperienceRecorder.Enabled)
+        {
+            if (record) HardAIExperienceRecorder.Start(); else HardAIExperienceRecorder.Stop();
+        }
+        if (HardAIExperienceRecorder.CurrentPath != null)
+        {
+            EditorGUILayout.LabelField($"Decision records: {HardAIExperienceRecorder.RecordsWritten} (maximum 512 / 16 MiB)");
+            if (GUILayout.Button("Show decision records")) EditorUtility.RevealInFinder(HardAIExperienceRecorder.CurrentPath);
+        }
         HardAIDiagnostics.PauseBeforeAction = EditorGUILayout.Toggle("Pause before executing", HardAIDiagnostics.PauseBeforeAction);
         using (new EditorGUI.DisabledScope(!EditorApplication.isPlaying || !HardAIDiagnostics.PauseBeforeAction))
             if (GUILayout.Button("Execute one action")) HardAIDiagnostics.RequestStep();
@@ -41,24 +55,53 @@ public sealed class HardAIInspectorWindow : EditorWindow
         AIObservation observation = HardAIDiagnostics.Observation;
         if (search == null || observation == null)
         {
-            EditorGUILayout.LabelField("Waiting for a Hard Tactician decision. No tournament is started by this window.", EditorStyles.wordWrappedLabel);
+            EditorGUILayout.LabelField("Waiting for an AI decision. This window does not start matches.", EditorStyles.wordWrappedLabel);
             return;
         }
         EditorGUILayout.LabelField($"{HardAIDiagnostics.PolicyVersion} · seat {observation.Seat + 1} · turn {HardAIDiagnostics.Turn}");
-        EditorGUILayout.LabelField($"Work {search.WorkCompleted}/{search.WorkBudget} · completed depth {search.Depth} · {HardAIDiagnostics.ElapsedSeconds:F2} s");
-        EditorGUILayout.LabelField(search.Complete ? search.StopReason : "Searching; candidates are provisional");
+        if (search is AIExternalActionDecision modelDecision)
+        {
+            EditorGUILayout.LabelField($"{modelDecision.RequestedModel} · {modelDecision.RequestedReasoningEffort} · {HardAIDiagnostics.ElapsedSeconds:F2} s waiting/elapsed");
+            AIExternalActionResponse response = modelDecision.Response;
+            if (response != null)
+            {
+                EditorGUILayout.LabelField($"Model: {response.Model} · effort: {response.ReasoningEffort} · bridge time {response.Seconds:F2} s");
+                EditorGUILayout.LabelField($"Tokens: {response.InputTokens} input / {response.OutputTokens} output · session calls left: {(response.CallsRemaining < 0 ? "no request" : response.CallsRemaining.ToString())}");
+                if (!string.IsNullOrEmpty(response.Summary)) EditorGUILayout.LabelField(response.Summary, EditorStyles.wordWrappedLabel);
+                if (!string.IsNullOrEmpty(response.Error)) EditorGUILayout.HelpBox(response.Error, MessageType.Warning);
+            }
+        }
+        else
+        {
+            EditorGUILayout.LabelField($"Work {search.WorkCompleted}/{search.WorkBudget} · enemy reply work {search.ReplyWorkCompleted} · completed depth {search.Depth} · {HardAIDiagnostics.ElapsedSeconds:F2} s");
+            EditorGUILayout.LabelField($"Evaluator: {search.EvaluatorVersion}");
+        }
+        EditorGUILayout.LabelField(search.Complete ? search.StopReason : external ? "Waiting for the local Luna response" : "Searching; candidates are provisional");
         EditorGUILayout.LabelField($"Last executed: {HardAIDiagnostics.LastAction ?? "none"}");
         scroll = EditorGUILayout.BeginScrollView(scroll);
         for (int i = 0; i < search.Candidates.Count; i++)
         {
             AICandidatePlan plan = search.Candidates[i];
-            if (GUILayout.Toggle(selectedCandidate == i, $"#{i + 1} · score {plan.Score} · {plan.Actions.Length} actions", "Button")) selectedCandidate = i;
-            EditorGUILayout.LabelField(plan.Evaluation.ToString(), EditorStyles.wordWrappedLabel);
+            string label = external ? "Selected action" : $"#{i + 1} · score {plan.Score} · {plan.Actions.Length} actions";
+            if (GUILayout.Toggle(selectedCandidate == i, label, "Button")) selectedCandidate = i;
+            if (!external) EditorGUILayout.LabelField(plan.Evaluation.ToString(), EditorStyles.wordWrappedLabel);
             StringBuilder sequence = new StringBuilder();
             for (int step = 0; step < plan.Actions.Length; step++)
                 sequence.Append(step + 1).Append(". ").Append(HardAIRuntime.Describe(observation, plan.Actions[step])).Append('\n');
             EditorGUILayout.LabelField(sequence.ToString(), EditorStyles.wordWrappedLabel);
+            if (plan.Reply != null && plan.Reply.Actions.Length > 0)
+            {
+                EditorGUILayout.LabelField($"Worst found reply · seat {plan.Reply.Seat + 1} · {plan.Reply.Evaluation.Total}", EditorStyles.boldLabel);
+                StringBuilder reply = new StringBuilder();
+                for (int step = 0; step < plan.Reply.Actions.Length; step++)
+                    reply.Append(step + 1).Append(". ").Append(HardAIRuntime.Describe(observation, plan.Reply.Actions[step])).Append('\n');
+                EditorGUILayout.LabelField(reply.ToString(), EditorStyles.wordWrappedLabel);
+            }
         }
+        showLegalActions = EditorGUILayout.Foldout(showLegalActions, $"Legal action mask ({observation.LegalActions.Length})");
+        if (showLegalActions)
+            for (int id = 0; id < observation.LegalActions.Length; id++)
+                EditorGUILayout.LabelField($"ID {id}: {HardAIRuntime.Describe(observation, observation.LegalActions[id])}");
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("Observed enemies and remembered cities", EditorStyles.boldLabel);
         foreach (AIUnitState unit in observation.Units)

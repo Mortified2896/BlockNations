@@ -17,6 +17,7 @@ namespace BlockNations.AI
         public bool[] Seen;
         public int Gold;
         public bool CapturedCity;
+        public bool LostCity;
 
         public AITacticalState(AIObservation observation)
         {
@@ -37,7 +38,27 @@ namespace BlockNations.AI
             Seen = (bool[])other.Seen.Clone();
             Gold = other.Gold;
             CapturedCity = other.CapturedCity;
+            LostCity = other.LostCity;
         }
+
+        // Only already-observed units are projected. Opponent gold/recruits and hidden
+        // discoveries are unknown, so this is a reply predictor, not a training environment.
+        public AITacticalState BeginObservedTurn(int seat)
+        {
+            AITacticalState next = new AITacticalState(this);
+            for (int i = 0; i < next.Units.Length; i++)
+            {
+                AIUnitState unit = next.Units[i];
+                if (unit.Seat != seat) continue;
+                unit.MovesUsed = unit.AttacksUsed = 0;
+                next.Units[i] = unit;
+            }
+            return next;
+        }
+
+        public bool AreHostile(int actorSeat, int targetSeat) =>
+            (actorSeat == Observation.Seat && Observation.IsHostileSeat(targetSeat)) ||
+            (targetSeat == Observation.Seat && Observation.IsHostileSeat(actorSeat));
 
         public AITacticalState After(AIAction action)
         {
@@ -81,16 +102,17 @@ namespace BlockNations.AI
                 for (int i = 0; i < next.Cities.Length; i++)
                 {
                     AICityState city = next.Cities[i];
-                    if (Observation.IsHostileSeat(city.Seat) && city.X == unit.X && city.Y == unit.Y)
+                    if (next.AreHostile(unit.Seat, city.Seat) && city.X == unit.X && city.Y == unit.Y)
                     {
                         // Current VsAI ends immediately on any hostile city capture.
                         // A remembered city is an objective, not a proven current capture.
-                        next.CapturedCity = city.CurrentlyVisible;
-                        city.Seat = Observation.Seat;
+                        if (unit.Seat == Observation.Seat) next.CapturedCity = city.CurrentlyVisible;
+                        else if (city.Seat == Observation.Seat) next.LostCity = true;
+                        city.Seat = unit.Seat;
                         next.Cities[i] = city;
                     }
                 }
-                next.Reveal(unit);
+                if (unit.Seat == Observation.Seat) next.Reveal(unit);
             }
             return next;
         }
@@ -105,25 +127,27 @@ namespace BlockNations.AI
                 }
         }
 
-        public List<AIAction> Actions()
+        public List<AIAction> Actions() => ActionsForSeat(Observation.Seat);
+
+        public List<AIAction> ActionsForSeat(int seat)
         {
             List<AIAction> result = new List<AIAction>();
-            if (CapturedCity) return result;
+            if (CapturedCity || LostCity) return result;
             int[] occupants = Occupants();
             for (int actor = 0; actor < Units.Length; actor++)
             {
                 AIUnitState unit = Units[actor];
-                if (unit.Health <= 0 || unit.Seat != Observation.Seat) continue;
+                if (unit.Health <= 0 || unit.Seat != seat) continue;
                 if (AIActionRules.CanAttack(unit.AttackAfterMoving, unit.MaxAttacks, unit.AttacksUsed, unit.MovesUsed))
                     for (int target = 0; target < Units.Length; target++)
                     {
                         AIUnitState enemy = Units[target];
-                        if (enemy.Health <= 0 || !Observation.IsHostileSeat(enemy.Seat) || Distance(unit, enemy) > unit.Range ||
+                        if (enemy.Health <= 0 || !AreHostile(unit.Seat, enemy.Seat) || Distance(unit, enemy) > unit.Range ||
                             Distance(unit, enemy) == 0 || AIActionRules.Damage(unit.Attack, enemy.Defense) == 0) continue;
                         result.Add(new AIAction { Kind = AIActionKind.Attack, Actor = actor, Target = target,
                             Destination = enemy.Position(Observation.Width) });
                     }
-                int range = AIActionRules.RemainingMoves(unit.Type, unit.MaxMoves, unit.MovesUsed);
+                int range = AIActionRules.RemainingMoves(unit.CommittedMove, unit.MaxMoves, unit.MovesUsed);
                 if (range <= 0) continue;
                 int[] distances = Reachable(unit.X, unit.Y, range, occupants);
                 for (int position = 0; position < distances.Length; position++)
@@ -134,7 +158,7 @@ namespace BlockNations.AI
             for (int cityIndex = 0; cityIndex < Cities.Length; cityIndex++)
             {
                 AICityState city = Cities[cityIndex];
-                if (city.Seat != Observation.Seat || city.Recruited || occupants[city.Position(Observation.Width)] >= 0) continue;
+                if (seat != Observation.Seat || city.Seat != seat || city.Recruited || occupants[city.Position(Observation.Width)] >= 0) continue;
                 for (int type = 0; type < Observation.RecruitTypes.Length; type++)
                     if (Observation.RecruitTypes[type].Cost <= Gold)
                         result.Add(new AIAction { Kind = AIActionKind.Recruit, Actor = cityIndex, RecruitType = type,
@@ -179,57 +203,12 @@ namespace BlockNations.AI
             return distances;
         }
 
-        public AIEvaluation Evaluate()
-        {
-            AIEvaluation value = new AIEvaluation();
-            if (CapturedCity) { value.Capture = 1000000; return value; }
-            int[] occupants = Occupants();
-            AITacticalThreats threats = new AITacticalThreats(this, occupants);
-            int friendlyCombat = 0, scouts = 0;
-            for (int i = 0; i < Units.Length; i++)
-            {
-                AIUnitState unit = Units[i];
-                if (unit.Health <= 0) continue;
-                int material = AIUnitValue.Material(unit);
-                if (unit.Seat != Observation.Seat) { if (Observation.IsHostileSeat(unit.Seat)) value.Material -= material; continue; }
-                value.Material += material;
-                if (unit.Attack > 0) friendlyCombat++; else scouts++;
-
-                int incoming = threats.IncomingDamage[i];
-                if (incoming >= unit.Health) value.Safety -= material + 140;
-                else value.Safety -= incoming * 120 / Math.Max(1, unit.MaxHealth);
-
-                value.Positioning += Goals.Progress(unit, unit.Position(Observation.Width)) * (unit.Attack > 0 ? 48 : 64);
-                if (unit.Attack > 0 && Goals.HasCombatObjective)
-                    for (int j = 0; j < Units.Length; j++)
-                        if (j != i && Units[j].Health > 0 && Units[j].Seat == unit.Seat && Units[j].Attack > 0 && Distance(unit, Units[j]) <= 2)
-                        { value.Positioning += 16; break; } // Bounded per-unit support, never pairwise army-size growth.
-            }
-            // Penalize leaving an owned city capturable on the next observed enemy turn.
-            for (int c = 0; c < Cities.Length; c++)
-            {
-                AICityState city = Cities[c];
-                if (city.Seat != Observation.Seat) continue;
-                value.Capture += 12000;
-                int defenderIndex = occupants[city.Position(Observation.Width)];
-                if (friendlyCombat > 1 && defenderIndex >= 0 && Units[defenderIndex].Attack > 0)
-                    value.Positioning += 400;
-                if (threats.CityAtRisk[c]) value.Safety -= 40000;
-            }
-            int unseen = 0;
-            for (int i = 0; i < Seen.Length; i++)
-                if (Observation.Tiles[i]) { if (Seen[i]) value.Exploration += 14; else unseen++; }
-            // Gold remains useful, but an appropriate recruit usually outweighs hoarding.
-            value.Economy = Gold * 130;
-            if (scouts > 1 || (unseen == 0 && scouts > 0)) value.Economy -= scouts * 220;
-            if (friendlyCombat == 0 && scouts > 0) value.Economy -= 450;
-            return value;
-        }
+        public AIEvaluation Evaluate() => new LinearAIPositionEvaluator().Evaluate(AIPositionFeatureExtractor.Extract(this));
 
         public string StateKey()
         {
             StringBuilder key = new StringBuilder();
-            key.Append(Gold).Append('|');
+            key.Append(Gold).Append(',').Append(CapturedCity).Append(',').Append(LostCity).Append('|');
             for (int i = 0; i < Units.Length; i++)
             {
                 AIUnitState u = Units[i];

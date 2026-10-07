@@ -12,7 +12,8 @@ namespace BlockNations.AI
             public RankedAction(AIAction action, int priority) { Action = action; Priority = priority; }
         }
 
-        public static List<AIAction> Order(AITacticalState state, List<AIAction> actions, bool selective)
+        public static List<AIAction> Order(AITacticalState state, List<AIAction> actions, bool selective,
+            int successorLimit = HardTacticianPolicy.SuccessorsPerNode)
         {
             List<RankedAction> ranked = new List<RankedAction>(actions.Count);
             foreach (AIAction action in actions) ranked.Add(new RankedAction(action, Priority(state, action)));
@@ -39,7 +40,7 @@ namespace BlockNations.AI
                     if (action.Kind == AIActionKind.Recruit && recruits++ >= 2) continue;
                 }
                 result.Add(action);
-                if (selective && result.Count >= HardTacticianPolicy.SuccessorsPerNode) break;
+                if (selective && result.Count >= successorLimit) break;
             }
             return result;
         }
@@ -56,24 +57,44 @@ namespace BlockNations.AI
                 int damage = AIActionRules.Damage(unit.Attack, target.Defense);
                 bool kills = damage >= target.Health;
                 foreach (AICityState city in state.Cities)
-                    if (kills && unit.Range <= 1 && state.Observation.IsHostileSeat(city.Seat) &&
+                    if (kills && unit.Range <= 1 && state.AreHostile(unit.Seat, city.Seat) &&
                         city.Position(state.Observation.Width) == action.Destination) return 1000000;
-                return 10000 + (kills ? AIUnitValue.Material(target) : damage * 30);
+                int attackPriority = 10000 + (kills ? AIUnitValue.Material(target) : damage * 30);
+                foreach (AICityState city in state.Cities)
+                    if (state.AreHostile(unit.Seat, city.Seat) && city.Position(state.Observation.Width) == action.Destination)
+                        attackPriority += 30000;
+                return attackPriority;
             }
             foreach (AICityState city in state.Cities)
-                if (state.Observation.IsHostileSeat(city.Seat) && city.Position(state.Observation.Width) == action.Destination)
+                if (state.AreHostile(unit.Seat, city.Seat) && city.Position(state.Observation.Width) == action.Destination)
                     return 1000000;
-            int progress = state.Goals.Progress(unit, action.Destination) - state.Goals.Progress(unit, unit.Position(state.Observation.Width));
+            int progress = unit.Seat == state.Observation.Seat
+                ? state.Goals.Progress(unit, action.Destination) - state.Goals.Progress(unit, unit.Position(state.Observation.Width))
+                : ObjectiveDistance(state, unit.Seat, unit.Position(state.Observation.Width)) - ObjectiveDistance(state, unit.Seat, action.Destination);
             int priority = progress * 100;
             foreach (AICityState city in state.Cities)
-                if (city.Seat == state.Observation.Seat && !city.Recruited && city.Position(state.Observation.Width) == unit.Position(state.Observation.Width))
+                if (unit.Seat == state.Observation.Seat && city.Seat == unit.Seat && !city.Recruited &&
+                    city.Position(state.Observation.Width) == unit.Position(state.Observation.Width))
                     priority += 800; // Open a recruiting tile; evaluation still decides if it is safe.
             if (unit.AttackAfterMoving && unit.AttacksUsed < unit.MaxAttacks)
                 foreach (AIUnitState target in state.Units)
-                    if (target.Health > 0 && state.Observation.IsHostileSeat(target.Seat) &&
+                    if (target.Health > 0 && state.AreHostile(unit.Seat, target.Seat) &&
                         AIActionRules.Distance(action.Destination % state.Observation.Width, action.Destination / state.Observation.Width,
                             target.X, target.Y) <= unit.Range) priority += 1200;
             return priority;
+        }
+
+        private static int ObjectiveDistance(AITacticalState state, int seat, int position)
+        {
+            int distance = state.Observation.Width + state.Observation.Height;
+            foreach (AICityState city in state.Cities)
+                if (state.AreHostile(seat, city.Seat)) distance = Math.Min(distance,
+                    AIActionRules.Distance(position % state.Observation.Width, position / state.Observation.Width, city.X, city.Y));
+            if (distance < state.Observation.Width + state.Observation.Height) return distance;
+            foreach (AIUnitState unit in state.Units)
+                if (unit.Health > 0 && state.AreHostile(seat, unit.Seat)) distance = Math.Min(distance,
+                    AIActionRules.Distance(position % state.Observation.Width, position / state.Observation.Width, unit.X, unit.Y));
+            return distance;
         }
     }
 

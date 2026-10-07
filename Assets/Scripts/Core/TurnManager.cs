@@ -33,7 +33,8 @@ public class TurnManager : MonoBehaviour
     {
         Default,
         RiderFocus,
-        HardTactician
+        HardTactician,
+        LunaPlaytest = 3
     }
 
     public enum AIDebugProfile
@@ -166,6 +167,7 @@ public class TurnManager : MonoBehaviour
     private float playByPostLastNoTurnLogTime = -999f;
     private Coroutine aiVsAiDebugRoutine;
     private readonly HardAIRuntime hardAIRuntime = new HardAIRuntime();
+    private readonly LocalLunaPlaytestPolicy lunaPlaytestPolicy = new LocalLunaPlaytestPolicy();
     private AIRecruitVariant aiVsAiSideARecruitVariant = AIRecruitVariant.Default;
     private AIRecruitVariant aiVsAiSideBRecruitVariant = AIRecruitVariant.Default;
     private bool aiVsAiDebugPaused = false;
@@ -2240,6 +2242,7 @@ public class TurnManager : MonoBehaviour
     void OnDisable()
     {
         PlayByPostSubmitResult -= OnPlayByPostSubmitResultForEndgame;
+        hardAIRuntime.ResetKnowledge();
     }
 
     void Start()
@@ -3798,7 +3801,7 @@ public class TurnManager : MonoBehaviour
 
         if (AIRecruitVariantSelection.TryConsume(out AIRecruitVariant pendingRecruitVariant))
         {
-            aiRecruitVariant = pendingRecruitVariant;
+            aiRecruitVariant = AIRecruitVariantSelection.ForCurrentBuild(pendingRecruitVariant);
         }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -4148,9 +4151,15 @@ public class TurnManager : MonoBehaviour
     private IEnumerator RunAITurnForSeat(int seatIndex)
     {
         if (!IsTurnOwnedBySeat(seatIndex)) yield break;
-        if (GetAIRecruitVariantForSeat(seatIndex) == AIRecruitVariant.HardTactician)
+        AIRecruitVariant variant = GetAIRecruitVariantForSeat(seatIndex);
+        if (variant == AIRecruitVariant.HardTactician)
         {
             IEnumerator turn = hardAIRuntime.RunTurn(this, seatIndex);
+            while (turn.MoveNext()) yield return turn.Current;
+        }
+        else if (variant == AIRecruitVariant.LunaPlaytest)
+        {
+            IEnumerator turn = hardAIRuntime.RunTurnWithPolicy(this, seatIndex, lunaPlaytestPolicy);
             while (turn.MoveNext()) yield return turn.Current;
         }
         else
@@ -8288,7 +8297,7 @@ private void PBpDebugSyncNow_Context()
             if (!string.IsNullOrEmpty(save.aiRecruitVariant) &&
                 System.Enum.TryParse(save.aiRecruitVariant, out AIRecruitVariant loadedRecruitVariant))
             {
-                aiRecruitVariant = loadedRecruitVariant;
+                aiRecruitVariant = AIRecruitVariantSelection.ForCurrentBuild(loadedRecruitVariant);
             }
 
             SetCurrentGameId(string.IsNullOrEmpty(save.gameId) ? System.Guid.NewGuid().ToString() : save.gameId);

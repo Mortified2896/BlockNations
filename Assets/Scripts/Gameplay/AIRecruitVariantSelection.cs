@@ -16,4 +16,15 @@ public static class AIRecruitVariantSelection
         pendingVariant = TurnManager.AIRecruitVariant.Default;
         return true;
     }
+
+    // A development-only opponent can appear in a local VsAI save. Shipping
+    // builds resolve it to the local policy without adding/changing save fields.
+    public static TurnManager.AIRecruitVariant ForCurrentBuild(TurnManager.AIRecruitVariant variant)
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        return variant;
+#else
+        return variant == TurnManager.AIRecruitVariant.LunaPlaytest ? TurnManager.AIRecruitVariant.HardTactician : variant;
+#endif
+    }
 }

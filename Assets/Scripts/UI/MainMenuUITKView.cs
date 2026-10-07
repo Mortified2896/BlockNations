@@ -110,6 +110,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private Button continueButton;
     private Button playVsAiButton;
+    private Button playVsModelButton;
     private Button puzzleModeButton;
     private Button puzzleModeBackButton;
     private Label puzzleModeStatusLabel;
@@ -130,6 +131,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Button generalSettingsAiStyleDefaultButton;
     private Button generalSettingsAiStyleRiderFocusButton;
     private Button generalSettingsAiStyleHardButton;
+    private LocalAIPlaytestSetupController modelAISetup;
     private Button generalSettingsStoreSnapshotHistoryButton;
     private Button generalSettingsWatchAIVsAIButton;
     private Button generalSettingsAIVsAiModeHeadToHeadButton;
@@ -232,7 +234,8 @@ public class MainMenuUITKView : MonoBehaviour
     {
         None,
         VsAI,
-        PlayByPost
+        PlayByPost,
+        VsModelAI
     }
 
     private enum GeneralSettingsBackgroundPane
@@ -271,6 +274,8 @@ public class MainMenuUITKView : MonoBehaviour
         StopProfileStatusClearTimer();
         StopProfileNewTitleCooldownTimer();
         UnsubscribeMainMenuEvents();
+        modelAISetup?.Dispose();
+        modelAISetup = null;
         UnbindButtons();
         UnregisterActiveGamesListCallbacks();
         ResetActiveGamesInteractionState();
@@ -477,6 +482,11 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsCard = root.Q<VisualElement>("GeneralSettingsCard");
         generalSettingsAiSection = root.Q<VisualElement>("GeneralSettingsAiSection");
         generalSettingsAiStyleSection = root.Q<VisualElement>("GeneralSettingsAiStyleSection");
+        modelAISetup?.Dispose();
+        modelAISetup = new LocalAIPlaytestSetupController(
+            root.Q<VisualElement>("GeneralSettingsLlmSection"), root.Q<DropdownField>("GeneralSettingsLlmModelField"),
+            root.Q<DropdownField>("GeneralSettingsLlmEffortField"), root.Q<Label>("GeneralSettingsLlmStatusLabel"),
+            RefreshGeneralSettingsSelectionState);
         generalSettingsPbpSection = root.Q<VisualElement>("GeneralSettingsPbpSection");
         generalSettingsDevSection = root.Q<VisualElement>("GeneralSettingsDevSection");
         generalSettingsAIVsAIOptionsSection = root.Q<VisualElement>("GeneralSettingsAIVsAIOptionsSection");
@@ -517,6 +527,8 @@ public class MainMenuUITKView : MonoBehaviour
 
         continueButton = root.Q<Button>("ContinueButton");
         playVsAiButton = root.Q<Button>("PlayVsAIButton");
+        playVsModelButton = root.Q<Button>("PlayVsModelButton");
+        if (playVsModelButton != null) playVsModelButton.style.display = IsDevBuild() ? DisplayStyle.Flex : DisplayStyle.None;
         puzzleModeButton = root.Q<Button>("PuzzleModeButton");
         puzzleModeBackButton = root.Q<Button>("PuzzleModeBackButton");
         puzzleModeStatusLabel = root.Q<Label>("PuzzleModeStatusLabel");
@@ -996,6 +1008,11 @@ public class MainMenuUITKView : MonoBehaviour
             playVsAiButton.clicked += HandlePlayVsAiClicked;
         }
 
+        if (playVsModelButton != null)
+        {
+            playVsModelButton.clicked += HandlePlayVsModelClicked;
+        }
+
         if (puzzleModeButton != null)
         {
             puzzleModeButton.clicked += HandlePuzzleModeClicked;
@@ -1090,6 +1107,7 @@ public class MainMenuUITKView : MonoBehaviour
         {
             generalSettingsAiStyleHardButton.clicked += HandleGeneralSettingsAiStyleHardClicked;
         }
+
 
         if (generalSettingsSideAAiStyleDefaultButton != null)
         {
@@ -1366,6 +1384,11 @@ public class MainMenuUITKView : MonoBehaviour
             playVsAiButton.clicked -= HandlePlayVsAiClicked;
         }
 
+        if (playVsModelButton != null)
+        {
+            playVsModelButton.clicked -= HandlePlayVsModelClicked;
+        }
+
         if (puzzleModeButton != null)
         {
             puzzleModeButton.clicked -= HandlePuzzleModeClicked;
@@ -1460,6 +1483,7 @@ public class MainMenuUITKView : MonoBehaviour
         {
             generalSettingsAiStyleHardButton.clicked -= HandleGeneralSettingsAiStyleHardClicked;
         }
+
 
         if (generalSettingsSideAAiStyleDefaultButton != null)
         {
@@ -1781,7 +1805,32 @@ public class MainMenuUITKView : MonoBehaviour
         ShowGeneralSettingsPanel(PendingGeneralSettingsMode.VsAI);
     }
 
+    private void HandlePlayVsModelClicked()
+    {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
+        ShowGeneralSettingsPanel(PendingGeneralSettingsMode.VsModelAI);
+#endif
+    }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    public void PrepareLunaPlaytest()
+    {
+        ShowGeneralSettingsPanel(PendingGeneralSettingsMode.VsModelAI);
+        selectedMapSizePreset = TurnManager.MapSizePreset.Small;
+        selectedAIRecruitVariant = TurnManager.AIRecruitVariant.LunaPlaytest;
+        selectedEnableAIVsAIDebugMode = false;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    public void PrepareHardAIPlaytest()
+    {
+        ShowGeneralSettingsPanel(PendingGeneralSettingsMode.VsAI);
+        selectedMapSizePreset = TurnManager.MapSizePreset.Small;
+        selectedAIRecruitVariant = TurnManager.AIRecruitVariant.HardTactician;
+        selectedEnableAIVsAIDebugMode = false;
+        RefreshGeneralSettingsSelectionState();
+    }
+
     // Prepare a concrete review configuration without persisting settings or starting a match.
     public void PrepareHardAIComparisonReview()
     {
@@ -1910,6 +1959,7 @@ public class MainMenuUITKView : MonoBehaviour
         selectedAIRecruitVariant = TurnManager.AIRecruitVariant.HardTactician;
         RefreshGeneralSettingsSelectionState();
     }
+
 
     private void HandleGeneralSettingsAiStyleRiderFocusClicked()
     {
@@ -2202,8 +2252,10 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         bool started = false;
-        if (pendingGeneralSettingsMode == PendingGeneralSettingsMode.VsAI)
+        if (pendingGeneralSettingsMode == PendingGeneralSettingsMode.VsAI || pendingGeneralSettingsMode == PendingGeneralSettingsMode.VsModelAI)
         {
+            if (!selectedEnableAIVsAIDebugMode && selectedAIRecruitVariant == TurnManager.AIRecruitVariant.LunaPlaytest && modelAISetup?.Ready != true)
+                return;
             CommitAIVsAiSimulationTextInputs();
             mainMenuController.StartVsAIGameWithSettings(
                 selectedMapSizePreset,
@@ -3252,7 +3304,7 @@ public class MainMenuUITKView : MonoBehaviour
             : GeneralSettingsBackgroundPane.Main;
         selectedMapSizePreset = TurnManager.GetDefaultMapSizePreset();
         selectedPlayByPostPlayerCount = PlayByPostSeatUtility.MinSeatCount;
-        selectedAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
+        selectedAIRecruitVariant = mode == PendingGeneralSettingsMode.VsModelAI ? TurnManager.AIRecruitVariant.LunaPlaytest : TurnManager.AIRecruitVariant.Default;
         selectedStoreSnapshotHistory = false;
         selectedEnableAIVsAIDebugMode = false;
         selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
@@ -3282,7 +3334,7 @@ public class MainMenuUITKView : MonoBehaviour
 
         if (generalSettingsTitleLabel != null)
         {
-            generalSettingsTitleLabel.text = "General Settings";
+            generalSettingsTitleLabel.text = mode == PendingGeneralSettingsMode.VsModelAI ? "Vs Model AI" : "General Settings";
         }
 
         if (generalSettingsAiSection != null)
@@ -3292,12 +3344,12 @@ public class MainMenuUITKView : MonoBehaviour
 
         if (generalSettingsPbpSection != null)
         {
-            generalSettingsPbpSection.style.display = isVsAi ? DisplayStyle.None : DisplayStyle.Flex;
+            generalSettingsPbpSection.style.display = mode == PendingGeneralSettingsMode.PlayByPost ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
         if (generalSettingsDevSection != null)
         {
-            generalSettingsDevSection.style.display = IsDevBuild() ? DisplayStyle.Flex : DisplayStyle.None;
+            generalSettingsDevSection.style.display = IsDevBuild() && mode != PendingGeneralSettingsMode.VsModelAI ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
         RefreshGeneralSettingsSelectionState();
@@ -3381,6 +3433,12 @@ public class MainMenuUITKView : MonoBehaviour
         bool isVsAi = pendingGeneralSettingsMode == PendingGeneralSettingsMode.VsAI;
         bool disableSnapshotHistory = isVsAi && selectedEnableAIVsAIDebugMode;
         bool hideGlobalAiStyle = isVsAi && selectedEnableAIVsAIDebugMode;
+        bool usingModelAI = pendingGeneralSettingsMode == PendingGeneralSettingsMode.VsModelAI;
+        modelAISetup?.SetVisible(usingModelAI);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (usingModelAI && modelAISetup != null && !modelAISetup.CatalogRequested)
+            StartCoroutine(modelAISetup.LoadCatalog());
+#endif
 
         if (generalSettingsAiSection != null)
         {
@@ -3465,12 +3523,13 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsSubtitleLabel != null)
             generalSettingsSubtitleLabel.text = isSimulation
                 ? "Choose the map and opponents for this simulation."
+                : usingModelAI ? "Choose your map, model, and reasoning level."
                 : isVsAi ? "Choose your map size and AI level."
                 : "Choose your map size and player count for this new play-by-post match.";
         if (generalSettingsConfirmButton != null)
             generalSettingsConfirmButton.text = isSimulation
                 ? (isTournamentMode ? "Start Tournament" : "Start Simulation")
-                : isVsAi ? "Start Game" : "Create Match";
+                : (isVsAi || usingModelAI) ? "Start Game" : "Create Match";
 
         UpdateGeneralSettingsSelectionButton(
             generalSettingsMapSmallButton,
@@ -3478,8 +3537,6 @@ public class MainMenuUITKView : MonoBehaviour
         UpdateGeneralSettingsSelectionButton(
             generalSettingsMapLargeButton,
             selectedMapSizePreset == TurnManager.MapSizePreset.Large);
-        if (generalSettingsAiStyleHardButton != null)
-            generalSettingsAiStyleHardButton.style.display = HardAIRuntime.PlayerPlaytestApproved ? DisplayStyle.Flex : DisplayStyle.None;
         SetLegacyFeatureButtonsEnabled(selectedSideAAIRecruitVariant != TurnManager.AIRecruitVariant.HardTactician, generalSettingsSideAFeatureOffenseButton, generalSettingsSideAFeatureExchangeButton, generalSettingsSideAFeatureDefenseButton);
         SetLegacyFeatureButtonsEnabled(selectedSideBAIRecruitVariant != TurnManager.AIRecruitVariant.HardTactician, generalSettingsSideBFeatureOffenseButton, generalSettingsSideBFeatureExchangeButton, generalSettingsSideBFeatureDefenseButton);
         UpdateGeneralSettingsSelectionButton(
@@ -3653,7 +3710,7 @@ public class MainMenuUITKView : MonoBehaviour
         bool tournamentReady = !isTournamentMode || selectedTournamentParticipants >= 2;
         if (generalSettingsConfirmButton != null)
         {
-            generalSettingsConfirmButton.SetEnabled(tournamentReady);
+            generalSettingsConfirmButton.SetEnabled(tournamentReady && (!usingModelAI || modelAISetup?.Ready == true));
         }
     }
 
@@ -4717,6 +4774,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAIVsAiTournamentMatchesPerPairingLabel = null;
         continueButton = null;
         playVsAiButton = null;
+        playVsModelButton = null;
         puzzleModeButton = null;
         puzzleModeBackButton = null;
         puzzleModeStatusLabel = null;
