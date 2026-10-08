@@ -30,9 +30,9 @@ public sealed class TrainingOverlay
             float width = ReservedWidth / Scale - 24;
             Fill(new Rect(12, 12, width, Screen.height / Scale - 24), new Color(0.035f, 0.13f, 0.20f, 0.97f));
             if (arena.Replay.Inspecting)
-                replayView.Draw(arena.Replay.CurrentFrame, arena.Replay.CurrentGame.frames[0], arena.Replay.CurrentGame.boardSize, vision, arena.SpectatorBackgroundColor);
+                replayView.Draw(arena.Replay.CurrentFrame, arena.Replay.CurrentGame.frames[0], arena.Replay.CurrentGame.boardSize, vision, arena.SpectatorBackgroundColor, showActionMarkers: true);
             else if (arena.IsTraining)
-                replayView.Draw(arena.Replay.LatestFrame, arena.Replay.OpeningFrame, arena.BoardSize, vision, arena.SpectatorBackgroundColor);
+                replayView.Draw(arena.Replay.LatestFrame, arena.Replay.OpeningFrame, arena.BoardSize, vision, arena.SpectatorBackgroundColor, showActionMarkers: false);
             GUILayout.BeginArea(new Rect(24, 24, width - 24, Screen.height / Scale - 48));
             scroll = GUILayout.BeginScrollView(scroll, false, false);
             if (arena.IsTraining) DrawVision();

@@ -7,7 +7,7 @@ public sealed class TrainingReplayView
     private GUIStyle health;
 
     public void Draw(TrainingReplayHistory.Frame frame, TrainingReplayHistory.Frame opening, int size,
-        TrainingVision vision, Color backgroundColor)
+        TrainingVision vision, Color backgroundColor, bool showActionMarkers)
     {
         if (frame == null) return;
         if (health == null) health = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter,
@@ -37,7 +37,7 @@ public sealed class TrainingReplayView
         foreach (var piece in frame.pieces)
         {
             if (!frame.Visible(piece.x, piece.y, vision)) continue;
-            if (piece.outlineSprite != null)
+            if (showActionMarkers && piece.outlineSprite != null)
                 DrawSprite(piece.outlineSprite, piece.outlineBounds, piece.outlineColor, false, false, center, pixelsPerWorldUnit);
             if (piece.sprite != null)
                 DrawSprite(piece.sprite, piece.bounds, piece.color, piece.flipX, piece.flipY, center, pixelsPerWorldUnit);
