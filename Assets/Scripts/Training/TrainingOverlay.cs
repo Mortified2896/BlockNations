@@ -4,7 +4,7 @@ using UnityEngine;
 // Spectator presentation only. Gold and chart data never enter policy observations.
 public sealed class TrainingOverlay
 {
-    private GUIStyle title, label, small, button;
+    private GUIStyle title, label, small, button, middleTick, rightTick;
     private TrainingVision vision = TrainingVision.Shared;
     private Vector2 scroll;
     private readonly int[] displayedGold = new int[2];
@@ -19,6 +19,8 @@ public sealed class TrainingOverlay
         {
             title = Style(21, true); label = Style(17, false); small = Style(13, false);
             button = new GUIStyle(GUI.skin.button) { fontSize = 17, fixedHeight = 38 };
+            middleTick = new GUIStyle(small) { alignment = TextAnchor.UpperCenter, wordWrap = false };
+            rightTick = new GUIStyle(small) { alignment = TextAnchor.UpperRight, wordWrap = false };
         }
         Matrix4x4 matrix = GUI.matrix;
         Color color = GUI.color;
@@ -203,11 +205,13 @@ public sealed class TrainingOverlay
         float baselineY = plot.yMax - (history.points[0].elo - low) / (high - low) * plot.height;
         Fill(new Rect(plot.x, baselineY, plot.width, 1), new Color(0.5f, 0.5f, 0.35f));
         long last = history.points[history.points.Count - 1].step;
+        // Leave room for new matches instead of stretching a fresh history to the edge.
+        long horizontalRange = Math.Max(1000, (long)Math.Ceiling(last / 1000d) * 1000);
         Vector2 previous = default;
         for (int i = 0; i < history.points.Count; i++)
         {
             TrainingEloHistory.Point point = history.points[i];
-            var current = new Vector2(plot.x + (float)(point.step / (double)Math.Max(1, last)) * plot.width,
+            var current = new Vector2(plot.x + (float)(point.step / (double)horizontalRange) * plot.width,
                 plot.yMax - (point.elo - low) / (high - low) * plot.height);
             // Bounded retention may leave a gap after the starting reference.
             if (i > 0 && !(i == 1 && point.step > 1000)) Line(previous, current, new Color(0.4f, 0.9f, 0.75f));
@@ -215,7 +219,8 @@ public sealed class TrainingOverlay
             previous = current;
         }
         GUI.Label(new Rect(plot.x, plot.yMax + 4, plot.width / 2, 22), "0", small);
-        GUI.Label(new Rect(plot.center.x, plot.yMax + 4, plot.width / 2, 22), last.ToString("N0"), small);
+        GUI.Label(new Rect(plot.x + plot.width / 4, plot.yMax + 4, plot.width / 2, 22), (horizontalRange / 2).ToString("N0"), middleTick);
+        GUI.Label(new Rect(plot.center.x, plot.yMax + 4, plot.width / 2, 22), horizontalRange.ToString("N0"), rightTick);
     }
 
     private static void Line(Vector2 a, Vector2 b, Color color)
