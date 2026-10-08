@@ -62,4 +62,38 @@ public sealed class TrainingReplayHistoryTests
         Assert.That(history.CurrentFrame.description, Is.EqualTo("fresh"));
         Assert.That(history.CompletedCount, Is.EqualTo(1));
     }
+    [Test]
+    public void SharedVisionIsUnionAndIndividualViewsHideOtherSeatsSight()
+    {
+        var frame = Frame();
+        frame.visionWidth = 5;
+        frame.blueVision = new bool[25]; frame.redVision = new bool[25];
+        frame.blueVision[6] = true; frame.redVision[18] = true;
+        Assert.That(frame.Visible(1, 1, TrainingVision.Blue), Is.True);
+        Assert.That(frame.Visible(3, 3, TrainingVision.Blue), Is.False);
+        Assert.That(frame.Visible(1, 1, TrainingVision.Red), Is.False);
+        Assert.That(frame.Visible(3, 3, TrainingVision.Red), Is.True);
+        Assert.That(frame.Visible(1, 1, TrainingVision.Shared), Is.True);
+        Assert.That(frame.Visible(3, 3, TrainingVision.Shared), Is.True);
+        Assert.That(frame.Visible(2, 2, TrainingVision.Shared), Is.False);
+        Assert.That(frame.Visible(2, 2, TrainingVision.All), Is.True);
+        Assert.That(Frame().Visible(0, 0, TrainingVision.Blue), Is.False);
+        Assert.That(frame.Visible(-1, 1, TrainingVision.Shared), Is.False);
+    }
+
+    [Test]
+    public void ReplayKeepsHistoricalVisionWhileLiveVisionChanges()
+    {
+        var history = new TrainingReplayHistory();
+        var opening = Frame(); opening.visionWidth = 5; opening.blueVision = new bool[25];
+        opening.blueVision[6] = true;
+        history.Begin(1, 5, 0, opening); history.Complete(Frame()); history.Inspect(0);
+        var later = Frame(); later.visionWidth = 5; later.blueVision = new bool[25]; later.blueVision[18] = true;
+        history.Begin(2, 5, 1, later);
+        Assert.That(history.CurrentFrame.Visible(1, 1, TrainingVision.Blue), Is.True);
+        Assert.That(history.CurrentFrame.Visible(3, 3, TrainingVision.Blue), Is.False);
+        Assert.That(history.LatestFrame.Visible(3, 3, TrainingVision.Blue), Is.True);
+        history.Complete(later);
+        Assert.That(history.OpeningFrame, Is.SameAs(later));
+    }
 }

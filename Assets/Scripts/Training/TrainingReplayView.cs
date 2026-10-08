@@ -4,21 +4,29 @@ using UnityEngine;
 public sealed class TrainingReplayView
 {
     private GUIStyle health;
-    public void Draw(TrainingReplayHistory replay)
+    public void Draw(TrainingReplayHistory.Frame frame, TrainingReplayHistory.Frame opening, int size, TrainingVision vision)
     {
-        if (!replay.Inspecting) return;
+        if (frame == null) return;
         if (health == null) health = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter,
             fontSize = 14, normal = { textColor = Color.white } };
         float left = TrainingOverlay.ReservedWidth / TrainingOverlay.Scale;
         float width = Screen.width / TrainingOverlay.Scale - left, height = Screen.height / TrainingOverlay.Scale;
         Fill(new Rect(left, 0, width, height), new Color(0.13f, 0.38f, 0.53f));
-        int size = replay.CurrentGame.boardSize;
         float step = Mathf.Min(width, height) / (size + 2);
         float x = left + (width - size * step) / 2, y = (height - size * step) / 2;
         for (int row = 0; row < size; row++) for (int column = 0; column < size; column++)
-            Fill(new Rect(x + column * step, y + (size - 1 - row) * step, step * .90f, step * .90f), Color.white);
-        foreach (var piece in replay.CurrentFrame.pieces)
+            Fill(new Rect(x + column * step, y + (size - 1 - row) * step, step * .90f, step * .90f),
+                frame.Visible(column, row, vision) ? Color.white : new Color(.055f, .085f, .12f));
+        // Only the starting locations are public; hidden current ownership is never drawn.
+        if (opening != null) foreach (var city in opening.pieces)
         {
+            if (!city.city || frame.Visible(city.x, city.y, vision)) continue;
+            Rect marker = new Rect(x + city.x * step, y + (size - 1 - city.y) * step, step * .90f, step * .90f);
+            GUI.Label(marker, "City", health);
+        }
+        foreach (var piece in frame.pieces)
+        {
+            if (!frame.Visible(piece.x, piece.y, vision)) continue;
             Rect cell = new Rect(x + piece.x * step, y + (size - 1 - piece.y) * step, step * .90f, step * .90f);
             if (piece.sprite != null)
             {

@@ -214,7 +214,7 @@ public sealed class TrainingArena : MonoBehaviour
         turnManager.RecalculatePlayerVisibility();
         if (turnManager.gameOver) FinishMatch(false);
         else if (turnActions > 4096) FinishMatch(true);
-        else if (requireTrainer && Replay.CanRecord) Replay.Record(TrainingReplayRecorder.Capture(turnManager, replayAction));
+        else if (requireTrainer) Replay.Record(TrainingReplayRecorder.Capture(turnManager, replayAction));
         return true;
     }
 

@@ -23,9 +23,16 @@ public static class TrainingReplayRecorder
                 health = unit.currentHealthUnits, maxHealth = unit.maxHealthUnits,
                 sprite = renderer != null ? renderer.sprite : null, color = renderer != null ? renderer.color : Color.white });
         }
+        int size = manager.gridManager.width;
+        var blueVision = new bool[size * size];
+        var redVision = new bool[size * size];
+        foreach (TileVisibility tile in manager.ComputeVisibilityForSeat(0))
+            blueVision[tile.gridY * size + tile.gridX] = true;
+        foreach (TileVisibility tile in manager.ComputeVisibilityForSeat(1))
+            redVision[tile.gridY * size + tile.gridX] = true;
         return new TrainingReplayHistory.Frame { round = manager.turnNumber, seat = manager.currentTurnSeatIndex,
             blueGold = manager.GetGoldForSeat(0), redGold = manager.GetGoldForSeat(1), description = description,
-            pieces = pieces.ToArray() };
+            visionWidth = size, blueVision = blueVision, redVision = redVision, pieces = pieces.ToArray() };
     }
     public static string Describe(LegalTurnAction action)
     {

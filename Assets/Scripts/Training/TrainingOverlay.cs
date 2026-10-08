@@ -5,6 +5,8 @@ using UnityEngine;
 public sealed class TrainingOverlay
 {
     private GUIStyle title, label, small, button;
+    private TrainingVision vision = TrainingVision.Shared;
+    private Vector2 scroll;
     private readonly int[] displayedGold = new int[2];
     private double nextGoldRefresh;
     private readonly TrainingReplayView replayView = new TrainingReplayView();
@@ -25,11 +27,17 @@ public sealed class TrainingOverlay
             GUI.matrix = Matrix4x4.Scale(new Vector3(Scale, Scale, 1));
             float width = ReservedWidth / Scale - 24;
             Fill(new Rect(12, 12, width, Screen.height / Scale - 24), new Color(0.035f, 0.13f, 0.20f, 0.97f));
-            replayView.Draw(arena.Replay);
+            if (arena.Replay.Inspecting)
+                replayView.Draw(arena.Replay.CurrentFrame, arena.Replay.CurrentGame.frames[0], arena.Replay.CurrentGame.boardSize, vision);
+            else if (arena.IsTraining && vision != TrainingVision.All)
+                replayView.Draw(arena.Replay.LatestFrame, arena.Replay.OpeningFrame, arena.BoardSize, vision);
             GUILayout.BeginArea(new Rect(24, 24, width - 24, Screen.height / Scale - 48));
+            scroll = GUILayout.BeginScrollView(scroll, false, false);
+            if (arena.IsTraining) DrawVision();
             if (arena.Replay.Inspecting)
             {
                 DrawInspection(arena);
+                GUILayout.EndScrollView();
                 GUILayout.EndArea();
                 return;
             }
@@ -50,7 +58,7 @@ public sealed class TrainingOverlay
                 Color seatColor = seat == 0 ? new Color(0.35f, 0.75f, 1f) : new Color(1f, 0.45f, 0.4f);
                 GUI.color = seatColor;
                 string gold = arena.IsHumanPlaytest && seat != arena.HumanSeat ? "Gold hidden" : $"Gold {displayedGold[seat]}";
-                Rect row = GUILayoutUtility.GetRect(width - 24, 28);
+                Rect row = GUILayoutUtility.GetRect(width - 48, 28);
                 string name = seat == 0 ? "Blue" : "Red";
                 GUI.Label(new Rect(row.x, row.y, 100, row.height), name + (arena.IsHumanPlaytest && seat == arena.HumanSeat ? " (you)" : " AI"), label);
                 GUI.Label(new Rect(row.x + 118, row.y, row.width - 118, row.height), gold, label);
@@ -78,7 +86,7 @@ public sealed class TrainingOverlay
                 GUILayout.Label("Training Elo", title);
                 GUILayout.Label(elo == null ? "Waiting for trainer rating…" :
                     $"{elo.points[elo.points.Count - 1].elo:F0} Elo · start {elo.points[0].elo:F0}", label);
-                Rect chart = GUILayoutUtility.GetRect(width - 24, 140);
+                Rect chart = GUILayoutUtility.GetRect(width - 48, 140);
                 if (elo != null) DrawChart(chart, elo);
                 GUILayout.Label("X: trainer steps · Y: self-play Elo", small);
                 GUILayout.Label("Relative to training opponents. Not human Elo.", small);
@@ -101,6 +109,7 @@ public sealed class TrainingOverlay
                     "Awaiting completed matches.", small);
                 GUILayout.Label("Seat split may reflect opponent changes as well as seat advantage.", small);
             }
+            GUILayout.EndScrollView();
             GUILayout.EndArea();
         }
         finally { GUI.matrix = matrix; GUI.color = color; GUI.enabled = true; }
@@ -141,6 +150,16 @@ public sealed class TrainingOverlay
         if (!string.IsNullOrEmpty(arena.Failure)) GUILayout.Label(arena.Failure, small);
         GUILayout.Space(12);
         GUILayout.Label($"Live run: {arena.Games:N0} matches · {arena.Actions:N0} actions", small);
+    }
+
+    private void DrawVision()
+    {
+        GUILayout.Label("Spectator vision", small);
+        vision = (TrainingVision)GUILayout.Toolbar((int)vision, new[] { "Shared", "Blue", "Red", "All" }, button);
+        GUILayout.Label(vision == TrainingVision.Shared ? "Fog where neither seat sees. Cities marked at known starting locations." :
+            vision == TrainingVision.All ? "All tiles and units visible." : "Current vision of " + vision + ". Hidden units concealed.", small);
+        GUILayout.Label("Gold and match details are spectator statistics.", small);
+        GUILayout.Space(12);
     }
 
     private static GUIStyle Style(int size, bool bold) => new GUIStyle(GUI.skin.label)

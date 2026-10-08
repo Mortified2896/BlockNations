@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 // Bounded spectator copies: no live scene objects, policies, rewards, or gameplay saves.
+public enum TrainingVision { Shared, Blue, Red, All }
+
 public sealed class TrainingReplayHistory
 {
     public const int MaximumGames = 4, MaximumFrames = 256, MaximumPieces = 8192;
@@ -17,6 +19,18 @@ public sealed class TrainingReplayHistory
     {
         public int round, seat, blueGold, redGold;
         public string description;
+        public int visionWidth;
+        public bool[] blueVision = Array.Empty<bool>(), redVision = Array.Empty<bool>();
+
+        public bool Visible(int x, int y, TrainingVision view)
+        {
+            if (view == TrainingVision.All) return true;
+            if (x < 0 || y < 0 || x >= visionWidth || y >= visionWidth) return false;
+            int index = y * visionWidth + x;
+            bool blue = index < blueVision.Length && blueVision[index];
+            bool red = index < redVision.Length && redVision[index];
+            return view == TrainingVision.Blue ? blue : view == TrainingVision.Red ? red : blue || red;
+        }
         public Piece[] pieces = Array.Empty<Piece>();
     }
     public sealed class Game
@@ -31,6 +45,8 @@ public sealed class TrainingReplayHistory
     private Game[] playlist;
     private int gameIndex, frameIndex;
     private double nextFrameTime;
+    public Frame LatestFrame { get; private set; }
+    public Frame OpeningFrame { get; private set; }
     public bool Inspecting => playlist != null;
     public bool Playing { get; set; } = true;
     public double SecondsPerAction { get; set; } = 1.2;
@@ -47,10 +63,12 @@ public sealed class TrainingReplayHistory
     {
         recording = new Game { number = number, boardSize = boardSize, firstSeat = firstSeat };
         pieceCount = 0;
+        OpeningFrame = opening;
         Record(opening);
     }
     public void Record(Frame frame)
     {
+        LatestFrame = frame;
         if (!CanRecord) return;
         if (recording.frames.Count >= MaximumFrames - 1 || pieceCount + frame.pieces.Length > MaximumPieces)
         { recording.truncated = true; return; }
@@ -59,6 +77,7 @@ public sealed class TrainingReplayHistory
     }
     public void Complete(Frame terminal)
     {
+        LatestFrame = terminal;
         if (recording == null) return;
         while (recording.frames.Count > 0 && (recording.frames.Count >= MaximumFrames || pieceCount + terminal.pieces.Length > MaximumPieces))
         {
