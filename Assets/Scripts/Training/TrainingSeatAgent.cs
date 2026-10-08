@@ -11,6 +11,7 @@ public sealed class TrainingSeatAgent : Agent
     [SerializeField] private TrainingArena arena;
     [SerializeField] private int seatIndex;
     private SeatAIObservationSource.Context context;
+    private SimulationObservationSource.Context simulationContext;
     private Dictionary<int, AIAction> choices;
     private float[] observations;
     private int selectedSource = -1;
@@ -22,6 +23,7 @@ public sealed class TrainingSeatAgent : Agent
     {
         selectedSource = -1;
         context = null;
+        simulationContext = null;
         choices = null;
         observations = null;
         awaitingDecision = false;
@@ -30,8 +32,21 @@ public sealed class TrainingSeatAgent : Agent
     public void PrepareDecision(SeatAIObservationSource.Context snapshot)
     {
         context = snapshot;
-        choices = LearnedActionSchema.Choices(snapshot.Observation, selectedSource);
-        observations = LearnedActionSchema.Encode(snapshot.Observation, selectedSource);
+        simulationContext = null;
+        PrepareDecision(snapshot.Observation);
+    }
+
+    public void PrepareDecision(SimulationObservationSource.Context snapshot)
+    {
+        simulationContext = snapshot;
+        context = null;
+        PrepareDecision(snapshot.Observation);
+    }
+
+    private void PrepareDecision(AIObservation snapshot)
+    {
+        choices = LearnedActionSchema.Choices(snapshot, selectedSource);
+        observations = LearnedActionSchema.Encode(snapshot, selectedSource);
         awaitingDecision = true;
         RequestDecision();
     }
@@ -67,8 +82,9 @@ public sealed class TrainingSeatAgent : Agent
             return;
         }
         selectedSource = -1;
-        bool executed = context.RuntimeActions.TryGetValue(selected.Key, out LegalTurnAction action) &&
-            arena.Execute(action);
+        bool executed = simulationContext != null ?
+            simulationContext.Commands.TryGetValue(selected.Key, out BlockNations.Simulation.MatchCommand command) && arena.Execute(command) :
+            context != null && context.RuntimeActions.TryGetValue(selected.Key, out LegalTurnAction action) && arena.Execute(action);
         if (!executed) arena.RejectAction("Authoritative action revalidation failed.");
     }
 

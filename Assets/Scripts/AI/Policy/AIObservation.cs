@@ -77,12 +77,12 @@ namespace BlockNations.AI
     // Shared primitive rules: runtime wrappers and prediction both call these functions.
     public static class AIActionRules
     {
-        public const string RulesVersion = "blocknations-actions-v1";
+        public const string RulesVersion = BlockNations.Simulation.SimulationRules.Version;
         public static int RemainingMoves(bool committedMove, int maximum, int used) =>
-            committedMove ? (used > 0 ? 0 : Math.Max(0, maximum)) : Math.Max(0, maximum - used);
+            BlockNations.Simulation.SimulationRules.RemainingMoves(committedMove, maximum, used);
         public static bool CanAttack(bool afterMoving, int maximum, int used, int movesUsed) =>
-            used < maximum && (afterMoving || movesUsed == 0);
-        public static int Damage(int attack, int defense) => Math.Max(0, attack - defense);
-        public static int Distance(int x1, int y1, int x2, int y2) => Math.Max(Math.Abs(x1 - x2), Math.Abs(y1 - y2));
+            BlockNations.Simulation.SimulationRules.CanAttack(afterMoving, maximum, used, movesUsed);
+        public static int Damage(int attack, int defense) => BlockNations.Simulation.SimulationRules.Damage(attack, defense);
+        public static int Distance(int x1, int y1, int x2, int y2) => BlockNations.Simulation.SimulationRules.Distance(x1, y1, x2, y2);
     }
 }

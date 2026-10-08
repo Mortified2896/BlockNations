@@ -57,7 +57,7 @@ public static class TrainingReplayRecorder
             blueVision = blueVision, redVision = redVision, pieces = pieces.ToArray() };
     }
 
-    private static TrainingReplayHistory.Piece CaptureSprite(SpriteRenderer renderer, int x, int y, int seat) =>
+    internal static TrainingReplayHistory.Piece CaptureSprite(SpriteRenderer renderer, int x, int y, int seat) =>
         new TrainingReplayHistory.Piece { x = x, y = y, seat = seat,
             sprite = renderer != null ? renderer.sprite : null, color = renderer != null ? renderer.color : Color.white,
             bounds = renderer != null ? WorldBounds(renderer) : default,

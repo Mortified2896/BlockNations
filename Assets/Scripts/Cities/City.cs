@@ -145,43 +145,18 @@ public class City : MonoBehaviour
             return false;
         }
 
-        if (!TurnManager.Instance.TrySpendGoldForSeat(ownerSeatIndex, definition.RecruitCost))
-        {
-            if (isPlayerOwned)
-            {
-                if (PbpDebugSettingsLoader.EnableInputLogs)
-                {
-                    Debug.Log($"Not enough gold to recruit a {definition.DisplayName} in {name}");
-                }
-            }
-            else
-            {
-                if (PbpDebugSettingsLoader.EnableInputLogs)
-                {
-                    Debug.Log($"AI lacks gold to recruit a {definition.DisplayName} in {name}");
-                }
-            }
-
-            // If the player attempted to recruit and still has no actions, auto-end can kick in.
-            TurnManager.Instance.ScheduleAutoEndTurnCheck();
-            return false;
-        }
-
-        GameObject spawnedUnit = TurnManager.Instance.InstantiateConfiguredUnit(
-            resolvedUnitTypeId,
-            prefab,
-            spawnPosition,
-            ownerSeatIndex,
-            this,
-            resetTurnState: true);
-        if (spawnedUnit == null)
+        TurnManager manager = TurnManager.Instance;
+        if (!manager.IsTurnOwnedBySeat(ownerSeatIndex) || manager.gridManager == null ||
+            !manager.gridManager.TryGetTile(x, y, out TileVisibility tile)) return false;
+        var command = new LegalTurnAction(LegalActionType.CityRecruit, ownerSeatIndex, null, tile, tile,
+            null, null, this, resolvedUnitTypeId, definition.RecruitCost);
+        if (!new SceneSimulationAdapter(manager).TryApply(command))
         {
             PlayInvalidIfHuman();
+            manager.ScheduleAutoEndTurnCheck();
             return false;
         }
-
-        stationedUnit = spawnedUnit;
-        hasRecruitedThisTurn = true;
+        GameObject spawnedUnit = stationedUnit;
 
         if (SoundManager.Instance != null &&
             (TurnManager.Instance == null || !TurnManager.Instance.ShouldSuppressAIVsAIAudio()))

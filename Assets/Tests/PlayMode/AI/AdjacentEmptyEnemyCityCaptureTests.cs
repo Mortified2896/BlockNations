@@ -787,6 +787,9 @@ public class AdjacentEmptyEnemyCityCaptureTests
     [Test]
     public void PublicStartingCitiesDoNotRevealHiddenUnitsOrRecruitment()
     {
+        // The hidden ownership change below is to a third valid match seat.
+        SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "PlayByPost"));
+        SetMember(_turnManager, "configuredPlayByPostSeatCount", 3);
         InvokeMethod(_city, "SetOwnerSeatIndex", new object[] { 0 });
         CreateUnit(1, 0, 0);
         object hidden = CreateUnit(0, 9, 9);
@@ -863,7 +866,8 @@ public class AdjacentEmptyEnemyCityCaptureTests
     [Test]
     public void HardCityMemoryRetainsLastObservedOwnership()
     {
-        SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "VsAI"));
+        SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "PlayByPost"));
+        SetMember(_turnManager, "configuredPlayByPostSeatCount", 3);
         SetMember(_turnManager, "currentTurnSeatIndex", 1);
         SetMember(_turnManager, "isPlayerTurn", false);
         InvokeMethod(_city, "SetOwnerSeatIndex", new object[] { 0 });

@@ -10,6 +10,7 @@ public partial class TurnManager
     public bool IsExternallyDrivenMatch => externallyDrivenMatch;
     public bool ExternalMatchReady { get; private set; }
     public int ExternalWinnerSeatIndex { get; private set; } = -1;
+    internal int ExternalFirstSeatIndex { get; private set; }
 
     public void ResetExternalMatch(int initialGold, int firstSeat)
     {
@@ -28,6 +29,7 @@ public partial class TurnManager
         currentMode = GameMode.VsAI;
         gameOver = false;
         ExternalWinnerSeatIndex = -1;
+        ExternalFirstSeatIndex = firstSeat;
         turnNumber = 1;
         SetSeatGoldFromLegacyBridges(2, initialGold, initialGold);
         SetCurrentTurnSeatIndexForRuntime(firstSeat, 2);
@@ -37,7 +39,9 @@ public partial class TurnManager
     public bool TryAdvanceExternalMatchTurn(int completedSeat)
     {
         if (!externallyDrivenMatch || !ExternalMatchReady || gameOver || !IsTurnOwnedBySeat(completedSeat)) return false;
-        AdvanceVsAITurnAfterSeat(completedSeat);
+        int nextSeat = BlockNations.Simulation.SimulationRules.NextSeat(completedSeat, RuntimeSeatCount);
+        turnNumber = BlockNations.Simulation.SimulationRules.NextRound(turnNumber, nextSeat, ExternalFirstSeatIndex);
+        SetCurrentTurnSeatIndexForRuntime(nextSeat, RuntimeSeatCount);
         BeginSeatTurn(currentTurnSeatIndex, playTurnStartSound: false);
         return true;
     }

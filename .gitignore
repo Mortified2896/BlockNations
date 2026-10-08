@@ -29,6 +29,7 @@ UserSettings/D
 .vscode/
 .idea/
 *.csproj
+!Tools/Simulation/Simulation.Benchmark.csproj
 *.sln
 *.slnx
 *.user
@@ -64,6 +65,7 @@ node_modules/
 Assets/TrainingModels/
 Assets/TrainingModels.meta
 Tools/Training/__pycache__/
+Tools/Simulation/bin/
 # ML-Agents' generated, overwritten per-scene timing diagnostics
 Assets/ML-Agents.meta
 Assets/ML-Agents/Timers/

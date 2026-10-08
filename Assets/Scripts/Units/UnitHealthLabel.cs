@@ -40,16 +40,38 @@ public class UnitHealthLabel : MonoBehaviour
         public string text;
     }
 
+    public struct PresentationTemplate
+    {
+        public Presentation presentation;
+        public DisplayMode mode;
+        public bool showUndamaged;
+        public bool Project(int current, int maximum, Vector2 offset, out Presentation result)
+        {
+            result = presentation;
+            if (current <= 0 || mode == DisplayMode.Hidden || (!showUndamaged && current >= maximum)) return false;
+            result.bounds.position += offset;
+            result.text = mode == DisplayMode.CurrentOnly ? CombatValues.FormatUnits(current) : CombatValues.FormatRatio(current, maximum);
+            return true;
+        }
+    }
+
     public bool TryGetPresentation(out Presentation presentation)
     {
         presentation = default;
-        if (canvas == null || unit == null || displayMode == DisplayMode.Hidden ||
-            (!showWhenUndamaged && unit.currentHealthUnits >= unit.maxHealthUnits)) return false;
+        return unit != null && TryGetPresentationTemplate(out PresentationTemplate template) &&
+            template.Project(unit.currentHealthUnits, unit.maxHealthUnits, Vector2.zero, out presentation);
+    }
+
+    public bool TryGetPresentationTemplate(out PresentationTemplate template)
+    {
+        template = default;
+        if (canvas == null || displayMode == DisplayMode.Hidden) return false;
         var rect = (RectTransform)canvas.transform;
         Vector3 lower = rect.TransformPoint(rect.rect.min), upper = rect.TransformPoint(rect.rect.max);
-        presentation = new Presentation { bounds = Rect.MinMaxRect(lower.x, lower.y, upper.x, upper.y),
+        var presentation = new Presentation { bounds = Rect.MinMaxRect(lower.x, lower.y, upper.x, upper.y),
             fontWorldSize = fontSize * Mathf.Abs(rect.lossyScale.y), textColor = textColor, badgeColor = badgeColor,
-            text = FormatHealthText(unit.currentHealthUnits, unit.maxHealthUnits) };
+            text = string.Empty };
+        template = new PresentationTemplate { presentation = presentation, mode = displayMode, showUndamaged = showWhenUndamaged };
         return true;
     }
 

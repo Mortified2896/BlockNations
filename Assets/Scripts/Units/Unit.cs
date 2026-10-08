@@ -184,6 +184,13 @@ public class Unit : MonoBehaviour
         SyncLegacyOwnershipBridge();
     }
 
+    private void OnDestroy()
+    {
+        // Scene unloads, match resets and editor destruction can bypass Die().
+        // Never leave a destroyed presentation object linked to a surviving city.
+        if (currentCity != null && currentCity.stationedUnit == gameObject) currentCity.stationedUnit = null;
+    }
+
     public void SyncLegacyOwnershipBridge()
     {
         isPlayerOwned = ownerSeatIndex == 0;

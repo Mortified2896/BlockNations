@@ -1,0 +1,7 @@
+{
+    "name": "BlockNations.Simulation",
+    "rootNamespace": "BlockNations.Simulation",
+    "references": [],
+    "autoReferenced": true,
+    "noEngineReferences": true
+}

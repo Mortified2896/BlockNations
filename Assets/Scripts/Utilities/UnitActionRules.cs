@@ -4,27 +4,9 @@ using UnityEngine;
 
 internal static class UnitActionRules
 {
-    private static readonly Vector2Int[] NeighborOffsets =
-    {
-        new Vector2Int(1, 0),
-        new Vector2Int(0, 1),
-        new Vector2Int(-1, 0),
-        new Vector2Int(0, -1),
-        new Vector2Int(1, 1),
-        new Vector2Int(1, -1),
-        new Vector2Int(-1, 1),
-        new Vector2Int(-1, -1)
-    };
-
-    private struct TileNode
-    {
-        public TileVisibility Tile;
-        public int Steps;
-    }
-
     public static bool UsesCommittedMoveActionThisTurn(string unitTypeId)
     {
-        return UnitRegistry.NormalizeTypeId(unitTypeId) == UnitRegistry.RiderTypeId;
+        return UnitRegistry.GetDefinitionOrDefault(unitTypeId).UsesCommittedMoveAction;
     }
 
     public static int GetRemainingMoveRangeThisTurn(string unitTypeId, int maxMovesPerTurn, int movesUsedThisTurn)
@@ -44,33 +26,14 @@ internal static class UnitActionRules
 
     public static int RegisterMove(int movesUsedThisTurn, int maxMovesPerTurn)
     {
-        if (movesUsedThisTurn < maxMovesPerTurn)
-        {
-            movesUsedThisTurn++;
-        }
-
-        return movesUsedThisTurn;
+        return BlockNations.Simulation.SimulationRules.Consume(movesUsedThisTurn, maxMovesPerTurn);
     }
 
-    public static int RegisterMove(int movesUsedThisTurn, int maxMovesPerTurn, int moveCount)
-    {
-        for (int i = 0; i < moveCount; i++)
-        {
-            movesUsedThisTurn = RegisterMove(movesUsedThisTurn, maxMovesPerTurn);
-        }
+    public static int RegisterMove(int movesUsedThisTurn, int maxMovesPerTurn, int moveCount) =>
+        BlockNations.Simulation.SimulationRules.Consume(movesUsedThisTurn, maxMovesPerTurn, moveCount);
 
-        return movesUsedThisTurn;
-    }
-
-    public static int RegisterAttack(int attacksUsedThisTurn, int maxAttacksPerTurn)
-    {
-        if (attacksUsedThisTurn < maxAttacksPerTurn)
-        {
-            attacksUsedThisTurn++;
-        }
-
-        return attacksUsedThisTurn;
-    }
+    public static int RegisterAttack(int attacksUsedThisTurn, int maxAttacksPerTurn) =>
+        BlockNations.Simulation.SimulationRules.Consume(attacksUsedThisTurn, maxAttacksPerTurn);
 
     public static int ComputeMitigatedDamage(int attackUnits, int defenseUnits)
     {
@@ -108,86 +71,27 @@ internal static class UnitActionRules
         int remainingMoves,
         Func<TileVisibility, bool> isTileBlocked)
     {
-        Dictionary<TileVisibility, List<TileVisibility>> reachablePaths = new Dictionary<TileVisibility, List<TileVisibility>>();
-        if (grid == null || originTile == null || remainingMoves <= 0)
-        {
-            return reachablePaths;
-        }
-
-        Func<TileVisibility, bool> safeIsTileBlocked = isTileBlocked ?? (_ => false);
-        Queue<TileNode> frontier = new Queue<TileNode>();
-        Dictionary<TileVisibility, TileVisibility> previous = new Dictionary<TileVisibility, TileVisibility>();
-        Dictionary<TileVisibility, int> bestSteps = new Dictionary<TileVisibility, int>();
-
-        frontier.Enqueue(new TileNode { Tile = originTile, Steps = 0 });
-        bestSteps[originTile] = 0;
-
-        while (frontier.Count > 0)
-        {
-            TileNode node = frontier.Dequeue();
-            if (node.Steps >= remainingMoves)
+        var paths = new Dictionary<TileVisibility, List<TileVisibility>>();
+        if (grid == null || originTile == null || remainingMoves <= 0) return paths;
+        bool[] tiles = new bool[grid.width * grid.height];
+        foreach (TileVisibility tile in grid.GetAllTiles()) tiles[tile.gridY * grid.width + tile.gridX] = true;
+        var corePaths = BlockNations.Simulation.MatchPaths.Build(grid.width, grid.height, tiles,
+            originTile.gridY * grid.width + originTile.gridX, remainingMoves, position =>
             {
-                continue;
-            }
-
-            for (int i = 0; i < NeighborOffsets.Length; i++)
-            {
-                Vector2Int offset = NeighborOffsets[i];
-                int nextX = node.Tile.gridX + offset.x;
-                int nextY = node.Tile.gridY + offset.y;
-                if (!grid.TryGetTile(nextX, nextY, out TileVisibility nextTile) || nextTile == null)
-                {
-                    continue;
-                }
-
-                if (safeIsTileBlocked(nextTile))
-                {
-                    continue;
-                }
-
-                int nextSteps = node.Steps + 1;
-                if (bestSteps.TryGetValue(nextTile, out int existingSteps) && existingSteps <= nextSteps)
-                {
-                    continue;
-                }
-
-                bestSteps[nextTile] = nextSteps;
-                previous[nextTile] = node.Tile;
-                frontier.Enqueue(new TileNode { Tile = nextTile, Steps = nextSteps });
-            }
-        }
-
-        foreach (KeyValuePair<TileVisibility, int> entry in bestSteps)
+                grid.TryGetTile(position % grid.width, position / grid.width, out TileVisibility tile);
+                return isTileBlocked != null && isTileBlocked(tile);
+            });
+        foreach (var entry in corePaths)
         {
-            TileVisibility targetTile = entry.Key;
-            if (targetTile == originTile)
+            grid.TryGetTile(entry.Key % grid.width, entry.Key / grid.width, out TileVisibility target);
+            var path = new List<TileVisibility>();
+            foreach (int position in entry.Value)
             {
-                continue;
+                grid.TryGetTile(position % grid.width, position / grid.width, out TileVisibility tile);
+                path.Add(tile);
             }
-
-            reachablePaths[targetTile] = BuildPath(originTile, targetTile, previous);
+            paths.Add(target, path);
         }
-
-        return reachablePaths;
-    }
-
-    private static List<TileVisibility> BuildPath(
-        TileVisibility originTile,
-        TileVisibility targetTile,
-        Dictionary<TileVisibility, TileVisibility> previous)
-    {
-        List<TileVisibility> reversedPath = new List<TileVisibility>();
-        TileVisibility current = targetTile;
-        while (current != null && current != originTile)
-        {
-            reversedPath.Add(current);
-            if (!previous.TryGetValue(current, out current))
-            {
-                break;
-            }
-        }
-
-        reversedPath.Reverse();
-        return reversedPath;
+        return paths;
     }
 }

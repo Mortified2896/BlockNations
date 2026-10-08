@@ -2,6 +2,8 @@
 
 Recorded on 2026-10-09 from the owner's discussion of the long-term game direction. This is a reference plan, not authorization to implement a broad core-system refactor. The current self-play run and its weights remain a baseline; this plan does not prescribe a new seed, board size, or reset.
 
+The owner subsequently approved phases 1–2 as an overnight goal. Their implementation, rule corrections, validation and remaining boundaries are recorded in [Shared C# Simulation](Shared_Simulation_Implementation.md). The later policy, reproducibility and evaluation phases below remain follow-ups.
+
 ## Intended outcome
 
 Build a reusable simulation and training framework that can grow with larger boards, new units and mechanics, and eventually additional seats/relationships. Ship a strong opponent that runs locally on target iPhone/Android devices, including the browser build hosted by Cloudflare. Training runs on development machines; the shipped game needs only the compatible model and local inference path.

@@ -14,7 +14,8 @@ public sealed class UnitDefinition
         bool canAttackAfterMoving,
         int defenseUnits,
         int maxMovesPerTurn,
-        int maxAttacksPerTurn)
+        int maxAttacksPerTurn,
+        bool usesCommittedMoveAction = false)
     {
         if (string.IsNullOrWhiteSpace(typeId))
         {
@@ -33,6 +34,7 @@ public sealed class UnitDefinition
         DefenseUnits = Math.Max(0, defenseUnits);
         MaxMovesPerTurn = Math.Max(1, maxMovesPerTurn);
         MaxAttacksPerTurn = Math.Max(0, maxAttacksPerTurn);
+        UsesCommittedMoveAction = usesCommittedMoveAction;
     }
 
     public string TypeId { get; }
@@ -47,4 +49,5 @@ public sealed class UnitDefinition
     public int DefenseUnits { get; }
     public int MaxMovesPerTurn { get; }
     public int MaxAttacksPerTurn { get; }
+    public bool UsesCommittedMoveAction { get; }
 }

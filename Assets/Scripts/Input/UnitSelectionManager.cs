@@ -14,21 +14,6 @@ public class UnitSelectionManager : MonoBehaviour
 
     private Unit selectedUnit;
 
-    private enum PlannedMoveStatus
-    {
-        Invalid,
-        ReachedTarget,
-        HiddenBlockerStop
-    }
-
-    private struct PlannedMoveResult
-    {
-        public PlannedMoveStatus status;
-        public Vector3 finalWorldPosition;
-        public int actualStepsMoved;
-        public int consumedMoveCount;
-    }
-
     void Awake()
     {
         if (Instance != null && Instance != this)
@@ -282,116 +267,11 @@ public class UnitSelectionManager : MonoBehaviour
             return reachablePaths;
         }
 
-        int remainingMoves = GetRemainingMoveCount(unit);
-        if (remainingMoves <= 0)
-        {
-            return reachablePaths;
-        }
-
-        GridManager grid = turnManager != null ? turnManager.gridManager : null;
-        if (grid == null)
-        {
-            return reachablePaths;
-        }
-
-        return UnitActionRules.BuildReachablePathMap(
-            grid,
-            originTile,
-            remainingMoves,
-            nextTile =>
-            {
-                Unit occupant = GridUtils.GetUnitAtPosition(nextTile.transform.position, unit);
-                return occupant != null && nextTile.isVisibleNow;
-            });
-    }
-
-    private static void SyncUnitCityOccupancy(Unit unit)
-    {
-        if (unit == null)
-        {
-            return;
-        }
-
-        if (unit.currentCity != null && unit.currentCity.stationedUnit == unit.gameObject)
-        {
-            unit.currentCity.stationedUnit = null;
-        }
-
-        unit.currentCity = null;
-
-        City city = GridUtils.GetCityAtPosition(unit.transform.position);
-        if (city == null)
-        {
-            return;
-        }
-
-        city.stationedUnit = unit.gameObject;
-        unit.currentCity = city;
-    }
-
-    private PlannedMoveResult ExecutePlannedPath(Unit unit, List<TileVisibility> path)
-    {
-        PlannedMoveResult invalidResult = new PlannedMoveResult
-        {
-            status = PlannedMoveStatus.Invalid,
-            finalWorldPosition = unit != null ? unit.transform.position : Vector3.zero,
-            actualStepsMoved = 0,
-            consumedMoveCount = 0
-        };
-
-        if (unit == null || path == null || path.Count == 0)
-        {
-            return invalidResult;
-        }
-
-        bool isMultiStepPath = path.Count > 1;
-        Vector3 currentWorldPosition = unit.transform.position;
-        currentWorldPosition.z = unit.transform.position.z;
-        int actualStepsMoved = 0;
-
-        for (int stepIndex = 0; stepIndex < path.Count; stepIndex++)
-        {
-            TileVisibility pathTile = path[stepIndex];
-            if (pathTile == null)
-            {
-                return invalidResult;
-            }
-
-            Vector3 stepWorldPosition = pathTile.transform.position;
-            stepWorldPosition.z = unit.transform.position.z;
-            Unit occupant = GridUtils.GetUnitAtPosition(stepWorldPosition, unit);
-            if (occupant != null)
-            {
-                if (pathTile.isVisibleNow)
-                {
-                    return invalidResult;
-                }
-
-                if (!isMultiStepPath)
-                {
-                    return invalidResult;
-                }
-
-                return new PlannedMoveResult
-                {
-                    status = PlannedMoveStatus.HiddenBlockerStop,
-                    finalWorldPosition = currentWorldPosition,
-                    actualStepsMoved = actualStepsMoved,
-                    consumedMoveCount = actualStepsMoved + 1
-                };
-            }
-
-            currentWorldPosition = stepWorldPosition;
-            actualStepsMoved++;
-        }
-
-        return new PlannedMoveResult
-        {
-            status = PlannedMoveStatus.ReachedTarget,
-            finalWorldPosition = currentWorldPosition,
-            actualStepsMoved = actualStepsMoved,
-            consumedMoveCount = path.Count
-        };
+        if (turnManager == null) return reachablePaths;
+        foreach (LegalTurnAction action in LegalActionService.GetLegalActionsForUnit(turnManager, unit, unit.ownerSeatIndex,
+            turnManager.ComputeVisibilityForSeat(unit.ownerSeatIndex)))
+            if (action.ActionType == LegalActionType.UnitMove) reachablePaths[action.TargetTile] = new List<TileVisibility>(action.Path);
+        return reachablePaths;
     }
 
     public void SelectUnit(Unit unit)
@@ -472,121 +352,18 @@ public class UnitSelectionManager : MonoBehaviour
             return;
         }
 
-        Dictionary<TileVisibility, List<TileVisibility>> reachablePaths = BuildReachablePathMap(selectedUnit, originTile);
-        int stepDistance = GetChebyshevDistance(originTile, targetTile);
-        if (stepDistance <= 0)
-        {
-            ClearSelection();
-            return;
-        }
-
-        // If the unit was stationed in a city, clear that link when it moves away
-        Vector3 newPos = targetWorldPosition;
-        newPos.z = selectedUnit.transform.position.z;
-
-        Unit targetUnit = GridUtils.GetUnitAtPosition(newPos, selectedUnit);
-        bool targetTileHasVisibleOccupant = targetUnit != null && targetTile.isVisibleNow;
-        bool targetTileHasHiddenOccupant = targetUnit != null && !targetTile.isVisibleNow;
-
         bool actionPerformed = false;
-        bool hasPlannedPath = reachablePaths.TryGetValue(targetTile, out List<TileVisibility> plannedPath);
-
-        bool canAttackTarget = targetTileHasVisibleOccupant &&
-                               targetUnit.ownerSeatIndex != selectedUnit.ownerSeatIndex &&
-                               selectedUnit.IsTargetInAttackRange(stepDistance) &&
-                               selectedUnit.CanAttackThisTurn();
-        bool canMoveToEmpty = !targetTileHasVisibleOccupant &&
-                              selectedUnit.CanMoveThisTurn() &&
-                              hasPlannedPath;
-
-        // If we can neither attack nor move, end selection.
-        if (!canAttackTarget && !canMoveToEmpty)
+        foreach (LegalTurnAction legal in LegalActionService.GetLegalActionsForUnit(turnManager, selectedUnit,
+            selectedUnit.ownerSeatIndex, turnManager.ComputeVisibilityForSeat(selectedUnit.ownerSeatIndex)))
         {
-            ClearSelection();
-            return;
+            if (legal.TargetTile != targetTile) continue;
+            actionPerformed = new SceneSimulationAdapter(turnManager).TryApply(legal);
+            break;
         }
-
-        // Determine what is on the target tile (ally/enemy/empty)
-        if (targetUnit != null && !targetTileHasHiddenOccupant)
-        {
-            // Friendly unit: cannot move onto the same tile
-            if (targetUnit.ownerSeatIndex == selectedUnit.ownerSeatIndex)
-            {
-                ClearSelection();
-                return;
-            }
-
-            if (!canAttackTarget)
-            {
-                ClearSelection();
-                return;
-            }
-
-            // Enemy unit: attack instead of moving onto the tile.
-            // Allow this even after moving once this turn, but only once.
-            selectedUnit.RegisterAttack();
-            selectedUnit.RegisterMove();
-            selectedUnit.UpdateMoveOutline(isActiveTurnForUnit);
-
-            bool killed = selectedUnit.Attack(targetUnit);
-            actionPerformed = true;
-
-            // If the defender died, move into their tile
-            if (killed && selectedUnit.AdvancesIntoDefenderTileOnKill)
-            {
-                selectedUnit.transform.position = newPos;
-                SyncUnitCityOccupancy(selectedUnit);
-                if (SoundManager.Instance != null)
-                {
-                    SoundManager.Instance.PlayMove();
-                }
-
-            }
-        }
-        else if (canMoveToEmpty)
-        {
-            PlannedMoveResult plannedMove = ExecutePlannedPath(selectedUnit, plannedPath);
-            if (plannedMove.status == PlannedMoveStatus.Invalid || plannedMove.consumedMoveCount <= 0)
-            {
-                ClearSelection();
-                return;
-            }
-
-            if (plannedMove.actualStepsMoved > 0)
-            {
-                selectedUnit.transform.position = plannedMove.finalWorldPosition;
-                SyncUnitCityOccupancy(selectedUnit);
-                if (SoundManager.Instance != null)
-                {
-                    SoundManager.Instance.PlayMove();
-                }
-            }
-
-            selectedUnit.RegisterMove(plannedMove.consumedMoveCount);
-            if (plannedMove.status == PlannedMoveStatus.HiddenBlockerStop)
-            {
-                selectedUnit.ConsumeRemainingAttacksForTurn();
-            }
-
-            selectedUnit.UpdateMoveOutline(isActiveTurnForUnit);
-            actionPerformed = plannedMove.actualStepsMoved > 0 || plannedMove.status == PlannedMoveStatus.HiddenBlockerStop;
-        }
-
-        // Update fog visibility after movement/attack
-        if (turnManager != null)
-        {
-            turnManager.RecalculatePlayerVisibility();
-
-            if (turnManager.gameOver)
-                return;
-
-            City city = GridUtils.GetCityAtPosition(selectedUnit.transform.position);
-            if (city != null && city.ownerSeatIndex != selectedUnit.ownerSeatIndex)
-            {
-                turnManager.OnCityCaptured(selectedUnit.ownerSeatIndex, city);
-                return;
-            }
-        }
+        if (!actionPerformed) { ClearSelection(); return; }
+        turnManager.RecalculatePlayerVisibility();
+        if (turnManager.gameOver) return;
+        selectedUnit.UpdateMoveOutline(isActiveTurnForUnit);
 
         // If this unit has no moves left, deselect it. Otherwise, update reachable tiles.
         if (!selectedUnit.CanMoveThisTurn())

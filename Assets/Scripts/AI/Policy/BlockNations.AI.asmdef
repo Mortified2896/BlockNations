@@ -1,7 +1,7 @@
 {
     "name": "BlockNations.AI",
     "rootNamespace": "BlockNations.AI",
-    "references": [],
+    "references": ["BlockNations.Simulation"],
     "autoReferenced": true,
     "noEngineReferences": true
 }

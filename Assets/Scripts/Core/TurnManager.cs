@@ -4201,23 +4201,7 @@ public partial class TurnManager : MonoBehaviour
         if (gameOver)
             return;
 
-        int baseIncome = 0;
-        City[] cities = Object.FindObjectsByType<City>();
-        foreach (City city in cities)
-        {
-            if (city != null && city.ownerSeatIndex == ownerSeatIndex)
-            {
-                baseIncome += goldPerCity;
-            }
-        }
-
-        int income = ownerSeatIndex == 1 && currentMode != GameMode.PlayByPost
-            ? ResolveAIGoldIncome(baseIncome, turnNumber)
-            : baseIncome;
-        if (income > 0)
-        {
-            AddGoldForSeat(ownerSeatIndex, income);
-        }
+        if (gridManager != null) new SceneSimulationAdapter(this).CollectIncome(ownerSeatIndex);
     }
 
     private void CollectIncomeForSide(bool sideIsPlayerOwned)
@@ -4238,29 +4222,18 @@ public partial class TurnManager : MonoBehaviour
             SoundManager.Instance.PlayTurnStart();
         }
 
-        ResetRecruitmentForSeat(seatIndex);
-
-        if (externallyDrivenMatch)
-            foreach (Unit unit in Object.FindObjectsByType<Unit>())
-                if (unit.ownerSeatIndex == seatIndex) unit.ResetMovementForTurn();
+        // Reset action/recruitment resources and grant income through the same
+        // rules used by the direct training environment. UI/transport stay here.
+        new SceneSimulationAdapter(this).BeginTurn(seatIndex);
 
         if (UnitSelectionManager.Instance != null)
         {
-            UnitSelectionManager.Instance.ResetMovementForSeat(seatIndex, IsCurrentSideOwner(seatIndex));
+            UnitSelectionManager.Instance.RefreshMoveOutlinesForCurrentTurn();
             UnitSelectionManager.Instance.ClearSelection();
         }
+        if (TileHoverManager.Instance != null) TileHoverManager.Instance.ClearSelection();
+        if (CityUIManager.Instance != null) CityUIManager.Instance.ClosePanel();
 
-        if (TileHoverManager.Instance != null)
-        {
-            TileHoverManager.Instance.ClearSelection();
-        }
-
-        if (CityUIManager.Instance != null)
-        {
-            CityUIManager.Instance.ClosePanel();
-        }
-
-        CollectIncomeForSeat(seatIndex);
         RecalculatePlayerVisibility();
 
         ScheduleAutoEndTurnCheck();
@@ -4660,8 +4633,8 @@ public partial class TurnManager : MonoBehaviour
     private void AdvanceVsAITurnAfterSeat(int completedSeatIndex)
     {
         if (!IsTurnOwnedBySeat(completedSeatIndex)) return;
-        int nextSeatIndex = (completedSeatIndex + 1) % GetRuntimeSeatCount();
-        if (nextSeatIndex == 0) turnNumber++;
+        int nextSeatIndex = BlockNations.Simulation.SimulationRules.NextSeat(completedSeatIndex, GetRuntimeSeatCount());
+        turnNumber = BlockNations.Simulation.SimulationRules.NextRound(turnNumber, nextSeatIndex, 0);
         SetCurrentTurnSeatIndexForRuntime(nextSeatIndex, GetRuntimeSeatCount());
     }
 
@@ -5431,35 +5404,7 @@ public partial class TurnManager : MonoBehaviour
             return false;
         }
 
-        Vector3 destination = targetTile.transform.position;
-        destination.z = unit.transform.position.z;
-        if (GridUtils.GetUnitAtPosition(destination, unit) != null)
-        {
-            return false;
-        }
-
-        if (unit.currentCity != null)
-        {
-            unit.currentCity.stationedUnit = null;
-            unit.currentCity = null;
-        }
-
-        unit.transform.position = destination;
-        int consumedMoveCount = legalMove.Value.Path != null ? Mathf.Max(1, legalMove.Value.Path.Count) : 1;
-        unit.RegisterMove(consumedMoveCount);
-
-        if (SoundManager.Instance != null && !ShouldSuppressAIVsAIAudio())
-        {
-            SoundManager.Instance.PlayMove();
-        }
-
-        City city = GridUtils.GetCityAtPosition(unit.transform.position);
-        if (city != null && city.ownerSeatIndex != unit.ownerSeatIndex)
-        {
-            OnCityCaptured(unit.ownerSeatIndex, city);
-        }
-
-        return true;
+        return new SceneSimulationAdapter(this).TryApply(legalMove.Value);
     }
 
     private bool TryExecuteTacticalAttackStep(
@@ -5493,26 +5438,7 @@ public partial class TurnManager : MonoBehaviour
             return false;
         }
 
-        Vector3 targetPosition = target.transform.position;
-        targetPosition.z = unit.transform.position.z;
-        unit.RegisterAttack();
-        bool killed = unit.Attack(target);
-        if (killed && unit.AdvancesIntoDefenderTileOnKill)
-        {
-            unit.transform.position = targetPosition;
-            if (SoundManager.Instance != null && !ShouldSuppressAIVsAIAudio())
-            {
-                SoundManager.Instance.PlayMove();
-            }
-        }
-
-        City city = GridUtils.GetCityAtPosition(unit.transform.position);
-        if (city != null && city.ownerSeatIndex != unit.ownerSeatIndex)
-        {
-            OnCityCaptured(unit.ownerSeatIndex, city);
-        }
-
-        return true;
+        return TryApplyLegacyAttack(unit, target, visibleTiles);
     }
 
     private Dictionary<City, List<LegalTurnAction>> BuildLegalAIRecruitActionsByCity(
@@ -5923,24 +5849,7 @@ public partial class TurnManager : MonoBehaviour
             return false;
         }
 
-        unit.RegisterAttack();
-        bool killed = unit.Attack(bestEnemy);
-        if (killed && unit.AdvancesIntoDefenderTileOnKill)
-        {
-            unit.transform.position = bestEnemy.transform.position;
-            if (SoundManager.Instance != null && !ShouldSuppressAIVsAIAudio())
-            {
-                SoundManager.Instance.PlayMove();
-            }
-        }
-
-        City city = GridUtils.GetCityAtPosition(unit.transform.position);
-        if (city != null && city.ownerSeatIndex != unit.ownerSeatIndex)
-        {
-            OnCityCaptured(unit.ownerSeatIndex, city);
-        }
-
-        return true;
+        return TryApplyLegacyAttack(unit, bestEnemy, visibleTiles);
     }
 
     private List<LegalTurnAction> GetLegalAIUnitActions(Unit unit, HashSet<TileVisibility> visibleTiles)
@@ -6082,25 +5991,12 @@ public partial class TurnManager : MonoBehaviour
                 out Vector3 chosenDestination))
             return;
 
-        if (unit.currentCity != null)
-        {
-            unit.currentCity.stationedUnit = null;
-            unit.currentCity = null;
-        }
-
-        unit.transform.position = chosenDestination;
-        unit.RegisterMove();
-
-        if (SoundManager.Instance != null && !ShouldSuppressAIVsAIAudio())
-        {
-            SoundManager.Instance.PlayMove();
-        }
-
-        City city = GridUtils.GetCityAtPosition(unit.transform.position);
-        if (city != null && city.ownerSeatIndex != unit.ownerSeatIndex)
-        {
-            OnCityCaptured(unit.ownerSeatIndex, city);
-        }
+        foreach (LegalTurnAction action in legalMoveActions)
+            if ((action.TargetTile.transform.position - chosenDestination).sqrMagnitude < .0001f)
+            {
+                new SceneSimulationAdapter(this).TryApply(action);
+                return;
+            }
     }
 
     void MoveAIUnitOneStep(
@@ -6142,122 +6038,25 @@ public partial class TurnManager : MonoBehaviour
         newPos.z = from.z;
 
         Unit targetUnit = GridUtils.GetUnitAtPosition(newPos, unit);
+        bool applied = false;
         if (targetUnit != null)
         {
-            // Same owner: do not move onto this tile
-            if (targetUnit.ownerSeatIndex == unit.ownerSeatIndex)
-            {
-                return;
-            }
-
-            if (!unit.CanAttackThisTurn() || unit.AttackRange > 1)
-            {
-                return;
-            }
-
-            bool hasLegalAttack = false;
-            List<LegalTurnAction> legalActions = GetLegalAIUnitActions(unit, aiVisibleTiles);
-            for (int i = 0; i < legalActions.Count; i++)
-            {
-                LegalTurnAction action = legalActions[i];
-                if (action.ActionType == LegalActionType.UnitAttack && action.TargetUnit == targetUnit)
-                {
-                    hasLegalAttack = true;
-                    break;
-                }
-            }
-
-            if (!hasLegalAttack)
-            {
-                return;
-            }
-
-            if (unit.currentCity != null)
-            {
-                unit.currentCity.stationedUnit = null;
-                unit.currentCity = null;
-            }
-
-            // Enemy: attack
-            unit.RegisterAttack();
-            unit.RegisterMove();
-            bool killed = unit.Attack(targetUnit);
-
-            if (killed && unit.AdvancesIntoDefenderTileOnKill)
-            {
-                unit.transform.position = newPos;
-
-                if (SoundManager.Instance != null && !ShouldSuppressAIVsAIAudio())
-                {
-                    SoundManager.Instance.PlayMove();
-                }
-            }
+            if (targetUnit.ownerSeatIndex == unit.ownerSeatIndex || unit.AttackRange > 1) return;
+            applied = TryApplyLegacyAttack(unit, targetUnit, aiVisibleTiles);
         }
         else
         {
-            bool hasLegalMove = false;
-            List<LegalTurnAction> legalMoveActions = GetLegalAIUnitMoveActions(unit, aiVisibleTiles);
-            for (int i = 0; i < legalMoveActions.Count; i++)
+            foreach (LegalTurnAction action in GetLegalAIUnitMoveActions(unit, aiVisibleTiles))
             {
-                LegalTurnAction action = legalMoveActions[i];
-                Vector3 legalTargetPosition = action.TargetTile.transform.position;
-                legalTargetPosition.z = newPos.z;
-                if ((legalTargetPosition - newPos).sqrMagnitude < 0.0001f)
-                {
-                    newPos = legalTargetPosition;
-                    hasLegalMove = true;
-                    break;
-                }
-            }
-
-            if (!hasLegalMove)
-            {
-                return;
-            }
-
-            // If the unit was stationed in a city, clear that link when it moves away.
-            if (unit.currentCity != null)
-            {
-                unit.currentCity.stationedUnit = null;
-                unit.currentCity = null;
-            }
-
-            // Empty tile: move normally
-            unit.transform.position = newPos;
-            unit.RegisterMove();
-
-            if (SoundManager.Instance != null && !ShouldSuppressAIVsAIAudio())
-            {
-                SoundManager.Instance.PlayMove();
+                Vector3 destination = action.TargetTile.transform.position; destination.z = newPos.z;
+                if ((destination - newPos).sqrMagnitude >= .0001f) continue;
+                applied = new SceneSimulationAdapter(this).TryApply(action);
+                break;
             }
         }
-
-        // After moving, if the AI unit has not attacked yet,
-        // look for an enemy within attack range (move-then-attack).
-        if (unit.CanAttackThisTurn())
-        {
-            List<Unit> legalAttackTargets = GetLegalAIUnitAttackTargets(unit, aiVisibleTiles);
-            Unit bestEnemy = SelectBestLocalAttackTarget(unit, legalAttackTargets);
-
-            if (bestEnemy != null)
-            {
-                unit.RegisterAttack();
-                unit.RegisterMove();
-                bool killed = unit.Attack(bestEnemy);
-
-                if (killed && unit.AdvancesIntoDefenderTileOnKill)
-                {
-                    unit.transform.position = bestEnemy.transform.position;
-                }
-            }
-        }
-
-        // Check for city capture after moving or killing
-        City city = GridUtils.GetCityAtPosition(unit.transform.position);
-        if (city != null && city.ownerSeatIndex != unit.ownerSeatIndex)
-        {
-            OnCityCaptured(unit.ownerSeatIndex, city);
-        }
+        if (!applied || gameOver || !unit.CanAttackThisTurn()) return;
+        Unit bestEnemy = SelectBestLocalAttackTarget(unit, GetLegalAIUnitAttackTargets(unit, aiVisibleTiles));
+        if (bestEnemy != null) TryApplyLegacyAttack(unit, bestEnemy, aiVisibleTiles);
     }
 
     public void OnCityCaptured(int capturedBySeatIndex, City capturedCity = null)
@@ -6945,46 +6744,8 @@ public partial class TurnManager : MonoBehaviour
     }
 #endif
 
-    void CollectPlayerIncome()
-    {
-        if (gameOver) return;
-
-        int income = 0;
-        City[] cities = Object.FindObjectsByType<City>();
-        foreach (City city in cities)
-        {
-            if (city.isPlayerOwned)
-            {
-                income += goldPerCity;
-            }
-        }
-
-        if (income > 0)
-        {
-            AddGold(true, income);
-        }
-    }
-
-    void CollectAIGold()
-    {
-        if (gameOver) return;
-
-        int baseIncome = 0;
-        City[] cities = Object.FindObjectsByType<City>();
-        foreach (City city in cities)
-        {
-            if (!city.isPlayerOwned)
-            {
-                baseIncome += goldPerCity;
-            }
-        }
-
-        int income = ResolveAIGoldIncome(baseIncome, turnNumber);
-        if (income > 0)
-        {
-            AddGold(false, income);
-        }
-    }
+    void CollectPlayerIncome() => CollectIncomeForSeat(0);
+    void CollectAIGold() => CollectIncomeForSeat(1);
 
     /// <summary>
     /// Computes which tiles are currently visible for a given side
@@ -6994,58 +6755,8 @@ public partial class TurnManager : MonoBehaviour
     /// </summary>
     internal HashSet<TileVisibility> ComputeVisibilityForSeat(int ownerSeatIndex)
     {
-        HashSet<TileVisibility> visibleTiles = new HashSet<TileVisibility>();
-
-        if (gridManager == null)
-            return visibleTiles;
-
-        // Reveal around cities owned by this side
-        City[] cities = Object.FindObjectsByType<City>();
-        foreach (City city in cities)
-        {
-            if (city.ownerSeatIndex != ownerSeatIndex)
-                continue;
-
-            for (int dx = -visibilityRadius; dx <= visibilityRadius; dx++)
-            {
-                for (int dy = -visibilityRadius; dy <= visibilityRadius; dy++)
-                {
-                    int tx = city.x + dx;
-                    int ty = city.y + dy;
-                    if (gridManager.TryGetTile(tx, ty, out TileVisibility tile))
-                    {
-                        visibleTiles.Add(tile);
-                    }
-                }
-            }
-        }
-
-        // Reveal around units owned by this side
-        Unit[] units = Object.FindObjectsByType<Unit>();
-        foreach (Unit unit in units)
-        {
-            if (unit.ownerSeatIndex != ownerSeatIndex)
-                continue;
-
-            if (!gridManager.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility originTile))
-                continue;
-
-            int unitVisionRange = Mathf.Max(1, unit.VisionRange);
-            for (int dx = -unitVisionRange; dx <= unitVisionRange; dx++)
-            {
-                for (int dy = -unitVisionRange; dy <= unitVisionRange; dy++)
-                {
-                    int tx = originTile.gridX + dx;
-                    int ty = originTile.gridY + dy;
-                    if (gridManager.TryGetTile(tx, ty, out TileVisibility tile))
-                    {
-                        visibleTiles.Add(tile);
-                    }
-                }
-            }
-        }
-
-        return visibleTiles;
+        return gridManager == null ? new HashSet<TileVisibility>() :
+            new SceneSimulationAdapter(this).VisibilityForSeat(ownerSeatIndex);
     }
 
     HashSet<TileVisibility> ComputeVisibilityForSide(bool sideIsPlayerOwned)

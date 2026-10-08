@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using BlockNations.AI;
+using BlockNations.Simulation;
 using Unity.MLAgents;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -34,6 +35,12 @@ public sealed class TrainingArena : MonoBehaviour
     private TrainingMatchJournal matchJournal;
     private bool ratingCheck;
     private readonly SeatAIObservationSource observationSource = new SeatAIObservationSource();
+    private readonly SimulationObservationSource simulationObservations = new SimulationObservationSource();
+    private MatchState simulation;
+    private SimulationReplayProjector simulationReplay;
+    private List<UnitDefinition> simulationRoster;
+    private bool directSimulation = true;
+    private int originalCameraCullingMask;
     private System.Random random;
     private bool ready, needsReset, ending;
     private bool previousBackground, previousAutomaticStepping;
@@ -53,8 +60,10 @@ public sealed class TrainingArena : MonoBehaviour
     public int TrainerResets { get; private set; }
     public string LastAction { get; private set; } = "Waiting for trainer";
     public string Failure { get; private set; }
-    public int Round => turnManager != null ? turnManager.turnNumber : 0;
-    public int ActingSeat => turnManager != null ? turnManager.currentTurnSeatIndex : -1;
+    public int Round => simulation != null ? simulation.Round : turnManager != null ? turnManager.turnNumber : 0;
+    public int ActingSeat => simulation != null ? simulation.CurrentTurnSeat : turnManager != null ? turnManager.currentTurnSeatIndex : -1;
+    public bool UsesDirectSimulation => requireTrainer && directSimulation && !IsHumanPlaytest;
+    public string SimulationVersion => SimulationRules.Version;
     public int CurriculumDistance => curriculumDistance;
     public int BoardSize => boardSize;
     public Color SpectatorBackgroundColor => boardCamera.backgroundColor;
@@ -86,7 +95,7 @@ public sealed class TrainingArena : MonoBehaviour
     public bool CanEndHumanTurn => IsHumanPlaytest && turnManager != null && !needsReset &&
         !Paused && turnManager.IsTurnOwnedBySeat(humanSeatIndex) && !turnManager.gameOver;
     public double Elapsed => Math.Max(0, Time.realtimeSinceStartupAsDouble - startedAt);
-    public int GoldForSeat(int seat) => turnManager != null ? turnManager.GetGoldForSeat(seat) : 0;
+    public int GoldForSeat(int seat) => simulation != null ? simulation.GoldForSeat(seat) : turnManager != null ? turnManager.GetGoldForSeat(seat) : 0;
     public void EndHumanTurn() { if (CanEndHumanTurn) turnManager.TryAdvanceExternalMatchTurn(humanSeatIndex); }
     public void NewHumanMatch() { if (CanStartNewMatch) { Paused = false; ResetMatch(); } }
     public int NextRandom(int exclusiveMaximum) => random.Next(exclusiveMaximum);
@@ -135,6 +144,7 @@ public sealed class TrainingArena : MonoBehaviour
         for (int i = 0; i + 1 < arguments.Length; i++)
         {
             if (arguments[i] == "--rating-check" && bool.TryParse(arguments[++i], out bool check)) ratingCheck = check;
+            else if (arguments[i] == "--training-simulation") directSimulation = arguments[++i] != "scene";
             else if (arguments[i] == "--training-board-size" && int.TryParse(arguments[++i], out int configuredSize)) boardSize = configuredSize;
             else if (arguments[i] == "--training-status") statusPath = arguments[++i];
             else if (arguments[i] == "--training-seed" && int.TryParse(arguments[++i], out int configuredSeed)) seed = configuredSeed;
@@ -151,6 +161,7 @@ public sealed class TrainingArena : MonoBehaviour
             throw new InvalidOperationException("Training arena needs explicitly wired two-seat agents, external TurnManager, and camera.");
         originalCameraRect = boardCamera.rect;
         originalCameraBackground = boardCamera.backgroundColor;
+        originalCameraCullingMask = boardCamera.cullingMask;
         cameraPresentationInitialized = true;
         if (requireTrainer)
         {
@@ -190,6 +201,15 @@ public sealed class TrainingArena : MonoBehaviour
         Academy.Instance.EnvironmentStep();
         if (trainerStopping) yield break;
         while (!turnManager.ExternalMatchReady) yield return null;
+        if (UsesDirectSimulation)
+        {
+            simulationRoster = turnManager.GetRecruitableOfficialUnitDefinitions();
+            simulationRoster.RemoveAll(definition => turnManager.GetUnitPrefabForType(definition.TypeId) == null);
+            var opening = new SceneSimulationAdapter(turnManager).State;
+            simulationReplay = new SimulationReplayProjector(turnManager, opening);
+            // The spectator draws cached copies; stale scene sprites never form a second board.
+            boardCamera.cullingMask = 0;
+        }
         startedAt = Time.realtimeSinceStartupAsDouble;
         ready = true;
         ResetMatch();
@@ -205,21 +225,28 @@ public sealed class TrainingArena : MonoBehaviour
             if (humanSeatIndex >= 0) { Paused = true; WriteStatusIfDue(); return; }
             ResetMatch();
         }
-        for (int decision = 0; decision < decisionsPerFrame && !needsReset && !Paused; decision++)
+        // Direct training is independent of rendered frames. Bound the batch by
+        // both decisions and wall time so the spectator/input still gets frames.
+        int decisionLimit = UsesDirectSimulation && requireTrainer ? 16 : decisionsPerFrame;
+        double frameDeadline = Time.realtimeSinceStartupAsDouble + .025;
+        for (int decision = 0; decision < decisionLimit && !needsReset && !Paused; decision++)
         {
-            if (turnManager.gameOver) { FinishMatch(false); break; }
-            if (turnManager.turnNumber > matchRoundLimit || matchDecisions >= 20000) { FinishMatch(true); break; }
-            int seat = turnManager.currentTurnSeatIndex;
+            if (decision > 0 && Time.realtimeSinceStartupAsDouble >= frameDeadline) break;
+            if (MatchGameOver) { FinishMatch(false); break; }
+            if (Round > matchRoundLimit || matchDecisions >= 20000) { FinishMatch(true); break; }
+            int seat = ActingSeat;
             if (seat == humanSeatIndex) break;
             TrainingSeatAgent agent = seats[seat];
-            agent.PrepareDecision(observationSource.Observe(turnManager, seat));
+            if (simulation != null) agent.PrepareDecision(simulationObservations.Observe(simulation, seat));
+            else agent.PrepareDecision(observationSource.Observe(turnManager, seat));
             Academy.Instance.EnvironmentStep();
         }
         WriteStatusIfDue();
     }
 
     public bool CanAct(int seat) => ready && !ending && !needsReset && !Paused && !trainerStopping &&
-        SeatAIActionExecutor.CanAct(turnManager, seat);
+        (simulation != null ? simulation.IsTurnOwnedBySeat(seat) : SeatAIActionExecutor.CanAct(turnManager, seat));
+    private bool MatchGameOver => simulation != null ? simulation.GameOver : turnManager.gameOver;
 
     public void RecordDecision() { Decisions++; matchDecisions++; if (ActingSeat >= 0 && ActingSeat < 2) matchSeatDecisions[ActingSeat]++; if (requireTrainer) progress.decisions++; }
 
@@ -247,11 +274,31 @@ public sealed class TrainingArena : MonoBehaviour
         turnActions = action.ActionType == LegalActionType.EndTurn ? 0 : turnActions + 1;
         LastAction = replayAction ?? action.ActionType + " by seat " + action.SeatIndex;
         turnManager.RecalculatePlayerVisibility();
-        if (turnManager.gameOver) FinishMatch(false);
+        if (MatchGameOver) FinishMatch(false);
         else if (turnActions > 4096) FinishMatch(true);
         else if (requireTrainer) Replay.Record(TrainingReplayRecorder.Capture(turnManager, replayAction));
         return true;
     }
+
+    public bool Execute(MatchCommand command)
+    {
+        if (simulation == null || !CanAct(command.Seat)) return false;
+        string replayAction = requireTrainer ? SimulationReplayProjector.Describe(simulation, command) : null;
+        RecordDecision();
+        if (!MatchEngine.Apply(simulation, command).Applied) return false;
+        Actions++;
+        turnActions = command.Kind == MatchActionKind.EndTurn ? 0 : turnActions + 1;
+        LastAction = replayAction ?? command.Kind + " by seat " + command.Seat;
+        if (simulation.GameOver) FinishMatch(false);
+        else if (turnActions > 4096) FinishMatch(true);
+        else if (requireTrainer) Replay.Record(CaptureFrame(replayAction));
+        return true;
+    }
+
+    private TrainingReplayHistory.Frame CaptureFrame(string description) => simulation != null ?
+        simulationReplay.Capture(simulation, description) : TrainingReplayRecorder.Capture(turnManager, description);
+    private AIObservation ObserveSeat(int seat) => simulation != null ?
+        simulationObservations.Observe(simulation, seat).Observation : observationSource.Observe(turnManager, seat).Observation;
 
     public void RejectAction(string reason)
     {
@@ -263,7 +310,7 @@ public sealed class TrainingArena : MonoBehaviour
     private void FinishMatch(bool interrupted)
     {
         ending = true;
-        int winner = turnManager.ExternalWinnerSeatIndex;
+        int winner = simulation != null ? simulation.WinnerSeat : turnManager.ExternalWinnerSeatIndex;
         if (!interrupted && (winner < 0 || winner > 1)) { Fail("Terminal match has no capture winner."); return; }
         if (matchJournal != null)
         {
@@ -272,11 +319,11 @@ public sealed class TrainingArena : MonoBehaviour
         }
         foreach (TrainingSeatAgent agent in seats)
         {
-            agent.PrepareTerminalObservation(observationSource.Observe(turnManager, agent.SeatIndex).Observation);
+            agent.PrepareTerminalObservation(ObserveSeat(agent.SeatIndex));
             if (interrupted) agent.EpisodeInterrupted();
             else { agent.AddReward(agent.SeatIndex == winner ? 1f : -1f); agent.EndEpisode(); }
         }
-        if (requireTrainer) Replay.Complete(TrainingReplayRecorder.Capture(turnManager, interrupted ?
+        if (requireTrainer) Replay.Complete(CaptureFrame(interrupted ?
             "Match interrupted at turn/action limit" : LastAction + " · " + (winner == 0 ? "Blue" : "Red") + " captures city and wins"));
         Games++;
         if (requireTrainer) progress.RecordMatch(fullOpening, interrupted, winner, firstSeat);
@@ -305,30 +352,65 @@ public sealed class TrainingArena : MonoBehaviour
         matchDecisions = turnActions = 0;
         matchSeatDecisions[0] = matchSeatDecisions[1] = 0;
         observationSource.ResetKnowledge();
+        simulationObservations.ResetKnowledge();
         foreach (TrainingSeatAgent agent in seats) agent.OnEpisodeBegin();
         fullOpening = humanSeatIndex >= 0 || !useCurriculum || random.Next(5) == 0;
         matchRoundLimit = fullOpening ? maxRounds : Math.Min(maxRounds, 30);
-        turnManager.ResetExternalMatch(fullOpening ? 2 : 4, humanSeatIndex >= 0 ? humanSeatIndex : ratingCheck ? Games % 2 : random.Next(2));
+        int startingSeat = humanSeatIndex >= 0 ? humanSeatIndex : ratingCheck ? Games % 2 : random.Next(2);
+        if (UsesDirectSimulation) ResetSimulation(startingSeat);
+        else turnManager.ResetExternalMatch(fullOpening ? 2 : 4, startingSeat);
         firstSeat = ActingSeat;
-        if (!fullOpening) ConfigureCurriculumOpening();
+        if (!fullOpening && simulation == null) ConfigureCurriculumOpening();
         if (matchJournal != null)
         {
             try { matchJournal.Begin(Games + 1, ActingSeat); }
             catch (IOException error) { Fail("Cannot record match opening: " + error.Message); return; }
         }
         var publicCities = new List<AICityState>();
-        foreach (City city in Object.FindObjectsByType<City>())
-            if (city.gameObject.scene == gameObject.scene)
-                publicCities.Add(new AICityState { Seat = city.ownerSeatIndex, X = city.x, Y = city.y });
+        if (simulation != null)
+            foreach (SimulationCity city in simulation.Cities)
+                publicCities.Add(new AICityState { Seat = city.Seat, X = city.Position % boardSize, Y = city.Position / boardSize });
+        else
+            foreach (City city in Object.FindObjectsByType<City>())
+                if (city.gameObject.scene == gameObject.scene)
+                    publicCities.Add(new AICityState { Seat = city.ownerSeatIndex, X = city.x, Y = city.y });
         observationSource.SetPublicStartingCities(publicCities.ToArray());
+        simulationObservations.SetPublicStartingCities(publicCities.ToArray());
         if (requireTrainer) Replay.Begin(Games + 1, boardSize, ActingSeat,
-            TrainingReplayRecorder.Capture(turnManager, (ActingSeat == 0 ? "Blue" : "Red") + " moves first"));
+            CaptureFrame((ActingSeat == 0 ? "Blue" : "Red") + " moves first"));
         startingDistance = publicCities.Count == 2 ? Math.Max(Math.Abs(publicCities[0].X - publicCities[1].X),
             Math.Abs(publicCities[0].Y - publicCities[1].Y)) : 0;
-        turnManager.RecalculatePlayerVisibility();
+        if (simulation == null) turnManager.RecalculatePlayerVisibility();
         boardCamera.transform.position = new Vector3(0, 0, boardCamera.transform.position.z);
         UpdateViewport(force: true);
         LastAction = "Match " + (Games + 1) + (fullOpening ? " — full opening" : " — curriculum distance " + startingDistance);
+    }
+
+    private void ResetSimulation(int startingSeat)
+    {
+        simulation = new MatchState(boardSize, boardSize, 2, simulationRoster, startingSeat, 1,
+            turnManager.visibilityRadius, turnManager.goldPerCity, firstSeat: startingSeat);
+        int low = 1, high = boardSize - 2;
+        bool mirror = false;
+        if (!fullOpening)
+        {
+            int distance = random.Next(4) == 0 ? Math.Max(2, curriculumDistance - 2) : curriculumDistance;
+            low = (boardSize - 1 - distance) / 2; high = low + distance;
+            mirror = random.Next(2) == 0;
+        }
+        for (int seat = 0; seat < 2; seat++)
+        {
+            int coordinate = (seat == 0) != mirror ? low : high;
+            int position = simulation.Position(coordinate, coordinate);
+            simulation.AddCity(new SimulationCity(seat + 1, seat, position));
+            simulation.SetGold(seat, fullOpening ? 2 : 4);
+            if (!fullOpening)
+            {
+                UnitDefinition type = simulation.Roster[random.Next(simulation.Roster.Count)];
+                simulation.AddUnit(new SimulationUnit(seat + 1, seat, position, type));
+            }
+        }
+        MatchEngine.BeginTurn(simulation, startingSeat);
     }
 
     private void ConfigureCurriculumOpening()
@@ -367,7 +449,7 @@ public sealed class TrainingArena : MonoBehaviour
         public double elapsedSeconds, decisionsPerSecond;
         public bool paused, trainerConnected, fullOpening;
         public int gold0, gold1, startingDistance, boardSize, schema;
-        public string lastAction, failure;
+        public string lastAction, failure, simulationVersion, simulationBackend;
     }
 
     private void WriteStatusIfDue(bool force = false)
@@ -410,6 +492,7 @@ public sealed class TrainingArena : MonoBehaviour
         var state = new ArenaStatus { decisions = Decisions, actions = Actions, games = Games, captures = Captures,
             interruptions = Interruptions, rejections = Rejections, round = Round, seat = ActingSeat,
             trainerResets = TrainerResets,
+            simulationVersion = SimulationVersion, simulationBackend = simulation != null ? "direct-csharp" : "scene-adapter",
             curriculumDistance = curriculumDistance, seed = seed, elapsedSeconds = elapsed,
             roundLimit = matchRoundLimit, fullOpening = fullOpening, startingDistance = startingDistance,
             gold0 = GoldForSeat(0), gold1 = GoldForSeat(1), boardSize = boardSize, schema = LearnedActionSchema.Version,
@@ -450,6 +533,7 @@ public sealed class TrainingArena : MonoBehaviour
         {
             boardCamera.rect = originalCameraRect;
             boardCamera.backgroundColor = originalCameraBackground;
+            boardCamera.cullingMask = originalCameraCullingMask;
         }
         if (trainerCommunicator != null) trainerCommunicator.QuitCommandReceived -= TrainerClosed;
         if (registeredTrainerFactory) CommunicatorFactory.ClearCreator();
