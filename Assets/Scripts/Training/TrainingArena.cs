@@ -29,12 +29,15 @@ public sealed class TrainingArena : MonoBehaviour
     private int startingDistance, viewportWidth, viewportHeight;
     private Rect originalCameraRect;
     private string progressPath;
+    private TrainingMatchJournal matchJournal;
+    private bool ratingCheck;
     private readonly SeatAIObservationSource observationSource = new SeatAIObservationSource();
     private System.Random random;
     private bool ready, needsReset, ending;
     private bool previousBackground, previousAutomaticStepping;
     private bool previousCommunicatorEnabled, registeredTrainerFactory, trainerStopping;
     private ICommunicator trainerCommunicator;
+    private readonly int[] matchSeatDecisions = new int[2];
     private int matchDecisions, turnActions, recentCaptures, recentGames, curriculumDistance = 2, matchRoundLimit;
     private double nextStatusTime, startedAt;
     private readonly Queue<bool> recentResults = new Queue<bool>();
@@ -69,6 +72,7 @@ public sealed class TrainingArena : MonoBehaviour
     }
     public bool IsHumanPlaytest => humanSeatIndex >= 0;
     public bool IsTraining => requireTrainer;
+    public bool IsRatingCheck => ratingCheck;
     public int HumanSeat => humanSeatIndex;
     public int RoundLimit => matchRoundLimit;
     public bool FullOpening => fullOpening;
@@ -126,7 +130,8 @@ public sealed class TrainingArena : MonoBehaviour
         string[] arguments = Environment.GetCommandLineArgs();
         for (int i = 0; i + 1 < arguments.Length; i++)
         {
-            if (arguments[i] == "--training-board-size" && int.TryParse(arguments[++i], out int configuredSize)) boardSize = configuredSize;
+            if (arguments[i] == "--rating-check" && bool.TryParse(arguments[++i], out bool check)) ratingCheck = check;
+            else if (arguments[i] == "--training-board-size" && int.TryParse(arguments[++i], out int configuredSize)) boardSize = configuredSize;
             else if (arguments[i] == "--training-status") statusPath = arguments[++i];
             else if (arguments[i] == "--training-seed" && int.TryParse(arguments[++i], out int configuredSeed)) seed = configuredSeed;
             else if (arguments[i] == "--training-curriculum" && bool.TryParse(arguments[++i], out bool configuredCurriculum)) useCurriculum = configuredCurriculum;
@@ -143,6 +148,7 @@ public sealed class TrainingArena : MonoBehaviour
         originalCameraRect = boardCamera.rect;
         if (requireTrainer && !string.IsNullOrEmpty(statusPath))
         {
+            matchJournal = new TrainingMatchJournal(Path.GetDirectoryName(statusPath), boardSize);
             progress = new TrainingProgressHistory { boardSize = boardSize };
             progressPath = Path.Combine(Path.GetDirectoryName(statusPath), $"board-{boardSize}-progress.json");
             if (File.Exists(progressPath))
@@ -198,7 +204,7 @@ public sealed class TrainingArena : MonoBehaviour
     public bool CanAct(int seat) => ready && !ending && !needsReset && !Paused && !trainerStopping &&
         SeatAIActionExecutor.CanAct(turnManager, seat);
 
-    public void RecordDecision() { Decisions++; matchDecisions++; if (requireTrainer) progress.decisions++; }
+    public void RecordDecision() { Decisions++; matchDecisions++; if (ActingSeat >= 0 && ActingSeat < 2) matchSeatDecisions[ActingSeat]++; if (requireTrainer) progress.decisions++; }
 
     private void TrainerReset()
     {
@@ -242,6 +248,11 @@ public sealed class TrainingArena : MonoBehaviour
         ending = true;
         int winner = turnManager.ExternalWinnerSeatIndex;
         if (!interrupted && (winner < 0 || winner > 1)) { Fail("Terminal match has no capture winner."); return; }
+        if (matchJournal != null)
+        {
+            try { matchJournal.Complete(Games + 1, winner, interrupted, matchSeatDecisions[0], matchSeatDecisions[1]); }
+            catch (IOException error) { Fail("Cannot record match result: " + error.Message); return; }
+        }
         foreach (TrainingSeatAgent agent in seats)
         {
             agent.PrepareTerminalObservation(observationSource.Observe(turnManager, agent.SeatIndex).Observation);
@@ -275,12 +286,18 @@ public sealed class TrainingArena : MonoBehaviour
     {
         needsReset = false;
         matchDecisions = turnActions = 0;
+        matchSeatDecisions[0] = matchSeatDecisions[1] = 0;
         observationSource.ResetKnowledge();
         foreach (TrainingSeatAgent agent in seats) agent.OnEpisodeBegin();
         fullOpening = humanSeatIndex >= 0 || !useCurriculum || random.Next(5) == 0;
         matchRoundLimit = fullOpening ? maxRounds : Math.Min(maxRounds, 30);
-        turnManager.ResetExternalMatch(fullOpening ? 2 : 4, humanSeatIndex >= 0 ? humanSeatIndex : random.Next(2));
+        turnManager.ResetExternalMatch(fullOpening ? 2 : 4, humanSeatIndex >= 0 ? humanSeatIndex : ratingCheck ? Games % 2 : random.Next(2));
         if (!fullOpening) ConfigureCurriculumOpening();
+        if (matchJournal != null)
+        {
+            try { matchJournal.Begin(Games + 1, ActingSeat); }
+            catch (IOException error) { Fail("Cannot record match opening: " + error.Message); return; }
+        }
         var publicCities = new List<AICityState>();
         foreach (City city in Object.FindObjectsByType<City>())
             if (city.gameObject.scene == gameObject.scene)
@@ -355,7 +372,7 @@ public sealed class TrainingArena : MonoBehaviour
                         !double.IsNaN(clock.totalSeconds) && !double.IsInfinity(clock.totalSeconds))
                     { TotalTrainingSeconds = clock.totalSeconds; TrainingTimeEstimated = clock.estimated; }
                 }
-                string path = Path.Combine(directory, "training-elo.json");
+                string path = Path.Combine(directory, "match-elo.json");
                 if (File.Exists(path))
                 {
                     var history = JsonUtility.FromJson<TrainingEloHistory>(File.ReadAllText(path));

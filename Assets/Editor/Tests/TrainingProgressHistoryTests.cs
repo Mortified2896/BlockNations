@@ -52,10 +52,13 @@ public sealed class TrainingProgressHistoryTests
     public void EloTelemetryRejectsAnotherRunAndInvalidSeries()
     {
         var history = JsonUtility.FromJson<TrainingEloHistory>(
-            "{\"version\":1,\"schema\":2,\"boardSize\":5,\"runId\":\"run\",\"behavior\":\"BlockNationsSeatV2\",\"points\":[{\"step\":0,\"elo\":1200},{\"step\":1000,\"elo\":1250}]}");
+            "{\"version\":2,\"source\":\"authoritative-match-results-v1\",\"matches\":1000,\"wins\":500,\"losses\":500,\"schema\":2,\"boardSize\":5,\"runId\":\"run\",\"behavior\":\"BlockNationsSeatV2\",\"points\":[{\"step\":0,\"elo\":1200},{\"step\":1000,\"elo\":1250}]}");
         Assert.That(history.IsValid(5, "run"), Is.True);
         Assert.That(history.IsValid(11, "run"), Is.False);
         Assert.That(history.IsValid(5, "other"), Is.False);
+        history.version = 1;
+        Assert.That(history.IsValid(5, "run"), Is.False, "Legacy trajectory ratings must not be accepted.");
+        history.version = 2;
         history.points.Add(new TrainingEloHistory.Point { step = 900, elo = 1300 });
         Assert.That(history.IsValid(5, "run"), Is.False);
     }

@@ -41,7 +41,7 @@ public sealed class TrainingOverlay
                 GUILayout.EndArea();
                 return;
             }
-            GUILayout.Label(arena.IsHumanPlaytest ? "Local policy playtest" : "Live self-play training", title);
+            GUILayout.Label(arena.IsHumanPlaytest ? "Local policy playtest" : arena.IsRatingCheck ? "Frozen policy rating check" : "Live self-play training", title);
             GUILayout.Space(12);
             if (arena.IsTraining) DrawTrainingTime(arena);
             GUILayout.Label($"Match {arena.Games + 1} · round {arena.Round}/{arena.RoundLimit}", label);
@@ -84,13 +84,18 @@ public sealed class TrainingOverlay
             {
                 GUILayout.Space(22);
                 TrainingEloHistory elo = arena.EloHistory;
-                GUILayout.Label("Training Elo", title);
-                GUILayout.Label(elo == null ? "Waiting for trainer rating…" :
+                GUILayout.Label("Match-result Elo", title);
+                GUILayout.Label(elo == null ? "Waiting for complete match results…" :
                     $"{elo.points[elo.points.Count - 1].elo:F0} Elo · start {elo.points[0].elo:F0}", label);
                 Rect chart = GUILayoutUtility.GetRect(width - 48, 140);
                 if (elo != null) DrawChart(chart, elo);
-                GUILayout.Label("X: trainer steps · Y: self-play Elo", small);
-                GUILayout.Label("Relative to training opponents. Not human Elo.", small);
+                GUILayout.Label("X: rated matches · Y: self-play Elo", small);
+                GUILayout.Label("New history · relative to training opponents. Not human Elo.", small);
+                if (elo != null)
+                {
+                    GUILayout.Label($"Rated {elo.wins + elo.losses:N0} · W {elo.wins:N0} / L {elo.losses:N0}", small);
+                    GUILayout.Label($"Limits {elo.interruptions:N0} · policy changed {elo.unrated:N0}", small);
+                }
                 GUILayout.Space(12);
                 TrainingProgressHistory progress = arena.Progress;
                 GUILayout.Label($"{arena.BoardSize} × {arena.BoardSize} outcomes", title);

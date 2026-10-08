@@ -6,7 +6,6 @@ with a shell, modify user power settings, or prune imported/pinned models.
 from __future__ import annotations
 
 import argparse
-from elo_history import TrainerEloHistory
 from training_time import TrainingTime
 import json
 import os
@@ -18,6 +17,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from typing import Iterable
 
 ROOT_MARKER = ".blocknations-training-root.json"
@@ -321,7 +321,11 @@ def main() -> int:
     environment = os.environ.copy()
     environment.update({"PYTHONUNBUFFERED": "1", "OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "2",
                         "OPENBLAS_NUM_THREADS": "2"})
-    command = [sys.executable, "-m", "mlagents.trainers.learn", str(config), "--run-id", args.run_id,
+    rating_session = uuid.uuid4().hex
+    atomic_json(run / "rating-session.json", {"session": rating_session})
+    environment.update({"BLOCKNATIONS_RATING_RUN": str(run), "BLOCKNATIONS_RATING_BOARD": str(args.board_size),
+                        "BLOCKNATIONS_RATING_SESSION": rating_session})
+    command = [sys.executable, str(Path(__file__).with_name("rated_training.py")), str(config), "--run-id", args.run_id,
                "--results-dir", str(run / "checkpoints"), "--seed", str(args.seed), "--timeout-wait", "300",
                "--torch-device", "cpu"]
     if args.resume:
@@ -349,16 +353,11 @@ def main() -> int:
             # No -d: locking and display sleep remain available. Bound to this supervisor.
             assertion = subprocess.Popen(["/usr/bin/caffeinate", "-i", "-s", "-w", str(os.getpid())],
                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        elo = TrainerEloHistory(args.run_id, args.board_size,
-            read_json(config)["behaviors"]["BlockNationsSeatV2"]["self_play"]["initial_elo"])
-        elo.restore(run / "training-elo.json")
-        elo.backfill(run)
         log = BoundedLog(run / "trainer.log")
         def capture_output():
             try:
                 while chunk := process.stdout.read1(4096):
                     log.append(chunk)
-                    elo.feed(chunk)
                     if b"Listening on port 5004" in chunk:
                         state["trainerReady"] = True
             finally:
@@ -376,7 +375,6 @@ def main() -> int:
             if resident is not None:
                 state["peakResidentBytes"] = max(state.get("peakResidentBytes", 0), resident)
             atomic_json(run / "supervisor-status.json", state)
-            atomic_json(run / "training-elo.json", elo.snapshot())
             atomic_json(root / "active.json", {"runId": args.run_id, "supervisorPid": os.getpid()})
             arena = read_json(run / "arena-status.json")
             training_time.tick(time.monotonic(), bool(arena.get("trainerConnected")) and
@@ -396,6 +394,9 @@ def main() -> int:
                 reason = "free_disk_guard"
             elif arena.get("failure"):
                 reason = "arena_failure"
+            elif arena.get("trainerConnected") and elapsed > 30 and rating_session not in read_json(run / "match-elo.json").get("sequences", {}):
+                reason = "rating_protocol_mismatch"
+                state["error"] = "Training player does not emit whole-match results. Rebuild the Mac training player."
             else:
                 time.sleep(2)
                 continue
@@ -405,10 +406,9 @@ def main() -> int:
             break
         atomic_json(run / "training-time.json", training_time.snapshot())
         output_thread.join(timeout=5)
-        atomic_json(run / "training-elo.json", elo.snapshot())
         checkpoints = list(run.rglob("*.pt"))
         exports = list(run.rglob("*.onnx"))
-        failed = process.returncode != 0 or reason == "arena_failure"
+        failed = process.returncode != 0 or reason in ("arena_failure", "rating_protocol_mismatch")
         state.update({"state": "failed" if failed else "stopped", "stopReason": reason,
                       "exitCode": process.returncode, "elapsedSeconds": time.monotonic() - started,
                       "usedBytes": size(root), "freeBytes": shutil.disk_usage(root).free,
