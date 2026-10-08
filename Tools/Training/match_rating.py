@@ -4,6 +4,7 @@ import json
 import math
 from pathlib import Path
 import time
+from elo_curve import MAXIMUM_POINTS, append_point, restore_curve
 
 
 def policy_id(weights):
@@ -20,7 +21,7 @@ def policy_id(weights):
 
 
 class MatchRating:
-    maximum_points = 200
+    maximum_points = MAXIMUM_POINTS
     initial = 1200.0
     k = 16.0
 
@@ -30,6 +31,7 @@ class MatchRating:
                          startedUtc=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
                          matches=0, wins=0, losses=0, interruptions=0, unrated=0,
                          selfMatches=0, abandoned=0, elo=self.initial,
+                         curveVersion=1, curveStart=0, curveBucketWidth=1,
                          points=[dict(step=0, elo=self.initial)], ratings={}, sequences={}, pending=None)
 
     def restore(self, path):
@@ -44,6 +46,7 @@ class MatchRating:
                 data['wins'] + data['losses'] + data['interruptions'] + data['unrated'] != data['matches']):
             raise ValueError('Invalid corrected rating history; preserve it before starting a new history.')
         self.data = data
+        restore_curve(self.data)
 
     def register(self, identifier, inherited=None):
         ratings = self.data['ratings']
@@ -98,9 +101,7 @@ class MatchRating:
             ratings[learner] += change; ratings[opponent] -= change
         self.data['elo'] = ratings[learner]
         rated = self.data['wins'] + self.data['losses']
-        self.data['points'].append(dict(step=rated, elo=self.data['elo']))
-        if len(self.data['points']) > self.maximum_points:
-            del self.data['points'][1]
+        append_point(self.data, rated, self.data['elo'])
         return True
 
     def retain(self, identifiers):

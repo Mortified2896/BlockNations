@@ -23,7 +23,9 @@ class MatchRatingTests(unittest.TestCase):
         self.assertEqual(rating.data['matches'], 1001)
         self.assertEqual(rating.data['wins'] + rating.data['losses'], 1001)
         self.assertLess(abs(rating.data['elo'] - 1200), 10)
-        self.assertEqual(len(rating.data['points']), 200)
+        self.assertLessEqual(len(rating.data['points']), 200)
+        self.assertEqual(rating.data['points'][0]['step'], 0)
+        self.assertEqual(rating.data['points'][-1]['step'], 1001)
 
     def test_identical_frozen_weights_stay_exactly_at_baseline(self):
         rating = MatchRating('run', 5)

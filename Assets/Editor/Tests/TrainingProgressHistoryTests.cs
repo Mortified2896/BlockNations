@@ -63,4 +63,46 @@ public sealed class TrainingProgressHistoryTests
         Assert.That(history.IsValid(5, "run"), Is.False);
     }
 
+    [Test]
+    public void LegacyEloTailUsesItsRecordedWindowAndDeclaresMissingHistory()
+    {
+        var history = EloCurveFixture();
+        Assert.That(history.IsValid(5, "run"), Is.True);
+        Assert.That(history.FirstRecordedMatch, Is.EqualTo(4139));
+        Assert.That(history.ChartStartMatch, Is.EqualTo(4000));
+        Assert.That(history.ChartEndMatch, Is.EqualTo(5000));
+        history.curveVersion = 1; history.curveStart = 4139; history.curveBucketWidth = 4;
+        Assert.That(history.IsValid(5, "run"), Is.True);
+        Assert.That(history.FirstRecordedMatch, Is.EqualTo(4139));
+    }
+
+    [Test]
+    public void WholeRunEloSummaryKeepsItsStartingWindowDespiteSparseSamples()
+    {
+        var history = EloCurveFixture();
+        history.curveVersion = 1; history.curveStart = 0; history.curveBucketWidth = 64;
+        Assert.That(history.IsValid(5, "run"), Is.True);
+        Assert.That(history.FirstRecordedMatch, Is.Zero);
+        Assert.That(history.ChartStartMatch, Is.Zero);
+        Assert.That(history.ChartEndMatch, Is.EqualTo(5000));
+        history.points.RemoveRange(1, 2);
+        history.matches = history.wins = 0;
+        Assert.That(history.ChartEndMatch, Is.EqualTo(1000));
+    }
+
+    [Test]
+    public void EloCurveRejectsFalseCoverageAndInvalidCompactionWidths()
+    {
+        var history = EloCurveFixture();
+        history.curveVersion = 1; history.curveStart = 4000; history.curveBucketWidth = 4;
+        Assert.That(history.IsValid(5, "run"), Is.False);
+        history.curveStart = 4139; history.curveBucketWidth = 3;
+        Assert.That(history.IsValid(5, "run"), Is.False);
+        history.curveBucketWidth = 4; history.curveVersion = 2;
+        Assert.That(history.IsValid(5, "run"), Is.False);
+    }
+
+    private static TrainingEloHistory EloCurveFixture() => JsonUtility.FromJson<TrainingEloHistory>(
+        "{\"version\":2,\"source\":\"authoritative-match-results-v1\",\"matches\":4337,\"wins\":4337,\"schema\":2,\"boardSize\":5,\"runId\":\"run\",\"behavior\":\"BlockNationsSeatV2\",\"points\":[{\"step\":0,\"elo\":1200},{\"step\":4139,\"elo\":1119},{\"step\":4337,\"elo\":1119}]}");
+
 }

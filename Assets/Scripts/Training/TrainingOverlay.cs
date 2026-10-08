@@ -95,6 +95,9 @@ public sealed class TrainingOverlay
                 GUILayout.Label("New history · relative to training opponents. Not human Elo.", small);
                 if (elo != null)
                 {
+                    GUILayout.Label(elo.FirstRecordedMatch > 0 ?
+                        $"Earlier chart samples unavailable. Showing match {elo.FirstRecordedMatch:N0} onward." :
+                        "Curve summarises the full recorded history.", small);
                     GUILayout.Label($"Rated {elo.wins + elo.losses:N0} · W {elo.wins:N0} / L {elo.losses:N0}", small);
                     GUILayout.Label($"Limits {elo.interruptions:N0} · policy changed {elo.unrated:N0}", small);
                 }
@@ -203,24 +206,29 @@ public sealed class TrainingOverlay
             GUI.Label(new Rect(rect.x, y - 9, 46, 22), value.ToString("F0"), small);
         }
         float baselineY = plot.yMax - (history.points[0].elo - low) / (high - low) * plot.height;
-        Fill(new Rect(plot.x, baselineY, plot.width, 1), new Color(0.5f, 0.5f, 0.35f));
-        long last = history.points[history.points.Count - 1].step;
+        // A faint dashed starting reference is distinct from the measured curve.
+        for (float x = plot.x; x < plot.xMax; x += 12)
+            Fill(new Rect(x, baselineY, Mathf.Min(6, plot.xMax - x), 1), new Color(0.3f, 0.4f, 0.43f));
+        long first = history.ChartStartMatch, last = history.ChartEndMatch;
         // Leave room for new matches instead of stretching a fresh history to the edge.
-        long horizontalRange = Math.Max(1000, (long)Math.Ceiling(last / 1000d) * 1000);
+        long horizontalRange = last - first;
+        bool hasPrevious = false;
         Vector2 previous = default;
         for (int i = 0; i < history.points.Count; i++)
         {
             TrainingEloHistory.Point point = history.points[i];
-            var current = new Vector2(plot.x + (float)(point.step / (double)horizontalRange) * plot.width,
+            if (point.step < history.FirstRecordedMatch) continue;
+            var current = new Vector2(plot.x + (float)((point.step - first) / (double)horizontalRange) * plot.width,
                 plot.yMax - (point.elo - low) / (high - low) * plot.height);
-            // Bounded retention may leave a gap after the starting reference.
-            if (i > 0 && !(i == 1 && point.step > 1000)) Line(previous, current, new Color(0.4f, 0.9f, 0.75f));
-            Fill(new Rect(current.x - 2, current.y - 2, 4, 4), new Color(0.4f, 0.9f, 0.75f));
+            if (hasPrevious) Line(previous, current, new Color(0.4f, 0.9f, 0.75f));
+            if (!hasPrevious || i == history.points.Count - 1)
+                Fill(new Rect(current.x - 2, current.y - 2, 4, 4), new Color(0.4f, 0.9f, 0.75f));
             previous = current;
+            hasPrevious = true;
         }
-        GUI.Label(new Rect(plot.x, plot.yMax + 4, plot.width / 2, 22), "0", small);
-        GUI.Label(new Rect(plot.x + plot.width / 4, plot.yMax + 4, plot.width / 2, 22), (horizontalRange / 2).ToString("N0"), middleTick);
-        GUI.Label(new Rect(plot.center.x, plot.yMax + 4, plot.width / 2, 22), horizontalRange.ToString("N0"), rightTick);
+        GUI.Label(new Rect(plot.x, plot.yMax + 4, plot.width / 2, 22), first.ToString("N0"), small);
+        GUI.Label(new Rect(plot.x + plot.width / 4, plot.yMax + 4, plot.width / 2, 22), (first + horizontalRange / 2).ToString("N0"), middleTick);
+        GUI.Label(new Rect(plot.center.x, plot.yMax + 4, plot.width / 2, 22), last.ToString("N0"), rightTick);
     }
 
     private static void Line(Vector2 a, Vector2 b, Color color)
