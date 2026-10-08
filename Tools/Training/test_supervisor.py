@@ -87,7 +87,7 @@ class RetentionTests(unittest.TestCase):
 
     def test_configuration_is_real_two_team_self_play_with_retained_checkpoints(self):
         config = supervisor.trainer_config(4096, 2048)
-        behavior = config["behaviors"]["BlockNationsSeatV1"]
+        behavior = config["behaviors"]["BlockNationsSeatV2"]
         self.assertEqual(behavior["trainer_type"], "ppo")
         self.assertEqual(behavior["keep_checkpoints"], 5)
         self.assertGreater(behavior["self_play"]["window"], 0)
@@ -99,6 +99,15 @@ class RetentionTests(unittest.TestCase):
         supervisor.atomic_json(run / "arena-status.json", {"curriculumDistance": 6, "failure": "old diagnostic"})
         self.assertEqual(supervisor.arena_options(run, 42, True, True), (12, False, 6))
         self.assertEqual(supervisor.arena_options(run, 42, True, False), (42, True, 2))
+
+    def test_board_resume_preserves_geometry_and_rejects_invalid_size(self):
+        run = self.run_directory("small")
+        supervisor.atomic_json(run / "run.json", {"boardSize": 5})
+        self.assertEqual(supervisor.board_options(run, 11, True), 5)
+        self.assertEqual(supervisor.board_options(run, 7, False), 7)
+        supervisor.atomic_json(run / "run.json", {"boardSize": 3})
+        with self.assertRaises(ValueError):
+            supervisor.board_options(run, 11, True)
 
     def test_invalid_saved_curriculum_stage_falls_back_to_first_stage(self):
         run = self.run_directory("resume")

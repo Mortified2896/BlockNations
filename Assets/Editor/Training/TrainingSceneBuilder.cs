@@ -86,6 +86,7 @@ public static class TrainingSceneBuilder
         Set(manager, "externalHumanSeatIndex", human ? 0 : -1);
         foreach (BehaviorParameters behavior in scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<BehaviorParameters>(true)))
         {
+            behavior.BehaviorName = LearnedActionSchema.BehaviorName;
             behavior.BehaviorType = requireTrainer ? BehaviorType.Default : model != null ? BehaviorType.InferenceOnly : BehaviorType.HeuristicOnly;
             behavior.Model = model;
         }

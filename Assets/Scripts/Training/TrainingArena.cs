@@ -15,6 +15,7 @@ public sealed class TrainingArena : MonoBehaviour
     [SerializeField] private TrainingSeatAgent[] seats;
     [SerializeField] private Camera boardCamera;
     [SerializeField] private int seed = 42;
+    [SerializeField] private int boardSize = 11;
     [SerializeField] private int maxRounds = 100;
     [SerializeField] private int decisionsPerFrame = 2;
     [SerializeField] private bool requireTrainer = true;
@@ -50,6 +51,7 @@ public sealed class TrainingArena : MonoBehaviour
     public int Round => turnManager != null ? turnManager.turnNumber : 0;
     public int ActingSeat => turnManager != null ? turnManager.currentTurnSeatIndex : -1;
     public int CurriculumDistance => curriculumDistance;
+    public int BoardSize => boardSize;
     public TrainingProgressHistory Progress => progress;
     public bool IsHumanPlaytest => humanSeatIndex >= 0;
     public bool IsTraining => requireTrainer;
@@ -69,6 +71,14 @@ public sealed class TrainingArena : MonoBehaviour
 
     private void Awake()
     {
+        ReadConfiguration();
+        if (!LearnedActionSchema.SupportsBoard(boardSize) || (boardSize != 11 && useCurriculum))
+            throw new InvalidOperationException("Choose a supported board; smaller boards use standard openings without tactical curriculum.");
+        if (turnManager != null && turnManager.gridManager != null)
+            turnManager.gridManager.width = turnManager.gridManager.height = boardSize;
+        if (seats != null)
+            foreach (TrainingSeatAgent seat in seats)
+                if (seat != null) seat.GetComponent<Unity.MLAgents.Policies.BehaviorParameters>().BehaviorName = LearnedActionSchema.BehaviorName;
         // Install the SDK's public quit notification before Agent.OnEnable initializes
         // Academy. A quit response contains no decision and must never become a move.
         previousCommunicatorEnabled = CommunicatorFactory.Enabled;
@@ -95,30 +105,36 @@ public sealed class TrainingArena : MonoBehaviour
         WriteStatusIfDue(force: true);
     }
 
-    private IEnumerator Start()
+    private void ReadConfiguration()
     {
         curriculumDistance = initialCurriculumDistance >= 2 && initialCurriculumDistance <= 8 && initialCurriculumDistance % 2 == 0
             ? initialCurriculumDistance : 2;
         string[] arguments = Environment.GetCommandLineArgs();
         for (int i = 0; i + 1 < arguments.Length; i++)
         {
-            if (arguments[i] == "--training-status") statusPath = arguments[++i];
+            if (arguments[i] == "--training-board-size" && int.TryParse(arguments[++i], out int configuredSize)) boardSize = configuredSize;
+            else if (arguments[i] == "--training-status") statusPath = arguments[++i];
             else if (arguments[i] == "--training-seed" && int.TryParse(arguments[++i], out int configuredSeed)) seed = configuredSeed;
             else if (arguments[i] == "--training-curriculum" && bool.TryParse(arguments[++i], out bool configuredCurriculum)) useCurriculum = configuredCurriculum;
             else if (arguments[i] == "--training-curriculum-distance" && int.TryParse(arguments[++i], out int configuredDistance) &&
                 configuredDistance >= 2 && configuredDistance <= 8 && configuredDistance % 2 == 0) curriculumDistance = configuredDistance;
         }
+    }
+
+    private IEnumerator Start()
+    {
         if (turnManager == null || !turnManager.IsExternallyDrivenMatch || seats == null || seats.Length != 2 ||
             seats[0] == null || seats[1] == null || seats[0].SeatIndex != 0 || seats[1].SeatIndex != 1 || boardCamera == null)
             throw new InvalidOperationException("Training arena needs explicitly wired two-seat agents, external TurnManager, and camera.");
         originalCameraRect = boardCamera.rect;
         if (requireTrainer && !string.IsNullOrEmpty(statusPath))
         {
-            progressPath = Path.Combine(Path.GetDirectoryName(statusPath), "fullboard-progress.json");
+            progress = new TrainingProgressHistory { boardSize = boardSize };
+            progressPath = Path.Combine(Path.GetDirectoryName(statusPath), $"board-{boardSize}-progress.json");
             if (File.Exists(progressPath))
             {
                 progress = JsonUtility.FromJson<TrainingProgressHistory>(File.ReadAllText(progressPath));
-                if (progress == null || !progress.IsValid())
+                if (progress == null || !progress.IsValid() || progress.boardSize != boardSize)
                     throw new InvalidOperationException("Saved full-board progress is incompatible or invalid; preserve it before starting a new tracker.");
             }
         }
@@ -294,7 +310,7 @@ public sealed class TrainingArena : MonoBehaviour
         public int games, captures, interruptions, rejections, trainerResets, round, seat, curriculumDistance, seed, roundLimit;
         public double elapsedSeconds, decisionsPerSecond;
         public bool paused, trainerConnected, fullOpening;
-        public int gold0, gold1, startingDistance;
+        public int gold0, gold1, startingDistance, boardSize, schema;
         public string lastAction, failure;
     }
 
@@ -309,7 +325,7 @@ public sealed class TrainingArena : MonoBehaviour
             trainerResets = TrainerResets,
             curriculumDistance = curriculumDistance, seed = seed, elapsedSeconds = elapsed,
             roundLimit = matchRoundLimit, fullOpening = fullOpening, startingDistance = startingDistance,
-            gold0 = GoldForSeat(0), gold1 = GoldForSeat(1),
+            gold0 = GoldForSeat(0), gold1 = GoldForSeat(1), boardSize = boardSize, schema = LearnedActionSchema.Version,
             decisionsPerSecond = elapsed > 0 ? Decisions / elapsed : 0, paused = Paused,
             trainerConnected = !trainerStopping && Academy.IsInitialized && Academy.Instance.IsCommunicatorOn, lastAction = LastAction, failure = Failure };
         try
@@ -335,7 +351,8 @@ public sealed class TrainingArena : MonoBehaviour
         float left = TrainingOverlay.ReservedWidth / Math.Max(1, Screen.width);
         boardCamera.rect = new Rect(left, 0, 1 - left, 1);
         float aspect = Math.Max(0.1f, (Screen.width - TrainingOverlay.ReservedWidth) / Math.Max(1, Screen.height));
-        boardCamera.orthographicSize = Mathf.Max(6.5f, 6.5f / aspect);
+        float extent = (boardSize + 2) / 2f;
+        boardCamera.orthographicSize = Mathf.Max(extent, extent / aspect);
     }
 
     private void OnGUI() => overlay.Draw(this);

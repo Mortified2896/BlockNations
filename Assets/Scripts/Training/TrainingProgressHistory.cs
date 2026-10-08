@@ -5,11 +5,12 @@ using System.Collections.Generic;
 [Serializable]
 public sealed class TrainingProgressHistory
 {
-    public const int Version = 1;
+    public const int Version = 2;
     public const int WindowSize = 40;
     public const int MaximumPoints = 200;
     public int version = Version;
-    public string informationContract = "public-starting-cities-v1";
+    public string informationContract = "public-starting-cities-canvas-v2";
+    public int boardSize = 11;
     public long decisions;
     public int fullBoardMatches, fullBoardCaptures, fullBoardInterruptions, curriculumMatches;
     public List<int> recentResults = new List<int>();
@@ -48,7 +49,7 @@ public sealed class TrainingProgressHistory
 
     public bool IsValid()
     {
-        if (version != Version || informationContract != "public-starting-cities-v1" || decisions < 0 ||
+        if (!BlockNations.AI.LearnedActionSchema.SupportsBoard(boardSize) || version != Version || informationContract != "public-starting-cities-canvas-v2" || decisions < 0 ||
             fullBoardMatches < 0 || fullBoardCaptures < 0 || fullBoardInterruptions < 0 || curriculumMatches < 0 ||
             fullBoardCaptures + fullBoardInterruptions != fullBoardMatches ||
             recentResults == null || points == null || recentResults.Count > WindowSize || points.Count > MaximumPoints)

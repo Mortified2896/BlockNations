@@ -205,7 +205,7 @@ def trainer_config(max_steps: int, checkpoint_interval: int, self_play: bool = T
         behavior["self_play"] = {"save_steps": 5000, "team_change": 10000, "swap_steps": 1000,
                                  "window": 10, "play_against_latest_model_ratio": 0.5,
                                  "initial_elo": 1200}
-    return {"behaviors": {"BlockNationsSeatV1": behavior},
+    return {"behaviors": {"BlockNationsSeatV2": behavior},
             "engine_settings": {"time_scale": 1, "target_frame_rate": 60},
             "torch_settings": {"device": "cpu"}}
 
@@ -218,6 +218,13 @@ def arena_options(run: Path, seed: int, curriculum: bool, resume: bool) -> tuple
     use_curriculum = bool(manifest.get("curriculum", curriculum))
     distance = int(previous.get("curriculumDistance", 2))
     return run_seed, use_curriculum, distance if distance in (2, 4, 6, 8) else 2
+
+
+def board_options(run: Path, board_size: int, resume: bool) -> int:
+    size = int(read_json(run / RUN_MARKER).get("boardSize", board_size)) if resume else board_size
+    if size not in (5, 7, 9, 11):
+        raise ValueError("Saved run has an unsupported board size.")
+    return size
 
 
 def interrupt_trainer(process: subprocess.Popen, timeout: float = 90) -> None:
@@ -247,6 +254,7 @@ def main() -> int:
     parser.add_argument("--max-steps", type=int, default=1_000_000)
     parser.add_argument("--checkpoint-interval", type=int, default=5000)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--board-size", type=int, choices=(5, 7, 9, 11), default=11)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--full-openings", action="store_true", help="Disable the tactical opening curriculum for a new run.")
     parser.add_argument("--env", type=Path)
@@ -275,9 +283,9 @@ def main() -> int:
         raise ValueError("Run must not be a symbolic link.")
     run.mkdir(exist_ok=True)
     if args.resume:
-        if read_json(run / RUN_MARKER).get("owner") != "BlockNations.LocalTraining.v1" or not list(run.rglob("*.pt")):
+        if read_json(run / RUN_MARKER).get("owner") != "BlockNations.LocalTraining.v1" or read_json(run / RUN_MARKER).get("schema") != 2 or not list(run.rglob("*.pt")):
             lock.unlink()
-            raise ValueError("Resume requires an owned run with a saved checkpoint.")
+            raise ValueError("Resume requires an owned schema v2 run with a saved checkpoint; v1 runs remain archived separately.")
     elif (run / RUN_MARKER).exists():
         lock.unlink()
         raise ValueError("Run already exists; choose Resume or a new run id.")
@@ -291,12 +299,17 @@ def main() -> int:
         raise ValueError("Insufficient artifact-budget headroom or free-disk reserve.")
     config = run / "trainer.yaml"
     args.seed, curriculum, curriculum_distance = arena_options(run, args.seed, not args.full_openings, args.resume)
+    args.board_size = board_options(run, args.board_size, args.resume)
+    if args.board_size != 11:
+        curriculum = False
     if not args.resume:
         atomic_json(config, trainer_config(args.max_steps, args.checkpoint_interval))
         atomic_json(run / RUN_MARKER, {"owner": "BlockNations.LocalTraining.v1", "runId": args.run_id,
                                       "createdUtc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                                       "seed": args.seed, "curriculum": curriculum,
-                                      "schema": 1, "observationSize": 3120, "actionCount": 259})
+                                      "schema": 2, "boardSize": args.board_size, "behavior": "BlockNationsSeatV2",
+                                      "opening": "tactical-curriculum" if curriculum else "standard",
+                                      "initialWeights": "random", "observationSize": 3120, "actionCount": 259})
     stop_path = run / "stop.request"
     stop_path.unlink(missing_ok=True)
     # A previous failure or pause is diagnostic history, not this launch's state.
@@ -318,7 +331,8 @@ def main() -> int:
         command.extend(["--env", str(args.env), "--width", "1400", "--height", "900", "--time-scale", "1",
                         "--env-args", "--training-status", str(run / "arena-status.json"),
                         "--training-seed", str(args.seed), "--training-curriculum", str(curriculum).lower(),
-                        "--training-curriculum-distance", str(curriculum_distance)])
+                        "--training-curriculum-distance", str(curriculum_distance),
+                        "--training-board-size", str(args.board_size)])
     process = None
     assertion = None
     started = time.monotonic()

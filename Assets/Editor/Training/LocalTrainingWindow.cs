@@ -22,7 +22,7 @@ public sealed class LocalTrainingWindow : EditorWindow
     private static string launchError;
     private static Process supervisor;
     private double hours = 8, budgetGB = 20;
-    private int seed = 42;
+    private int seed = 42, boardSize = 11;
     private bool curriculum = true;
     private bool useStandalone;
     private string playerPath = "";
@@ -74,18 +74,21 @@ public sealed class LocalTrainingWindow : EditorWindow
             if (root != RootPath) EditorPrefs.SetString(RootKey, root);
             if (python != PythonPath) EditorPrefs.SetString(PythonKey, python);
             useStandalone = EditorGUILayout.Toggle("Use standalone training player", useStandalone);
-            if (useStandalone) playerPath = EditorGUILayout.TextField("Training player (.app)", string.IsNullOrEmpty(playerPath) ? Path.GetFullPath("Build/LocalTraining.app") : playerPath);
+            if (useStandalone) playerPath = EditorGUILayout.TextField("Training player (.app)", string.IsNullOrEmpty(playerPath) ? Path.GetFullPath("Build/LocalTrainingV2.app") : playerPath);
         }
         hours = EditorGUILayout.DoubleField("Maximum hours", hours);
         budgetGB = EditorGUILayout.DoubleField("Total storage limit (GB)", budgetGB);
         seed = EditorGUILayout.IntField("Seed", seed);
-        curriculum = EditorGUILayout.Toggle("Tactical curriculum + full games", curriculum);
+        boardSize = EditorGUILayout.IntPopup("Board size", boardSize, new[] { "5 × 5", "7 × 7", "9 × 9", "11 × 11" }, new[] { 5, 7, 9, 11 });
+        if (boardSize != 11) curriculum = false;
+        using (new EditorGUI.DisabledScope(boardSize != 11))
+            curriculum = EditorGUILayout.Toggle("Tactical curriculum + full games", curriculum);
         runId = EditorGUILayout.TextField("Run id (blank = new)", runId);
         EditorGUILayout.HelpBox("Default: 20 GB shared across all runs, 512 MB checkpoint reserve, 20 GB free disk guard. Five recent checkpoints per active behavior, pinned models protected, bounded trainer logs, videos/replays off. Plug in and keep the lid open; screen locking is supported.", MessageType.None);
         using (new EditorGUI.DisabledScope(active || EditorApplication.isPlaying || EditorApplication.isCompiling))
         {
-            if (GUILayout.Button("Start Training")) Launch(runId, false, hours, budgetGB, seed, curriculum, player: useStandalone ? playerPath : null);
-            if (GUILayout.Button("Resume Saved Run")) Launch(runId, true, hours, budgetGB, seed, curriculum, player: useStandalone ? playerPath : null);
+            if (GUILayout.Button("Start Training")) Launch(runId, false, hours, budgetGB, seed, curriculum, player: useStandalone ? playerPath : null, boardSize: boardSize);
+            if (GUILayout.Button("Resume Saved Run")) Launch(runId, true, hours, budgetGB, seed, curriculum, player: useStandalone ? playerPath : null, boardSize: boardSize);
         }
         using (new EditorGUI.DisabledScope(!active))
             if (GUILayout.Button("Stop and Save Checkpoint")) RequestStop();
@@ -122,8 +125,9 @@ public sealed class LocalTrainingWindow : EditorWindow
     }
 
     public static void Launch(string id, bool resume, double durationHours = 8, double storageGB = 20,
-        int runSeed = 42, bool useCurriculum = true, int maxSteps = 1_000_000, int checkpointInterval = 5000, string player = null)
+        int runSeed = 42, bool useCurriculum = true, int maxSteps = 1_000_000, int checkpointInterval = 5000, string player = null, int boardSize = 11)
     {
+        if (!BlockNations.AI.LearnedActionSchema.SupportsBoard(boardSize)) throw new ArgumentException("Choose a supported training board size.");
         if (IsRunActive() || EditorApplication.isPlaying || EditorApplication.isCompiling)
             throw new InvalidOperationException("Finish the active run and leave Play Mode before starting another.");
         if (!File.Exists(PythonPath)) throw new FileNotFoundException("Install the scoped trainer environment described in Docs/ML_Training_MVP.md.", PythonPath);
@@ -138,23 +142,26 @@ public sealed class LocalTrainingWindow : EditorWindow
         {
             RunManifest manifest = Read<RunManifest>(Path.Combine(directory, "run.json"));
             if (manifest == null || manifest.owner != "BlockNations.LocalTraining.v1" || manifest.schema != BlockNations.AI.LearnedActionSchema.Version)
-                throw new InvalidOperationException("Resume requires an owned, compatible training run.");
+                throw new InvalidOperationException("Resume requires a compatible schema v2 run; v1 checkpoints remain preserved separately.");
             runSeed = manifest.seed;
             useCurriculum = manifest.curriculum;
             TrainingArena.ArenaStatus previous = Read<TrainingArena.ArenaStatus>(Path.Combine(directory, "arena-status.json"));
             if (previous != null && previous.curriculumDistance >= 2 && previous.curriculumDistance <= 8 && previous.curriculumDistance % 2 == 0)
                 savedDistance = previous.curriculumDistance;
+            boardSize = manifest.boardSize;
         }
+        if (boardSize != 11) useCurriculum = false;
         if (string.IsNullOrEmpty(player))
         {
             TrainingArena arena = TrainingSceneBuilder.Prepare(Path.Combine(directory, "arena-status.json"), runSeed, useCurriculum, requireTrainer: true);
             TrainingSceneBuilder.Set(arena, "initialCurriculumDistance", savedDistance);
+            TrainingSceneBuilder.Set(arena, "boardSize", boardSize);
         }
         else if (!Directory.Exists(player)) throw new DirectoryNotFoundException("Build the Mac training player first.");
         string script = Path.GetFullPath(Path.Combine(Application.dataPath, "../Tools/Training/supervisor.py"));
         string[] arguments = { script, "--root", RootPath, "--run-id", id, "--hours", durationHours.ToString(CultureInfo.InvariantCulture),
             "--budget-gb", storageGB.ToString(CultureInfo.InvariantCulture), "--seed", runSeed.ToString(),
-            "--max-steps", maxSteps.ToString(), "--checkpoint-interval", checkpointInterval.ToString() };
+            "--board-size", boardSize.ToString(), "--max-steps", maxSteps.ToString(), "--checkpoint-interval", checkpointInterval.ToString() };
         string command = string.Join(" ", arguments.Select(Quote)) + (resume ? " --resume" : "");
         if (!useCurriculum) command += " --full-openings";
         if (!string.IsNullOrEmpty(player)) command += " --env " + Quote(Path.GetFullPath(player));
@@ -170,7 +177,7 @@ public sealed class LocalTrainingWindow : EditorWindow
         SessionState.SetString(AwaitStartedKey, DateTime.UtcNow.ToString("o"));
         LocalTrainingWindow window = GetWindow<LocalTrainingWindow>("Local ML Training");
         window.runId = id; window.hours = durationHours; window.budgetGB = storageGB;
-        window.seed = runSeed; window.curriculum = useCurriculum;
+        window.seed = runSeed; window.curriculum = useCurriculum; window.boardSize = boardSize;
         window.useStandalone = !string.IsNullOrEmpty(player); window.playerPath = player ?? "";
         Debug.Log("[ML Training] Starting supervised local run " + id);
     }
@@ -290,8 +297,12 @@ public sealed class LocalTrainingWindow : EditorWindow
         if (IsRunActive() || EditorApplication.isPlaying) throw new InvalidOperationException("Stop and save training before a local model playtest.");
         ModelAsset model = ImportModel(path);
         SessionState.SetBool(TrainingPlayKey, false);
-        TrainingSceneBuilder.Prepare(Path.GetFullPath("Logs/Validation/MLTraining/local-inference-status.json"),
+        TrainingArena arena = TrainingSceneBuilder.Prepare(Path.GetFullPath("Logs/Validation/MLTraining/local-inference-status.json"),
             42, curriculum: false, requireTrainer: false, model: model, human: human);
+        DirectoryInfo source = new FileInfo(Path.GetFullPath(path)).Directory;
+        while (source != null && !File.Exists(Path.Combine(source.FullName, "run.json"))) source = source.Parent;
+        RunManifest manifest = Read<RunManifest>(Path.Combine(source.FullName, "run.json"));
+        TrainingSceneBuilder.Set(arena, "boardSize", manifest.boardSize);
         TrainingSceneBuilder.ShowBoard();
         EditorApplication.isPlaying = true;
         Debug.Log("[ML Training] Local CPU inference playtest: " + path);
@@ -311,7 +322,7 @@ public sealed class LocalTrainingWindow : EditorWindow
         public double elapsedSeconds;
         public bool trainerReady;
     }
-    [Serializable] private sealed class RunManifest { public string owner; public int schema, observationSize, actionCount, seed; public bool curriculum = true; }
+    [Serializable] private sealed class RunManifest { public string owner; public int schema, observationSize, actionCount, seed, boardSize = 11; public bool curriculum = true; }
     [Serializable] private sealed class ActiveRunInfo { public string runId; }
     [Serializable] private sealed class Pins { public string[] files = Array.Empty<string>(); }
 }

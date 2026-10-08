@@ -557,6 +557,29 @@ public class AdjacentEmptyEnemyCityCaptureTests
     }
 
     [Test]
+    public void ExternalResetPreservesFiveByFiveBoardAndInsetCities()
+    {
+        SetMember(_turnManager, "externallyDrivenMatch", true);
+        SetMember(_turnManager, "ExternalMatchReady", true);
+        SetMember(_gridManager, "externallyDrivenBoard", true);
+        SetMember(_gridManager, "width", 5); SetMember(_gridManager, "height", 5);
+        SetMember(_gridManager, "tilePrefab", ((Component)_cityTile).gameObject);
+        SetMember(_gridManager, "cityPrefab", ((Component)_city).gameObject);
+        InvokeMethod(_turnManager, "ResetExternalMatch", new object[] { 2, 0 });
+        Assert.That(GetMember(_gridManager, "width"), Is.EqualTo(5));
+        Assert.That(((Array)GetMember(_gridManager, "tileGrid")).Length, Is.EqualTo(25));
+        Component[] cities = ((Component)_gridManager).GetComponentsInChildren(_cityType, true);
+        Assert.That(cities.Length, Is.EqualTo(2));
+        foreach (Component city in cities)
+        {
+            int coordinate = (int)GetMember(city, "ownerSeatIndex") == 0 ? 1 : 3;
+            Assert.That(GetMember(city, "x"), Is.EqualTo(coordinate));
+            Assert.That(GetMember(city, "y"), Is.EqualTo(coordinate));
+            Assert.That(GetMember(city, "stationedUnit"), Is.Null);
+        }
+    }
+
+    [Test]
     public void TrainerEpisodeResetDiscardsInFlightBufferAndAcceptsFreshDecision()
     {
         SetMember(_turnManager, "externallyDrivenMatch", true);

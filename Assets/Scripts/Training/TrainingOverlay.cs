@@ -28,7 +28,7 @@ public sealed class TrainingOverlay
             GUILayout.Label(arena.IsHumanPlaytest ? "Local policy playtest" : "Live self-play training", title);
             GUILayout.Space(12);
             GUILayout.Label($"Match {arena.Games + 1} · round {arena.Round}/{arena.RoundLimit}", label);
-            GUILayout.Label(arena.FullOpening ? "Full opening · 11 × 11" :
+            GUILayout.Label(arena.FullOpening ? $"Standard opening · {arena.BoardSize} × {arena.BoardSize}" :
                 $"Curriculum stage {arena.CurriculumDistance} · distance {arena.StartingDistance}", small);
             GUILayout.Space(12);
             // Sample balances once per second; fixed rows keep rapid turn changes readable.
@@ -60,7 +60,7 @@ public sealed class TrainingOverlay
             if (arena.IsTraining)
             {
                 GUILayout.Space(22);
-                GUILayout.Label("Full-board progress", title);
+                GUILayout.Label($"{arena.BoardSize} × {arena.BoardSize} progress", title);
                 TrainingProgressHistory progress = arena.Progress;
                 GUILayout.Label("Capture completion · rolling last 40 matches", small);
                 Rect chart = GUILayoutUtility.GetRect(width - 24, 160);
@@ -68,7 +68,7 @@ public sealed class TrainingOverlay
                 GUILayout.Label($"{progress.fullBoardCaptures} captures · {progress.fullBoardInterruptions} limits", label);
                 if (progress.recentResults.Count > 0)
                     GUILayout.Label($"{progress.CapturePercent:F0}% completion · {progress.recentResults.Count} matches in window", small);
-                else GUILayout.Label("Awaiting completed full-opening matches.", small);
+                else GUILayout.Label("Awaiting completed standard-opening matches.", small);
                 GUILayout.Label("X: training decisions since tracking began.\nCurriculum matches are excluded. Older mixed results cannot be backfilled.", small);
                 GUILayout.Space(10);
                 GUILayout.Label("Self-play completion is not benchmark strength. Fixed-opponent strength: not measured.", small);

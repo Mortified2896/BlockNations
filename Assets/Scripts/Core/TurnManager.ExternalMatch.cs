@@ -24,7 +24,7 @@ public partial class TurnManager
             unit.gameObject.SetActive(false);
             Destroy(unit.gameObject);
         }
-        gridManager.RebuildGrid(11, 11);
+        gridManager.RebuildGrid(gridManager.width, gridManager.height);
         currentMode = GameMode.VsAI;
         gameOver = false;
         ExternalWinnerSeatIndex = -1;

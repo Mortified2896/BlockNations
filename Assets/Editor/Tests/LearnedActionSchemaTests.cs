@@ -67,6 +67,51 @@ public sealed class LearnedActionSchemaTests
         Assert.That(LearnedActionSchema.Encode(state, -1), Is.EqualTo(before));
     }
 
+    [TestCase(5)] [TestCase(7)] [TestCase(9)] [TestCase(11)]
+    public void SmallerBoardsKeepNativeActionsAndMaskCanvasPadding(int size)
+    {
+        AIObservation state = Position(0);
+        state.Width = state.Height = size;
+        state.Tiles = Enumerable.Repeat(true, size * size).ToArray();
+        state.Seen = state.Visible = new bool[size * size];
+        AIUnitState own = state.Units[0]; own.X = 1; own.Y = 2;
+        AIUnitState enemy = state.Units[1]; enemy.X = 3; enemy.Y = 2;
+        state.Units = new[] { own, enemy };
+        state.LegalActions = new[] {
+            new AIAction { Kind = AIActionKind.Move, Actor = 0, Target = -1, Destination = 2 * size + 2 },
+            new AIAction { Kind = AIActionKind.Attack, Actor = 0, Target = 1, Destination = 2 * size + 3 },
+            new AIAction { Kind = AIActionKind.Recruit, Actor = 0, Target = -1, RecruitType = 0, Destination = size + 1 },
+            new AIAction { Kind = AIActionKind.EndTurn, Actor = -1, Target = -1 } };
+        float[] encoded = LearnedActionSchema.Encode(state, -1);
+        Assert.That(encoded.Length, Is.EqualTo(3120));
+        Assert.That(Enumerable.Range(0, 121).Sum(i => encoded[i * LearnedActionSchema.TileChannels]), Is.EqualTo(size * size));
+        var sources = LearnedActionSchema.Choices(state, -1);
+        var actual = sources.Keys.Where(i => i != LearnedActionSchema.EndTurn)
+            .SelectMany(i => LearnedActionSchema.Choices(state, i).Values)
+            .Where(a => a.Kind != AIActionKind.EndTurn).ToArray();
+        Assert.That(actual, Is.EquivalentTo(state.LegalActions.Where(a => a.Kind != AIActionKind.EndTurn)),
+            "Action keys must still identify authoritative native-board actions.");
+        if (size < 11) Assert.That(sources.ContainsKey(0), Is.False, "Padding must not offer an action.");
+        state.Seat = 1;
+        for (int i = 0; i < state.Units.Length; i++)
+        {
+            AIUnitState unit = state.Units[i]; unit.Seat = 1 - unit.Seat;
+            unit.X = size - 1 - unit.X; unit.Y = size - 1 - unit.Y; state.Units[i] = unit;
+        }
+        for (int i = 0; i < state.Cities.Length; i++)
+        {
+            AICityState city = state.Cities[i]; city.Seat = 1;
+            city.X = size - 1 - city.X; city.Y = size - 1 - city.Y; state.Cities[i] = city;
+        }
+        for (int i = 0; i < state.LegalActions.Length; i++)
+        {
+            AIAction action = state.LegalActions[i]; action.Destination = size * size - 1 - action.Destination;
+            state.LegalActions[i] = action;
+        }
+        Assert.That(LearnedActionSchema.Encode(state, -1), Is.EqualTo(encoded), "Seat mirroring must work on every board size.");
+        Assert.That(LearnedActionSchema.Choices(state, -1).Keys, Is.EquivalentTo(sources.Keys));
+    }
+
     [Test]
     public void CapacityAndBoardMismatchFailInsteadOfDroppingChoices()
     {

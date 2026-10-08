@@ -7,8 +7,8 @@ namespace BlockNations.AI
     // Type names never enter the network: roster slots carry capabilities and costs.
     public static class LearnedActionSchema
     {
-        public const int Version = 1;
-        public const string BehaviorName = "BlockNationsSeatV1";
+        public const int Version = 2;
+        public const string BehaviorName = "BlockNationsSeatV2";
         public const int BoardSize = 11;
         public const int Positions = BoardSize * BoardSize;
         public const int RecruitCapacity = 16;
@@ -22,21 +22,33 @@ namespace BlockNations.AI
 
         public static void Validate(AIObservation observation)
         {
-            if (observation == null || observation.Width != BoardSize || observation.Height != BoardSize ||
-                observation.Seat < 0 || observation.Seat > 1 || observation.Tiles?.Length != Positions ||
-                observation.Seen?.Length != Positions || observation.Visible?.Length != Positions ||
+            if (observation == null || !SupportsBoard(observation.Width) || observation.Height != observation.Width ||
+                observation.Seat < 0 || observation.Seat > 1 || observation.Tiles?.Length != observation.Width * observation.Height ||
+                observation.Seen?.Length != observation.Width * observation.Height || observation.Visible?.Length != observation.Width * observation.Height ||
                 observation.Units == null || observation.Cities == null || observation.RecruitTypes == null ||
                 observation.LegalActions == null)
-                throw new ArgumentException("Learned schema v1 requires a complete two-seat 11x11 observation.");
+                throw new ArgumentException("Learned schema v2 requires a complete two-seat square board of size 5, 7, 9 or 11.");
             if (observation.RecruitTypes.Length > RecruitCapacity)
-                throw new ArgumentException("Recruit roster exceeds learned schema v1; train a new schema instead of dropping actions.");
+                throw new ArgumentException("Recruit roster exceeds learned schema v2; train a new schema instead of dropping actions.");
+        }
+
+        public static bool SupportsBoard(int size) => size >= 5 && size <= BoardSize && size % 2 == 1;
+
+        // Center native board coordinates on a fixed canvas. Padding is unavailable,
+        // and action dictionaries retain native actions for authoritative execution.
+        public static int CanvasPosition(AIObservation observation, int position)
+        {
+            if (position < 0 || position >= observation.Width * observation.Height)
+                throw new ArgumentOutOfRangeException(nameof(position));
+            int inset = (BoardSize - observation.Width) / 2;
+            return (position / observation.Width + inset) * BoardSize + position % observation.Width + inset;
         }
 
         public static int CanonicalPosition(int position, int seat) => seat == 0 ? position : Positions - 1 - position;
 
         private static int SourcePosition(AIObservation observation, AIAction action) =>
-            action.Kind == AIActionKind.Recruit ? observation.Cities[action.Actor].Position(BoardSize) :
-            observation.Units[action.Actor].Position(BoardSize);
+            action.Kind == AIActionKind.Recruit ? CanvasPosition(observation, observation.Cities[action.Actor].Position(observation.Width)) :
+            CanvasPosition(observation, observation.Units[action.Actor].Position(observation.Width));
 
         // selectedSource is in the canonical perspective. -1 is source selection.
         public static Dictionary<int, AIAction> Choices(AIObservation observation, int selectedSource)
@@ -50,7 +62,7 @@ namespace BlockNations.AI
                 if (selectedSource < 0) { choices[source] = action; continue; }
                 if (source != selectedSource) continue;
                 int encoded = action.Kind == AIActionKind.Recruit ? RecruitOffset + action.RecruitType :
-                    CanonicalPosition(action.Destination, observation.Seat) + (action.Kind == AIActionKind.Attack ? Positions : 0);
+                    CanonicalPosition(CanvasPosition(observation, action.Destination), observation.Seat) + (action.Kind == AIActionKind.Attack ? Positions : 0);
                 if (choices.TryGetValue(encoded, out AIAction previous) && !previous.Equals(action))
                     throw new InvalidOperationException("Two legal actions alias the same learned action; schema must change.");
                 choices[encoded] = action;
@@ -64,16 +76,16 @@ namespace BlockNations.AI
         {
             Validate(observation);
             float[] values = new float[ObservationSize];
-            for (int position = 0; position < Positions; position++)
+            for (int position = 0; position < observation.Tiles.Length; position++)
             {
-                int index = CanonicalPosition(position, observation.Seat) * TileChannels;
+                int index = CanonicalPosition(CanvasPosition(observation, position), observation.Seat) * TileChannels;
                 values[index] = observation.Tiles[position] ? 1 : 0;
                 values[index + 1] = observation.Seen[position] ? 1 : 0;
                 values[index + 2] = observation.Visible[position] ? 1 : 0;
             }
             foreach (AICityState city in observation.Cities)
             {
-                int index = CanonicalPosition(city.Position(BoardSize), observation.Seat) * TileChannels;
+                int index = CanonicalPosition(CanvasPosition(observation, city.Position(observation.Width)), observation.Seat) * TileChannels;
                 values[index + 3] = city.Seat == observation.Seat ? 1 : -1;
                 values[index + 4] = city.CurrentlyVisible ? 1 : 0;
                 // Hidden recruitment is transient private information, even if once remembered.
@@ -81,7 +93,7 @@ namespace BlockNations.AI
             }
             foreach (AIUnitState unit in observation.Units)
             {
-                int index = CanonicalPosition(unit.Position(BoardSize), observation.Seat) * TileChannels;
+                int index = CanonicalPosition(CanvasPosition(observation, unit.Position(observation.Width)), observation.Seat) * TileChannels;
                 values[index + 6] = unit.Seat == observation.Seat ? 1 : -1;
                 values[index + 7] = unit.Health / 10f;
                 values[index + 8] = unit.MaxHealth / 10f;
@@ -104,7 +116,7 @@ namespace BlockNations.AI
                 int source = CanonicalPosition(SourcePosition(observation, action), observation.Seat);
                 if (action.Kind == AIActionKind.Recruit) values[source * TileChannels + 23] = 1;
                 else if (selectedSource < 0 || source == selectedSource)
-                    values[CanonicalPosition(action.Destination, observation.Seat) * TileChannels +
+                    values[CanonicalPosition(CanvasPosition(observation, action.Destination), observation.Seat) * TileChannels +
                         (action.Kind == AIActionKind.Move ? 21 : 22)] = 1;
             }
             for (int slot = 0; slot < observation.RecruitTypes.Length; slot++)
