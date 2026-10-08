@@ -5,6 +5,8 @@ using UnityEngine;
 public sealed class TrainingOverlay
 {
     private GUIStyle title, label, small, button;
+    private readonly int[] displayedGold = new int[2];
+    private double nextGoldRefresh;
     public static float Scale => Mathf.Clamp(Screen.height / 900f, 0.8f, 2.5f);
     public static float ReservedWidth => Mathf.Min(370f * Scale, Screen.width * 0.4f);
 
@@ -29,18 +31,26 @@ public sealed class TrainingOverlay
             GUILayout.Label(arena.FullOpening ? "Full opening · 11 × 11" :
                 $"Curriculum stage {arena.CurriculumDistance} · distance {arena.StartingDistance}", small);
             GUILayout.Space(12);
+            // Sample balances once per second; fixed rows keep rapid turn changes readable.
+            if (Time.realtimeSinceStartupAsDouble >= nextGoldRefresh)
+            {
+                for (int seat = 0; seat < 2; seat++) displayedGold[seat] = arena.GoldForSeat(seat);
+                nextGoldRefresh = Time.realtimeSinceStartupAsDouble + 1;
+            }
             for (int seat = 0; seat < 2; seat++)
             {
                 Color seatColor = seat == 0 ? new Color(0.35f, 0.75f, 1f) : new Color(1f, 0.45f, 0.4f);
                 GUI.color = seatColor;
-                string gold = arena.IsHumanPlaytest && seat != arena.HumanSeat ? "Gold hidden" : $"Gold {arena.GoldForSeat(seat)}";
-                GUILayout.Label($"Seat {seat} {(seat == arena.ActingSeat ? "• playing" : "")}    {gold}", label);
+                string gold = arena.IsHumanPlaytest && seat != arena.HumanSeat ? "Gold hidden" : $"Gold {displayedGold[seat]}";
+                Rect row = GUILayoutUtility.GetRect(width - 24, 28);
+                string name = seat == 0 ? "Blue" : "Red";
+                GUI.Label(new Rect(row.x, row.y, 100, row.height), name + (arena.IsHumanPlaytest && seat == arena.HumanSeat ? " (you)" : " AI"), label);
+                GUI.Label(new Rect(row.x + 118, row.y, row.width - 118, row.height), gold, label);
                 GUI.color = Color.white;
             }
             GUILayout.Space(12);
             GUILayout.Label($"Captures {arena.Captures} · limits {arena.Interruptions}", label);
             GUILayout.Label($"{arena.Actions:N0} actions · {(arena.Elapsed > 0 ? arena.Decisions / arena.Elapsed : 0):F1} decisions/s", small);
-            GUILayout.Label(arena.LastAction, small);
             if (!string.IsNullOrEmpty(arena.Failure)) GUILayout.Label(arena.Failure, small);
             GUI.enabled = arena.CanContinue;
             if (GUILayout.Button(arena.Paused ? "Continue live run" : "Pause live run", button)) arena.Paused = !arena.Paused;
@@ -103,10 +113,14 @@ public sealed class TrainingOverlay
 
     private static void Line(Vector2 a, Vector2 b, Color color)
     {
-        Matrix4x4 matrix = GUI.matrix;
-        GUIUtility.RotateAroundPivot(Mathf.Atan2(b.y - a.y, b.x - a.x) * Mathf.Rad2Deg, a);
-        Fill(new Rect(a.x, a.y - 1, Vector2.Distance(a, b), 2), color);
-        GUI.matrix = matrix;
+        // Draw in the same clipped coordinate space as the chart markers.
+        // Rotating GUI.matrix inside a GUILayout area displaces Retina line segments.
+        int steps = Mathf.Max(1, Mathf.CeilToInt(Mathf.Max(Mathf.Abs(b.x - a.x), Mathf.Abs(b.y - a.y))));
+        for (int step = 0; step <= steps; step++)
+        {
+            Vector2 point = Vector2.Lerp(a, b, step / (float)steps);
+            Fill(new Rect(point.x - 1, point.y - 1, 2, 2), color);
+        }
     }
     private static void Fill(Rect rect, Color color)
     {
