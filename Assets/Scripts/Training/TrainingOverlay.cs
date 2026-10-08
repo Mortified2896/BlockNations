@@ -104,21 +104,21 @@ public sealed class TrainingOverlay
                 GUILayout.Space(12);
                 TrainingProgressHistory progress = arena.Progress;
                 GUILayout.Label($"{arena.BoardSize} × {arena.BoardSize} outcomes", title);
-                if (progress.seatTrackedMatches > 0)
+                if (progress.turnOrderTrackedMatches > 0)
                 {
-                    int n = progress.seatTrackedMatches;
-                    GUILayout.Label($"Blue wins {progress.blueWins} ({100f * progress.blueWins / n:F1}%)", label);
-                    GUILayout.Label($"Red wins {progress.redWins} ({100f * progress.redWins / n:F1}%)", label);
-                    GUILayout.Label($"Turn limits {progress.seatTrackedLimits} ({100f * progress.seatTrackedLimits / n:F1}%)", label);
-                    GUILayout.Label($"{n:N0} matches since seat tracking began. Limits are not draws.", small);
-
+                    int n = progress.turnOrderTrackedMatches;
+                    int captures = progress.firstPlayerWins + progress.secondPlayerWins;
+                    GUILayout.Label($"First player wins {progress.firstPlayerWins:N0} ({(captures > 0 ? 100f * progress.firstPlayerWins / captures : 0):F1}%)", label);
+                    GUILayout.Label($"Second player wins {progress.secondPlayerWins:N0} ({(captures > 0 ? 100f * progress.secondPlayerWins / captures : 0):F1}%)", label);
+                    GUILayout.Label($"Turn limits {progress.turnOrderLimits:N0} ({100f * progress.turnOrderLimits / n:F1}%)", label);
+                    GUILayout.Label($"{n:N0} matches with known starter. Win percentages exclude turn limits.", small);
                 }
-                else GUILayout.Label("Seat results start with newly completed matches.", small);
+                else GUILayout.Label("First/second-player results await completed matches with a known starter.", small);
                 GUILayout.Space(8);
                 GUILayout.Label(progress.recentResults.Count > 0 ?
                     $"City capture before limit: {progress.CapturePercent:F0}% of last {progress.recentResults.Count} matches." :
                     "Awaiting completed matches.", small);
-                GUILayout.Label("Seat split may reflect opponent changes as well as seat advantage.", small);
+                GUILayout.Label("Training opponents also affect this split; paired evaluations isolate first-move advantage.", small);
             }
             GUILayout.EndScrollView();
             GUILayout.EndArea();

@@ -14,6 +14,8 @@ public sealed class TrainingProgressHistory
     public long decisions;
     public int fullBoardMatches, fullBoardCaptures, fullBoardInterruptions, curriculumMatches;
     public int seatTrackedMatches, blueWins, redWins, seatTrackedLimits;
+    // Additive development telemetry: older files leave these at zero.
+    public int turnOrderTrackedMatches, firstPlayerWins, secondPlayerWins, turnOrderLimits;
     public List<int> recentResults = new List<int>();
     public List<Point> points = new List<Point>();
 
@@ -36,7 +38,7 @@ public sealed class TrainingProgressHistory
         }
     }
 
-    public void RecordMatch(bool fullOpening, bool interrupted, int winnerSeat = -1)
+    public void RecordMatch(bool fullOpening, bool interrupted, int winnerSeat = -1, int firstSeat = -1)
     {
         if (!fullOpening) { curriculumMatches++; return; }
         fullBoardMatches++;
@@ -47,6 +49,13 @@ public sealed class TrainingProgressHistory
             if (interrupted) seatTrackedLimits++;
             else if (winnerSeat == 0) blueWins++;
             else redWins++;
+        }
+        if ((firstSeat == 0 || firstSeat == 1) && (interrupted || winnerSeat == 0 || winnerSeat == 1))
+        {
+            turnOrderTrackedMatches++;
+            if (interrupted) turnOrderLimits++;
+            else if (winnerSeat == firstSeat) firstPlayerWins++;
+            else secondPlayerWins++;
         }
         if (interrupted) fullBoardInterruptions++; else fullBoardCaptures++;
         recentResults.Add(interrupted ? 0 : 1);
@@ -63,6 +72,9 @@ public sealed class TrainingProgressHistory
             fullBoardCaptures + fullBoardInterruptions != fullBoardMatches ||
             seatTrackedMatches < 0 || seatTrackedMatches > fullBoardMatches || blueWins < 0 || redWins < 0 || seatTrackedLimits < 0 ||
             blueWins + redWins + seatTrackedLimits != seatTrackedMatches ||
+            turnOrderTrackedMatches < 0 || turnOrderTrackedMatches > fullBoardMatches || firstPlayerWins < 0 ||
+            secondPlayerWins < 0 || turnOrderLimits < 0 ||
+            firstPlayerWins + secondPlayerWins + turnOrderLimits != turnOrderTrackedMatches ||
             recentResults == null || points == null || recentResults.Count > WindowSize || points.Count > MaximumPoints)
             return false;
         foreach (int result in recentResults) if (result != 0 && result != 1) return false;

@@ -40,7 +40,7 @@ public sealed class TrainingArena : MonoBehaviour
     private bool previousCommunicatorEnabled, registeredTrainerFactory, trainerStopping;
     private ICommunicator trainerCommunicator;
     private readonly int[] matchSeatDecisions = new int[2];
-    private int matchDecisions, turnActions, recentCaptures, recentGames, curriculumDistance = 2, matchRoundLimit;
+    private int matchDecisions, turnActions, recentCaptures, recentGames, curriculumDistance = 2, matchRoundLimit, firstSeat;
     private double nextStatusTime, startedAt;
     private readonly Queue<bool> recentResults = new Queue<bool>();
     public bool Paused { get; set; }
@@ -169,6 +169,10 @@ public sealed class TrainingArena : MonoBehaviour
                 progress = JsonUtility.FromJson<TrainingProgressHistory>(File.ReadAllText(progressPath));
                 if (progress == null || !progress.IsValid() || progress.boardSize != boardSize)
                     throw new InvalidOperationException("Saved full-board progress is incompatible or invalid; preserve it before starting a new tracker.");
+                // Standard-only runs can recover old starters from bounded journals.
+                // Mixed curriculum journals did not record opening type; do not guess.
+                if (!useCurriculum && progress.turnOrderTrackedMatches == 0 && progress.fullBoardMatches > 0)
+                    TrainingMatchJournal.RestoreStandardTurnOrder(Path.GetDirectoryName(statusPath), progress);
             }
         }
         random = new System.Random(seed);
@@ -275,7 +279,7 @@ public sealed class TrainingArena : MonoBehaviour
         if (requireTrainer) Replay.Complete(TrainingReplayRecorder.Capture(turnManager, interrupted ?
             "Match interrupted at turn/action limit" : LastAction + " · " + (winner == 0 ? "Blue" : "Red") + " captures city and wins"));
         Games++;
-        if (requireTrainer) progress.RecordMatch(fullOpening, interrupted, winner);
+        if (requireTrainer) progress.RecordMatch(fullOpening, interrupted, winner, firstSeat);
         if (interrupted) Interruptions++; else Captures++;
         LastAction = interrupted ? "Match interrupted at its limit" : "Seat " + winner + " won by city capture";
         recentResults.Enqueue(!interrupted);
@@ -305,6 +309,7 @@ public sealed class TrainingArena : MonoBehaviour
         fullOpening = humanSeatIndex >= 0 || !useCurriculum || random.Next(5) == 0;
         matchRoundLimit = fullOpening ? maxRounds : Math.Min(maxRounds, 30);
         turnManager.ResetExternalMatch(fullOpening ? 2 : 4, humanSeatIndex >= 0 ? humanSeatIndex : ratingCheck ? Games % 2 : random.Next(2));
+        firstSeat = ActingSeat;
         if (!fullOpening) ConfigureCurriculumOpening();
         if (matchJournal != null)
         {

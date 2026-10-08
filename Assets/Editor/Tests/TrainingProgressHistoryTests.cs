@@ -48,6 +48,39 @@ public sealed class TrainingProgressHistoryTests
         Assert.That(restored.IsValid(), Is.True);
     }
 
+    [TestCase(0, 0, 1, 0)] [TestCase(1, 1, 1, 0)]
+    [TestCase(0, 1, 0, 1)] [TestCase(1, 0, 0, 1)]
+    public void TurnOrderUsesTheOpeningSeatRatherThanWinningColour(int first, int winner, int firstWins, int secondWins)
+    {
+        var history = new TrainingProgressHistory { boardSize = 6 };
+        history.RecordMatch(true, false, winner, first);
+        Assert.That(history.firstPlayerWins, Is.EqualTo(firstWins));
+        Assert.That(history.secondPlayerWins, Is.EqualTo(secondWins));
+        Assert.That(history.turnOrderTrackedMatches, Is.EqualTo(1));
+        Assert.That(history.IsValid(), Is.True);
+    }
+
+    [Test]
+    public void TurnOrderExcludesUnknownStartersAndCurriculumAndKeepsLimitsSeparateAcrossResume()
+    {
+        var history = new TrainingProgressHistory { boardSize = 6 };
+        history.RecordMatch(true, false, 0); // Old winner alone cannot identify initiative.
+        history.RecordMatch(false, false, 0, 0);
+        history.RecordMatch(true, false, 1, 1);
+        history.RecordMatch(true, false, 0, 1);
+        history.RecordMatch(true, true, -1, 0);
+        var restored = JsonUtility.FromJson<TrainingProgressHistory>(JsonUtility.ToJson(history));
+        Assert.That(restored.turnOrderTrackedMatches, Is.EqualTo(3));
+        Assert.That(restored.firstPlayerWins, Is.EqualTo(1));
+        Assert.That(restored.secondPlayerWins, Is.EqualTo(1));
+        Assert.That(restored.turnOrderLimits, Is.EqualTo(1));
+        restored.RecordMatch(true, false, 0, 0);
+        Assert.That(restored.firstPlayerWins, Is.EqualTo(2));
+        Assert.That(restored.IsValid(), Is.True);
+        restored.turnOrderTrackedMatches++;
+        Assert.That(restored.IsValid(), Is.False);
+    }
+
     [Test]
     public void EloTelemetryRejectsAnotherRunAndInvalidSeries()
     {
