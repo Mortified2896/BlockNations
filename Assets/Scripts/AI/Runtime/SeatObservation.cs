@@ -8,7 +8,25 @@ using Object = UnityEngine.Object;
 public sealed class SeatAIObservationSource
 {
     private readonly Dictionary<int, Dictionary<int, AICityState>> cityMemory = new Dictionary<int, Dictionary<int, AICityState>>();
-    public void ResetKnowledge() => cityMemory.Clear();
+    private AICityState[] publicStartingCities = Array.Empty<AICityState>();
+    public void ResetKnowledge()
+    {
+        cityMemory.Clear();
+        publicStartingCities = Array.Empty<AICityState>();
+    }
+
+    // The match driver supplies immutable public map knowledge at the opening.
+    // Never read hidden live ownership/recruitment to refresh these records.
+    public void SetPublicStartingCities(AICityState[] cities)
+    {
+        cityMemory.Clear();
+        publicStartingCities = (AICityState[])cities.Clone();
+        for (int i = 0; i < publicStartingCities.Length; i++)
+        {
+            publicStartingCities[i].CurrentlyVisible = false;
+            publicStartingCities[i].Recruited = false;
+        }
+    }
 
     public sealed class Context
     {
@@ -60,7 +78,12 @@ public sealed class SeatAIObservationSource
         }
 
         if (!cityMemory.TryGetValue(seat, out Dictionary<int, AICityState> remembered))
+        {
             cityMemory[seat] = remembered = new Dictionary<int, AICityState>();
+            foreach (AICityState city in publicStartingCities)
+                if (city.X >= 0 && city.X < grid.width && city.Y >= 0 && city.Y < grid.height)
+                    remembered[city.Position(grid.width)] = city;
+        }
         List<int> memoryPositions = new List<int>(remembered.Keys);
         foreach (int p in memoryPositions)
         {

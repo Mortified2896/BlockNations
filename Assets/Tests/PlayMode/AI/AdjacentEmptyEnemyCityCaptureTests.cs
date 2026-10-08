@@ -762,6 +762,38 @@ public class AdjacentEmptyEnemyCityCaptureTests
     }
 
     [Test]
+    public void PublicStartingCitiesDoNotRevealHiddenUnitsOrRecruitment()
+    {
+        InvokeMethod(_city, "SetOwnerSeatIndex", new object[] { 0 });
+        CreateUnit(1, 0, 0);
+        object hidden = CreateUnit(0, 9, 9);
+        object source = Activator.CreateInstance(FindType("SeatAIObservationSource"));
+        Type cityType = FindType("BlockNations.AI.AICityState");
+        object initial = Activator.CreateInstance(cityType);
+        SetMember(initial, "Seat", 0); SetMember(initial, "X", 3); SetMember(initial, "Y", 3);
+        SetMember(initial, "CurrentlyVisible", true); SetMember(initial, "Recruited", true);
+        Array cities = Array.CreateInstance(cityType, 1); cities.SetValue(initial, 0);
+        InvokeMethod(source, "SetPublicStartingCities", new object[] { cities });
+        object first = GetMember(InvokeMethod(source, "Observe", new object[] { _turnManager, 1, true, null }), "Observation");
+        object known = ((Array)GetMember(first, "Cities")).GetValue(0);
+        Assert.That(GetMember(known, "CurrentlyVisible"), Is.False);
+        Assert.That(GetMember(known, "Recruited"), Is.False);
+        Assert.That(((Array)GetMember(first, "Units")).Length, Is.EqualTo(1));
+        Assert.That(((bool[])GetMember(first, "Visible"))[3 * 11 + 3], Is.False);
+        SetMember(_city, "ownerSeatIndex", 2);
+        SetMember(_city, "hasRecruitedThisTurn", true);
+        ((Component)hidden).transform.position = ((Component)((Array)GetMember(_gridManager, "tileGrid")).GetValue(8, 8)).transform.position;
+        object second = GetMember(InvokeMethod(source, "Observe", new object[] { _turnManager, 1, true, null }), "Observation");
+        Assert.That(GetMember(((Array)GetMember(second, "Cities")).GetValue(0), "Seat"), Is.EqualTo(0));
+        Type schema = FindType("BlockNations.AI.LearnedActionSchema");
+        Assert.That(schema.GetMethod("Encode").Invoke(null, new object[] { second, -1 }),
+            Is.EqualTo(schema.GetMethod("Encode").Invoke(null, new object[] { first, -1 })));
+        InvokeMethod(source, "ResetKnowledge", Array.Empty<object>());
+        object cleared = GetMember(InvokeMethod(source, "Observe", new object[] { _turnManager, 1, true, null }), "Observation");
+        Assert.That(((Array)GetMember(cleared, "Cities")).Length, Is.Zero);
+    }
+
+    [Test]
     public void HardObservationIgnoresHiddenSceneChangesAndViewerFog()
     {
         SetMember(_turnManager, "currentMode", Enum.Parse(_gameModeEnum, "VsAI"));

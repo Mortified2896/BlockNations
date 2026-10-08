@@ -107,7 +107,7 @@ public sealed class LocalTrainingWindow : EditorWindow
             {
                 EditorGUILayout.LabelField("Live matches", $"{arena.games} completed; captures {arena.captures}, interruptions {arena.interruptions}");
                 EditorGUILayout.LabelField("Decisions", $"{arena.decisions} / {arena.decisionsPerSecond:F1} per second; actions {arena.actions}; rejected {arena.rejections}");
-                EditorGUILayout.LabelField("Board", $"Round {arena.round}/{arena.roundLimit}, seat {arena.seat}, curriculum distance {arena.curriculumDistance}; trainer resets {arena.trainerResets}");
+                EditorGUILayout.LabelField("Board", $"Round {arena.round}/{arena.roundLimit}, seat {arena.seat}, {(arena.fullOpening ? "full opening" : "curriculum distance " + arena.startingDistance)}; trainer resets {arena.trainerResets}");
                 if (!string.IsNullOrEmpty(arena.failure)) EditorGUILayout.HelpBox(arena.failure, MessageType.Error);
             }
             if (GUILayout.Button("Show Run Files")) EditorUtility.RevealInFinder(RunDirectory);

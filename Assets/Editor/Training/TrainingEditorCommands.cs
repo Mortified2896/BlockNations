@@ -56,7 +56,7 @@ public static class TrainingEditorCommands
         string directory = Path.GetFullPath("Logs/Validation/MLTraining/" + DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ"));
         Directory.CreateDirectory(directory);
         SessionState.SetString(TestResultKey, Path.Combine(directory, mode + "-results.xml"));
-        string[] groups = mode == TestMode.EditMode ? new[] { "LearnedActionSchemaTests", "HardTacticianPolicyTests",
+        string[] groups = mode == TestMode.EditMode ? new[] { "LearnedActionSchemaTests", "TrainingProgressHistoryTests", "HardTacticianPolicyTests",
             "LocalAIOpponentCompatibilityTests", "AIVsAIMatchHandoffTests" } : new[] { "ExternalTrainingMatchTests", "AdjacentEmptyEnemyCityCaptureTests" };
         TestRunnerApi api = ScriptableObject.CreateInstance<TestRunnerApi>();
         api.Execute(new ExecutionSettings(new Filter { testMode = mode, groupNames = groups }));
