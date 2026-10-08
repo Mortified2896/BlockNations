@@ -83,12 +83,14 @@ public sealed class LocalTrainingWindow : EditorWindow
         if (boardSize != 11) curriculum = false;
         using (new EditorGUI.DisabledScope(boardSize != 11))
             curriculum = EditorGUILayout.Toggle("Tactical curriculum + full games", curriculum);
-        runId = EditorGUILayout.TextField("Run id (blank = new)", runId);
+        EditorGUILayout.LabelField("New run", $"Automatic ID · {boardSize} × {boardSize} · fresh weights");
+        runId = EditorGUILayout.TextField("Saved run ID", runId);
+        EditorGUILayout.HelpBox("Start New Training creates a unique run ID for the selected board. Resume Saved Run uses the saved ID above and restores that run's board and weights.", MessageType.None);
         EditorGUILayout.HelpBox("Default: 20 GB shared across all runs, 512 MB checkpoint reserve, 20 GB free disk guard. Five recent checkpoints per active behavior, pinned models protected, bounded trainer logs, videos/replays off. Plug in and keep the lid open; screen locking is supported.", MessageType.None);
         using (new EditorGUI.DisabledScope(active || EditorApplication.isPlaying || EditorApplication.isCompiling))
         {
-            if (GUILayout.Button("Start Training")) Launch(runId, false, hours, budgetGB, seed, curriculum, player: useStandalone ? playerPath : null, boardSize: boardSize);
-            if (GUILayout.Button("Resume Saved Run")) Launch(runId, true, hours, budgetGB, seed, curriculum, player: useStandalone ? playerPath : null, boardSize: boardSize);
+            if (GUILayout.Button("Start New Training")) LaunchFromControls(false);
+            if (GUILayout.Button("Resume Saved Run")) LaunchFromControls(true);
         }
         using (new EditorGUI.DisabledScope(!active))
             if (GUILayout.Button("Stop and Save Checkpoint")) RequestStop();
@@ -124,6 +126,16 @@ public sealed class LocalTrainingWindow : EditorWindow
         EditorGUILayout.EndScrollView();
     }
 
+    private void LaunchFromControls(bool resume)
+    {
+        try
+        {
+            Launch(resume ? runId : null, resume, hours, budgetGB, seed, curriculum,
+                player: useStandalone ? playerPath : null, boardSize: boardSize);
+        }
+        catch (Exception error) when (!(error is ExitGUIException)) { launchError = error.Message; }
+    }
+
     public static void Launch(string id, bool resume, double durationHours = 8, double storageGB = 20,
         int runSeed = 42, bool useCurriculum = true, int maxSteps = 1_000_000, int checkpointInterval = 5000, string player = null, int boardSize = 11)
     {
@@ -131,10 +143,7 @@ public sealed class LocalTrainingWindow : EditorWindow
         if (IsRunActive() || EditorApplication.isPlaying || EditorApplication.isCompiling)
             throw new InvalidOperationException("Finish the active run and leave Play Mode before starting another.");
         if (!File.Exists(PythonPath)) throw new FileNotFoundException("Install the scoped trainer environment described in Docs/ML_Training_MVP.md.", PythonPath);
-        if (resume && string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Enter the saved run id to resume.");
-        id = string.IsNullOrWhiteSpace(id) ? "mac-" + DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ") : id.Trim();
-        if (!System.Text.RegularExpressions.Regex.IsMatch(id, @"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$"))
-            throw new ArgumentException("Use letters, numbers, dash, or underscore for the run id.");
+        id = TrainingRunSelection.ResolveId(RootPath, id, resume, boardSize, DateTime.UtcNow);
         if (durationHours <= 0 || storageGB <= 0.512) throw new ArgumentException("Use a positive duration and a budget above the checkpoint reserve.");
         string directory = Path.Combine(RootPath, "runs", id);
         int savedDistance = 2;
