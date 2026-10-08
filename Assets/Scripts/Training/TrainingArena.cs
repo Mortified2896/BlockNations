@@ -52,6 +52,7 @@ public sealed class TrainingArena : MonoBehaviour
     public int ActingSeat => turnManager != null ? turnManager.currentTurnSeatIndex : -1;
     public int CurriculumDistance => curriculumDistance;
     public int BoardSize => boardSize;
+    public Color SpectatorBackgroundColor => boardCamera.backgroundColor;
     public TrainingReplayHistory Replay { get; } = new TrainingReplayHistory();
     public TrainingProgressHistory Progress => progress;
     public TrainingEloHistory EloHistory { get; private set; }

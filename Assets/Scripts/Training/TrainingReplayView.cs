@@ -4,14 +4,15 @@ using UnityEngine;
 public sealed class TrainingReplayView
 {
     private GUIStyle health;
-    public void Draw(TrainingReplayHistory.Frame frame, TrainingReplayHistory.Frame opening, int size, TrainingVision vision)
+    public void Draw(TrainingReplayHistory.Frame frame, TrainingReplayHistory.Frame opening, int size, TrainingVision vision, Color backgroundColor)
     {
         if (frame == null) return;
         if (health == null) health = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter,
             fontSize = 14, normal = { textColor = Color.white } };
         float left = TrainingOverlay.ReservedWidth / TrainingOverlay.Scale;
         float width = Screen.width / TrainingOverlay.Scale - left, height = Screen.height / TrainingOverlay.Scale;
-        Fill(new Rect(left, 0, width, height), new Color(0.13f, 0.38f, 0.53f));
+        // Match the live camera colour rather than maintaining a separate replay palette.
+        Fill(new Rect(left, 0, width, height), backgroundColor);
         float step = Mathf.Min(width, height) / (size + 2);
         float x = left + (width - size * step) / 2, y = (height - size * step) / 2;
         for (int row = 0; row < size; row++) for (int column = 0; column < size; column++)
