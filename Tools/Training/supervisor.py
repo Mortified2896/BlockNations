@@ -224,7 +224,7 @@ def arena_options(run: Path, seed: int, curriculum: bool, resume: bool) -> tuple
 
 def board_options(run: Path, board_size: int, resume: bool) -> int:
     size = int(read_json(run / RUN_MARKER).get("boardSize", board_size)) if resume else board_size
-    if size not in (5, 7, 9, 11):
+    if size not in (5, 6, 7, 9, 11):
         raise ValueError("Saved run has an unsupported board size.")
     return size
 
@@ -256,7 +256,7 @@ def main() -> int:
     parser.add_argument("--max-steps", type=int, default=1_000_000)
     parser.add_argument("--checkpoint-interval", type=int, default=5000)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--board-size", type=int, choices=(5, 7, 9, 11), default=11)
+    parser.add_argument("--board-size", type=int, choices=(5, 6, 7, 9, 11), default=11)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--full-openings", action="store_true", help="Disable the tactical opening curriculum for a new run.")
     parser.add_argument("--env", type=Path)

@@ -27,12 +27,12 @@ namespace BlockNations.AI
                 observation.Seen?.Length != observation.Width * observation.Height || observation.Visible?.Length != observation.Width * observation.Height ||
                 observation.Units == null || observation.Cities == null || observation.RecruitTypes == null ||
                 observation.LegalActions == null)
-                throw new ArgumentException("Learned schema v2 requires a complete two-seat square board of size 5, 7, 9 or 11.");
+                throw new ArgumentException("Learned schema v2 requires a complete two-seat square board of size 5, 6, 7, 9 or 11.");
             if (observation.RecruitTypes.Length > RecruitCapacity)
                 throw new ArgumentException("Recruit roster exceeds learned schema v2; train a new schema instead of dropping actions.");
         }
 
-        public static bool SupportsBoard(int size) => size >= 5 && size <= BoardSize && size % 2 == 1;
+        public static bool SupportsBoard(int size) => size == 5 || size == 6 || size == 7 || size == 9 || size == 11;
 
         // Center native board coordinates on a fixed canvas. Padding is unavailable,
         // and action dictionaries retain native actions for authoritative execution.
@@ -40,7 +40,10 @@ namespace BlockNations.AI
         {
             if (position < 0 || position >= observation.Width * observation.Height)
                 throw new ArgumentOutOfRangeException(nameof(position));
-            int inset = (BoardSize - observation.Width) / 2;
+            int padding = BoardSize - observation.Width;
+            // On an even board, put the spare padding cell on the opposite side
+            // for seat 1, so rotating its canvas produces the same perspective.
+            int inset = padding / 2 + (observation.Seat == 1 ? padding % 2 : 0);
             return (position / observation.Width + inset) * BoardSize + position % observation.Width + inset;
         }
 

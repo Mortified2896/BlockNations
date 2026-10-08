@@ -105,6 +105,9 @@ class RetentionTests(unittest.TestCase):
         supervisor.atomic_json(run / "run.json", {"boardSize": 5})
         self.assertEqual(supervisor.board_options(run, 11, True), 5)
         self.assertEqual(supervisor.board_options(run, 7, False), 7)
+        self.assertEqual(supervisor.board_options(run, 6, False), 6)
+        supervisor.atomic_json(run / "run.json", {"boardSize": 6})
+        self.assertEqual(supervisor.board_options(run, 5, True), 6)
         supervisor.atomic_json(run / "run.json", {"boardSize": 3})
         with self.assertRaises(ValueError):
             supervisor.board_options(run, 11, True)

@@ -67,7 +67,7 @@ public sealed class LearnedActionSchemaTests
         Assert.That(LearnedActionSchema.Encode(state, -1), Is.EqualTo(before));
     }
 
-    [TestCase(5)] [TestCase(7)] [TestCase(9)] [TestCase(11)]
+    [TestCase(5)] [TestCase(6)] [TestCase(7)] [TestCase(9)] [TestCase(11)]
     public void SmallerBoardsKeepNativeActionsAndMaskCanvasPadding(int size)
     {
         AIObservation state = Position(0);

@@ -79,7 +79,7 @@ public sealed class LocalTrainingWindow : EditorWindow
         hours = EditorGUILayout.DoubleField("Maximum hours", hours);
         budgetGB = EditorGUILayout.DoubleField("Total storage limit (GB)", budgetGB);
         seed = EditorGUILayout.IntField("Seed", seed);
-        boardSize = EditorGUILayout.IntPopup("Board size", boardSize, new[] { "5 × 5", "7 × 7", "9 × 9", "11 × 11" }, new[] { 5, 7, 9, 11 });
+        boardSize = EditorGUILayout.IntPopup("Board size", boardSize, new[] { "5 × 5", "6 × 6", "7 × 7", "9 × 9", "11 × 11" }, new[] { 5, 6, 7, 9, 11 });
         if (boardSize != 11) curriculum = false;
         using (new EditorGUI.DisabledScope(boardSize != 11))
             curriculum = EditorGUILayout.Toggle("Tactical curriculum + full games", curriculum);
