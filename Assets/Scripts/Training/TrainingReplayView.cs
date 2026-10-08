@@ -11,8 +11,10 @@ public sealed class TrainingReplayView
             fontSize = 14, normal = { textColor = Color.white } };
         float left = TrainingOverlay.ReservedWidth / TrainingOverlay.Scale;
         float width = Screen.width / TrainingOverlay.Scale - left, height = Screen.height / TrainingOverlay.Scale;
-        // Match the live camera colour rather than maintaining a separate replay palette.
-        Fill(new Rect(left, 0, width, height), backgroundColor);
+        // Camera backgrounds are authored in sRGB; IMGUI tint is in the active
+        // rendering space. Match the displayed colour, not just its raw values.
+        Fill(new Rect(left, 0, width, height), QualitySettings.activeColorSpace == ColorSpace.Linear
+            ? backgroundColor.linear : backgroundColor);
         float step = Mathf.Min(width, height) / (size + 2);
         float x = left + (width - size * step) / 2, y = (height - size * step) / 2;
         for (int row = 0; row < size; row++) for (int column = 0; column < size; column++)

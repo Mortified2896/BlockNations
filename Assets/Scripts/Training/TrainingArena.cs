@@ -28,6 +28,8 @@ public sealed class TrainingArena : MonoBehaviour
     private bool fullOpening;
     private int startingDistance, viewportWidth, viewportHeight;
     private Rect originalCameraRect;
+    private Color originalCameraBackground;
+    private bool cameraPresentationInitialized;
     private string progressPath;
     private TrainingMatchJournal matchJournal;
     private bool ratingCheck;
@@ -146,6 +148,15 @@ public sealed class TrainingArena : MonoBehaviour
             seats[0] == null || seats[1] == null || seats[0].SeatIndex != 0 || seats[1].SeatIndex != 1 || boardCamera == null)
             throw new InvalidOperationException("Training arena needs explicitly wired two-seat agents, external TurnManager, and camera.");
         originalCameraRect = boardCamera.rect;
+        originalCameraBackground = boardCamera.backgroundColor;
+        cameraPresentationInitialized = true;
+        if (requireTrainer)
+        {
+            // Soften the training viewer without changing the game's camera palette.
+            float grey = originalCameraBackground.grayscale;
+            boardCamera.backgroundColor = Color.Lerp(originalCameraBackground,
+                new Color(grey, grey, grey, originalCameraBackground.a), .15f);
+        }
         if (requireTrainer && !string.IsNullOrEmpty(statusPath))
         {
             matchJournal = new TrainingMatchJournal(Path.GetDirectoryName(statusPath), boardSize);
@@ -422,7 +433,11 @@ public sealed class TrainingArena : MonoBehaviour
 
     private void OnDestroy()
     {
-        if (boardCamera != null) boardCamera.rect = originalCameraRect;
+        if (boardCamera != null && cameraPresentationInitialized)
+        {
+            boardCamera.rect = originalCameraRect;
+            boardCamera.backgroundColor = originalCameraBackground;
+        }
         if (trainerCommunicator != null) trainerCommunicator.QuitCommandReceived -= TrainerClosed;
         if (registeredTrainerFactory) CommunicatorFactory.ClearCreator();
         CommunicatorFactory.Enabled = previousCommunicatorEnabled;
