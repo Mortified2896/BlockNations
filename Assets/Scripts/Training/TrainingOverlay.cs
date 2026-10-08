@@ -45,7 +45,7 @@ public sealed class TrainingOverlay
             }
             GUILayout.Label(arena.IsHumanPlaytest ? "Local policy playtest" : arena.IsRatingCheck ? "Frozen policy rating check" : "Live self-play training", title);
             GUILayout.Space(12);
-            if (arena.IsTraining) DrawTrainingTime(arena);
+            if (arena.IsTraining) { DrawTrainingTime(arena); DrawStorage(arena); }
             GUILayout.Label($"Match {arena.Games + 1} · round {arena.Round}/{arena.RoundLimit}", label);
             GUILayout.Label(arena.FullOpening ? $"Standard opening · {arena.BoardSize} × {arena.BoardSize}" :
                 $"Curriculum stage {arena.CurriculumDistance} · distance {arena.StartingDistance}", small);
@@ -134,6 +134,7 @@ public sealed class TrainingOverlay
         double now = Time.realtimeSinceStartupAsDouble;
         GUILayout.Label("Recent match replay", title);
         DrawTrainingTime(arena);
+        DrawStorage(arena);
         GUILayout.Label(arena.Paused ? "Live training is paused." : "Training continues at full speed.", small);
         if (GUILayout.Button("Back to Live", button)) { replay.BackToLive(); return; }
         GUILayout.Space(12);
@@ -172,6 +173,28 @@ public sealed class TrainingOverlay
         int minutes = (int)(seconds / 60 % 60), remainder = (int)(seconds % 60);
         GUILayout.Label($"Total training: {(arena.TrainingTimeEstimated ? "≈ " : "")}{hours:00}:{minutes:00}:{remainder:00}", label);
         GUILayout.Label(arena.TrainingTimeEstimated ? "Includes estimated earlier sessions." : "Active time across resumes · pauses excluded", small);
+    }
+
+    private void DrawStorage(TrainingArena arena)
+    {
+        GUILayout.Space(8);
+        TrainingStorageStatus storage = arena.StorageStatus;
+        GUILayout.Label(storage != null ? storage.Summary : "Shared storage: awaiting supervisor telemetry", small);
+        if (storage != null)
+        {
+            Rect bar = GUILayoutUtility.GetRect(1, 7, GUILayout.ExpandWidth(true));
+            Fill(bar, new Color(0.02f, 0.09f, 0.14f));
+            Fill(new Rect(bar.x, bar.y, bar.width * storage.Fraction, bar.height), new Color(0.55f, 0.85f, 0.8f));
+        }
+        GUILayout.Label("Budget is shared across all training runs.", small);
+        string folder = arena.TrainingRunDirectory;
+        if (!string.IsNullOrEmpty(folder))
+        {
+            GUILayout.Label("Run folder · checkpoints and match results", small);
+            GUILayout.Label(folder, small);
+            if (GUILayout.Button("Copy run folder", button)) GUIUtility.systemCopyBuffer = folder;
+        }
+        GUILayout.Space(8);
     }
 
     private void DrawVision()

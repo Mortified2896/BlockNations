@@ -7,6 +7,8 @@ public static class TrainingReplayRecorder
     public static TrainingReplayHistory.Frame Capture(TurnManager manager, string description)
     {
         var pieces = new List<TrainingReplayHistory.Piece>();
+        HashSet<TileVisibility> blueVisible = manager.ComputeVisibilityForSeat(0);
+        HashSet<TileVisibility> redVisible = manager.ComputeVisibilityForSeat(1);
         foreach (City city in Object.FindObjectsByType<City>())
         {
             if (city.gameObject.scene != manager.gameObject.scene) continue;
@@ -24,20 +26,28 @@ public static class TrainingReplayRecorder
             piece.health = unit.currentHealthUnits; piece.maxHealth = unit.maxHealthUnits;
             UnitHealthLabel label = unit.GetComponent<UnitHealthLabel>();
             if (label != null) piece.hasHealthPresentation = label.TryGetPresentation(out piece.healthPresentation);
-            if (unit.moveOutline != null && unit.moveOutline.enabled)
+            bool active = !manager.gameOver && unit.ownerSeatIndex == manager.currentTurnSeatIndex;
+            bool hasAttackTarget = false;
+            if (active && !unit.CanMoveThisTurn() && unit.CanAttackThisTurn())
             {
-                piece.outlineSprite = unit.moveOutline.sprite;
-                piece.outlineBounds = WorldBounds(unit.moveOutline);
-                piece.outlineColor = unit.moveOutline.color;
+                foreach (LegalTurnAction action in LegalActionService.GetLegalActionsForUnit(manager, unit,
+                    unit.ownerSeatIndex, unit.ownerSeatIndex == 0 ? blueVisible : redVisible))
+                    if (action.ActionType == LegalActionType.UnitAttack) { hasAttackTarget = true; break; }
+            }
+            if (unit.TryGetActionOutlinePresentation(active, hasAttackTarget, out Unit.ActionOutlinePresentation outline))
+            {
+                piece.outlineSprite = outline.sprite;
+                piece.outlineBounds = outline.bounds;
+                piece.outlineColor = outline.color;
             }
             pieces.Add(piece);
         }
         int size = manager.gridManager.width;
         var blueVision = new bool[size * size];
         var redVision = new bool[size * size];
-        foreach (TileVisibility tile in manager.ComputeVisibilityForSeat(0))
+        foreach (TileVisibility tile in blueVisible)
             blueVision[tile.gridY * size + tile.gridX] = true;
-        foreach (TileVisibility tile in manager.ComputeVisibilityForSeat(1))
+        foreach (TileVisibility tile in redVisible)
             redVision[tile.gridY * size + tile.gridX] = true;
         SpriteRenderer tileRenderer = manager.gridManager.tileGrid[0, 0].GetComponent<SpriteRenderer>();
         return new TrainingReplayHistory.Frame { round = manager.turnNumber, seat = manager.currentTurnSeatIndex,

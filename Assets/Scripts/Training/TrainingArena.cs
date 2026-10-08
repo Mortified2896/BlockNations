@@ -63,6 +63,8 @@ public sealed class TrainingArena : MonoBehaviour
     public TrainingEloHistory EloHistory { get; private set; }
     public double TotalTrainingSeconds { get; private set; } = -1;
     public bool TrainingTimeEstimated { get; private set; }
+    public string TrainingRunDirectory => string.IsNullOrEmpty(statusPath) ? null : Path.GetDirectoryName(statusPath);
+    public TrainingStorageStatus StorageStatus { get; private set; }
 
     [Serializable]
     private sealed class TrainingTimeStatus
@@ -382,6 +384,12 @@ public sealed class TrainingArena : MonoBehaviour
                         clock.runId == new DirectoryInfo(directory).Name && clock.totalSeconds >= 0 &&
                         !double.IsNaN(clock.totalSeconds) && !double.IsInfinity(clock.totalSeconds))
                     { TotalTrainingSeconds = clock.totalSeconds; TrainingTimeEstimated = clock.estimated; }
+                }
+                string storagePath = Path.Combine(directory, "supervisor-status.json");
+                if (File.Exists(storagePath))
+                {
+                    var storage = JsonUtility.FromJson<TrainingStorageStatus>(File.ReadAllText(storagePath));
+                    if (storage != null && storage.IsValid(new DirectoryInfo(directory).Name)) StorageStatus = storage;
                 }
                 string path = Path.Combine(directory, "match-elo.json");
                 if (File.Exists(path))

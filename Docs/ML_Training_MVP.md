@@ -1,5 +1,7 @@
 # Local ML-Agents training MVP
 
+The proposed architecture beyond this MVP is recorded in [General AI Training Direction](AI_Training_Direction.md). That reference plan is distinct from the current implementation and run configuration.
+
 The owner approved implementation on this Mac on 2026-10-07, including continuous live self-play, checkpoint saving/resuming, local inference, and a configurable total training-artifact budget of 20 GB. Training matches run automatically after Start; comparison tournaments still require separate owner approval. The Mac training loop, checkpoint resume, and local model playtest have been validated. Opponent strength and physical phone/browser inference remain unverified.
 
 ## Implementation plan
@@ -110,6 +112,12 @@ The development training player uses its own macOS app identifier (`com.blocknat
 Live training and recent-match inspection share a **Shared / Blue / Red / All** vision selector, defaulting to Shared. Shared reveals the union of both seats' current sight: dark tiles are unseen by either seat. Blue and Red show only that seat's current visible tiles and conceal units outside them. These individual views are better for inspecting scouting and surprise attacks. All preserves the omniscient view.
 
 Replay frames capture independent visibility masks through the same read-only `ComputeVisibilityForSeat` rules used by seat observations. The viewer draws copies over the camera; it never mutates game visibility, legal actions, observations, or rewards. Fog remembers no explored tiles in this viewer: it depicts current sight. Public starting city coordinates remain marked with a neutral City label under fog, without revealing hidden current ownership. Gold and match descriptions remain clearly labelled spectator statistics. Human policy playtests retain their normal player fog and do not expose this selector.
+
+Action markers are recorded from the explicit current turn seat and remaining unit actions, rather than copied from a possibly stale live renderer. Yellow means movement remains for the active seat; when movement is exhausted, a smaller attack marker appears only if an attack remains and a target is legal in that seat's vision. Ending the turn switches markers to the next seat, and terminal frames have none. The recorder reads the shared authored marker style without changing live renderers or action resources.
+
+Both live and slow-replay sidebars show the active run folder and supervisor-reported shared storage usage, budget, and percentage. The folder contains checkpoints and match-result journals/metrics; slow-replay frames remain memory-only. Storage is the total across all runs under the configured training root, not just the displayed run, and refreshes from bounded supervisor telemetry rather than scanning files in the viewer. **Copy run folder** copies its full path. Native players need a new launch/resume to load these viewer changes; weights are preserved.
+
+Replay marker/storage validation (2026-10-09): 31 focused Editor checks passed, including production frame capture for both seats despite stale renderer/legacy flags, move exhaustion and remaining multi-step movement, committed Rider movement, turn changes/resets, legal attack-only markers, hidden targets, terminal frames, replay history, and shared-byte telemetry. Frozen production-overlay screenshots confirmed yellow markers on Blue before movement, zero after movement, markers on Red's turn, and zero on termination. The run folder and shared-budget display were inspected in live and replay views. These fixtures did not start self-play matches or a trainer. The native arm64 player rebuilt successfully.
 
 The masks are memory-only and remain bounded by the existing four-game, 256-frame replay limits; on 11×11 they add at most about 0.5 MB of mask payload across the frozen inspection playlist and live ring. The sidebar scrolls when necessary at smaller window sizes.
 

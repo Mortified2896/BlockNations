@@ -68,36 +68,59 @@ public class Unit : MonoBehaviour
         if (moveOutline == null) return;
 
         CacheMoveOutlineBaseLocalScale();
-
-        if (!isTurnForThisUnit)
-        {
-            moveOutline.enabled = false;
-            return;
-        }
-
-        bool canMove = CanMoveThisTurn();
-        bool canAttack = CanAttackThisTurn();
-
-        if (canMove)
-        {
-            moveOutline.color = moveReadyOutlineColor;
-            ApplyMoveOutlineScale(moveReadyOutlineScaleMultiplier);
-            moveOutline.enabled = true;
-            return;
-        }
-
-        bool hasAttackTargetNow = canAttack &&
+        bool hasAttackTargetNow = isTurnForThisUnit && !CanMoveThisTurn() && CanAttackThisTurn() &&
                                   UnitSelectionManager.Instance != null &&
                                   UnitSelectionManager.Instance.HasLegalAttackTargetNow(this);
-        if (hasAttackTargetNow)
-        {
-            moveOutline.color = attackReadyOutlineColor;
-            ApplyMoveOutlineScale(attackReadyOutlineScaleMultiplier);
-            moveOutline.enabled = true;
-            return;
-        }
+        moveOutline.enabled = TryGetActionOutlineStyle(isTurnForThisUnit, hasAttackTargetNow,
+            out Color color, out float scale);
+        if (!moveOutline.enabled) return;
+        moveOutline.color = color;
+        ApplyMoveOutlineScale(scale);
+    }
 
-        moveOutline.enabled = false;
+    public struct ActionOutlinePresentation
+    {
+        public Sprite sprite;
+        public Rect bounds;
+        public Color color;
+    }
+
+    // Record action readiness, not the renderer's possibly stale enabled/tint state.
+    // The caller supplies explicit turn ownership and fair legal-target information.
+    public bool TryGetActionOutlinePresentation(bool isTurnForThisUnit, bool hasAttackTargetNow,
+        out ActionOutlinePresentation presentation)
+    {
+        presentation = default;
+        if (moveOutline == null || moveOutline.sprite == null || currentHealthUnits <= 0 ||
+            !TryGetActionOutlineStyle(isTurnForThisUnit, hasAttackTargetNow, out Color color, out float scale)) return false;
+        Transform outline = moveOutline.transform;
+        Vector3 baseScale = hasMoveOutlineBaseLocalScale ? moveOutlineBaseLocalScale : outline.localScale;
+        Matrix4x4 matrix = (outline.parent != null ? outline.parent.localToWorldMatrix : Matrix4x4.identity) *
+            Matrix4x4.TRS(outline.localPosition, outline.localRotation, baseScale * Mathf.Max(0, scale));
+        Bounds local = moveOutline.localBounds;
+        Vector3 lower = matrix.MultiplyPoint3x4(local.min), upper = lower;
+        for (int corner = 1; corner < 8; corner++)
+        {
+            Vector3 point = matrix.MultiplyPoint3x4(new Vector3(
+                (corner & 1) == 0 ? local.min.x : local.max.x,
+                (corner & 2) == 0 ? local.min.y : local.max.y,
+                (corner & 4) == 0 ? local.min.z : local.max.z));
+            lower = Vector3.Min(lower, point); upper = Vector3.Max(upper, point);
+        }
+        presentation = new ActionOutlinePresentation { sprite = moveOutline.sprite, color = color,
+            bounds = Rect.MinMaxRect(lower.x, lower.y, upper.x, upper.y) };
+        return true;
+    }
+
+    private bool TryGetActionOutlineStyle(bool isTurnForThisUnit, bool hasAttackTargetNow,
+        out Color color, out float scale)
+    {
+        color = default; scale = 0;
+        if (!isTurnForThisUnit) return false;
+        if (CanMoveThisTurn()) { color = moveReadyOutlineColor; scale = moveReadyOutlineScaleMultiplier; return true; }
+        if (!CanAttackThisTurn() || !hasAttackTargetNow) return false;
+        color = attackReadyOutlineColor; scale = attackReadyOutlineScaleMultiplier;
+        return true;
     }
 
     [Header("City Link")]
