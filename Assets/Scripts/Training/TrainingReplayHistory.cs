@@ -14,12 +14,20 @@ public sealed class TrainingReplayHistory
         public bool city;
         public Sprite sprite;
         public Color color;
+        public Rect bounds;
+        public bool flipX, flipY, hasHealthPresentation;
+        public UnitHealthLabel.Presentation healthPresentation;
+        public Sprite outlineSprite;
+        public Rect outlineBounds;
+        public Color outlineColor;
     }
     public sealed class Frame
     {
         public int round, seat, blueGold, redGold;
         public string description;
         public int visionWidth;
+        public float tileSpacing = 1f;
+        public Vector2 tileWorldSize = new Vector2(.9f, .9f);
         public bool[] blueVision = Array.Empty<bool>(), redVision = Array.Empty<bool>();
 
         public bool Visible(int x, int y, TrainingVision view)

@@ -30,6 +30,29 @@ public class UnitHealthLabel : MonoBehaviour
     private TextMeshProUGUI labelText;
     private Camera cachedMainCamera;
 
+    // Read-only presentation data lets recorded spectator views keep the same
+    // badge geometry and colours without holding or changing the live Canvas.
+    public struct Presentation
+    {
+        public Rect bounds;
+        public float fontWorldSize;
+        public Color textColor, badgeColor;
+        public string text;
+    }
+
+    public bool TryGetPresentation(out Presentation presentation)
+    {
+        presentation = default;
+        if (canvas == null || unit == null || displayMode == DisplayMode.Hidden ||
+            (!showWhenUndamaged && unit.currentHealthUnits >= unit.maxHealthUnits)) return false;
+        var rect = (RectTransform)canvas.transform;
+        Vector3 lower = rect.TransformPoint(rect.rect.min), upper = rect.TransformPoint(rect.rect.max);
+        presentation = new Presentation { bounds = Rect.MinMaxRect(lower.x, lower.y, upper.x, upper.y),
+            fontWorldSize = fontSize * Mathf.Abs(rect.lossyScale.y), textColor = textColor, badgeColor = badgeColor,
+            text = FormatHealthText(unit.currentHealthUnits, unit.maxHealthUnits) };
+        return true;
+    }
+
     private void Awake()
     {
         unit = GetComponent<Unit>();
