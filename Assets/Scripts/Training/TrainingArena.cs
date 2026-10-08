@@ -52,6 +52,7 @@ public sealed class TrainingArena : MonoBehaviour
     public int ActingSeat => turnManager != null ? turnManager.currentTurnSeatIndex : -1;
     public int CurriculumDistance => curriculumDistance;
     public int BoardSize => boardSize;
+    public TrainingReplayHistory Replay { get; } = new TrainingReplayHistory();
     public TrainingProgressHistory Progress => progress;
     public TrainingEloHistory EloHistory { get; private set; }
     public bool IsHumanPlaytest => humanSeatIndex >= 0;
@@ -161,6 +162,7 @@ public sealed class TrainingArena : MonoBehaviour
 
     private void Update()
     {
+        Replay.Tick(Time.realtimeSinceStartupAsDouble);
         UpdateViewport();
         if (!ready || Paused || !string.IsNullOrEmpty(Failure)) { WriteStatusIfDue(); return; }
         if (needsReset)
@@ -200,6 +202,7 @@ public sealed class TrainingArena : MonoBehaviour
 
     public bool Execute(LegalTurnAction action)
     {
+        string replayAction = requireTrainer ? TrainingReplayRecorder.Describe(action) : null;
         RecordDecision();
         bool executed = action.ActionType == LegalActionType.EndTurn
             ? turnManager.TryAdvanceExternalMatchTurn(action.SeatIndex)
@@ -207,10 +210,11 @@ public sealed class TrainingArena : MonoBehaviour
         if (!executed) return false;
         Actions++;
         turnActions = action.ActionType == LegalActionType.EndTurn ? 0 : turnActions + 1;
-        LastAction = action.ActionType + " by seat " + action.SeatIndex;
+        LastAction = replayAction ?? action.ActionType + " by seat " + action.SeatIndex;
         turnManager.RecalculatePlayerVisibility();
         if (turnManager.gameOver) FinishMatch(false);
         else if (turnActions > 4096) FinishMatch(true);
+        else if (requireTrainer && Replay.CanRecord) Replay.Record(TrainingReplayRecorder.Capture(turnManager, replayAction));
         return true;
     }
 
@@ -232,6 +236,8 @@ public sealed class TrainingArena : MonoBehaviour
             if (interrupted) agent.EpisodeInterrupted();
             else { agent.AddReward(agent.SeatIndex == winner ? 1f : -1f); agent.EndEpisode(); }
         }
+        if (requireTrainer) Replay.Complete(TrainingReplayRecorder.Capture(turnManager, interrupted ?
+            "Match interrupted at turn/action limit" : LastAction + " · " + (winner == 0 ? "Blue" : "Red") + " captures city and wins"));
         Games++;
         if (requireTrainer) progress.RecordMatch(fullOpening, interrupted, winner);
         if (interrupted) Interruptions++; else Captures++;
@@ -268,6 +274,8 @@ public sealed class TrainingArena : MonoBehaviour
             if (city.gameObject.scene == gameObject.scene)
                 publicCities.Add(new AICityState { Seat = city.ownerSeatIndex, X = city.x, Y = city.y });
         observationSource.SetPublicStartingCities(publicCities.ToArray());
+        if (requireTrainer) Replay.Begin(Games + 1, boardSize, ActingSeat,
+            TrainingReplayRecorder.Capture(turnManager, (ActingSeat == 0 ? "Blue" : "Red") + " moves first"));
         startingDistance = publicCities.Count == 2 ? Math.Max(Math.Abs(publicCities[0].X - publicCities[1].X),
             Math.Abs(publicCities[0].Y - publicCities[1].Y)) : 0;
         turnManager.RecalculatePlayerVisibility();

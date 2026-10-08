@@ -7,6 +7,7 @@ public sealed class TrainingOverlay
     private GUIStyle title, label, small, button;
     private readonly int[] displayedGold = new int[2];
     private double nextGoldRefresh;
+    private readonly TrainingReplayView replayView = new TrainingReplayView();
     public static float Scale => Mathf.Clamp(Screen.height / 900f, 0.8f, 2.5f);
     public static float ReservedWidth => Mathf.Min(370f * Scale, Screen.width * 0.4f);
 
@@ -24,7 +25,14 @@ public sealed class TrainingOverlay
             GUI.matrix = Matrix4x4.Scale(new Vector3(Scale, Scale, 1));
             float width = ReservedWidth / Scale - 24;
             Fill(new Rect(12, 12, width, Screen.height / Scale - 24), new Color(0.035f, 0.13f, 0.20f, 0.97f));
+            replayView.Draw(arena.Replay);
             GUILayout.BeginArea(new Rect(24, 24, width - 24, Screen.height / Scale - 48));
+            if (arena.Replay.Inspecting)
+            {
+                DrawInspection(arena);
+                GUILayout.EndArea();
+                return;
+            }
             GUILayout.Label(arena.IsHumanPlaytest ? "Local policy playtest" : "Live self-play training", title);
             GUILayout.Space(12);
             GUILayout.Label($"Match {arena.Games + 1} · round {arena.Round}/{arena.RoundLimit}", label);
@@ -52,6 +60,12 @@ public sealed class TrainingOverlay
             GUILayout.Label($"Captures {arena.Captures} · limits {arena.Interruptions}", label);
             GUILayout.Label($"{arena.Actions:N0} actions · {(arena.Elapsed > 0 ? arena.Decisions / arena.Elapsed : 0):F1} decisions/s", small);
             if (!string.IsNullOrEmpty(arena.Failure)) GUILayout.Label(arena.Failure, small);
+            if (arena.IsTraining)
+            {
+                GUI.enabled = arena.Replay.CanInspect;
+                if (GUILayout.Button("Inspect recent games", button)) arena.Replay.Inspect(Time.realtimeSinceStartupAsDouble);
+                GUI.enabled = true;
+            }
             GUI.enabled = arena.CanContinue;
             if (GUILayout.Button(arena.Paused ? "Continue live run" : "Pause live run", button)) arena.Paused = !arena.Paused;
             GUI.enabled = true;
@@ -64,7 +78,7 @@ public sealed class TrainingOverlay
                 GUILayout.Label("Training Elo", title);
                 GUILayout.Label(elo == null ? "Waiting for trainer rating…" :
                     $"{elo.points[elo.points.Count - 1].elo:F0} Elo · start {elo.points[0].elo:F0}", label);
-                Rect chart = GUILayoutUtility.GetRect(width - 24, 160);
+                Rect chart = GUILayoutUtility.GetRect(width - 24, 140);
                 if (elo != null) DrawChart(chart, elo);
                 GUILayout.Label("X: trainer steps · Y: self-play Elo", small);
                 GUILayout.Label("Relative to training opponents. Not human Elo.", small);
@@ -78,9 +92,7 @@ public sealed class TrainingOverlay
                     GUILayout.Label($"Red wins {progress.redWins} ({100f * progress.redWins / n:F1}%)", label);
                     GUILayout.Label($"Turn limits {progress.seatTrackedLimits} ({100f * progress.seatTrackedLimits / n:F1}%)", label);
                     GUILayout.Label($"{n:N0} matches since seat tracking began. Limits are not draws.", small);
-                    int wins = progress.blueWins + progress.redWins;
-                    if (wins > 0)
-                        GUILayout.Label($"Among captures: blue {100f * progress.blueWins / wins:F1}% · red {100f * progress.redWins / wins:F1}%", small);
+
                 }
                 else GUILayout.Label("Seat results start with newly completed matches.", small);
                 GUILayout.Space(8);
@@ -92,6 +104,43 @@ public sealed class TrainingOverlay
             GUILayout.EndArea();
         }
         finally { GUI.matrix = matrix; GUI.color = color; GUI.enabled = true; }
+    }
+
+    private void DrawInspection(TrainingArena arena)
+    {
+        TrainingReplayHistory replay = arena.Replay;
+        TrainingReplayHistory.Game game = replay.CurrentGame;
+        TrainingReplayHistory.Frame frame = replay.CurrentFrame;
+        double now = Time.realtimeSinceStartupAsDouble;
+        GUILayout.Label("Recent match replay", title);
+        GUILayout.Label(arena.Paused ? "Live training is paused." : "Training continues at full speed.", small);
+        if (GUILayout.Button("Back to Live", button)) { replay.BackToLive(); return; }
+        GUILayout.Space(12);
+        GUILayout.Label($"Recorded match {game.number} · {game.boardSize} × {game.boardSize}", label);
+        GUILayout.Label($"Recent game {replay.PlaylistIndex + 1}/{replay.PlaylistCount} · round {frame.round}", small);
+        GUILayout.Label((game.firstSeat == 0 ? "Blue" : "Red") + " moved first", small);
+        GUILayout.Space(12);
+        GUILayout.Label($"Blue gold {frame.blueGold}    Red gold {frame.redGold}", label);
+        GUILayout.Label($"State {replay.FrameIndex + 1}/{game.frames.Count}", small);
+        GUILayout.Label(frame.description, label);
+        GUILayout.Space(12);
+        if (GUILayout.Button(replay.Playing ? "Pause replay" : "Play replay", button)) replay.Playing = !replay.Playing;
+        if (GUILayout.Button("Next action", button)) { replay.Playing = false; replay.Step(now); }
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button("Previous game", button)) replay.SelectGame(-1, now);
+        if (GUILayout.Button("Next game", button)) replay.SelectGame(1, now);
+        GUILayout.EndHorizontal();
+        GUILayout.Space(12);
+        GUILayout.Label("Seconds per action", small);
+        int speed = replay.SecondsPerAction < 1 ? 0 : replay.SecondsPerAction < 1.5 ? 1 : 2;
+        speed = GUILayout.Toolbar(speed, new[] { "0.6 s", "1.2 s", "2 s" });
+        replay.SecondsPerAction = speed == 0 ? .6 : speed == 1 ? 1.2 : 2;
+        GUILayout.Space(12);
+        GUILayout.Label("Recorded actions, not a new match. These recent games stay fixed while you inspect. Re-enter inspection to load newer games.", small);
+        if (game.truncated) GUILayout.Label("Long match: replay buffer kept the opening and final state; some later actions are omitted.", small);
+        if (!string.IsNullOrEmpty(arena.Failure)) GUILayout.Label(arena.Failure, small);
+        GUILayout.Space(12);
+        GUILayout.Label($"Live run: {arena.Games:N0} matches · {arena.Actions:N0} actions", small);
     }
 
     private static GUIStyle Style(int size, bool bold) => new GUIStyle(GUI.skin.label)

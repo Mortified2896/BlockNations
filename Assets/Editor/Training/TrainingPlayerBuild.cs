@@ -18,11 +18,14 @@ public static class TrainingPlayerBuild
         if (string.IsNullOrWhiteSpace(output)) output = Path.GetFullPath("Build/LocalTrainingV2.app");
         Directory.CreateDirectory(Path.GetDirectoryName(output));
         int architecture = PlayerSettings.GetArchitecture(NamedBuildTarget.Standalone);
+        string identifier = PlayerSettings.GetApplicationIdentifier(NamedBuildTarget.Standalone);
         bool background = PlayerSettings.runInBackground;
         FullScreenMode fullscreen = PlayerSettings.fullScreenMode;
         try
         {
             PlayerSettings.SetArchitecture(NamedBuildTarget.Standalone, 1);
+            // Isolate development players from shipping/legacy apps in macOS window targeting.
+            PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Standalone, "com.blocknations.localtraining.v2");
             PlayerSettings.runInBackground = true;
             PlayerSettings.fullScreenMode = FullScreenMode.Windowed;
             BuildReport result = BuildPipeline.BuildPlayer(new BuildPlayerOptions {
@@ -35,6 +38,7 @@ public static class TrainingPlayerBuild
         finally
         {
             PlayerSettings.SetArchitecture(NamedBuildTarget.Standalone, architecture);
+            PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Standalone, identifier);
             PlayerSettings.runInBackground = background;
             PlayerSettings.fullScreenMode = fullscreen;
         }
