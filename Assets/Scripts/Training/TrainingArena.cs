@@ -53,6 +53,7 @@ public sealed class TrainingArena : MonoBehaviour
     public int CurriculumDistance => curriculumDistance;
     public int BoardSize => boardSize;
     public TrainingProgressHistory Progress => progress;
+    public TrainingEloHistory EloHistory { get; private set; }
     public bool IsHumanPlaytest => humanSeatIndex >= 0;
     public bool IsTraining => requireTrainer;
     public int HumanSeat => humanSeatIndex;
@@ -232,7 +233,7 @@ public sealed class TrainingArena : MonoBehaviour
             else { agent.AddReward(agent.SeatIndex == winner ? 1f : -1f); agent.EndEpisode(); }
         }
         Games++;
-        if (requireTrainer) progress.RecordMatch(fullOpening, interrupted);
+        if (requireTrainer) progress.RecordMatch(fullOpening, interrupted, winner);
         if (interrupted) Interruptions++; else Captures++;
         LastAction = interrupted ? "Match interrupted at its limit" : "Seat " + winner + " won by city capture";
         recentResults.Enqueue(!interrupted);
@@ -319,6 +320,22 @@ public sealed class TrainingArena : MonoBehaviour
         double now = Time.realtimeSinceStartupAsDouble;
         if ((!force && now < nextStatusTime) || string.IsNullOrEmpty(statusPath)) return;
         nextStatusTime = now + 2;
+        if (requireTrainer)
+        {
+            // Missing/stale chart telemetry must never stop or alter training.
+            try
+            {
+                string directory = Path.GetDirectoryName(statusPath);
+                string path = Path.Combine(directory, "training-elo.json");
+                if (File.Exists(path))
+                {
+                    var history = JsonUtility.FromJson<TrainingEloHistory>(File.ReadAllText(path));
+                    if (history != null && history.IsValid(boardSize, new DirectoryInfo(directory).Name)) EloHistory = history;
+                }
+            }
+            catch (IOException) { }
+            catch (ArgumentException) { }
+        }
         double elapsed = Math.Max(0, now - startedAt);
         var state = new ArenaStatus { decisions = Decisions, actions = Actions, games = Games, captures = Captures,
             interruptions = Interruptions, rejections = Rejections, round = Round, seat = ActingSeat,

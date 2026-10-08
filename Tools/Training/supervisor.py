@@ -6,6 +6,7 @@ with a shell, modify user power settings, or prune imported/pinned models.
 from __future__ import annotations
 
 import argparse
+from elo_history import TrainerEloHistory
 import json
 import os
 from pathlib import Path
@@ -346,11 +347,16 @@ def main() -> int:
             # No -d: locking and display sleep remain available. Bound to this supervisor.
             assertion = subprocess.Popen(["/usr/bin/caffeinate", "-i", "-s", "-w", str(os.getpid())],
                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elo = TrainerEloHistory(args.run_id, args.board_size,
+            read_json(config)["behaviors"]["BlockNationsSeatV2"]["self_play"]["initial_elo"])
+        elo.restore(run / "training-elo.json")
+        elo.backfill(run)
         log = BoundedLog(run / "trainer.log")
         def capture_output():
             try:
                 while chunk := process.stdout.read1(4096):
                     log.append(chunk)
+                    elo.feed(chunk)
                     if b"Listening on port 5004" in chunk:
                         state["trainerReady"] = True
             finally:
@@ -368,6 +374,7 @@ def main() -> int:
             if resident is not None:
                 state["peakResidentBytes"] = max(state.get("peakResidentBytes", 0), resident)
             atomic_json(run / "supervisor-status.json", state)
+            atomic_json(run / "training-elo.json", elo.snapshot())
             atomic_json(root / "active.json", {"runId": args.run_id, "supervisorPid": os.getpid()})
             arena = read_json(run / "arena-status.json")
             if arena.get("trainerConnected"):
@@ -392,6 +399,7 @@ def main() -> int:
             interrupt_trainer(process)
             break
         output_thread.join(timeout=5)
+        atomic_json(run / "training-elo.json", elo.snapshot())
         checkpoints = list(run.rglob("*.pt"))
         exports = list(run.rglob("*.onnx"))
         failed = process.returncode != 0 or reason == "arena_failure"

@@ -30,4 +30,34 @@ public sealed class TrainingProgressHistoryTests
         resumed.informationContract = "another observation contract";
         Assert.That(resumed.IsValid(), Is.False);
     }
+    [Test]
+    public void SeatSplitExcludesUnknownHistoricalWinnersAndCurriculum()
+    {
+        var history = new TrainingProgressHistory { boardSize = 5 };
+        history.RecordMatch(true, false); // Old record: winning seat unknown.
+        history.RecordMatch(false, false, 0);
+        history.RecordMatch(true, false, 0);
+        history.RecordMatch(true, false, 1);
+        history.RecordMatch(true, true, -1);
+        var restored = JsonUtility.FromJson<TrainingProgressHistory>(JsonUtility.ToJson(history));
+        Assert.That(restored.fullBoardMatches, Is.EqualTo(4));
+        Assert.That(restored.seatTrackedMatches, Is.EqualTo(3));
+        Assert.That(restored.blueWins, Is.EqualTo(1));
+        Assert.That(restored.redWins, Is.EqualTo(1));
+        Assert.That(restored.seatTrackedLimits, Is.EqualTo(1));
+        Assert.That(restored.IsValid(), Is.True);
+    }
+
+    [Test]
+    public void EloTelemetryRejectsAnotherRunAndInvalidSeries()
+    {
+        var history = JsonUtility.FromJson<TrainingEloHistory>(
+            "{\"version\":1,\"schema\":2,\"boardSize\":5,\"runId\":\"run\",\"behavior\":\"BlockNationsSeatV2\",\"points\":[{\"step\":0,\"elo\":1200},{\"step\":1000,\"elo\":1250}]}");
+        Assert.That(history.IsValid(5, "run"), Is.True);
+        Assert.That(history.IsValid(11, "run"), Is.False);
+        Assert.That(history.IsValid(5, "other"), Is.False);
+        history.points.Add(new TrainingEloHistory.Point { step = 900, elo = 1300 });
+        Assert.That(history.IsValid(5, "run"), Is.False);
+    }
+
 }

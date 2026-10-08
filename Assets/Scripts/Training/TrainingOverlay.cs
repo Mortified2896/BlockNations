@@ -60,18 +60,34 @@ public sealed class TrainingOverlay
             if (arena.IsTraining)
             {
                 GUILayout.Space(22);
-                GUILayout.Label($"{arena.BoardSize} × {arena.BoardSize} progress", title);
-                TrainingProgressHistory progress = arena.Progress;
-                GUILayout.Label("Capture completion · rolling last 40 matches", small);
+                TrainingEloHistory elo = arena.EloHistory;
+                GUILayout.Label("Training Elo", title);
+                GUILayout.Label(elo == null ? "Waiting for trainer rating…" :
+                    $"{elo.points[elo.points.Count - 1].elo:F0} Elo · start {elo.points[0].elo:F0}", label);
                 Rect chart = GUILayoutUtility.GetRect(width - 24, 160);
-                DrawChart(chart, progress);
-                GUILayout.Label($"{progress.fullBoardCaptures} captures · {progress.fullBoardInterruptions} limits", label);
-                if (progress.recentResults.Count > 0)
-                    GUILayout.Label($"{progress.CapturePercent:F0}% completion · {progress.recentResults.Count} matches in window", small);
-                else GUILayout.Label("Awaiting completed standard-opening matches.", small);
-                GUILayout.Label("X: training decisions since tracking began.\nCurriculum matches are excluded. Older mixed results cannot be backfilled.", small);
-                GUILayout.Space(10);
-                GUILayout.Label("Self-play completion is not benchmark strength. Fixed-opponent strength: not measured.", small);
+                if (elo != null) DrawChart(chart, elo);
+                GUILayout.Label("X: trainer steps · Y: self-play Elo", small);
+                GUILayout.Label("Relative to training opponents. Not human Elo.", small);
+                GUILayout.Space(12);
+                TrainingProgressHistory progress = arena.Progress;
+                GUILayout.Label($"{arena.BoardSize} × {arena.BoardSize} outcomes", title);
+                if (progress.seatTrackedMatches > 0)
+                {
+                    int n = progress.seatTrackedMatches;
+                    GUILayout.Label($"Blue wins {progress.blueWins} ({100f * progress.blueWins / n:F1}%)", label);
+                    GUILayout.Label($"Red wins {progress.redWins} ({100f * progress.redWins / n:F1}%)", label);
+                    GUILayout.Label($"Turn limits {progress.seatTrackedLimits} ({100f * progress.seatTrackedLimits / n:F1}%)", label);
+                    GUILayout.Label($"{n:N0} matches since seat tracking began. Limits are not draws.", small);
+                    int wins = progress.blueWins + progress.redWins;
+                    if (wins > 0)
+                        GUILayout.Label($"Among captures: blue {100f * progress.blueWins / wins:F1}% · red {100f * progress.redWins / wins:F1}%", small);
+                }
+                else GUILayout.Label("Seat results start with newly completed matches.", small);
+                GUILayout.Space(8);
+                GUILayout.Label(progress.recentResults.Count > 0 ?
+                    $"City capture before limit: {progress.CapturePercent:F0}% of last {progress.recentResults.Count} matches." :
+                    "Awaiting completed matches.", small);
+                GUILayout.Label("Seat split may reflect opponent changes as well as seat advantage.", small);
             }
             GUILayout.EndArea();
         }
@@ -84,30 +100,36 @@ public sealed class TrainingOverlay
         normal = { textColor = new Color(0.91f, 0.95f, 1f) }
     };
 
-    private void DrawChart(Rect rect, TrainingProgressHistory history)
+    private void DrawChart(Rect rect, TrainingEloHistory history)
     {
-        Rect plot = new Rect(rect.x + 34, rect.y + 12, rect.width - 42, rect.height - 38);
+        Rect plot = new Rect(rect.x + 46, rect.y + 12, rect.width - 54, rect.height - 38);
         Fill(plot, new Color(0.02f, 0.09f, 0.14f));
-        for (int percent = 0; percent <= 100; percent += 50)
+        float low = history.points[0].elo, high = low;
+        foreach (var point in history.points) { low = Mathf.Min(low, point.elo); high = Mathf.Max(high, point.elo); }
+        low = Mathf.Floor((low - 10) / 50) * 50;
+        high = Mathf.Max(low + 100, Mathf.Ceil((high + 10) / 50) * 50);
+        for (int i = 0; i <= 2; i++)
         {
-            float y = plot.yMax - percent / 100f * plot.height;
+            float value = Mathf.Lerp(low, high, i / 2f);
+            float y = plot.yMax - i / 2f * plot.height;
             Fill(new Rect(plot.x, y, plot.width, 1), new Color(0.25f, 0.35f, 0.42f));
-            GUI.Label(new Rect(rect.x, y - 9, 34, 22), percent.ToString(), small);
+            GUI.Label(new Rect(rect.x, y - 9, 46, 22), value.ToString("F0"), small);
         }
-        if (history.points.Count == 0) return;
-        long first = history.points[0].decisions;
-        long last = history.points[history.points.Count - 1].decisions;
+        float baselineY = plot.yMax - (history.points[0].elo - low) / (high - low) * plot.height;
+        Fill(new Rect(plot.x, baselineY, plot.width, 1), new Color(0.5f, 0.5f, 0.35f));
+        long last = history.points[history.points.Count - 1].step;
         Vector2 previous = default;
         for (int i = 0; i < history.points.Count; i++)
         {
-            TrainingProgressHistory.Point point = history.points[i];
-            var current = new Vector2(plot.x + (float)((point.decisions - first) / (double)Math.Max(1, last - first)) * plot.width,
-                plot.yMax - point.capturePercent / 100f * plot.height);
-            if (i > 0) Line(previous, current, new Color(0.4f, 0.9f, 0.75f));
+            TrainingEloHistory.Point point = history.points[i];
+            var current = new Vector2(plot.x + (float)(point.step / (double)Math.Max(1, last)) * plot.width,
+                plot.yMax - (point.elo - low) / (high - low) * plot.height);
+            // Bounded retention may leave a gap after the starting reference.
+            if (i > 0 && !(i == 1 && point.step > 1000)) Line(previous, current, new Color(0.4f, 0.9f, 0.75f));
             Fill(new Rect(current.x - 2, current.y - 2, 4, 4), new Color(0.4f, 0.9f, 0.75f));
             previous = current;
         }
-        GUI.Label(new Rect(plot.x, plot.yMax + 4, plot.width / 2, 22), first.ToString("N0"), small);
+        GUI.Label(new Rect(plot.x, plot.yMax + 4, plot.width / 2, 22), "0", small);
         GUI.Label(new Rect(plot.center.x, plot.yMax + 4, plot.width / 2, 22), last.ToString("N0"), small);
     }
 

@@ -78,3 +78,9 @@ The Unity training controls include board size. Standard-opening results are tra
 Initial run recommendation: one hour with the existing shared 20 GB artifact limit. Observe completed games, turn-limit endings and actual tactical behaviour before claiming better strength. Evaluation tournaments remain separately approved.
 
 Validation for this change: 62 Editor tests, 21 Play Mode tests and 9 Python supervisor tests passed. The separate native arm64 v2 player built successfully. The fresh run `mac-5x5-fresh-20261008` connected as `BlockNationsSeatV2`, began from random weights and completed standard-opening captures with zero rejected actions. These are functional checks, not a strength benchmark.
+
+### Live training rating and seat outcomes
+
+The spectator chart displays ML-Agents' reported **Training Elo**, with the trainer's configured 1200 starting reference and trainer steps on the horizontal axis. This is relative to the evolving self-play opponent pool, not calibrated human Elo or fixed-opponent evaluation. The supervisor backfills available bounded trainer logs, persists `training-elo.json`, and keeps the baseline plus the latest 199 reports across resumes. Missing chart telemetry does not halt training.
+
+Standard-opening outcomes separately show blue wins, red wins, turn-limit interruptions, and the blue/red split among captures. Seat tracking starts when winning-seat telemetry is available; historical records without winners are excluded from that denominator. A limit is not counted as a draw. Capture completion is only the share of matches ending before the limit, not playing strength. Seat splits flag possible bias but changing opponent assignments, learning, and fixed starting positions can also affect them; controlled swapped-position evaluation is needed to isolate causes.

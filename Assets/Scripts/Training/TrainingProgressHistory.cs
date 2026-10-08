@@ -13,6 +13,7 @@ public sealed class TrainingProgressHistory
     public int boardSize = 11;
     public long decisions;
     public int fullBoardMatches, fullBoardCaptures, fullBoardInterruptions, curriculumMatches;
+    public int seatTrackedMatches, blueWins, redWins, seatTrackedLimits;
     public List<int> recentResults = new List<int>();
     public List<Point> points = new List<Point>();
 
@@ -35,10 +36,18 @@ public sealed class TrainingProgressHistory
         }
     }
 
-    public void RecordMatch(bool fullOpening, bool interrupted)
+    public void RecordMatch(bool fullOpening, bool interrupted, int winnerSeat = -1)
     {
         if (!fullOpening) { curriculumMatches++; return; }
         fullBoardMatches++;
+        // Older telemetry omitted winners; never invent results for those matches.
+        if (interrupted || winnerSeat == 0 || winnerSeat == 1)
+        {
+            seatTrackedMatches++;
+            if (interrupted) seatTrackedLimits++;
+            else if (winnerSeat == 0) blueWins++;
+            else redWins++;
+        }
         if (interrupted) fullBoardInterruptions++; else fullBoardCaptures++;
         recentResults.Add(interrupted ? 0 : 1);
         if (recentResults.Count > WindowSize) recentResults.RemoveAt(0);
@@ -52,6 +61,8 @@ public sealed class TrainingProgressHistory
         if (!BlockNations.AI.LearnedActionSchema.SupportsBoard(boardSize) || version != Version || informationContract != "public-starting-cities-canvas-v2" || decisions < 0 ||
             fullBoardMatches < 0 || fullBoardCaptures < 0 || fullBoardInterruptions < 0 || curriculumMatches < 0 ||
             fullBoardCaptures + fullBoardInterruptions != fullBoardMatches ||
+            seatTrackedMatches < 0 || seatTrackedMatches > fullBoardMatches || blueWins < 0 || redWins < 0 || seatTrackedLimits < 0 ||
+            blueWins + redWins + seatTrackedLimits != seatTrackedMatches ||
             recentResults == null || points == null || recentResults.Count > WindowSize || points.Count > MaximumPoints)
             return false;
         foreach (int result in recentResults) if (result != 0 && result != 1) return false;
