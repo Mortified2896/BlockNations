@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 from training_time import TrainingTime
+from run_limits import RunLimits, continuous_config, is_continuous
 import json
 import os
 from pathlib import Path
@@ -249,7 +250,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--run-id", required=True)
-    parser.add_argument("--hours", type=float, default=8)
+    parser.add_argument("--hours", type=float, default=8, help="Wall-clock hours; 0 enables continuing learning without a time limit.")
     parser.add_argument("--budget-gb", type=float, default=20)
     parser.add_argument("--free-gb", type=float, default=20)
     parser.add_argument("--reserve-mb", type=int, default=512)
@@ -263,8 +264,9 @@ def main() -> int:
     args = parser.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,80}", args.run_id):
         raise ValueError("Invalid run id.")
-    if args.hours <= 0 or args.budget_gb <= 0 or args.free_gb < 0 or args.reserve_mb < 1 or args.max_steps < 2048:
-        raise ValueError("Invalid duration, storage, or step budget.")
+    limits = RunLimits(args.hours, args.budget_gb, args.free_gb, args.reserve_mb)
+    if args.max_steps < 2048 or args.checkpoint_interval < 1:
+        raise ValueError("Use at least 2048 training steps and a positive checkpoint interval.")
     root = args.root.absolute()
     prepare_root(root)
     lock = root / "supervisor.lock"
@@ -291,10 +293,7 @@ def main() -> int:
     elif (run / RUN_MARKER).exists():
         lock.unlink()
         raise ValueError("Run already exists; choose Resume or a new run id.")
-    budget, reserve = int(args.budget_gb * GB), args.reserve_mb * MB
-    if reserve >= budget:
-        lock.unlink()
-        raise ValueError("Storage budget must exceed checkpoint reserve.")
+    budget, reserve = limits.budget_bytes, limits.reserve_bytes
     removed = prune(root, run, budget - reserve)
     if size(root) > budget - reserve or shutil.disk_usage(root).free < args.free_gb * GB + reserve:
         lock.unlink()
@@ -312,6 +311,17 @@ def main() -> int:
                                       "schema": 2, "boardSize": args.board_size, "behavior": "BlockNationsSeatV2",
                                       "opening": "tactical-curriculum" if curriculum else "standard",
                                       "initialWeights": "random", "observationSize": 3120, "actionCount": 259})
+    plan = read_json(config)
+    if args.hours == 0 and not is_continuous(plan):
+        # Preserve the exact prior plan before changing the learning horizon.
+        # Weights and optimizer checkpoints are neither rewritten nor reset.
+        continuing = continuous_config(plan)
+        backup = run / "trainer-before-continuous.json"
+        if not backup.exists():
+            with backup.open("x") as saved:
+                saved.write(config.read_text())
+        atomic_json(config, continuing)
+        plan = continuing
     stop_path = run / "stop.request"
     stop_path.unlink(missing_ok=True)
     # A previous failure or pause is diagnostic history, not this launch's state.
@@ -344,7 +354,10 @@ def main() -> int:
     training_time = TrainingTime.load(run, args.run_id, args.board_size)
     started = time.monotonic()
     state = {"runId": args.run_id, "supervisorPid": os.getpid(), "state": "starting", "trainerReady": False, "budgetBytes": budget,
-             "reserveBytes": reserve, "durationSeconds": args.hours * 3600, "removedArtifacts": removed[-20:]}
+             "reserveBytes": reserve, "durationSeconds": limits.duration_seconds,
+             "continuousTraining": is_continuous(plan),
+             "trainingStepLimit": 0 if is_continuous(plan) else plan.get("behaviors", {}).get("BlockNationsSeatV2", {}).get("max_steps", args.max_steps),
+             "removedArtifacts": removed[-20:]}
     try:
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                    stdin=subprocess.DEVNULL, env=environment, cwd=run)
@@ -386,12 +399,8 @@ def main() -> int:
             state["exportCount"] = len(list(run.rglob("*.onnx")))
             if stop_requested or stop_path.exists():
                 reason = "user_stop"
-            elif elapsed >= args.hours * 3600:
-                reason = "duration_limit"
-            elif used >= budget - reserve:
-                reason = "artifact_budget"
-            elif free < args.free_gb * GB + reserve:
-                reason = "free_disk_guard"
+            elif limit_reason := limits.stop_reason(elapsed, used, free):
+                reason = limit_reason
             elif arena.get("failure"):
                 reason = "arena_failure"
             elif arena.get("trainerConnected") and elapsed > 30 and rating_session not in read_json(run / "match-elo.json").get("sequences", {}):

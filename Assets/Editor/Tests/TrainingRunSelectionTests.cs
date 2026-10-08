@@ -18,6 +18,24 @@ public sealed class TrainingRunSelectionTests
     public void TearDown() => Directory.Delete(root, true);
 
     [Test]
+    public void ZeroHoursAllowsAnUnlimitedSessionWithTheSharedBudget()
+    {
+        Assert.DoesNotThrow(() => LocalTrainingWindow.ValidateRunLimits(0, 20));
+        Assert.DoesNotThrow(() => LocalTrainingWindow.ValidateRunLimits(8, 20));
+    }
+
+    [TestCase(-1, 20)]
+    [TestCase(double.NaN, 20)]
+    [TestCase(double.PositiveInfinity, 20)]
+    [TestCase(0, double.NaN)]
+    [TestCase(0, double.PositiveInfinity)]
+    [TestCase(0, 0.512)]
+    public void InvalidLimitsAreRejectedBeforeLaunching(double hours, double budget)
+    {
+        Assert.Throws<ArgumentException>(() => LocalTrainingWindow.ValidateRunLimits(hours, budget));
+    }
+
+    [Test]
     public void NewRunUsesSelectedBoardAndSkipsExistingDirectoriesAndFiles()
     {
         string id = TrainingRunSelection.ResolveId(root, null, false, 6, Now);

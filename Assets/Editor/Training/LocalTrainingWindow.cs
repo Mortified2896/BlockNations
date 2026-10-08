@@ -76,7 +76,10 @@ public sealed class LocalTrainingWindow : EditorWindow
             useStandalone = EditorGUILayout.Toggle("Use standalone training player", useStandalone);
             if (useStandalone) playerPath = EditorGUILayout.TextField("Training player (.app)", string.IsNullOrEmpty(playerPath) ? Path.GetFullPath("Build/LocalTrainingV2.app") : playerPath);
         }
-        hours = EditorGUILayout.DoubleField("Maximum hours", hours);
+        hours = EditorGUILayout.DoubleField(new GUIContent("Maximum hours", "0 enables continuing learning with no time limit."), hours);
+        EditorGUILayout.HelpBox(hours == 0 ?
+            "No time limit. Continuing learning stays enabled for this run; positive hours can still limit later sessions. Stop and Save Checkpoint or the storage/free-disk safeguards end the session. Retention means the storage allowance may never fill." :
+            "Set hours to 0 for continuing learning without a timer. Storage limits and checkpoint retention still apply.", MessageType.None);
         budgetGB = EditorGUILayout.DoubleField("Total storage limit (GB)", budgetGB);
         seed = EditorGUILayout.IntField("Seed", seed);
         boardSize = EditorGUILayout.IntPopup("Board size", boardSize, new[] { "5 × 5", "6 × 6", "7 × 7", "9 × 9", "11 × 11" }, new[] { 5, 6, 7, 9, 11 });
@@ -102,7 +105,12 @@ public sealed class LocalTrainingWindow : EditorWindow
             if (status != null)
             {
                 EditorGUILayout.LabelField("Trainer", status.state + (string.IsNullOrEmpty(status.stopReason) ? "" : " / " + status.stopReason));
-                EditorGUILayout.LabelField("Time", TimeSpan.FromSeconds(status.elapsedSeconds).ToString(@"hh\:mm\:ss"));
+                if (status.continuousTraining) EditorGUILayout.LabelField("Trainer plan", "Continuing learning · no step limit");
+                else if (status.trainingStepLimit > 0) EditorGUILayout.LabelField("Trainer plan", $"Up to {status.trainingStepLimit:N0} cumulative learning steps");
+                TimeSpan elapsed = TimeSpan.FromSeconds(status.elapsedSeconds);
+                EditorGUILayout.LabelField("Session time", $"{(long)elapsed.TotalHours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}");
+                if (status.durationSeconds > 0) EditorGUILayout.LabelField("Session time limit", $"{status.durationSeconds / 3600:G4} hours");
+                else if (status.continuousTraining) EditorGUILayout.LabelField("Session time limit", "None");
                 EditorGUILayout.LabelField("Storage", $"{status.usedBytes / 1e9:F3} / {status.budgetBytes / 1e9:F1} GB; free {status.freeBytes / 1e9:F1} GB");
                 EditorGUILayout.LabelField("Saved artifacts", $"Checkpoints {status.checkpointCount}, exports {status.exportCount}");
                 if (status.peakResidentBytes > 0) EditorGUILayout.LabelField("Peak trainer + player RAM", $"{status.peakResidentBytes / 1e9:F2} GB resident");
@@ -144,7 +152,7 @@ public sealed class LocalTrainingWindow : EditorWindow
             throw new InvalidOperationException("Finish the active run and leave Play Mode before starting another.");
         if (!File.Exists(PythonPath)) throw new FileNotFoundException("Install the scoped trainer environment described in Docs/ML_Training_MVP.md.", PythonPath);
         id = TrainingRunSelection.ResolveId(RootPath, id, resume, boardSize, DateTime.UtcNow);
-        if (durationHours <= 0 || storageGB <= 0.512) throw new ArgumentException("Use a positive duration and a budget above the checkpoint reserve.");
+        ValidateRunLimits(durationHours, storageGB);
         string directory = Path.Combine(RootPath, "runs", id);
         int savedDistance = 2;
         if (resume)
@@ -189,6 +197,13 @@ public sealed class LocalTrainingWindow : EditorWindow
         window.seed = runSeed; window.curriculum = useCurriculum; window.boardSize = boardSize;
         window.useStandalone = !string.IsNullOrEmpty(player); window.playerPath = player ?? "";
         Debug.Log("[ML Training] Starting supervised local run " + id);
+    }
+
+    internal static void ValidateRunLimits(double durationHours, double storageGB)
+    {
+        if (double.IsNaN(durationHours) || double.IsInfinity(durationHours) || durationHours < 0 ||
+            double.IsNaN(storageGB) || double.IsInfinity(storageGB) || storageGB <= 0.512)
+            throw new ArgumentException("Use nonnegative hours (0 = no time limit) and a finite storage budget above the checkpoint reserve.");
     }
 
     public static void RequestStop()
@@ -328,8 +343,9 @@ public sealed class LocalTrainingWindow : EditorWindow
         public string runId, state, stopReason;
         public int supervisorPid, trainerPid, checkpointCount, exportCount, exitCode;
         public long usedBytes, freeBytes, budgetBytes, peakResidentBytes;
-        public double elapsedSeconds;
-        public bool trainerReady;
+        public long trainingStepLimit;
+        public double elapsedSeconds, durationSeconds;
+        public bool trainerReady, continuousTraining;
     }
     [Serializable] private sealed class RunManifest { public string owner; public int schema, observationSize, actionCount, seed, boardSize = 11; public bool curriculum = true; }
     [Serializable] private sealed class ActiveRunInfo { public string runId; }
