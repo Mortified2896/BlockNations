@@ -55,6 +55,17 @@ public sealed class TrainingArena : MonoBehaviour
     public TrainingReplayHistory Replay { get; } = new TrainingReplayHistory();
     public TrainingProgressHistory Progress => progress;
     public TrainingEloHistory EloHistory { get; private set; }
+    public double TotalTrainingSeconds { get; private set; } = -1;
+    public bool TrainingTimeEstimated { get; private set; }
+
+    [Serializable]
+    private sealed class TrainingTimeStatus
+    {
+        public int version, boardSize;
+        public string runId;
+        public double totalSeconds;
+        public bool estimated;
+    }
     public bool IsHumanPlaytest => humanSeatIndex >= 0;
     public bool IsTraining => requireTrainer;
     public int HumanSeat => humanSeatIndex;
@@ -334,6 +345,15 @@ public sealed class TrainingArena : MonoBehaviour
             try
             {
                 string directory = Path.GetDirectoryName(statusPath);
+                string clockPath = Path.Combine(directory, "training-time.json");
+                if (File.Exists(clockPath))
+                {
+                    var clock = JsonUtility.FromJson<TrainingTimeStatus>(File.ReadAllText(clockPath));
+                    if (clock != null && clock.version == 1 && clock.boardSize == boardSize &&
+                        clock.runId == new DirectoryInfo(directory).Name && clock.totalSeconds >= 0 &&
+                        !double.IsNaN(clock.totalSeconds) && !double.IsInfinity(clock.totalSeconds))
+                    { TotalTrainingSeconds = clock.totalSeconds; TrainingTimeEstimated = clock.estimated; }
+                }
                 string path = Path.Combine(directory, "training-elo.json");
                 if (File.Exists(path))
                 {

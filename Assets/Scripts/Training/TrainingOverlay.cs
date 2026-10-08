@@ -43,6 +43,7 @@ public sealed class TrainingOverlay
             }
             GUILayout.Label(arena.IsHumanPlaytest ? "Local policy playtest" : "Live self-play training", title);
             GUILayout.Space(12);
+            if (arena.IsTraining) DrawTrainingTime(arena);
             GUILayout.Label($"Match {arena.Games + 1} · round {arena.Round}/{arena.RoundLimit}", label);
             GUILayout.Label(arena.FullOpening ? $"Standard opening · {arena.BoardSize} × {arena.BoardSize}" :
                 $"Curriculum stage {arena.CurriculumDistance} · distance {arena.StartingDistance}", small);
@@ -122,6 +123,7 @@ public sealed class TrainingOverlay
         TrainingReplayHistory.Frame frame = replay.CurrentFrame;
         double now = Time.realtimeSinceStartupAsDouble;
         GUILayout.Label("Recent match replay", title);
+        DrawTrainingTime(arena);
         GUILayout.Label(arena.Paused ? "Live training is paused." : "Training continues at full speed.", small);
         if (GUILayout.Button("Back to Live", button)) { replay.BackToLive(); return; }
         GUILayout.Space(12);
@@ -150,6 +152,16 @@ public sealed class TrainingOverlay
         if (!string.IsNullOrEmpty(arena.Failure)) GUILayout.Label(arena.Failure, small);
         GUILayout.Space(12);
         GUILayout.Label($"Live run: {arena.Games:N0} matches · {arena.Actions:N0} actions", small);
+    }
+
+    private void DrawTrainingTime(TrainingArena arena)
+    {
+        if (arena.TotalTrainingSeconds < 0) { GUILayout.Label("Total training time: awaiting telemetry", small); return; }
+        double seconds = arena.TotalTrainingSeconds;
+        long hours = (long)(seconds / 3600);
+        int minutes = (int)(seconds / 60 % 60), remainder = (int)(seconds % 60);
+        GUILayout.Label($"Total training: {(arena.TrainingTimeEstimated ? "≈ " : "")}{hours:00}:{minutes:00}:{remainder:00}", label);
+        GUILayout.Label(arena.TrainingTimeEstimated ? "Includes estimated earlier sessions." : "Active time across resumes · pauses excluded", small);
     }
 
     private void DrawVision()

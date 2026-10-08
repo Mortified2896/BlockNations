@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 from elo_history import TrainerEloHistory
+from training_time import TrainingTime
 import json
 import os
 from pathlib import Path
@@ -336,6 +337,7 @@ def main() -> int:
                         "--training-board-size", str(args.board_size)])
     process = None
     assertion = None
+    training_time = TrainingTime.load(run, args.run_id, args.board_size)
     started = time.monotonic()
     state = {"runId": args.run_id, "supervisorPid": os.getpid(), "state": "starting", "trainerReady": False, "budgetBytes": budget,
              "reserveBytes": reserve, "durationSeconds": args.hours * 3600, "removedArtifacts": removed[-20:]}
@@ -377,6 +379,9 @@ def main() -> int:
             atomic_json(run / "training-elo.json", elo.snapshot())
             atomic_json(root / "active.json", {"runId": args.run_id, "supervisorPid": os.getpid()})
             arena = read_json(run / "arena-status.json")
+            training_time.tick(time.monotonic(), bool(arena.get("trainerConnected")) and
+                               not arena.get("paused", False) and not arena.get("failure"))
+            atomic_json(run / "training-time.json", training_time.snapshot())
             if arena.get("trainerConnected"):
                 state["trainerReady"] = True
             state["checkpointCount"] = len(list(run.rglob("*.pt")))
@@ -398,6 +403,7 @@ def main() -> int:
             atomic_json(run / "supervisor-status.json", state)
             interrupt_trainer(process)
             break
+        atomic_json(run / "training-time.json", training_time.snapshot())
         output_thread.join(timeout=5)
         atomic_json(run / "training-elo.json", elo.snapshot())
         checkpoints = list(run.rglob("*.pt"))
