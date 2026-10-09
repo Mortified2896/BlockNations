@@ -3,11 +3,14 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
+    "test": "node --test access/*.test.mjs",
     "preview": "wrangler dev --config wrangler.jsonc --local",
-    "deploy:preview": "python3 ../Tools/WebRelease/audit.py ../Build/WebRelease && wrangler deploy --config wrangler.jsonc",
-    "deploy:production": "python3 ../Tools/WebRelease/audit.py ../Build/WebRelease && wrangler deploy --config wrangler.production.jsonc"
+    "deploy:access": "wrangler deploy --config wrangler.access.jsonc",
+    "deploy:preview": "npm test && python3 ../Tools/WebRelease/audit.py ../Build/WebRelease && wrangler deploy --config wrangler.jsonc",
+    "deploy:production": "npm test && python3 ../Tools/WebRelease/audit.py ../Build/WebRelease && wrangler deploy --config wrangler.production.jsonc"
   },
   "devDependencies": {
+    "miniflare": "5.20261006.1-alpha",
     "wrangler": "4.149.0"
   }
 }

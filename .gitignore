@@ -77,6 +77,8 @@ Assets/ML-Agents/Timers.meta
 /Tools/Training/SimulationWorker/obj/
 Tools/WebRelease/__pycache__/
 Web/.wrangler/
+Web/.dev.vars*
+Web/.env*
 .wrangler/
 output/playwright/
 .playwright-cli/

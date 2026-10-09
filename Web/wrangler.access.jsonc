@@ -1,0 +1,11 @@
+{
+  "name": "blocknations-access",
+  "main": "access/service.mjs",
+  "account_id": "6635ddbbb1755e951c11e0898f447f75",
+  "compatibility_date": "2026-10-08",
+  "workers_dev": false,
+  "preview_urls": false,
+  "services": [{ "binding": "REVIEW", "service": "article-lab-review" }],
+  "durable_objects": { "bindings": [{ "name": "ACCESS_STORE", "class_name": "AccessStore" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AccessStore"] }]
+}

@@ -1,8 +1,17 @@
 {
   "name": "blocknations-web-preview",
+  "main": "access/worker.mjs",
   "account_id": "6635ddbbb1755e951c11e0898f447f75",
   "compatibility_date": "2026-10-08",
   "workers_dev": true,
   "preview_urls": false,
-  "assets": { "directory": "../Build/WebRelease", "not_found_handling": "404-page" }
+  "assets": { "directory": "../Build/WebRelease", "binding": "ASSETS", "run_worker_first": true, "not_found_handling": "404-page" },
+  "services": [{ "binding": "REVIEW", "service": "article-lab-review" }],
+  "durable_objects": { "bindings": [{ "name": "ACCESS_STORE", "class_name": "AccessStore", "script_name": "blocknations-access" }] },
+  "routes": [{ "pattern": "feedback.moneymattersmedia.com/blocknations-auth-preview/*", "zone_name": "moneymattersmedia.com" }],
+  "vars": {
+    "AUTH_PATH": "/blocknations-auth-preview/authorize",
+    "GAME_ORIGIN": "https://blocknations-web-preview.johannes-gaebler.workers.dev",
+    "GAME_ORIGINS": "[\"https://blocknations.moneymattersmedia.com\",\"https://blocknations-web-preview.johannes-gaebler.workers.dev\"]"
+  }
 }

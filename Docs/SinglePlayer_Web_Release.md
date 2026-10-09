@@ -1,6 +1,7 @@
 # Single-player browser release
 
-The public playtest target is `https://blocknations.moneymattersmedia.com`.
+The hosted playtest target is `https://blocknations.moneymattersmedia.com`.
+It requires Google sign-in and tester approval; the hostname is publicly reachable, but the game files are protected.
 `https://staging.blocknations.moneymattersmedia.com` is reserved for internal development.
 These are distinct release targets; publishing the public game must not overwrite the staging service or its saved matches.
 
@@ -45,6 +46,7 @@ Wrangler authentication belongs to the developer machine, outside the game and r
 ```sh
 cd Web
 npm ci --ignore-scripts
+npm run deploy:access
 npm run deploy:preview
 # After preview acceptance, publish the same generated artifact:
 npm run deploy:production
@@ -55,12 +57,48 @@ Verify the preview can start a match, recruit, move, end a turn, and receive loc
 Then publish the exact reviewed artifact and verify public HTTPS, assets, gameplay, and the unchanged staging mapping.
 Desktop browser and emulated mobile acceptance are separate from tests on physical iPhone/Android devices.
 
-Static assets use Cloudflare's free static hosting allowance. No server-side inference is required.
-Preview URLs receive `X-Robots-Tag: noindex, nofollow`; this is indexing guidance, not authentication.
+Static assets are served through an approval-checking Worker. Authentication and private admission storage use Workers and SQLite-backed Durable Objects, which are available on Cloudflare's free plan within its limits. No server-side inference is required.
+All game responses receive `X-Robots-Tag: noindex, nofollow, noarchive`; this is indexing guidance in addition to authentication.
+
+## Tester admission and Review accounts
+
+The two sites share Google identity, with **one-way approval inheritance**:
+
+| Account state | BlockNations | Article Review |
+| --- | --- | --- |
+| Approved reviewer | Automatic game access | Existing reviewer access |
+| Approved only for the game | Game access | Requires separate Review approval |
+| New Google account | Waiting for game approval | Requires separate Review approval |
+| Game-specific rejection/disable | Game files denied, including for reviewers | Review approval unchanged |
+
+The owner manages game requests at `https://blocknations.moneymattersmedia.com/admin/testers`.
+Sign in through `/access` first if the browser has no game session.
+Only a currently approved Review administrator can manage that queue.
+Game approval changes only `game_testers` in the private `blocknations-access` Durable Object namespace. It never upgrades the Review account's status or role.
+Review-only approval grants automatic game access; removing it removes inherited game access unless the person has a separate game approval.
+
+`Web/access/worker.mjs` runs before **every** static asset in production and preview, including HTML, the loader, framework, data, Wasm, release metadata and alternate paths.
+Anonymous visitors see the sign-in page; other unauthorised game-file requests receive 403.
+Protected responses use `private, no-store`. Auth/storage failures return 503 and never fall back to public assets.
+Revocation blocks subsequent requests. A client that already downloaded the game can continue running its local code until reload; website authentication cannot recall downloaded bytes.
+
+The sign-in handoff runs on `feedback.moneymattersmedia.com/blocknations-auth/*`; preview uses `/blocknations-auth-preview/*`.
+An existing Review session is reused automatically after the player selects **Continue with Google**. Otherwise the existing Review Google login handles authentication, using its already registered OAuth callback.
+The browser returns to the game with a 90-second, one-use opaque code tied to the initiating host-only cookie and exact game origin. The callback consumes it atomically and removes it from the URL immediately.
+The game session cookie is encrypted, `Secure`, `HttpOnly`, `SameSite=Lax` and host-only. Preview and production share admission decisions, with separate browser cookies.
+The Google credentials stay in Review. The game has no binding to the article database; it calls only the Review authentication/session APIs. Review session cookies stay in private server storage, outside game assets and browser responses.
+Sign-out from BlockNations revokes its server session and clears its cookies while leaving Review signed in. Review sign-out or expiration invalidates the linked game session on its next request.
+
+`Web/wrangler.access.jsonc` owns the private admission/session storage and has no public URL, preview URL or route.
+Deploy it before either game Worker. Install the **same** high-entropy `SESSION_SECRET` in production and preview through Wrangler's hidden-input secret workflow before publishing the gate; missing secrets fail closed.
+The initial secret is kept outside Git at `~/.config/blocknations/access.json`, directory mode 700 and file mode 600. Never print it or put it in the export.
+This integration does not require a new Google OAuth client, parent-domain cookies, Cloudflare Access configuration, or a paid-plan change.
+The local regression suite uses synthetic Review identities and real isolated Durable Object SQLite storage; it needs no live credentials.
 
 ## Regression checks
 
 ```sh
+(cd Web && npm test)
 python3 -m unittest discover -s Tools/WebRelease -p 'test_*.py'
 python3 Tools/WebRelease/audit.py Build/WebRelease
 ```
@@ -91,3 +129,14 @@ The browser playtest includes the existing local AI opponents; the recently trai
 - Normal single-player city captures persist the finished status immediately. A controlled 11×11 browser position was continued and won by capturing the enemy city; IndexedDB contained `gameOver: true`, and Continue stayed hidden after full page reloads in both layouts.
 - All seven focused Unity EditMode save eligibility cases passed. The rebuilt export audit and comparisons against five local authentication values found zero credential matches.
 - The public release uses the same artifact tested on preview. Build/test receipts and browser captures are kept under ignored `Logs/MenuFix/` and `output/playwright/`.
+
+## Google sign-in and approval acceptance: 2026-10-09
+
+- Production Worker version: `8f62045a-e0d1-4a38-873e-bcbedf2e27f3`; preview version: `6794ef8b-2250-4b22-aa39-857246ddfdb7`.
+- Private admission Worker version: `fb5f42dd-18b5-45e3-af57-f6b039ffa952`, with no public URL or routes.
+- All 17 authentication/admission regressions passed, including one-way approval, game-only approval leaving Review pending, disabled access, live Review revocation, expired sessions, bound one-use handoffs, admin origin checks, logout and unavailable services failing closed.
+- Real Chrome verification on preview and production reused an existing approved Review session and reached the Unity main menu without another Google login or approval. The approved Review administrator could open the separate game approval queue.
+- Anonymous HTTPS checks on both targets returned sign-in pages for `/` and `/index.html`, and 403 for the actual loader, framework, data, Wasm, release metadata and admin queue. Responses used `private, no-store`.
+- A fresh browser session reached the existing Google sign-in flow. A complete new-person Google login was not performed; pending registration and game-only approval were verified with synthetic identities in the regression suite.
+- The sign-in page was visually checked at desktop 1280×800 and mobile 390×844. Physical phones and Safari remain separate acceptance work.
+- Deployment reused the exact previously published game assets from version `cb3f824c-0b63-4fa9-9b75-0805da24b62d`, with no updated static files to upload. The preserved export passed the credential audit. Staging still resolves to `91.98.79.206`, and Review authentication remains ready.
