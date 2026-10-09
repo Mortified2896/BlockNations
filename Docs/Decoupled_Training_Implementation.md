@@ -12,7 +12,25 @@ The optional viewer opens into a recent completed game at 1.2 seconds per action
 
 **Pause replay** controls playback only. **Pause training** holds every arena. **Stop & save** requests the existing graceful checkpoint stop and works while paused. Closing the viewer leaves learning running; **Show Training Viewer** in the Editor reopens it. Closing the Editor also leaves a decoupled supervisor running. Training time, shared storage usage, run folder, self-play Elo and first/second-player outcomes refresh independently of the displayed historical match. The folder is expandable/copyable in the spectator sidebar.
 
-**Play against recent AI** still opens a separate human match against a frozen completed checkpoint. Learning continues independently; opening/closing that match does not change the training pause choice. Stopping the supervisor closes its owned viewer and human player.
+**Play against Easy / Medium / Hard AI** opens a separate human match against a frozen completed checkpoint. Learning continues independently; opening/closing that match does not change the training pause choice. Stopping the supervisor closes its owned viewer and human player.
+
+## Local difficulty playtest with training stopped
+
+In **Open Controls**, select the saved run and press **Open Easy / Medium / Hard Playtest**. This opens the standalone viewer without starting a learner or C# simulation worker. The overlay puts **Easy / Medium / Hard** at the top; choose a preset and press **Play against … AI**. A separate human match opens. **Back to training** returns to the selector; closing the viewer ends the local session. Training time and rated self-play results do not advance during these playtests. The public browser build is unaffected.
+
+The controller copies the newest completed numbered checkpoint outside ML-Agents' rolling directory to `frozen-playtests/<checkpoint>/`, records its SHA-256 and fixes that source for the entire comparison session. Each human match gets an inference-only scratch copy. No optimizer updates, self-play swaps or rated training games run in that process. The controller uses the existing shared storage allowance, free-disk guard and exclusive root lock; stop and save an active run before opening it. Completed human demonstrations keep their existing recording path and are available for later training, not applied during a frozen comparison.
+
+The initial presets share the same weights and fair seat observations. They match the existing browser sampler: Easy uses temperature 1.8; Medium 0.8; Hard 0.25 and discards actions below 70% of the highest policy probability. Legal masks remain enforced, and similarly preferred choices can still vary. These are **experimental sampling presets**, not measured or calibrated strength bands. A preferred move can be poor when the policy has learned a poor preference; the names alone do not establish a strength ordering.
+
+Validation for this addition is under ignored `Logs/Validation/LocalDifficulty/20261010/`: 44 Python checks passed; 15 Unity human/bridge/layout checks passed, followed by a six-case bridge recheck for all three stopped launch and restored difficulty paths. The rebuilt native player connected Easy, Medium and Hard in an isolated copy of the saved 7×7 run with the same checkpoint SHA-256; returning closed each owned player and released the controller lock. The actual saved actor loaded strictly and produced legal choices for all three presets on a fair shared-simulation recruitment observation, without changing any tensor or completing a game. The selector was inspected in the native window. Native coordinate automation could not target that Unity window; a human click-through and playing-strength comparison remain the owner's playtest. No learning or watched tournament was started by these checks.
+
+The stopped controller can also be opened directly with the configured Python environment:
+
+```bash
+/Users/Jo/.local/share/blocknations-ml/venv/bin/python Tools/Training/playtest_controller.py \
+  --run "/Users/Jo/Library/Application Support/BlockNations/Training/runs/<saved-run>" \
+  --env Build/LocalTrainingV2.app
+```
 
 ## Shared simulation and learner boundary
 

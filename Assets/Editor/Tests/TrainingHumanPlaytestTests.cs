@@ -46,7 +46,38 @@ public sealed class TrainingHumanPlaytestTests
         }
         finally { UnityEngine.Object.DestroyImmediate(root); Directory.Delete(directory, true); }
     }
-    [Serializable] private sealed class Request { public string requestId; }
+    [Serializable] private sealed class Request { public string requestId, difficulty; }
+
+    [TestCase(BlockNations.AI.LearnedDifficulty.Easy)]
+    [TestCase(BlockNations.AI.LearnedDifficulty.Medium)]
+    [TestCase(BlockNations.AI.LearnedDifficulty.Hard)]
+    public void FrozenDifficultyCanLaunchFromStoppedViewerWithoutStartingTraining(BlockNations.AI.LearnedDifficulty difficulty)
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "bn-stopped-playtest-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var root = new GameObject("Stopped difficulty selection"); root.SetActive(false);
+        try
+        {
+            var viewer = root.AddComponent<TrainingViewer>();
+            TrainingSceneBuilder.Set(viewer, "runDirectory", directory);
+            File.WriteAllText(Path.Combine(directory, "supervisor-status.json"),
+                "{\"state\":\"playtesting\",\"playtestAvailable\":true,\"checkpointCount\":1,\"frozenPlaytestCheckpoint\":\"Policy-123\"}");
+            Assert.That(viewer.CanContinue, Is.False);
+            viewer.Playtest.Difficulty = difficulty;
+            viewer.Playtest.Poll(viewer);
+            Assert.That(viewer.Playtest.TrainingActive, Is.False);
+            Assert.That(viewer.Playtest.Available, Is.True);
+            Assert.That(viewer.Playtest.FrozenCheckpoint, Is.EqualTo("Policy-123"));
+            viewer.Playtest.Start(viewer);
+            var request = JsonUtility.FromJson<Request>(File.ReadAllText(Path.Combine(directory, "playtest.request.json")));
+            Assert.That(request.difficulty, Is.EqualTo(difficulty.ToString()));
+            Assert.That(viewer.Playtest.Busy, Is.True);
+            Assert.That(File.Exists(Path.Combine(directory, "training-control.json")), Is.False);
+            Assert.That(Directory.GetFiles(directory, "match-events*"), Is.Empty);
+            Assert.That(viewer.CanContinue, Is.False);
+        }
+        finally { UnityEngine.Object.DestroyImmediate(root); Directory.Delete(directory, true); }
+    }
 
     [Test]
     public void PlaytestMenuInvokesItsExplicitExitWithoutLoadingMainMenu()
@@ -82,8 +113,10 @@ public sealed class TrainingHumanPlaytestTests
         finally { EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single); }
     }
 
-    [Test]
-    public void SupervisorOpenedPlaytestIsDetectedWithoutPausingTraining()
+    [TestCase(BlockNations.AI.LearnedDifficulty.Easy)]
+    [TestCase(BlockNations.AI.LearnedDifficulty.Medium)]
+    [TestCase(BlockNations.AI.LearnedDifficulty.Hard)]
+    public void SupervisorOpenedPlaytestIsDetectedWithoutPausingTraining(BlockNations.AI.LearnedDifficulty difficulty)
     {
         string directory = Path.Combine(Path.GetTempPath(), "bn-human-restore-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -94,10 +127,11 @@ public sealed class TrainingHumanPlaytestTests
             TrainingSceneBuilder.Set(arena, "requireTrainer", true);
             TrainingSceneBuilder.Set(arena, "statusPath", Path.Combine(directory, "arena-status.json"));
             File.WriteAllText(Path.Combine(directory, "playtest-status.json"),
-                "{\"requestId\":\"" + Guid.NewGuid().ToString("N") + "\",\"state\":\"playing\",\"message\":\"Training continues.\"}");
+                "{\"requestId\":\"" + Guid.NewGuid().ToString("N") + "\",\"state\":\"playing\",\"difficulty\":\"" + difficulty + "\",\"message\":\"Training continues.\"}");
             arena.Playtest.Poll(arena);
             Assert.That(arena.Playtest.Busy, Is.True, "An open inference player disables duplicate launches.");
             Assert.That(arena.Playtest.Message, Is.EqualTo("Training continues."));
+            Assert.That(arena.Playtest.Difficulty, Is.EqualTo(difficulty));
             Assert.That(arena.Paused, Is.False);
             Assert.That(arena.CanContinue, Is.True);
         }

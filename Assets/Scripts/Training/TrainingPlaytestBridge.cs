@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using UnityEngine;
+using BlockNations.AI;
 
 // The supervisor owns process/model loading. A playtest never changes the viewer's pause state.
 // A separate inference arena keeps its opponent frozen. Human demonstrations are
@@ -11,15 +12,18 @@ public sealed class TrainingPlaytestBridge
     {
         public bool playtestAvailable;
         public int checkpointCount;
-        public string state;
+        public string state, frozenPlaytestCheckpoint;
     }
-    [Serializable] private sealed class Request { public string requestId; }
-    [Serializable] private sealed class Status { public string requestId, state, message, checkpoint; }
+    [Serializable] private sealed class Request { public string requestId, difficulty; }
+    [Serializable] private sealed class Status { public string requestId, state, message, checkpoint, difficulty; }
     private string requestId;
     private double requestedAt, nextPoll;
     public bool Available { get; private set; }
     public bool Busy => requestId != null;
     public string Message { get; private set; }
+    public LearnedDifficulty Difficulty { get; set; } = LearnedDifficulty.Medium;
+    public bool TrainingActive { get; private set; }
+    public string FrozenCheckpoint { get; private set; }
 
     public void Poll(ITrainingView arena)
     {
@@ -35,7 +39,10 @@ public sealed class TrainingPlaytestBridge
             }
             string supervisorPath = Path.Combine(directory, "supervisor-status.json");
             SupervisorStatus supervisor = File.Exists(supervisorPath) ? JsonUtility.FromJson<SupervisorStatus>(File.ReadAllText(supervisorPath)) : null;
-            Available = supervisor != null && supervisor.playtestAvailable && supervisor.checkpointCount > 0 && supervisor.state == "running";
+            TrainingActive = supervisor != null && supervisor.state == "running";
+            FrozenCheckpoint = supervisor?.frozenPlaytestCheckpoint;
+            Available = supervisor != null && supervisor.playtestAvailable && supervisor.checkpointCount > 0 &&
+                (TrainingActive || supervisor.state == "playtesting");
             string path = Path.Combine(directory, "playtest-status.json");
             Status status = File.Exists(path) ? JsonUtility.FromJson<Status>(File.ReadAllText(path)) : null;
             // A supervisor-owned launch can also restore an open playtest after a viewer restart.
@@ -44,6 +51,8 @@ public sealed class TrainingPlaytestBridge
             if (!Busy) return;
             if (status != null && status.requestId == requestId)
             {
+                if (Enum.TryParse(status.difficulty, out LearnedDifficulty restored) && Enum.IsDefined(typeof(LearnedDifficulty), restored))
+                    Difficulty = restored;
                 Message = status.message;
                 if (status.state == "finished" || status.state == "error") Finish();
             }
@@ -59,14 +68,14 @@ public sealed class TrainingPlaytestBridge
 
     public void Start(ITrainingView arena)
     {
-        if (!Available || Busy || !arena.CanContinue) return;
+        if (!Available || Busy) return;
         string path = Path.Combine(arena.TrainingRunDirectory, "playtest.request.json");
         requestId = Guid.NewGuid().ToString("N");
         requestedAt = Time.realtimeSinceStartupAsDouble;
-        Message = "Opening a human match against the newest saved checkpoint…";
+        Message = "Opening a frozen " + Difficulty + " playtest…";
         try
         {
-            File.WriteAllText(path + ".tmp", JsonUtility.ToJson(new Request { requestId = requestId }));
+            File.WriteAllText(path + ".tmp", JsonUtility.ToJson(new Request { requestId = requestId, difficulty = Difficulty.ToString() }));
             if (File.Exists(path)) File.Replace(path + ".tmp", path, null);
             else File.Move(path + ".tmp", path);
         }

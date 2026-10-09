@@ -70,8 +70,9 @@ def frozen_config(config: dict, checkpoint: Path) -> dict:
 
 
 class PlaytestSession:
-    def __init__(self, run: Path, environment: Path | None):
+    def __init__(self, run: Path, environment: Path | None, frozen_checkpoint: Path | None = None, training_active=True):
         self.run, self.environment = run, environment
+        self.frozen_checkpoint, self.training_active = frozen_checkpoint, training_active
         self.process = None
         self.log = None
         self.deadline = None
@@ -89,7 +90,10 @@ class PlaytestSession:
         try:
             if self.environment is None:
                 raise ValueError("A standalone training player is required to open a human match.")
-            source = latest_checkpoint(self.run)
+            difficulty = request.get('difficulty', 'Medium')
+            if difficulty not in ('Easy', 'Medium', 'Hard'):
+                raise ValueError('Choose Easy, Medium or Hard.')
+            source = self.frozen_checkpoint or latest_checkpoint(self.run)
             scratch = self.run / "playtest"
             if scratch.is_symlink():
                 raise ValueError("The playtest scratch directory cannot be a symbolic link.")
@@ -102,7 +106,7 @@ class PlaytestSession:
             shutil.copyfile(source, snapshot)
             digest = hashlib.sha256(snapshot.read_bytes()).hexdigest()
             manifest = read_json(self.run / "run.json")
-            self.state.update({"checkpoint": source.stem, "sha256": digest, "boardSize": manifest["boardSize"]})
+            self.state.update({"checkpoint": source.stem, "sha256": digest, "boardSize": manifest["boardSize"], "difficulty": difficulty})
             atomic_json(scratch / "session.json", dict(self.state, owner=OWNER, source=str(source)))
             config = scratch / "inference.yaml"
             atomic_json(config, frozen_config(read_json(self.run / "trainer.yaml"), snapshot))
@@ -116,9 +120,10 @@ class PlaytestSession:
                        "--env-args", "--training-status", str(scratch / "arena-status.json"),
                        "--training-board-size", str(manifest["boardSize"]), "--training-curriculum", "false",
                        "--training-seed", str(manifest["seed"]), "--training-human-seat", "0",
-                       "--training-policy-version", source.stem, "--training-playtest-return", "true"]
+                       "--training-policy-version", source.stem + ' / ' + difficulty, "--training-playtest-return", "true"]
             environment = {key: value for key, value in os.environ.items() if not key.startswith("BLOCKNATIONS_RATING_")}
             environment.update({"PYTHONUNBUFFERED": "1", "OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "2"})
+            environment['BLOCKNATIONS_PLAYTEST_DIFFICULTY'] = difficulty
             self.log = (scratch / "inference.log").open("wb")
             self.process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=self.log,
                                             stderr=subprocess.STDOUT, cwd=scratch, env=environment, start_new_session=True)
@@ -155,7 +160,8 @@ class PlaytestSession:
             self.deadline = None
             self.cleanup_outputs()
         elif status.get("trainerConnected") and status.get("round", 0) > 0:
-            self.state.update(state="playing", message="Human match open; training is " + ("manually paused." if arena.get("paused") else "continuing."))
+            self.state.update(state="playing", message="Human match open; training is " +
+                              ("stopped." if not self.training_active else "manually paused." if arena.get("paused") else "continuing."))
             self.deadline = None
         elif self.deadline is not None and time.monotonic() > self.deadline:
             self.state.update(state="error", message="Model playtest did not connect in time.")

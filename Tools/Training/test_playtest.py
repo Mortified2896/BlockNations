@@ -120,6 +120,34 @@ class PlaytestTests(unittest.TestCase):
         self.assertEqual(keep.read_text(), "keep")
 
     @patch("playtest.subprocess.Popen")
+    def test_offline_difficulty_uses_one_fixed_model_and_does_not_resume_learning(self, launch):
+        source = self.checkpoint(10)
+        process = Mock()
+        process.poll.return_value = None
+        launch.return_value = process
+        session = PlaytestSession(self.run, Path('/Training.app'), frozen_checkpoint=source, training_active=False)
+        session.start({'requestId': 'd'*32, 'difficulty': 'Hard'}, {})
+        arguments = launch.call_args.args[0]
+        self.assertIn('--inference', arguments)
+        self.assertNotIn('--resume', arguments)
+        self.assertEqual(launch.call_args.kwargs['env']['BLOCKNATIONS_PLAYTEST_DIFFICULTY'], 'Hard')
+        self.assertIn(source.stem + ' / Hard', arguments)
+        self.write('playtest/arena-status.json', {'trainerConnected':True, 'round':1})
+        session.poll({})
+        self.assertEqual(session.state['difficulty'], 'Hard')
+        self.assertIn('training is stopped', session.state['message'])
+        self.assertTrue(source.exists())
+        self.assertNotIn('self_play', json.loads((self.run/'playtest/inference.yaml').read_text())['behaviors'][BEHAVIOR])
+
+    @patch("playtest.subprocess.Popen")
+    def test_invalid_difficulty_never_launches_a_process(self, launch):
+        self.checkpoint(10)
+        session = PlaytestSession(self.run, Path('/Training.app'))
+        session.start({'requestId':'e'*32, 'difficulty':'Maximum'}, {})
+        launch.assert_not_called()
+        self.assertEqual(session.state['state'], 'error')
+
+    @patch("playtest.subprocess.Popen")
     def test_supervisor_shutdown_asks_its_native_human_window_to_close(self, launch):
         source = self.checkpoint(10)
         process = Mock()

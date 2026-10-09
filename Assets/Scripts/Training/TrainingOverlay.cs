@@ -48,6 +48,7 @@ public sealed class TrainingOverlay
                 replayView.Draw(arena.Replay.LatestFrame, arena.Replay.OpeningFrame, arena.BoardSize, vision, arena.SpectatorBackgroundColor, showActionMarkers: false);
             GUILayout.BeginArea(new Rect(24, 24, width - 24, Screen.height / Scale - 48));
             scroll = GUILayout.BeginScrollView(scroll, false, false);
+            if (arena.IsTraining) { DrawPlaytest(arena); GUILayout.Space(12); }
             if (arena is ITrainingSpectator spectator) DrawSpectatorControls(spectator);
             if (arena.IsTraining) DrawVision();
             if (arena.IsTraining) DrawHumanLearning(arena);
@@ -61,7 +62,7 @@ public sealed class TrainingOverlay
             GUILayout.Label(arena is ITrainingSpectator ? "Simulation spectator" : arena.IsHumanPlaytest ? "Local policy playtest" : arena.IsRatingCheck ? "Frozen policy rating check" : "Live self-play training", title);
             if (arena is ITrainingSpectator waiting && !waiting.ShowingLive) GUILayout.Label("Waiting for the first completed replay…", label);
             GUILayout.Space(12);
-            if (arena.IsTraining) { DrawPlaytest(arena); DrawTrainingTime(arena); DrawStorage(arena); }
+            if (arena.IsTraining) { DrawTrainingTime(arena); DrawStorage(arena); }
             if (arena.IsHumanPlaytest)
             {
                 GUILayout.Label("You are Blue and move first. Select your city to recruit, then select units to move or attack.", small);
@@ -201,7 +202,6 @@ public sealed class TrainingOverlay
         DrawStorage(arena);
         GUILayout.Label(!arena.CanContinue ? "Training is stopped or disconnected." : arena.Paused ? "Live training is paused." : "Training continues at full speed.", small);
         if (!(arena is ITrainingSpectator) && GUILayout.Button("Back to Live", button)) { replay.BackToLive(); return; }
-        DrawPlaytest(arena);
         GUILayout.Space(12);
         if (!string.IsNullOrEmpty(game.sourceKey)) GUILayout.Label(game.policyLabel, small);
         GUILayout.Label($"Recent game {replay.PlaylistIndex + 1}/{replay.PlaylistCount} · round {frame.round}", small);
@@ -246,7 +246,9 @@ public sealed class TrainingOverlay
     private void DrawSpectatorControls(ITrainingSpectator spectator)
     {
         GUILayout.Label("Training viewer", title);
-        GUILayout.Label($"{spectator.WorkerCount} parallel {(spectator.WorkerCount == 1 ? "game" : "games")} · learning runs independently", small);
+        GUILayout.Label(spectator.Playtest.TrainingActive ?
+            $"{spectator.WorkerCount} parallel {(spectator.WorkerCount == 1 ? "game" : "games")} · learning runs independently" :
+            "Training is stopped. Recent games remain available to inspect.", small);
         if (GUILayout.Button(spectator.ShowingLive ? "Watch recent games" : "Watch live training", button))
         { if (spectator.ShowingLive) spectator.WatchRecent(); else spectator.WatchLive(); }
         if (spectator.ShowingLive)
@@ -273,7 +275,8 @@ public sealed class TrainingOverlay
         if (GUILayout.Button("Stop & save", button)) spectator.StopAndSave();
         GUILayout.EndHorizontal();
         GUI.enabled = true;
-        GUILayout.Label("Closing this viewer leaves training running.", small);
+        GUILayout.Label(spectator.Playtest.TrainingActive ? "Closing this viewer leaves training running." :
+            "Closing this viewer ends the local playtest session.", small);
         GUILayout.Space(12);
     }
 
@@ -289,10 +292,18 @@ public sealed class TrainingOverlay
 
     private void DrawPlaytest(ITrainingView arena)
     {
-        GUI.enabled = arena.Playtest.Available && !arena.Playtest.Busy && arena.CanContinue;
-        if (GUILayout.Button("Play against recent AI", button)) arena.Playtest.Start(arena);
+        GUILayout.Label("Play a frozen AI", title);
+        GUI.enabled = !arena.Playtest.Busy;
+        arena.Playtest.Difficulty = (BlockNations.AI.LearnedDifficulty)GUILayout.Toolbar(
+            (int)arena.Playtest.Difficulty, new[] { "Easy", "Medium", "Hard" }, button);
+        GUI.enabled = arena.Playtest.Available && !arena.Playtest.Busy;
+        if (GUILayout.Button("Play against " + arena.Playtest.Difficulty + " AI", button)) arena.Playtest.Start(arena);
         GUI.enabled = true;
-        GUILayout.Label("Opens a separate match with fixed weights. Training continues independently.", small);
+        GUILayout.Label(arena.Playtest.TrainingActive ? "Fixed weights. Training continues independently." :
+            "Training stopped. Opens a separate human match.", small);
+        GUILayout.Label("Experimental difficulty presets; playing strength is not calibrated yet.", small);
+        if (!string.IsNullOrEmpty(arena.Playtest.FrozenCheckpoint))
+            GUILayout.Label("Frozen version: " + arena.Playtest.FrozenCheckpoint, small);
         if (!arena.Playtest.Available && !arena.Playtest.Busy)
             GUILayout.Label("Requires a standalone run with a saved checkpoint.", small);
         if (!string.IsNullOrEmpty(arena.Playtest.Message)) GUILayout.Label(arena.Playtest.Message, small);

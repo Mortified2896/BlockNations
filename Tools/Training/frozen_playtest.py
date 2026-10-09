@@ -19,9 +19,12 @@ def strict_load(self, load_path, policy=None, reset_global_steps=False):
 
 
 if __name__ == "__main__":
+    import os
     import mlagents.trainers
+    from playtest_sampling import install as install_difficulty
     if mlagents.trainers.__version__ != "1.1.0":
         raise RuntimeError("Frozen playtests require the audited ML-Agents 1.1.0 runtime.")
     TorchModelSaver._load_model = strict_load
+    install_difficulty(os.environ.get('BLOCKNATIONS_PLAYTEST_DIFFICULTY', 'Medium'))
     install_interactive_environment(learn)
     learn.main()

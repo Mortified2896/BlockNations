@@ -126,7 +126,8 @@ public sealed class LocalTrainingWindow : EditorWindow
             if (GUILayout.Button("Resume Saved Run")) LaunchFromControls(true);
         }
         using (new EditorGUI.DisabledScope(!active))
-            if (GUILayout.Button("Stop and Save Checkpoint")) RequestStop();
+            if (GUILayout.Button(Read<SupervisorStatus>(Path.Combine(RunDirectory, "supervisor-status.json"))?.state == "playtesting" ?
+                "Close Local Playtest" : "Stop and Save Checkpoint")) RequestStop();
         if (!string.IsNullOrEmpty(launchError)) EditorGUILayout.HelpBox(launchError, MessageType.Error);
         if (!string.IsNullOrEmpty(RunDirectory))
         {
@@ -156,6 +157,12 @@ public sealed class LocalTrainingWindow : EditorWindow
             if (GUILayout.Button("Show Run Files")) EditorUtility.RevealInFinder(RunDirectory);
             if (active && status != null && status.viewerAvailable && GUILayout.Button("Show Training Viewer"))
                 File.WriteAllText(Path.Combine(RunDirectory, "viewer.request"), "Open viewer.\n");
+            using (new EditorGUI.DisabledScope(active || EditorApplication.isCompiling || EditorApplication.isPlaying || status == null || status.checkpointCount == 0))
+                if (GUILayout.Button("Open Easy / Medium / Hard Playtest"))
+                {
+                    try { OpenDifficultyPlaytest(ActiveRun, playerPath); }
+                    catch (Exception error) when (!(error is ExitGUIException)) { launchError = error.Message; }
+                }
         }
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("Play a saved policy locally", EditorStyles.boldLabel);
@@ -260,7 +267,30 @@ public sealed class LocalTrainingWindow : EditorWindow
         if (supervisor != null && !supervisor.HasExited) return true;
         if (string.IsNullOrEmpty(RunDirectory)) return false;
         SupervisorStatus status = Read<SupervisorStatus>(Path.Combine(RunDirectory, "supervisor-status.json"));
-        return status != null && (status.state == "running" || status.state == "starting" || status.state == "saving") && ProcessExists(status.supervisorPid);
+        return status != null && (status.state == "running" || status.state == "starting" || status.state == "saving" || status.state == "playtesting") && ProcessExists(status.supervisorPid);
+    }
+
+    public static void OpenDifficultyPlaytest(string id, string player = null)
+    {
+        if (IsRunActive() || EditorApplication.isPlaying) throw new InvalidOperationException("Stop and save training before opening the local difficulty playtest.");
+        if (!System.Text.RegularExpressions.Regex.IsMatch(id ?? "", @"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$"))
+            throw new ArgumentException("Choose an existing saved run ID.");
+        string directory = Path.Combine(RootPath, "runs", id);
+        if (!File.Exists(Path.Combine(directory, "run.json"))) throw new DirectoryNotFoundException("The saved run does not exist.");
+        if (string.IsNullOrEmpty(player)) player = Path.GetFullPath("Build/LocalTrainingV2.app");
+        if (!Directory.Exists(player)) throw new DirectoryNotFoundException("Build the Mac training player first.");
+        string script = Path.GetFullPath(Path.Combine(Application.dataPath, "../Tools/Training/playtest_controller.py"));
+        string[] arguments = { script, "--run", directory, "--env", Path.GetFullPath(player) };
+        supervisor = new Process { StartInfo = new ProcessStartInfo(PythonPath, string.Join(" ", arguments.Select(Quote)))
+        { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, RedirectStandardOutput = true } };
+        launchError = null;
+        supervisor.ErrorDataReceived += (_, data) => { if (!string.IsNullOrEmpty(data.Data)) launchError = data.Data; };
+        supervisor.OutputDataReceived += (_, data) => { if (!string.IsNullOrEmpty(data.Data)) launchError = data.Data; };
+        supervisor.Start(); supervisor.BeginErrorReadLine(); supervisor.BeginOutputReadLine();
+        SessionState.SetString(ActiveRunKey, id);
+        SessionState.SetBool(AwaitPlayKey, false);
+        SessionState.SetBool(TrainingPlayKey, false);
+        Debug.Log("[ML Training] Opening frozen difficulty playtest with training stopped: " + id);
     }
 
     private static bool ProcessExists(int pid)

@@ -39,6 +39,7 @@ public static class TrainingEditorCommands
                 case "stop": LocalTrainingWindow.RequestStop(); break;
                 case "exitPlay": EditorApplication.isPlaying = false; break;
                 case "playModel": LocalTrainingWindow.PlayModel(request.modelPath, request.human); break;
+                case "openDifficultyPlaytest": LocalTrainingWindow.OpenDifficultyPlaytest(request.runId, request.playerPath); break;
                 case "editTests": RunTests(TestMode.EditMode); break;
                 case "playTests": RunTests(TestMode.PlayMode); break;
                 default: throw new ArgumentException("Unknown training development command.");
