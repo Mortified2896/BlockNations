@@ -10,8 +10,6 @@ public class MainMenuUITKView : MonoBehaviour
     private const bool EnableProfileResponsiveDebugLogs = true;
     private const string ProfileTypedDisplayNameHelperErrorClass = "profile-typed-display-name-label--error";
     private const string ThemeResourceName = "MainMenu_UITK_Theme";
-    private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
-    private const string LegacySharedSaveFileName = "save.json";
     private const int VisiblePlayerIdPrefixLength = 8;
     private const int VisiblePlayerIdSuffixLength = 5;
     private const int ProfileStatusHideDelayMs = 1800;
@@ -2947,6 +2945,7 @@ public class MainMenuUITKView : MonoBehaviour
         HideDetailsPanel();
         ClearProfileStatus();
         SetClearLocalPbpConfirmVisible(false);
+        RefreshContinueButtonVisibility();
         SetVisible(mainPanel, true);
         SetVisible(multiplayerPanel, false);
         SetVisible(profilePanel, false);
@@ -4290,20 +4289,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private static bool HasContinueSaveFile()
     {
-        string persistentRoot = DevClientInstanceScope.GetScopedPersistentDataPath();
-        if (string.IsNullOrWhiteSpace(persistentRoot))
-        {
-            return false;
-        }
-
-        string singlePlayerSavePath = Path.Combine(persistentRoot, SinglePlayerPrimarySaveFileName);
-        if (File.Exists(singlePlayerSavePath))
-        {
-            return true;
-        }
-
-        string legacySavePath = Path.Combine(persistentRoot, LegacySharedSaveFileName);
-        return File.Exists(legacySavePath);
+        return SinglePlayerContinueSave.TryGetPath(DevClientInstanceScope.GetScopedPersistentDataPath(), out _);
     }
 
     private void ApplySafeArea(bool force)

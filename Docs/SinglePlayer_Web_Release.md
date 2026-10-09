@@ -68,7 +68,7 @@ python3 Tools/WebRelease/audit.py Build/WebRelease
 Store build logs, deployment receipts, and browser acceptance captures in ignored local output.
 Never put Cloudflare credentials, PBp credentials, or private training/human match data into release files or documentation.
 
-## Release acceptance: 2026-10-09
+## Initial release acceptance: 2026-10-09
 
 - Public Worker: `blocknations-web`, version `371e089b-2517-405c-bc80-50b85f0c2780`.
 - Preview: `https://blocknations-web-preview.johannes-gaebler.workers.dev`, version `f23f769f-24c5-4773-ba28-deba2203de57`.
@@ -82,3 +82,12 @@ Never put Cloudflare credentials, PBp credentials, or private training/human mat
 Physical iPhone/Android devices and Safari are still separate acceptance work.
 At a 390-pixel-wide viewport with device pixel ratio one, the existing Unity settings pane can clip its heading and needs more scrolling; the tested ratio-two touch view displayed the heading and Start button correctly.
 The browser playtest includes the existing local AI opponents; the recently trained policy is not included in this release.
+
+## Menu follow-up: 2026-10-09
+
+- Public Worker version: `cb3f824c-0b63-4fa9-9b75-0805da24b62d`; preview version: `01c880fe-8229-4923-8f31-32f6d3ebe4e3`.
+- Main-menu button backgrounds reach both horizontal edges. Verified in Chromium at 1280×720 and 976×1622.
+- Continue uses the saved match's terminal state, with shared eligibility for button visibility and its action. Completed primary saves suppress older legacy saves; supported unfinished legacy saves still work. Saved files are preserved.
+- Normal single-player city captures persist the finished status immediately. A controlled 11×11 browser position was continued and won by capturing the enemy city; IndexedDB contained `gameOver: true`, and Continue stayed hidden after full page reloads in both layouts.
+- All seven focused Unity EditMode save eligibility cases passed. The rebuilt export audit and comparisons against five local authentication values found zero credential matches.
+- The public release uses the same artifact tested on preview. Build/test receipts and browser captures are kept under ignored `Logs/MenuFix/` and `output/playwright/`.

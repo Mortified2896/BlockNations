@@ -6152,6 +6152,12 @@ public partial class TurnManager : MonoBehaviour
             ConfigurePbpEndgameFallback("capture_result_resolution_failed");
         }
 
+        if (currentMode == GameMode.VsAI && !IsAIVsAIDebugModeActive())
+        {
+            // Persist the terminal flag before returning to the menu or reloading the browser.
+            AutoSaveIfEnabled();
+        }
+
         if (SoundManager.Instance != null && !ShouldSuppressAIVsAIAudio())
         {
             // In Play-by-Post both sides are human-controlled, so always treat game-over as a "win" cue.

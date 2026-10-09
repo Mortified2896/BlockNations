@@ -45,8 +45,6 @@ public class MainMenuController : MonoBehaviour
     private const string PlayByPostPendingNewGameIdKeyRaw = "pbp_pendingNewGameId";
     private const string PendingCreateShareReadyGameIdKeyRaw = "ui_pbp_createShareReadyGameId";
     private const string ReturnToMultiplayerPaneKeyRaw = "ui_returnToMultiplayerPane";
-    private const string SinglePlayerPrimarySaveFileName = "save_sp.json";
-    private const string LegacySharedSaveFileName = "save.json";
     private const string PbpVersionVerificationFailedMessage = "Unable to verify this game's PbP version. For safety, this match cannot be opened on this build.";
     private const string PbpActiveGameUpdateRequiredCardText = "Requires matching version";
     private const string PbpJoinFullMessage = "Can't join: this game is already full.";
@@ -1203,46 +1201,15 @@ public class MainMenuController : MonoBehaviour
 
     public void ContinueLastSave()
     {
-        string path = ResolveContinueSavePath();
-        if (!System.IO.File.Exists(path))
+        if (!SinglePlayerContinueSave.TryGetPath(GetPersistentRootPath(), out string path))
         {
-            Debug.LogWarning("No save file found at " + path + ". Continue canceled; staying in menu.");
+            Debug.LogWarning("No unfinished single-player save is available. Continue canceled; staying in menu.");
             return;
-        }
-
-        // Peek at the save header so we can skip PlayByPost saves.
-        try
-        {
-            string json = File.ReadAllText(path);
-            MinimalSaveHeader header = JsonUtility.FromJson<MinimalSaveHeader>(json);
-            if (header != null && !string.IsNullOrEmpty(header.mode))
-            {
-                if (header.mode == TurnManager.GameMode.PlayByPost.ToString())
-                {
-                    Debug.LogWarning("Last save is a Play-by-Post game. Use Import JSON instead of Continue.");
-                    return;
-                }
-            }
-        }
-        catch (System.Exception ex)
-        {
-            Debug.LogWarning("Failed to inspect save header; attempting to continue anyway. " + ex.Message);
         }
 
         Debug.Log("Continue requested. Loading save at " + path);
         SaveLoadRequest.RequestLoad(path);
         SceneManager.LoadScene(gameplaySceneName);
-    }
-
-    private static string ResolveContinueSavePath()
-    {
-        string spPath = Path.Combine(GetPersistentRootPath(), SinglePlayerPrimarySaveFileName);
-        if (File.Exists(spPath))
-        {
-            return spPath;
-        }
-
-        return Path.Combine(GetPersistentRootPath(), LegacySharedSaveFileName);
     }
 
     // === JSON import (paste-based) ===
