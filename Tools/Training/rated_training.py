@@ -13,6 +13,7 @@ from mlagents.trainers import learn as sdk_learn
 from mlagents.trainers.ghost.trainer import GhostTrainer
 from mlagents.trainers.behavior_id_utils import create_name_behavior_id
 from match_rating import MatchRating, MatchJournalReader, policy_id
+from interactive_environment import install as install_interactive_environment
 
 ACTIVE_TRAINER = None
 
@@ -115,6 +116,7 @@ def main():
         raise RuntimeError('Whole-match rating adapter requires audited ML-Agents 1.1.0.')
     import mlagents.trainers.trainer.trainer_factory as factory
     factory.GhostTrainer = WholeMatchGhostTrainer
+    install_interactive_environment(sdk_learn)
     previous = signal.getsignal(signal.SIGINT)
     def interrupt(signum, frame):
         if ACTIVE_TRAINER is not None:

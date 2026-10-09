@@ -12,6 +12,14 @@ public partial class TurnManager
     public int ExternalWinnerSeatIndex { get; private set; } = -1;
     internal int ExternalFirstSeatIndex { get; private set; }
 
+    public void ConfigureExternalHumanSeat(int seat)
+    {
+        if (!externallyDrivenMatch || ExternalMatchReady)
+            throw new InvalidOperationException("Configure the external human seat before the arena starts.");
+        if (seat < -1 || seat > 1) throw new ArgumentOutOfRangeException(nameof(seat));
+        externalHumanSeatIndex = seat;
+    }
+
     public void ResetExternalMatch(int initialGold, int firstSeat)
     {
         if (!externallyDrivenMatch || !ExternalMatchReady || gridManager == null)

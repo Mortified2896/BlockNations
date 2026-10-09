@@ -24,7 +24,11 @@ public sealed class TrainingArena : MonoBehaviour
     [SerializeField] private int initialCurriculumDistance = 2;
     [SerializeField] private int humanSeatIndex = -1;
     [SerializeField] private string statusPath;
+    [SerializeField] private TrainingHumanPresentation humanPresentation;
     private readonly TrainingOverlay overlay = new TrainingOverlay();
+    public TrainingPlaytestBridge Playtest { get; } = new TrainingPlaytestBridge();
+    public string HumanPolicyVersion { get; private set; }
+    public bool CanReturnToTraining { get; private set; }
     private TrainingProgressHistory progress = new TrainingProgressHistory();
     private bool fullOpening;
     private int startingDistance, viewportWidth, viewportHeight;
@@ -43,6 +47,7 @@ public sealed class TrainingArena : MonoBehaviour
     private int originalCameraCullingMask;
     private System.Random random;
     private bool ready, needsReset, ending;
+    private bool humanReturnRequested;
     private bool previousBackground, previousAutomaticStepping;
     private bool previousCommunicatorEnabled, registeredTrainerFactory, trainerStopping;
     private ICommunicator trainerCommunicator;
@@ -84,7 +89,7 @@ public sealed class TrainingArena : MonoBehaviour
         public bool estimated;
     }
     public bool IsHumanPlaytest => humanSeatIndex >= 0;
-    public bool IsTraining => requireTrainer;
+    public bool IsTraining => requireTrainer && !IsHumanPlaytest;
     public bool IsRatingCheck => ratingCheck;
     public int HumanSeat => humanSeatIndex;
     public int RoundLimit => matchRoundLimit;
@@ -98,11 +103,24 @@ public sealed class TrainingArena : MonoBehaviour
     public int GoldForSeat(int seat) => simulation != null ? simulation.GoldForSeat(seat) : turnManager != null ? turnManager.GetGoldForSeat(seat) : 0;
     public void EndHumanTurn() { if (CanEndHumanTurn) turnManager.TryAdvanceExternalMatchTurn(humanSeatIndex); }
     public void NewHumanMatch() { if (CanStartNewMatch) { Paused = false; ResetMatch(); } }
+    public void PublishStatus() => WriteStatusIfDue(force: true);
+    public void ReturnToTraining()
+    {
+        if (!CanReturnToTraining) return;
+        humanReturnRequested = true;
+        PublishStatus();
+        Application.Quit();
+    }
     public int NextRandom(int exclusiveMaximum) => random.Next(exclusiveMaximum);
 
     private void Awake()
     {
         ReadConfiguration();
+        if (IsHumanPlaytest)
+        {
+            turnManager.ConfigureExternalHumanSeat(humanSeatIndex);
+            if (humanPresentation != null) humanPresentation.SetHumanMode(true);
+        }
         if (!LearnedActionSchema.SupportsBoard(boardSize) || (boardSize != 11 && useCurriculum))
             throw new InvalidOperationException("Choose a supported board; smaller boards use standard openings without tactical curriculum.");
         if (turnManager != null && turnManager.gridManager != null)
@@ -145,6 +163,9 @@ public sealed class TrainingArena : MonoBehaviour
         {
             if (arguments[i] == "--rating-check" && bool.TryParse(arguments[++i], out bool check)) ratingCheck = check;
             else if (arguments[i] == "--training-simulation") directSimulation = arguments[++i] != "scene";
+            else if (arguments[i] == "--training-human-seat" && int.TryParse(arguments[++i], out int humanSeat)) humanSeatIndex = humanSeat;
+            else if (arguments[i] == "--training-policy-version") HumanPolicyVersion = arguments[++i];
+            else if (arguments[i] == "--training-playtest-return" && bool.TryParse(arguments[++i], out bool canReturn)) CanReturnToTraining = canReturn;
             else if (arguments[i] == "--training-board-size" && int.TryParse(arguments[++i], out int configuredSize)) boardSize = configuredSize;
             else if (arguments[i] == "--training-status") statusPath = arguments[++i];
             else if (arguments[i] == "--training-seed" && int.TryParse(arguments[++i], out int configuredSeed)) seed = configuredSeed;
@@ -163,14 +184,14 @@ public sealed class TrainingArena : MonoBehaviour
         originalCameraBackground = boardCamera.backgroundColor;
         originalCameraCullingMask = boardCamera.cullingMask;
         cameraPresentationInitialized = true;
-        if (requireTrainer)
+        if (IsTraining)
         {
             // Soften the training viewer without changing the game's camera palette.
             float grey = originalCameraBackground.grayscale;
             boardCamera.backgroundColor = Color.Lerp(originalCameraBackground,
                 new Color(grey, grey, grey, originalCameraBackground.a), .15f);
         }
-        if (requireTrainer && !string.IsNullOrEmpty(statusPath))
+        if (IsTraining && !string.IsNullOrEmpty(statusPath))
         {
             matchJournal = new TrainingMatchJournal(Path.GetDirectoryName(statusPath), boardSize);
             progress = new TrainingProgressHistory { boardSize = boardSize };
@@ -217,6 +238,7 @@ public sealed class TrainingArena : MonoBehaviour
 
     private void Update()
     {
+        Playtest.Poll(this);
         Replay.Tick(Time.realtimeSinceStartupAsDouble);
         UpdateViewport();
         if (!ready || Paused || !string.IsNullOrEmpty(Failure)) { WriteStatusIfDue(); return; }
@@ -248,7 +270,7 @@ public sealed class TrainingArena : MonoBehaviour
         (simulation != null ? simulation.IsTurnOwnedBySeat(seat) : SeatAIActionExecutor.CanAct(turnManager, seat));
     private bool MatchGameOver => simulation != null ? simulation.GameOver : turnManager.gameOver;
 
-    public void RecordDecision() { Decisions++; matchDecisions++; if (ActingSeat >= 0 && ActingSeat < 2) matchSeatDecisions[ActingSeat]++; if (requireTrainer) progress.decisions++; }
+    public void RecordDecision() { Decisions++; matchDecisions++; if (ActingSeat >= 0 && ActingSeat < 2) matchSeatDecisions[ActingSeat]++; if (IsTraining) progress.decisions++; }
 
     private void TrainerReset()
     {
@@ -264,7 +286,7 @@ public sealed class TrainingArena : MonoBehaviour
 
     public bool Execute(LegalTurnAction action)
     {
-        string replayAction = requireTrainer ? TrainingReplayRecorder.Describe(action) : null;
+        string replayAction = IsTraining ? TrainingReplayRecorder.Describe(action) : null;
         RecordDecision();
         bool executed = action.ActionType == LegalActionType.EndTurn
             ? turnManager.TryAdvanceExternalMatchTurn(action.SeatIndex)
@@ -276,14 +298,14 @@ public sealed class TrainingArena : MonoBehaviour
         turnManager.RecalculatePlayerVisibility();
         if (MatchGameOver) FinishMatch(false);
         else if (turnActions > 4096) FinishMatch(true);
-        else if (requireTrainer) Replay.Record(TrainingReplayRecorder.Capture(turnManager, replayAction));
+        else if (IsTraining) Replay.Record(TrainingReplayRecorder.Capture(turnManager, replayAction));
         return true;
     }
 
     public bool Execute(MatchCommand command)
     {
         if (simulation == null || !CanAct(command.Seat)) return false;
-        string replayAction = requireTrainer ? SimulationReplayProjector.Describe(simulation, command) : null;
+        string replayAction = IsTraining ? SimulationReplayProjector.Describe(simulation, command) : null;
         RecordDecision();
         if (!MatchEngine.Apply(simulation, command).Applied) return false;
         Actions++;
@@ -291,7 +313,7 @@ public sealed class TrainingArena : MonoBehaviour
         LastAction = replayAction ?? command.Kind + " by seat " + command.Seat;
         if (simulation.GameOver) FinishMatch(false);
         else if (turnActions > 4096) FinishMatch(true);
-        else if (requireTrainer) Replay.Record(CaptureFrame(replayAction));
+        else if (IsTraining) Replay.Record(CaptureFrame(replayAction));
         return true;
     }
 
@@ -323,10 +345,10 @@ public sealed class TrainingArena : MonoBehaviour
             if (interrupted) agent.EpisodeInterrupted();
             else { agent.AddReward(agent.SeatIndex == winner ? 1f : -1f); agent.EndEpisode(); }
         }
-        if (requireTrainer) Replay.Complete(CaptureFrame(interrupted ?
+        if (IsTraining) Replay.Complete(CaptureFrame(interrupted ?
             "Match interrupted at turn/action limit" : LastAction + " · " + (winner == 0 ? "Blue" : "Red") + " captures city and wins"));
         Games++;
-        if (requireTrainer) progress.RecordMatch(fullOpening, interrupted, winner, firstSeat);
+        if (IsTraining) progress.RecordMatch(fullOpening, interrupted, winner, firstSeat);
         if (interrupted) Interruptions++; else Captures++;
         LastAction = interrupted ? "Match interrupted at its limit" : "Seat " + winner + " won by city capture";
         recentResults.Enqueue(!interrupted);
@@ -376,7 +398,7 @@ public sealed class TrainingArena : MonoBehaviour
                     publicCities.Add(new AICityState { Seat = city.ownerSeatIndex, X = city.x, Y = city.y });
         observationSource.SetPublicStartingCities(publicCities.ToArray());
         simulationObservations.SetPublicStartingCities(publicCities.ToArray());
-        if (requireTrainer) Replay.Begin(Games + 1, boardSize, ActingSeat,
+        if (IsTraining) Replay.Begin(Games + 1, boardSize, ActingSeat,
             CaptureFrame((ActingSeat == 0 ? "Blue" : "Red") + " moves first"));
         startingDistance = publicCities.Count == 2 ? Math.Max(Math.Abs(publicCities[0].X - publicCities[1].X),
             Math.Abs(publicCities[0].Y - publicCities[1].Y)) : 0;
@@ -447,9 +469,9 @@ public sealed class TrainingArena : MonoBehaviour
         public long decisions, actions;
         public int games, captures, interruptions, rejections, trainerResets, round, seat, curriculumDistance, seed, roundLimit;
         public double elapsedSeconds, decisionsPerSecond;
-        public bool paused, trainerConnected, fullOpening;
+        public bool paused, trainerConnected, fullOpening, humanPlaytest, returnRequested;
         public int gold0, gold1, startingDistance, boardSize, schema;
-        public string lastAction, failure, simulationVersion, simulationBackend;
+        public string lastAction, failure, simulationVersion, simulationBackend, policyVersion;
     }
 
     private void WriteStatusIfDue(bool force = false)
@@ -457,7 +479,7 @@ public sealed class TrainingArena : MonoBehaviour
         double now = Time.realtimeSinceStartupAsDouble;
         if ((!force && now < nextStatusTime) || string.IsNullOrEmpty(statusPath)) return;
         nextStatusTime = now + 2;
-        if (requireTrainer)
+        if (IsTraining)
         {
             // Missing/stale chart telemetry must never stop or alter training.
             try
@@ -493,6 +515,7 @@ public sealed class TrainingArena : MonoBehaviour
             interruptions = Interruptions, rejections = Rejections, round = Round, seat = ActingSeat,
             trainerResets = TrainerResets,
             simulationVersion = SimulationVersion, simulationBackend = simulation != null ? "direct-csharp" : "scene-adapter",
+            humanPlaytest = IsHumanPlaytest, policyVersion = HumanPolicyVersion, returnRequested = humanReturnRequested,
             curriculumDistance = curriculumDistance, seed = seed, elapsedSeconds = elapsed,
             roundLimit = matchRoundLimit, fullOpening = fullOpening, startingDistance = startingDistance,
             gold0 = GoldForSeat(0), gold1 = GoldForSeat(1), boardSize = boardSize, schema = LearnedActionSchema.Version,
@@ -504,7 +527,7 @@ public sealed class TrainingArena : MonoBehaviour
             File.WriteAllText(statusPath + ".tmp", JsonUtility.ToJson(state, true));
             if (File.Exists(statusPath)) File.Replace(statusPath + ".tmp", statusPath, null);
             else File.Move(statusPath + ".tmp", statusPath);
-            if (requireTrainer && !string.IsNullOrEmpty(progressPath))
+            if (IsTraining && !string.IsNullOrEmpty(progressPath))
             {
                 File.WriteAllText(progressPath + ".tmp", JsonUtility.ToJson(progress));
                 if (File.Exists(progressPath)) File.Replace(progressPath + ".tmp", progressPath, null);

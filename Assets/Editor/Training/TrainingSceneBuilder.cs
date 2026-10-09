@@ -64,6 +64,7 @@ public static class TrainingSceneBuilder
             seatReferences.GetArrayElementAtIndex(seat).objectReferenceValue = agent;
         }
         arenaFields.ApplyModifiedPropertiesWithoutUndo();
+        WireHumanPresentation(scene, arena);
         ConfigurePresentation(scene, human: false);
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
@@ -78,6 +79,7 @@ public static class TrainingSceneBuilder
         Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
         TrainingArena arena = Root<TrainingArena>(scene, "LocalTrainingArena");
         TurnManager manager = Root<TurnManager>(scene, "TurnManager");
+        WireHumanPresentation(scene, arena);
         Set(arena, "statusPath", statusPath);
         Set(arena, "seed", seed);
         Set(arena, "useCurriculum", curriculum);
@@ -118,6 +120,36 @@ public static class TrainingSceneBuilder
             if (root.name == "UnitSelectionManager" || root.name == "HoverManager")
                 foreach (MonoBehaviour component in root.GetComponents<MonoBehaviour>()) component.enabled = human;
         }
+    }
+
+    public static void PrepareHumanPlaytestWiring()
+    {
+        Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+        WireHumanPresentation(scene, Root<TrainingArena>(scene, "LocalTrainingArena"));
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+    }
+
+    private static void WireHumanPresentation(Scene scene, TrainingArena arena)
+    {
+        TrainingHumanPresentation presentation = arena.GetComponent<TrainingHumanPresentation>();
+        if (presentation == null) presentation = arena.gameObject.AddComponent<TrainingHumanPresentation>();
+        string[] names = { "GameplayUnitPanelUITK", "UITK_GameplayHUD_SafeArea", "GameplayBottomHudUITK", "GameplayTopHudUITK",
+            "UnitUIManager", "GameplayCityPanelUITK", "CityUIManager", "UITK_GameplayHUD_Root", "GameMenuActions" };
+        GameObject[] roots = scene.GetRootGameObjects();
+        GameObject[] ui = roots.Where(root => Array.IndexOf(names, root.name) >= 0).ToArray();
+        MonoBehaviour[] input = roots.Where(root => root.name == "UnitSelectionManager" || root.name == "HoverManager")
+            .SelectMany(root => root.GetComponents<MonoBehaviour>()).ToArray();
+        if (ui.Length == 0 || input.Length == 0) throw new InvalidOperationException("Training scene is missing its authored human UI/input roots.");
+        SerializedObject fields = new SerializedObject(presentation);
+        SerializedProperty uiReferences = fields.FindProperty("humanUIRoots");
+        uiReferences.arraySize = ui.Length;
+        for (int i = 0; i < ui.Length; i++) uiReferences.GetArrayElementAtIndex(i).objectReferenceValue = ui[i];
+        SerializedProperty inputReferences = fields.FindProperty("humanInput");
+        inputReferences.arraySize = input.Length;
+        for (int i = 0; i < input.Length; i++) inputReferences.GetArrayElementAtIndex(i).objectReferenceValue = input[i];
+        fields.ApplyModifiedPropertiesWithoutUndo();
+        Set(arena, "humanPresentation", presentation);
     }
 
     private static T Root<T>(Scene scene, string name) where T : Component

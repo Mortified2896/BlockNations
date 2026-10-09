@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 from training_time import TrainingTime
 from run_limits import RunLimits, continuous_config, is_continuous
+from playtest import PlaytestSession
 import json
 import os
 from pathlib import Path
@@ -351,13 +352,14 @@ def main() -> int:
                         "--training-board-size", str(args.board_size)])
     process = None
     assertion = None
+    playtest = PlaytestSession(run, args.env)
     training_time = TrainingTime.load(run, args.run_id, args.board_size)
     started = time.monotonic()
     state = {"runId": args.run_id, "supervisorPid": os.getpid(), "state": "starting", "trainerReady": False, "budgetBytes": budget,
              "reserveBytes": reserve, "durationSeconds": limits.duration_seconds,
              "continuousTraining": is_continuous(plan),
              "trainingStepLimit": 0 if is_continuous(plan) else plan.get("behaviors", {}).get("BlockNationsSeatV2", {}).get("max_steps", args.max_steps),
-             "removedArtifacts": removed[-20:]}
+             "removedArtifacts": removed[-20:], "playtestAvailable": args.env is not None}
     try:
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                    stdin=subprocess.DEVNULL, env=environment, cwd=run)
@@ -390,6 +392,7 @@ def main() -> int:
             atomic_json(run / "supervisor-status.json", state)
             atomic_json(root / "active.json", {"runId": args.run_id, "supervisorPid": os.getpid()})
             arena = read_json(run / "arena-status.json")
+            playtest.poll(arena)
             training_time.tick(time.monotonic(), bool(arena.get("trainerConnected")) and
                                not arena.get("paused", False) and not arena.get("failure"))
             atomic_json(run / "training-time.json", training_time.snapshot())
@@ -425,6 +428,7 @@ def main() -> int:
         atomic_json(run / "supervisor-status.json", state)
         return process.returncode or (1 if failed else 0)
     finally:
+        playtest.close()
         if process is not None and process.poll() is None:
             interrupt_trainer(process)
         if assertion is not None:

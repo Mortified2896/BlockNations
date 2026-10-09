@@ -45,7 +45,15 @@ public sealed class TrainingOverlay
             }
             GUILayout.Label(arena.IsHumanPlaytest ? "Local policy playtest" : arena.IsRatingCheck ? "Frozen policy rating check" : "Live self-play training", title);
             GUILayout.Space(12);
-            if (arena.IsTraining) { DrawTrainingTime(arena); DrawStorage(arena); }
+            if (arena.IsTraining) { DrawPlaytest(arena); DrawTrainingTime(arena); DrawStorage(arena); }
+            if (arena.IsHumanPlaytest)
+            {
+                GUILayout.Label("You are Blue and move first. Select your city to recruit, then select units to move or attack.", small);
+                if (!string.IsNullOrEmpty(arena.HumanPolicyVersion)) GUILayout.Label("Frozen version: " + arena.HumanPolicyVersion, small);
+                GUILayout.Label(arena.CanEndHumanTurn ? "Your turn" : arena.CanStartNewMatch ? "Match finished" : "AI's turn", label);
+                if (arena.CanStartNewMatch) GUILayout.Label(arena.LastAction, label);
+                if (arena.CanReturnToTraining && GUILayout.Button("Back to training", button)) arena.ReturnToTraining();
+            }
             GUILayout.Label($"Match {arena.Games + 1} · round {arena.Round}/{arena.RoundLimit}", label);
             GUILayout.Label(arena.FullOpening ? $"Standard opening · {arena.BoardSize} × {arena.BoardSize}" :
                 $"Curriculum stage {arena.CurriculumDistance} · distance {arena.StartingDistance}", small);
@@ -78,7 +86,9 @@ public sealed class TrainingOverlay
                 GUI.enabled = true;
             }
             GUI.enabled = arena.CanContinue;
-            if (GUILayout.Button(arena.Paused ? "Continue live run" : "Pause live run", button)) arena.Paused = !arena.Paused;
+            string pauseLabel = arena.IsHumanPlaytest ? (arena.Paused ? "Continue match" : "Pause match") :
+                (arena.Paused ? "Continue live run" : "Pause live run");
+            if (GUILayout.Button(pauseLabel, button)) arena.Paused = !arena.Paused;
             GUI.enabled = true;
             if (arena.CanEndHumanTurn && GUILayout.Button("End your turn", button)) arena.EndHumanTurn();
             if (arena.CanStartNewMatch && GUILayout.Button("New playtest match", button)) arena.NewHumanMatch();
@@ -137,6 +147,7 @@ public sealed class TrainingOverlay
         DrawStorage(arena);
         GUILayout.Label(arena.Paused ? "Live training is paused." : "Training continues at full speed.", small);
         if (GUILayout.Button("Back to Live", button)) { replay.BackToLive(); return; }
+        DrawPlaytest(arena);
         GUILayout.Space(12);
         GUILayout.Label($"Recorded match {game.number} · {game.boardSize} × {game.boardSize}", label);
         GUILayout.Label($"Recent game {replay.PlaylistIndex + 1}/{replay.PlaylistCount} · round {frame.round}", small);
@@ -173,6 +184,17 @@ public sealed class TrainingOverlay
         int minutes = (int)(seconds / 60 % 60), remainder = (int)(seconds % 60);
         GUILayout.Label($"Total training: {(arena.TrainingTimeEstimated ? "≈ " : "")}{hours:00}:{minutes:00}:{remainder:00}", label);
         GUILayout.Label(arena.TrainingTimeEstimated ? "Includes estimated earlier sessions." : "Active time across resumes · pauses excluded", small);
+    }
+
+    private void DrawPlaytest(TrainingArena arena)
+    {
+        GUI.enabled = arena.Playtest.Available && !arena.Playtest.Busy && arena.CanContinue;
+        if (GUILayout.Button("Play against recent AI", button)) arena.Playtest.Start(arena);
+        GUI.enabled = true;
+        GUILayout.Label("Opens a separate match with fixed weights. Training keeps running in this window.", small);
+        if (!arena.Playtest.Available && !arena.Playtest.Busy)
+            GUILayout.Label("Requires a standalone run with a saved checkpoint.", small);
+        if (!string.IsNullOrEmpty(arena.Playtest.Message)) GUILayout.Label(arena.Playtest.Message, small);
     }
 
     private void DrawStorage(TrainingArena arena)

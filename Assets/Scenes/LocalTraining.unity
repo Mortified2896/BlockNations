@@ -895,6 +895,7 @@ GameObject:
   m_Component:
   - component: {fileID: 807338925}
   - component: {fileID: 807338924}
+  - component: {fileID: 807338926}
   m_Layer: 0
   m_Name: LocalTrainingArena
   m_TagString: Untagged
@@ -920,6 +921,7 @@ MonoBehaviour:
   - {fileID: 2037586052}
   boardCamera: {fileID: 519420031}
   seed: 42
+  boardSize: 11
   maxRounds: 100
   decisionsPerFrame: 2
   requireTrainer: 1
@@ -927,6 +929,7 @@ MonoBehaviour:
   initialCurriculumDistance: 2
   humanSeatIndex: -1
   statusPath:
+  humanPresentation: {fileID: 807338926}
 --- !u!4 &807338925
 Transform:
   m_ObjectHideFlags: 0
@@ -944,6 +947,26 @@ Transform:
   - {fileID: 2037586054}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &807338926
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 807338923}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 12d22633ae644ab1b14c35f385ef400e, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::TrainingHumanPresentation
+  humanUIRoots:
+  - {fileID: 1477350322}
+  - {fileID: 1175018322}
+  - {fileID: 305045618}
+  - {fileID: 1805156416}
+  humanInput:
+  - {fileID: 701978255}
+  - {fileID: 653581782}
 --- !u!1 &878665045
 GameObject:
   m_ObjectHideFlags: 0
