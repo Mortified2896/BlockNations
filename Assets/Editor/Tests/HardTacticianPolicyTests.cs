@@ -7,9 +7,12 @@ using UnityEngine;
 
 public class HardTacticianPolicyTests
 {
-    private static AIUnitState Warrior(int seat, int x, int y) => new AIUnitState {
-        Seat = seat, X = x, Y = y, Type = "warrior", Health = 10, MaxHealth = 10, Attack = 10,
-        Range = 1, Vision = 1, MaxMoves = 1, MaxAttacks = 1, AttackAfterMoving = true, Cost = 2 };
+    private static AIUnitState Warrior(int seat, int x, int y)
+    {
+        AIUnitState unit = SimulationObservationSource.UnitCapabilities(UnitRegistry.Warrior, seat);
+        unit.X = x; unit.Y = y;
+        return unit;
+    }
 
     private static AIObservation Board(int seat, params AIUnitState[] units)
     {
@@ -104,6 +107,7 @@ public class HardTacticianPolicyTests
     {
         AIUnitState a = Warrior(0, 4, 5), b = Warrior(0, 5, 4);
         a.Type = b.Type = "rider"; a.CommittedMove = b.CommittedMove = true;
+        a.AttackEndsMovement = b.AttackEndsMovement = false;
         a.Attack = b.Attack = 5; a.MaxMoves = b.MaxMoves = 2;
         AIObservation board = Board(0, a, b, Warrior(1, 5, 5),
             Warrior(0, 0, 0), Warrior(0, 1, 0), Warrior(0, 2, 0), Warrior(0, 3, 0),
@@ -120,6 +124,7 @@ public class HardTacticianPolicyTests
     {
         AIUnitState a = Warrior(1, 4, 5), b = Warrior(1, 5, 4), defender = Warrior(0, 5, 5);
         a.Type = b.Type = "rider"; a.CommittedMove = b.CommittedMove = true;
+        a.AttackEndsMovement = b.AttackEndsMovement = false;
         a.Attack = b.Attack = 5; a.MaxMoves = b.MaxMoves = 2;
         AIObservation board = Board(1, a, b, defender);
         board.Cities = new[] { new AICityState { Seat = 0, X = 5, Y = 5, CurrentlyVisible = true } };
@@ -154,10 +159,12 @@ public class HardTacticianPolicyTests
     public void RiderMoveIsCommittedAndArcherCannotAttackAfterMoving()
     {
         AIUnitState rider = Warrior(1, 4, 4); rider.Type = "rider"; rider.CommittedMove = true; rider.MaxMoves = 2;
+        rider.AttackEndsMovement = false;
         AIObservation board = Board(1, rider, Warrior(0, 6, 5));
         AITacticalState moved = new AITacticalState(board).After(new AIAction { Kind = AIActionKind.Move, Actor = 0, Destination = 49, MoveCost = 1 });
         Assert.That(moved.Actions().Any(a => a.Actor == 0 && a.Kind == AIActionKind.Move), Is.False);
         AIUnitState archer = Warrior(1, 4, 4); archer.Type = "archer"; archer.Range = 2; archer.AttackAfterMoving = false;
+        archer.AttackEndsMovement = false;
         board = Board(1, archer, Warrior(0, 6, 5));
         moved = new AITacticalState(board).After(new AIAction { Kind = AIActionKind.Move, Actor = 0, Destination = 49, MoveCost = 1 });
         Assert.That(moved.Actions().Any(a => a.Actor == 0 && a.Kind == AIActionKind.Attack), Is.False);
@@ -167,6 +174,7 @@ public class HardTacticianPolicyTests
     public void ArcherKillDoesNotAdvanceIntoCity()
     {
         AIUnitState archer = Warrior(1, 4, 5); archer.Range = 2; archer.Type = "archer";
+        archer.AttackEndsMovement = false;
         AIObservation board = Board(1, archer, Warrior(0, 5, 5));
         board.Cities = new[] { new AICityState { Seat = 0, X = 5, Y = 5, CurrentlyVisible = true } };
         AITacticalState next = new AITacticalState(board).After(new AIAction { Kind = AIActionKind.Attack, Actor = 0, Target = 1, Destination = 60 });
@@ -225,6 +233,7 @@ public class HardTacticianPolicyTests
     {
         AIUnitState riderA = Warrior(1, 4, 5), riderB = Warrior(1, 5, 4);
         riderA.Type = riderB.Type = "rider"; riderA.Attack = riderB.Attack = 5;
+        riderA.AttackEndsMovement = riderB.AttackEndsMovement = false;
         AIObservation board = Board(0, Warrior(0, 5, 5), riderA, riderB);
         board.Cities = new[] { new AICityState { Seat = 0, X = 5, Y = 5, CurrentlyVisible = true } };
         Assert.That(new AITacticalState(board).Evaluate().Safety, Is.LessThan(-40000));
@@ -245,6 +254,7 @@ public class HardTacticianPolicyTests
             attacker.Attack = 5;
             attacker.Range = 2;
             attacker.AttackAfterMoving = false;
+            attacker.AttackEndsMovement = false;
             units[1 + i] = attacker;
         }
         if (includeScout)
@@ -265,6 +275,7 @@ public class HardTacticianPolicyTests
         AIUnitState guard = Warrior(0, 5, 5); guard.Health = 5;
         AIUnitState attacker = Warrior(1, 7, 5);
         attacker.Type = "test-ranged"; attacker.Attack = 5; attacker.Range = 2; attacker.AttackAfterMoving = false;
+        attacker.AttackEndsMovement = false;
         AIObservation board = Board(0, guard, attacker);
         board.Cities = new[] { new AICityState { Seat = 0, X = 5, Y = 5, CurrentlyVisible = true } };
         Assert.That(new AITacticalState(board).Evaluate().Safety, Is.GreaterThan(-40000),
@@ -279,6 +290,7 @@ public class HardTacticianPolicyTests
         AIUnitState attacker = Warrior(1 - seat, 6, 5);
         attacker.Type = "unnamed-ranged-capability"; attacker.Range = 2;
         attacker.Attack = 5; attacker.AttackAfterMoving = false;
+        attacker.AttackEndsMovement = false;
         // These are spent resources in the current observation; only the enemy's next turn resets.
         attacker.MovesUsed = attacker.AttacksUsed = 1;
         guard.MovesUsed = guard.AttacksUsed = 1;

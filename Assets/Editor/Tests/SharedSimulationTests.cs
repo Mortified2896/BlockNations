@@ -71,7 +71,7 @@ public sealed class SharedSimulationTests
     }
 
     [TestCase(false)] [TestCase(true)]
-    public void AttacksUseTheirOwnBudgetAndOnlyMeleeAdvances(bool ranged)
+    public void AttacksUseDefinedMovementBudgetAndOnlyMeleeAdvances(bool ranged)
     {
         var weak = new UnitDefinition("weak", "Weak", 1, 1, "weak", 5, 1, 1, true, 0, 1, 1);
         MatchState state = Board();
@@ -79,9 +79,76 @@ public sealed class SharedSimulationTests
         SimulationUnit target = Add(state, 2, 1, 3, 2, weak);
         MatchTransition result = MatchEngine.Apply(state, Attack(unit, target));
         Assert.That(result.KilledUnitId, Is.EqualTo(target.Id)); Assert.That(state.GetUnit(target.Id), Is.Null);
-        Assert.That(unit.MovesUsed, Is.Zero); Assert.That(unit.AttacksUsed, Is.EqualTo(1));
+        Assert.That(unit.MovesUsed, Is.EqualTo(ranged ? 0 : 1)); Assert.That(unit.AttacksUsed, Is.EqualTo(1));
         Assert.That(unit.Position, Is.EqualTo(state.Position(ranged ? 2 : 3, 2)));
         Assert.That(MatchEngine.Apply(state, Attack(unit, target)).Applied, Is.False);
+    }
+
+    [TestCase(0, false, false)] [TestCase(0, false, true)]
+    [TestCase(0, true, false)] [TestCase(0, true, true)]
+    [TestCase(1, false, false)] [TestCase(1, false, true)]
+    [TestCase(1, true, false)] [TestCase(1, true, true)]
+    public void WarriorCanMoveThenAttackButAnyAttackEndsItsActions(int seat, bool movedFirst, bool kill)
+    {
+        MatchState state = Board(seat);
+        SimulationUnit warrior = Add(state, 1, seat, 2, 2);
+        var defender = new UnitDefinition("training-target", "Target", 1, 1, "target", kill ? 5 : 20, 1, 1, true, 0, 1, 1);
+        SimulationUnit target = Add(state, 2, 1 - seat, movedFirst ? 4 : 3, 2, defender);
+        if (movedFirst)
+        {
+            Assert.That(MatchEngine.Apply(state, Move(state, warrior, 3, 2)).Applied, Is.True);
+            Assert.That(warrior.CanAttack, Is.True, "Movement keeps the Warrior's attack available.");
+        }
+        Assert.That(MatchEngine.Apply(state, Attack(warrior, target)).Applied, Is.True);
+        Assert.That(warrior.Position, Is.EqualTo(state.Position(kill ? (movedFirst ? 4 : 3) : (movedFirst ? 3 : 2), 2)));
+        Assert.That(warrior.RemainingMoves, Is.Zero);
+        Assert.That(warrior.CanAttack, Is.False);
+        Assert.That(MatchEngine.LegalUnitActions(state, seat, warrior.Id), Is.Empty);
+        Assert.That(MatchEngine.Apply(state, Move(state, warrior, 3, 3)).Applied, Is.False);
+        Assert.That(MatchEngine.Apply(state, Attack(warrior, target)).Applied, Is.False);
+        Assert.That(MatchEngine.Apply(state, End(seat)).Applied, Is.True);
+        Assert.That(MatchEngine.Apply(state, End(1 - seat)).Applied, Is.True);
+        Assert.That(warrior.RemainingMoves, Is.EqualTo(1));
+        Assert.That(warrior.CanAttack, Is.True);
+    }
+
+    [Test]
+    public void ImportedWarriorAttackCountersPreventMovementEvenWithOldUnusedMoveCounter()
+    {
+        MatchState state = Board(); SimulationUnit warrior = Add(state, 1, 0, 2, 2, attacks: 1);
+        Assert.That(warrior.RemainingMoves, Is.Zero);
+        Assert.That(MatchEngine.LegalUnitActions(state, 0, warrior.Id), Is.Empty);
+    }
+
+    [Test]
+    public void CustomUnitCanEndMovementOnAttackWithoutATypeNameRule()
+    {
+        var custom = new UnitDefinition("new-custom-unit", "Custom", 1, 1, "custom", 10, 1, 1, true, 0, 3, 2,
+            attackEndsMovement: true);
+        MatchState state = new MatchState(7, 7, 2, new[] { custom });
+        SimulationUnit own = Add(state, 1, 0, 2, 2, custom), target = Add(state, 2, 1, 3, 2, custom);
+        Assert.That(MatchEngine.Apply(state, Attack(own, target)).Applied, Is.True);
+        Assert.That(own.RemainingMoves, Is.Zero);
+        Assert.That(own.CanAttack, Is.True, "This custom definition still has its second attack.");
+    }
+
+    [TestCase(0, false)] [TestCase(0, true)] [TestCase(1, false)] [TestCase(1, true)]
+    public void WarriorLookaheadAndLearnedMasksUseTheSameAttackEndRule(int seat, bool kill)
+    {
+        MatchState state = Board(seat); SimulationUnit warrior = Add(state, 1, seat, 2, 2);
+        var defender = new UnitDefinition("training-target", "Target", 1, 1, "target", kill ? 5 : 20, 1, 1, true, 0, 1, 1);
+        Add(state, 2, 1 - seat, 3, 2, defender);
+        var source = new SimulationObservationSource();
+        var context = source.Observe(state, seat);
+        AIAction attack = context.Observation.LegalActions.Single(action => action.Kind == AIActionKind.Attack);
+        AITacticalState predicted = new AITacticalState(context.Observation).After(attack);
+        Assert.That(predicted.Actions().Any(action => action.Kind == AIActionKind.Move || action.Kind == AIActionKind.Attack), Is.False);
+        Assert.That(MatchEngine.Apply(state, context.Commands[attack.Key]).Applied, Is.True);
+        Assert.That(predicted.Units[attack.Actor].MovesUsed, Is.EqualTo(warrior.MovesUsed));
+        Assert.That(predicted.Units[attack.Actor].AttacksUsed, Is.EqualTo(warrior.AttacksUsed));
+        var after = source.Observe(state, seat).Observation;
+        Assert.That(after.LegalActions.All(action => action.Kind == AIActionKind.EndTurn), Is.True);
+        Assert.That(LearnedActionSchema.Choices(after, -1).Keys, Is.EquivalentTo(new[] { LearnedActionSchema.EndTurn }));
     }
 
     [Test]

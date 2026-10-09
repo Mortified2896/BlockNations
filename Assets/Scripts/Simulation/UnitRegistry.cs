@@ -22,7 +22,8 @@ public static class UnitRegistry
                 true,
                 CombatValues.FromDisplay(0),
                 1,
-                1),
+                1,
+                attackEndsMovement: true),
             [ScoutTypeId] = new UnitDefinition(
                 ScoutTypeId,
                 "Scout",

@@ -24,7 +24,8 @@ public class Unit : MonoBehaviour
 
     public int GetRemainingMoveRangeThisTurn()
     {
-        return UnitActionRules.GetRemainingMoveRangeThisTurn(UnitTypeId, maxMovesPerTurn, movesUsedThisTurn);
+        return BlockNations.Simulation.SimulationRules.RemainingMoves(UsesCommittedMoveActionThisTurn(), maxMovesPerTurn,
+            movesUsedThisTurn, AttackEndsMovement, attacksUsedThisTurn);
     }
 
     public bool CanAttackThisTurn()
@@ -145,6 +146,7 @@ public class Unit : MonoBehaviour
     public int VisionRange => resolvedDefinition != null ? resolvedDefinition.VisionRange : UnitRegistry.GetDefinitionOrDefault(UnitTypeId).VisionRange;
     public int AttackRange => resolvedDefinition != null ? resolvedDefinition.AttackRange : UnitRegistry.GetDefinitionOrDefault(UnitTypeId).AttackRange;
     public bool CanAttackAfterMoving => resolvedDefinition != null ? resolvedDefinition.CanAttackAfterMoving : UnitRegistry.GetDefinitionOrDefault(UnitTypeId).CanAttackAfterMoving;
+    public bool AttackEndsMovement => resolvedDefinition != null ? resolvedDefinition.AttackEndsMovement : UnitRegistry.GetDefinitionOrDefault(UnitTypeId).AttackEndsMovement;
     public bool AdvancesIntoDefenderTileOnKill => UnitActionRules.AdvancesIntoDefenderTileOnKill(AttackRange);
     public SpriteRenderer PrimarySpriteRenderer => presentationRenderer;
     public bool IsPresentationVisible => presentationRenderer == null || presentationRenderer.enabled;
@@ -254,6 +256,7 @@ public class Unit : MonoBehaviour
     public void RegisterAttack()
     {
         attacksUsedThisTurn = UnitActionRules.RegisterAttack(attacksUsedThisTurn, maxAttacksPerTurn);
+        movesUsedThisTurn = BlockNations.Simulation.SimulationRules.MovementUsedAfterAttack(AttackEndsMovement, maxMovesPerTurn, movesUsedThisTurn);
     }
 
     public void ConsumeRemainingAttacksForTurn()

@@ -150,6 +150,20 @@ public sealed class TrainingReplayOutlineTests
         Assert.That(Recorded(frame, 1).outlineSprite, Is.Null);
     }
 
+    [TestCase(0)] [TestCase(1)]
+    public void WarriorAttackClearsUnusedMovementMarkerAndOldAttackCountersAlsoBlockMovement(int seat)
+    {
+        Unit own = CreateUnit(seat, 1, 1);
+        manager.currentTurnSeatIndex = seat;
+        Assert.That(Recorded(TrainingReplayRecorder.Capture(manager, "before attack"), seat).outlineSprite, Is.SameAs(sprite));
+        own.RegisterAttack();
+        Assert.That(own.CanMoveThisTurn(), Is.False);
+        Assert.That(Recorded(TrainingReplayRecorder.Capture(manager, "after attack"), seat).outlineSprite, Is.Null);
+        own.movesUsedThisTurn = 0; // Counter combination from an older save.
+        Assert.That(own.CanMoveThisTurn(), Is.False);
+        Assert.That(Recorded(TrainingReplayRecorder.Capture(manager, "old counters"), seat).outlineSprite, Is.Null);
+    }
+
     [Test]
     public void TerminalFramesHaveNoActionMarkers()
     {

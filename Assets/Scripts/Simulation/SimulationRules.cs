@@ -5,9 +5,12 @@ namespace BlockNations.Simulation
     // All engine and prediction adapters use the same capability arithmetic.
     public static class SimulationRules
     {
-        public const string Version = "blocknations-simulation-v1";
-        public static int RemainingMoves(bool committedMove, int maximum, int used) =>
+        public const string Version = "blocknations-simulation-v2";
+        public static int RemainingMoves(bool committedMove, int maximum, int used, bool attackEndsMovement = false, int attacksUsed = 0) =>
+            attackEndsMovement && attacksUsed > 0 ? 0 :
             committedMove ? (used > 0 ? 0 : Math.Max(0, maximum)) : Math.Max(0, maximum - used);
+        public static int MovementUsedAfterAttack(bool attackEndsMovement, int maximum, int used) =>
+            Consume(used, maximum, attackEndsMovement ? maximum : 0);
         public static bool CanAttack(bool afterMoving, int maximum, int used, int movesUsed) =>
             used < maximum && (afterMoving || movesUsed == 0);
         public static int Damage(int attack, int defense) => Math.Max(0, attack - defense);

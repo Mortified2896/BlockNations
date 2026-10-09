@@ -122,6 +122,7 @@ namespace BlockNations.AI
             Seat = seat, Type = definition.TypeId, Health = definition.MaxHealthUnits, MaxHealth = definition.MaxHealthUnits,
             Attack = definition.AttackUnits, Defense = definition.DefenseUnits, Range = definition.AttackRange,
             Vision = definition.VisionRange, MaxMoves = definition.MaxMovesPerTurn, MaxAttacks = definition.MaxAttacksPerTurn,
-            AttackAfterMoving = definition.CanAttackAfterMoving, CommittedMove = definition.UsesCommittedMoveAction, Cost = definition.RecruitCost };
+            AttackAfterMoving = definition.CanAttackAfterMoving, CommittedMove = definition.UsesCommittedMoveAction,
+            AttackEndsMovement = definition.AttackEndsMovement, Cost = definition.RecruitCost };
     }
 }

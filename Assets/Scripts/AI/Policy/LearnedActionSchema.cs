@@ -105,7 +105,7 @@ namespace BlockNations.AI
                 values[index + 11] = unit.Range / (float)BoardSize;
                 values[index + 12] = unit.Vision / (float)BoardSize;
                 values[index + 13] = unit.MaxMoves / (float)BoardSize;
-                values[index + 14] = AIActionRules.RemainingMoves(unit.CommittedMove, unit.MaxMoves, unit.MovesUsed) / (float)BoardSize;
+                values[index + 14] = AIActionRules.RemainingMoves(unit.CommittedMove, unit.MaxMoves, unit.MovesUsed, unit.AttackEndsMovement, unit.AttacksUsed) / (float)BoardSize;
                 values[index + 15] = unit.MaxAttacks / 10f;
                 values[index + 16] = Math.Max(0, unit.MaxAttacks - unit.AttacksUsed) / 10f;
                 values[index + 17] = unit.AttackAfterMoving ? 1 : 0;

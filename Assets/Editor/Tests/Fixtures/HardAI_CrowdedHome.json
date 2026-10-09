@@ -41,7 +41,7 @@
     {"Seat": 0,"X": 0,"Y": 0,"Health": 10,"MaxHealth": 10,"Attack": 5,"Defense": 0,"Range": 2,"Vision": 1,"MaxMoves": 1,"MovesUsed": 0,"MaxAttacks": 1,"AttacksUsed": 0,"Cost": 2,"Type": "archer", "CommittedMove": false,"AttackAfterMoving": false},
     {"Seat": 0,"X": 0,"Y": 0,"Health": 10,"MaxHealth": 10,"Attack": 5,"Defense": 0,"Range": 1,"Vision": 1,"MaxMoves": 2,"MovesUsed": 0,"MaxAttacks": 1,"AttacksUsed": 0,"Cost": 2,"Type": "rider", "CommittedMove": true,"AttackAfterMoving": true},
     {"Seat": 0,"X": 0,"Y": 0,"Health": 10,"MaxHealth": 10,"Attack": 0,"Defense": 0,"Range": 1,"Vision": 2,"MaxMoves": 1,"MovesUsed": 0,"MaxAttacks": 0,"AttacksUsed": 0,"Cost": 2,"Type": "scout", "CommittedMove": false,"AttackAfterMoving": false},
-    {"Seat": 0,"X": 0,"Y": 0,"Health": 10,"MaxHealth": 10,"Attack": 10,"Defense": 0,"Range": 1,"Vision": 1,"MaxMoves": 1,"MovesUsed": 0,"MaxAttacks": 1,"AttacksUsed": 0,"Cost": 2,"Type": "warrior", "CommittedMove": false,"AttackAfterMoving": true}
+    {"Seat": 0,"X": 0,"Y": 0,"Health": 10,"MaxHealth": 10,"Attack": 10,"Defense": 0,"Range": 1,"Vision": 1,"MaxMoves": 1,"MovesUsed": 0,"MaxAttacks": 1,"AttacksUsed": 0,"Cost": 2,"Type": "warrior", "CommittedMove": false,"AttackAfterMoving": true,"AttackEndsMovement": true}
   ],
   "Cities": [
     {"Seat": 0,"X": 1,"Y": 1,"Recruited": false,"CurrentlyVisible": true}

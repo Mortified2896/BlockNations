@@ -110,6 +110,7 @@ namespace BlockNations.Simulation
             }
             SimulationUnit target = state.GetUnit(command.TargetId);
             unit.AttacksUsed = SimulationRules.Consume(unit.AttacksUsed, unit.Definition.MaxAttacksPerTurn);
+            unit.MovesUsed = SimulationRules.MovementUsedAfterAttack(unit.Definition.AttackEndsMovement, unit.Definition.MaxMovesPerTurn, unit.MovesUsed);
             target.Health = Math.Max(0, target.Health - SimulationRules.Damage(unit.Definition.AttackUnits, target.Definition.DefenseUnits));
             int killed = 0, advance = 0;
             if (target.Health == 0)

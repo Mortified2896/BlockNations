@@ -85,6 +85,7 @@ namespace BlockNations.AI
                     AIUnitState target = next.Units[action.Target];
                     target.Health = Math.Max(0, target.Health - AIActionRules.Damage(unit.Attack, target.Defense));
                     unit.AttacksUsed++;
+                    unit.MovesUsed = BlockNations.Simulation.SimulationRules.MovementUsedAfterAttack(unit.AttackEndsMovement, unit.MaxMoves, unit.MovesUsed);
                     if (target.Health == 0 && unit.Range <= 1)
                     {
                         unit.X = target.X;
@@ -147,7 +148,7 @@ namespace BlockNations.AI
                         result.Add(new AIAction { Kind = AIActionKind.Attack, Actor = actor, Target = target,
                             Destination = enemy.Position(Observation.Width) });
                     }
-                int range = AIActionRules.RemainingMoves(unit.CommittedMove, unit.MaxMoves, unit.MovesUsed);
+                int range = AIActionRules.RemainingMoves(unit.CommittedMove, unit.MaxMoves, unit.MovesUsed, unit.AttackEndsMovement, unit.AttacksUsed);
                 if (range <= 0) continue;
                 int[] distances = Reachable(unit.X, unit.Y, range, occupants);
                 for (int position = 0; position < distances.Length; position++)

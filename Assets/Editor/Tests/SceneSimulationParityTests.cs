@@ -127,6 +127,61 @@ public sealed class SceneSimulationParityTests
         yield return new ExitPlayMode();
     }
 
+    [UnityTest]
+    public IEnumerator HumanWarriorMovementAndAttackBudgetsMatchTheSharedRules()
+    {
+        EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        yield return new EnterPlayMode();
+        CreateArena(7);
+        var input = new GameObject("Warrior human input").AddComponent<UnitSelectionManager>();
+        input.enabled = false; input.turnManager = manager;
+        // The human playtest exposes Blue; the pure rules cover both acting seats.
+        const int seat = 0;
+        foreach (bool movedFirst in new[] { false, true })
+        foreach (bool kill in new[] { false, true })
+        {
+            string scenario = $"seat {seat}, moved first {movedFirst}, kill {kill}";
+            TestContext.WriteLine(scenario);
+            manager.ResetExternalMatch(2, seat);
+            TrainingSceneBuilder.Set(manager, "externalHumanSeatIndex", seat);
+            grid.TryGetTile(2, 2, out TileVisibility origin);
+            grid.TryGetTile(3, 2, out TileVisibility movedTile);
+            grid.TryGetTile(movedFirst ? 4 : 3, 2, out TileVisibility targetTile);
+            grid.TryGetTile(3, 3, out TileVisibility extraMove);
+            Unit own = manager.InstantiateConfiguredUnit(UnitRegistry.WarriorTypeId,
+                manager.GetUnitPrefabForType(UnitRegistry.WarriorTypeId), origin.transform.position, seat, null, true).GetComponent<Unit>();
+            Unit target = manager.InstantiateConfiguredUnit(UnitRegistry.WarriorTypeId,
+                manager.GetUnitPrefabForType(UnitRegistry.WarriorTypeId), targetTile.transform.position, 1 - seat, null, true).GetComponent<Unit>();
+            target.maxHealthUnits = kill ? 5 : 20; target.SetCurrentHealthUnits(target.maxHealthUnits);
+            manager.RecalculatePlayerVisibility(); input.SelectUnit(own);
+            Assert.That(manager.CanControlUnit(own), Is.True, scenario);
+            Assert.That(input.SelectedUnit, Is.SameAs(own), scenario);
+            if (movedFirst)
+            {
+                input.TryMoveOrAttackAtPosition(movedTile.transform.position);
+                Assert.That(own.transform.position, Is.EqualTo(movedTile.transform.position));
+                Assert.That(own.CanAttackThisTurn(), Is.True);
+                Assert.That(own.attacksUsedThisTurn, Is.Zero);
+            }
+            Assert.That(input.SelectedUnit, Is.SameAs(own), scenario);
+            Assert.That(LegalActionService.GetLegalActionsForUnit(manager, own, seat,
+                new SceneSimulationAdapter(manager).VisibilityForSeat(seat)).Any(a =>
+                a.ActionType == LegalActionType.UnitAttack && a.TargetUnit == target), Is.True, scenario);
+            input.TryMoveOrAttackAtPosition(targetTile.transform.position);
+            Assert.That(target.currentHealthUnits, Is.EqualTo(kill ? 0 : 10), scenario);
+            Assert.That(own.attacksUsedThisTurn, Is.EqualTo(1));
+            Assert.That(own.CanMoveThisTurn(), Is.False);
+            Assert.That(own.CanAttackThisTurn(), Is.False);
+            Vector3 expected = (kill ? targetTile : movedFirst ? movedTile : origin).transform.position;
+            Assert.That(own.transform.position, Is.EqualTo(expected), "Only the automatic melee advance follows a kill.");
+            input.TryMoveOrAttackAtPosition(extraMove.transform.position);
+            Assert.That(own.transform.position, Is.EqualTo(expected));
+            Assert.That(LegalActionService.GetLegalActionsForUnit(manager, own, seat, new SceneSimulationAdapter(manager).VisibilityForSeat(seat)), Is.Empty);
+            yield return null;
+        }
+        yield return new ExitPlayMode();
+    }
+
     private static void SameRect(Rect a, Rect b)
     {
         Assert.That(a.x, Is.EqualTo(b.x).Within(.00001f)); Assert.That(a.y, Is.EqualTo(b.y).Within(.00001f));

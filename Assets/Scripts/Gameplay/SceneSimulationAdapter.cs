@@ -47,7 +47,7 @@ public sealed class SceneSimulationAdapter
         UnitDefinition official = UnitRegistry.GetDefinitionOrDefault(unit.UnitTypeId);
         return new UnitDefinition(unit.UnitTypeId, unit.DisplayName, official.RecruitCost, unit.VisionRange, official.PrefabTypeId,
             unit.maxHealthUnits, unit.attackUnits, unit.AttackRange, unit.CanAttackAfterMoving, unit.defenseUnits,
-            unit.maxMovesPerTurn, unit.maxAttacksPerTurn, official.UsesCommittedMoveAction);
+            unit.maxMovesPerTurn, unit.maxAttacksPerTurn, official.UsesCommittedMoveAction, unit.AttackEndsMovement);
     }
 
     public bool[] VisibilityMask(Func<TileVisibility, bool> predicate)

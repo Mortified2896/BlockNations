@@ -12,7 +12,7 @@ namespace BlockNations.AI
         public int Seat, X, Y, Health, MaxHealth, Attack, Defense, Range, Vision;
         public int MaxMoves, MovesUsed, MaxAttacks, AttacksUsed, Cost;
         public string Type;
-        public bool AttackAfterMoving, CommittedMove;
+        public bool AttackAfterMoving, CommittedMove, AttackEndsMovement;
         public int Position(int width) => Y * width + X;
     }
 
@@ -78,8 +78,8 @@ namespace BlockNations.AI
     public static class AIActionRules
     {
         public const string RulesVersion = BlockNations.Simulation.SimulationRules.Version;
-        public static int RemainingMoves(bool committedMove, int maximum, int used) =>
-            BlockNations.Simulation.SimulationRules.RemainingMoves(committedMove, maximum, used);
+        public static int RemainingMoves(bool committedMove, int maximum, int used, bool attackEndsMovement = false, int attacksUsed = 0) =>
+            BlockNations.Simulation.SimulationRules.RemainingMoves(committedMove, maximum, used, attackEndsMovement, attacksUsed);
         public static bool CanAttack(bool afterMoving, int maximum, int used, int movesUsed) =>
             BlockNations.Simulation.SimulationRules.CanAttack(afterMoving, maximum, used, movesUsed);
         public static int Damage(int attack, int defense) => BlockNations.Simulation.SimulationRules.Damage(attack, defense);

@@ -12,7 +12,8 @@ namespace BlockNations.Simulation
         public int Health { get; internal set; }
         public int MovesUsed { get; internal set; }
         public int AttacksUsed { get; internal set; }
-        public int RemainingMoves => SimulationRules.RemainingMoves(Definition.UsesCommittedMoveAction, Definition.MaxMovesPerTurn, MovesUsed);
+        public int RemainingMoves => SimulationRules.RemainingMoves(Definition.UsesCommittedMoveAction, Definition.MaxMovesPerTurn, MovesUsed,
+            Definition.AttackEndsMovement, AttacksUsed);
         public bool CanAttack => SimulationRules.CanAttack(Definition.CanAttackAfterMoving, Definition.MaxAttacksPerTurn, AttacksUsed, MovesUsed);
 
         public SimulationUnit(int id, int seat, int position, UnitDefinition definition, int health = -1, int movesUsed = 0, int attacksUsed = 0)
