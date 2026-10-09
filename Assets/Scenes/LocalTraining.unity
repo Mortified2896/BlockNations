@@ -967,6 +967,11 @@ MonoBehaviour:
   humanInput:
   - {fileID: 701978255}
   - {fileID: 653581782}
+  humanDocuments:
+  - {fileID: 1170089931}
+  - {fileID: 1120547148}
+  - {fileID: 1292175163}
+  - {fileID: 311232537}
 --- !u!1 &878665045
 GameObject:
   m_ObjectHideFlags: 0

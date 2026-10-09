@@ -1,10 +1,13 @@
 using System;
+using System.Collections;
 using System.IO;
 using System.Reflection;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.TestTools;
+using UnityEngine.UIElements;
 
 public sealed class TrainingHumanPlaytestTests
 {
@@ -114,13 +117,63 @@ public sealed class TrainingHumanPlaytestTests
             Assert.That(presentation, Is.Not.Null);
             var wiring = new SerializedObject(presentation);
             SerializedProperty ui = wiring.FindProperty("humanUIRoots"), input = wiring.FindProperty("humanInput");
+            SerializedProperty documents = wiring.FindProperty("humanDocuments");
             Assert.That(ui.arraySize, Is.GreaterThanOrEqualTo(4));
             Assert.That(input.arraySize, Is.GreaterThanOrEqualTo(2));
+            Assert.That(documents.arraySize, Is.EqualTo(4));
+            for (int i = 0; i < documents.arraySize; i++)
+                Assert.That(documents.GetArrayElementAtIndex(i).objectReferenceValue, Is.TypeOf<UIDocument>());
             for (int i = 0; i < ui.arraySize; i++)
                 Assert.That(((GameObject)ui.GetArrayElementAtIndex(i).objectReferenceValue).activeSelf, Is.True);
             for (int i = 0; i < input.arraySize; i++)
                 Assert.That(((MonoBehaviour)input.GetArrayElementAtIndex(i).objectReferenceValue).enabled, Is.True);
         }
         finally { EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single); }
+    }
+
+    [UnityTest]
+    public IEnumerator HumanMenuAndPanelsUseTheBoardViewportAcrossWidthChangesAndDocumentRebuilds()
+    {
+        TrainingArena configured = TrainingSceneBuilder.Prepare("", 42, false, false, human: true);
+        TrainingSceneBuilder.Set(configured, "boardSize", 7);
+        TrainingSceneBuilder.ShowBoard();
+        yield return new EnterPlayMode();
+        var arena = UnityEngine.Object.FindFirstObjectByType<TrainingArena>();
+        var presentation = arena.GetComponent<TrainingHumanPresentation>();
+        var wiring = new SerializedObject(presentation).FindProperty("humanDocuments");
+        var documents = new UIDocument[wiring.arraySize];
+        for (int i = 0; i < documents.Length; i++) documents[i] = (UIDocument)wiring.GetArrayElementAtIndex(i).objectReferenceValue;
+        for (int frame = 0; frame < 12; frame++) yield return null;
+        foreach (float left in new[] { TrainingOverlay.ReservedWidth / Screen.width, .4f, .2f })
+        {
+            presentation.SetViewport(new Rect(left, 0, 1 - left, 1));
+            for (int frame = 0; frame < 4; frame++) yield return null;
+            foreach (UIDocument document in documents)
+            {
+                VisualElement root = document.rootVisualElement;
+                float screenWidth = root.panel.visualTree.worldBound.width;
+                Assert.That(root.worldBound.xMin, Is.EqualTo(screenWidth * left).Within(1));
+                Assert.That(root.worldBound.xMax, Is.EqualTo(screenWidth).Within(1));
+                Button menu = root.Q<Button>("MenuButton");
+                if (menu == null) continue;
+                Assert.That(menu.worldBound.xMin, Is.GreaterThanOrEqualTo(screenWidth * left));
+                Assert.That(menu.worldBound.xMax, Is.LessThanOrEqualTo(screenWidth));
+                Assert.That(menu.worldBound.width, Is.GreaterThan(100));
+                Assert.That(root.panel.Pick(menu.worldBound.center), Is.SameAs(menu), "The visible button must also receive pointer input.");
+                TestContext.WriteLine($"Menu: {menu.worldBound}; sidebar edge {screenWidth * left}; panel width {screenWidth}.");
+            }
+        }
+        foreach (UIDocument document in documents) { document.enabled = false; document.enabled = true; }
+        for (int frame = 0; frame < 6; frame++) yield return null;
+        foreach (UIDocument document in documents)
+            Assert.That(document.rootVisualElement.worldBound.xMin,
+                Is.EqualTo(document.rootVisualElement.panel.visualTree.worldBound.width * .2f).Within(1));
+        presentation.SetViewport(new Rect(TrainingOverlay.ReservedWidth / Screen.width, 0, 1 - TrainingOverlay.ReservedWidth / Screen.width, 1));
+        for (int frame = 0; frame < 4; frame++) yield return null;
+        string screenshot = TakeScreenshotMenu.RequestScreenshot("human-playtest-hud-fixed");
+        for (int frame = 0; frame < 120 && !File.Exists(screenshot); frame++) yield return null;
+        Assert.That(File.Exists(screenshot), Is.True);
+        TestContext.WriteLine("Layout screenshot: " + screenshot);
+        yield return new ExitPlayMode();
     }
 }

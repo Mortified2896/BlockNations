@@ -148,6 +148,11 @@ public static class TrainingSceneBuilder
         SerializedProperty inputReferences = fields.FindProperty("humanInput");
         inputReferences.arraySize = input.Length;
         for (int i = 0; i < input.Length; i++) inputReferences.GetArrayElementAtIndex(i).objectReferenceValue = input[i];
+        UnityEngine.UIElements.UIDocument[] documents = ui.SelectMany(root => root.GetComponentsInChildren<UnityEngine.UIElements.UIDocument>(true)).Distinct().ToArray();
+        if (documents.Length < 4) throw new InvalidOperationException("Training scene is missing its authored gameplay documents.");
+        SerializedProperty documentReferences = fields.FindProperty("humanDocuments");
+        documentReferences.arraySize = documents.Length;
+        for (int i = 0; i < documents.Length; i++) documentReferences.GetArrayElementAtIndex(i).objectReferenceValue = documents[i];
         fields.ApplyModifiedPropertiesWithoutUndo();
         Set(arena, "humanPresentation", presentation);
     }

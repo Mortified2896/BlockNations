@@ -543,6 +543,7 @@ public sealed class TrainingArena : MonoBehaviour
         viewportWidth = Screen.width; viewportHeight = Screen.height;
         float left = TrainingOverlay.ReservedWidth / Math.Max(1, Screen.width);
         boardCamera.rect = new Rect(left, 0, 1 - left, 1);
+        if (IsHumanPlaytest && humanPresentation != null) humanPresentation.SetViewport(boardCamera.rect);
         float aspect = Math.Max(0.1f, (Screen.width - TrainingOverlay.ReservedWidth) / Math.Max(1, Screen.height));
         float extent = (boardSize + 2) / 2f;
         boardCamera.orthographicSize = Mathf.Max(extent, extent / aspect);
