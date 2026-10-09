@@ -1711,9 +1711,33 @@ public partial class TurnManager : MonoBehaviour
 
     public int GetDisplayedGoldForUi()
     {
-        return currentMode == GameMode.PlayByPost
-            ? GetGoldForSeat(GetViewerSeatIndexForRuntime())
-            : (isPlayerTurn ? playerGold : aiGold);
+        return TryGetDisplayedGoldForUi(out int gold) ? gold : 0;
+    }
+
+    // Private resources belong to the viewer, independent of the active turn.
+    // Only explicitly configured development spectators follow the acting seat.
+    public bool TryGetDisplayedGoldForUi(out int gold)
+    {
+        gold = 0;
+        int viewerSeatIndex;
+        if (currentMode == GameMode.PlayByPost)
+        {
+            if (!TryGetLocalSeatIndexForPbp(currentGameId, out viewerSeatIndex)) return false;
+        }
+        else if (currentMode == GameMode.VsAI)
+        {
+            viewerSeatIndex = externallyDrivenMatch
+                ? (externalHumanSeatIndex >= 0 ? externalHumanSeatIndex : GetCurrentTurnSeatIndexForRuntime())
+                : (IsAIVsAIDebugModeActive() ? GetCurrentTurnSeatIndexForRuntime() : 0);
+        }
+        else
+        {
+            return false;
+        }
+
+        if (viewerSeatIndex < 0 || viewerSeatIndex >= GetRuntimeSeatCount()) return false;
+        gold = GetGoldForSeat(viewerSeatIndex);
+        return true;
     }
 
     public string GetLocalPlayByPostSeatLabelForUi()

@@ -249,24 +249,15 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         {
             bool hasLocalPlayByPostSeat = TryGetLocalPlayByPostSeatIndexForUi(out int localPlayByPostSeatIndex);
             turnLabel.text = BuildPlayByPostTurnLabel(hasLocalPlayByPostSeat, localPlayByPostSeatIndex);
-
-            if (hasLocalPlayByPostSeat)
-            {
-                goldLabel.style.display = DisplayStyle.Flex;
-                goldLabel.text = BuildPlayByPostGoldLabel(localPlayByPostSeatIndex);
-            }
-            else
-            {
-                goldLabel.text = string.Empty;
-                goldLabel.style.display = DisplayStyle.None;
-            }
         }
         else
         {
             turnLabel.text = BuildTurnLabel();
-            goldLabel.style.display = DisplayStyle.Flex;
-            goldLabel.text = BuildGoldLabel();
         }
+
+        bool hasVisibleGold = turnManager.TryGetDisplayedGoldForUi(out int visibleGold);
+        goldLabel.text = hasVisibleGold ? $"Gold {visibleGold}" : string.Empty;
+        goldLabel.style.display = hasVisibleGold ? DisplayStyle.Flex : DisplayStyle.None;
 
         if (statusLabel == null)
         {
@@ -322,6 +313,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
     {
         turnLabel.style.width = 520f;
         goldLabel.style.width = 520f;
+        goldLabel.style.display = DisplayStyle.Flex;
 
         if (snapshot.simulationMode == AIVsAIBatchRunController.SimulationMode.Tournament)
         {
@@ -419,26 +411,6 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             ? PlayByPostSeatUtility.BuildPlayerLabel(localPlayByPostSeatIndex)
             : "Player ?";
         return $"Turn {turnManager.turnNumber} - {localSeatLabel}";
-    }
-
-    private string BuildGoldLabel()
-    {
-        if (turnManager == null)
-        {
-            return string.Empty;
-        }
-
-        return $"Gold {turnManager.GetDisplayedGoldForUi()}";
-    }
-
-    private string BuildPlayByPostGoldLabel(int localPlayByPostSeatIndex)
-    {
-        if (turnManager == null)
-        {
-            return string.Empty;
-        }
-
-        return $"Gold {turnManager.GetGoldForSeat(localPlayByPostSeatIndex)}";
     }
 
     private bool TryGetLocalPlayByPostSeatIndexForUi(out int localPlayByPostSeatIndex)
