@@ -2,6 +2,7 @@ import { open, seal, fingerprint, randomToken, cookie, setCookie, SESSION_COOKIE
 import { page, loginPage, accountPage, googlePage } from "./pages.mjs";
 import { adminPage, decide } from "./admission.mjs";
 import { storeCall } from "./store.mjs";
+import { submitFeedback, feedbackInbox, feedbackScreenshot } from "./feedback.mjs";
 
 const REVIEW_ORIGIN = "https://feedback.moneymattersmedia.com";
 const BROKER_PATH = "/blocknations-auth/authorize";
@@ -181,9 +182,17 @@ async function handle(request, env) {
   if (url.pathname.startsWith("/admin/")) {
     const actor = await gameProfile(request, env);
     if (!actor?.can_administer) return json({ error: "Approved Review administrator access required." }, 403);
+    if (url.pathname === "/admin/feedback" && request.method === "GET") return feedbackInbox(request, env);
+    const image = /^\/admin\/feedback\/([a-f0-9]{32})\/screenshot$/.exec(url.pathname);
+    if (image && request.method === "GET") return feedbackScreenshot(image[1], env);
     if (url.pathname === "/admin/testers/decision") return decide(request, env, actor);
     if (url.pathname === "/admin/testers" && request.method === "GET") return adminPage(request, env);
     return json({ error: "Not found." }, 404);
+  }
+  if (url.pathname === "/api/feedback") {
+    const actor = await gameProfile(request, env);
+    if (actor?.status !== "approved") return json({ error: "Please sign in again as an approved tester before sending feedback." }, 403);
+    return submitFeedback(request, env, actor);
   }
   if (!["GET", "HEAD"].includes(request.method)) return json({ error: "Method not allowed." }, 405);
   if (url.pathname === "/auth/login") {

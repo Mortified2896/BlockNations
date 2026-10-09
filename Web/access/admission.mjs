@@ -19,6 +19,7 @@ export async function adminPage(request, env) {
     return `<article class="tester"><p><strong>${escape(tester.display_name)}</strong><br>${escape(tester.email)}</p><p class="note">${escape(label)}</p>${decisions}</article>`;
   }).join("");
   return page("Manage playtest access", `<p>Approving here unlocks only Block Nations. Article access still needs separate approval on the Review website.</p>
+<a class="button secondary" href="/admin/feedback">Player feedback</a>
 <p class="note">Approved reviewers can play automatically. You can disable their game access here independently.</p>
 ${cards || "<p>No playtest requests yet.</p>"}
 ${current > 0 ? `<a class="button secondary" href="/admin/testers?page=${current - 1}">Newer requests</a>` : ""}

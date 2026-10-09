@@ -1,0 +1,19 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
+    <Style src="Feedback_UITK.uss" />
+    <ui:VisualElement name="FeedbackOverlay" class="feedback-overlay" style="display: none;">
+        <ui:ScrollView class="feedback-card" mode="Vertical">
+            <ui:Label text="Send feedback" class="feedback-title" />
+            <ui:DropdownField name="FeedbackCategory" label="Type" />
+            <ui:TextField name="FeedbackDescription" label="What happened, or what would you improve?" multiline="true" max-length="4000" class="feedback-description" />
+            <ui:Toggle name="FeedbackIncludeScreenshot" label="Include screenshot" value="true" />
+            <ui:Image name="FeedbackScreenshot" class="feedback-screenshot" />
+            <ui:Button name="FeedbackRemoveScreenshot" text="Remove screenshot" class="feedback-action feedback-secondary" />
+            <ui:Label text="The screenshot and build information will be sent with your report. Only the playtest administrators can view it." class="feedback-note" />
+            <ui:Label name="FeedbackStatus" text="" class="feedback-note" />
+            <ui:VisualElement class="feedback-actions">
+                <ui:Button name="FeedbackCancel" text="Cancel" class="feedback-action feedback-secondary" />
+                <ui:Button name="FeedbackSend" text="Send" class="feedback-action" />
+            </ui:VisualElement>
+        </ui:ScrollView>
+    </ui:VisualElement>
+</ui:UXML>

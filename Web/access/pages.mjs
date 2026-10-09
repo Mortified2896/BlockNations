@@ -17,7 +17,7 @@ main{flex:1;width:min(calc(100% - 80px),480px);margin-inline:auto;padding:80px 0
 h1{font-family:var(--serif);font-size:42px;font-weight:500;letter-spacing:-.045em;margin:18px 0 24px;line-height:1.12;text-wrap:pretty}p{line-height:1.65;font-size:15px;overflow-wrap:anywhere;color:var(--muted)}a{color:var(--ink);text-underline-offset:4px}
 .button,button{display:flex;justify-content:center;align-items:center;min-height:48px;width:100%;margin-top:28px;padding:12px 16px;background:var(--ink);color:var(--paper);border:1px solid var(--ink);border-radius:2px;font-family:inherit;font-size:14px;font-weight:600;text-decoration:none;cursor:pointer}
 .button:hover,button:hover{background:#3a3a3a;border-color:#3a3a3a}button:disabled{opacity:.65;cursor:wait}.secondary{background:var(--paper);color:var(--ink);border-color:var(--line);margin-top:12px}.secondary:hover{background:#f6f6f6;border-color:#bdbdbd}
-a:focus-visible,button:focus-visible{outline:2px solid var(--ink);outline-offset:5px}.note{font-size:13px;color:var(--muted);margin-top:24px}.tester{border-top:1px solid var(--line);padding-top:16px;margin-top:28px}.tester strong{color:var(--ink)}#error{color:var(--ink);font-weight:600}#error:empty{display:none}form{margin:0}
+a:focus-visible,button:focus-visible{outline:2px solid var(--ink);outline-offset:5px}.note{font-size:13px;color:var(--muted);margin-top:24px}.tester{border-top:1px solid var(--line);padding-top:16px;margin-top:28px}.tester strong{color:var(--ink)}.feedback-image{display:block;max-width:100%;height:auto;margin-top:16px;border:1px solid var(--line)}#error{color:var(--ink);font-weight:600}#error:empty{display:none}form{margin:0}
 .site-footer{border-top:1px solid var(--line);padding:24px 0;font-size:12px;color:var(--muted)}@media(max-width:600px){.site-header,.site-footer{width:calc(100% - 44px)}.site-header{padding:20px 0}.wordmark{font-size:27px}.site-name{font-size:12px}main{width:calc(100% - 44px);padding:56px 0 64px}h1{font-size:36px}.site-footer{font-size:11px;flex-wrap:wrap;gap:10px}}
 </style></head><body><header class="site-header"><a class="wordmark" href="https://moneymattersmedia.com/" aria-label="Money Matters Media home">MMM.</a><span class="site-name">Block Nations</span></header><main>
 <div class="eyebrow">Block Nations · Private playtest</div><h1>${escape(title)}</h1>${content}</main>
@@ -27,7 +27,7 @@ ${script ? `<script nonce="${nonce}">${script}</script>` : ""}</body></html>`;
     status,
     headers: {
       "Content-Type": "text/html; charset=utf-8",
-      "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; img-src data:; connect-src 'self'; form-action ${formOrigins}; base-uri 'none'; frame-ancestors 'none'`,
+      "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; img-src 'self' data:; connect-src 'self'; form-action ${formOrigins}; base-uri 'none'; frame-ancestors 'none'`,
     },
   });
 }
@@ -43,7 +43,7 @@ export function accountPage(user) {
   const signedIn = `<p class="note">Signed in as ${escape(user.email)}</p>`;
   const accountActions = `<form method="post" action="/auth/switch-account"><button class="secondary">Switch Google account</button></form><form method="post" action="/auth/logout"><button class="secondary">Sign out of Block Nations</button></form>`;
   if (user.status === "approved") {
-    return page("You're ready to play", `<p>Welcome, ${escape(user.display_name)}. Your tester account is approved.</p><a class="button" href="/">Play Block Nations</a>${user.can_administer ? '<a class="button secondary" href="/admin/testers">Manage playtest access</a>' : ""}${signedIn}${accountActions}`);
+    return page("You're ready to play", `<p>Welcome, ${escape(user.display_name)}. Your tester account is approved.</p><a class="button" href="/">Play Block Nations</a>${user.can_administer ? '<a class="button secondary" href="/admin/testers">Manage playtest access</a><a class="button secondary" href="/admin/feedback">Player feedback</a>' : ""}${signedIn}${accountActions}`);
   }
   if (user.status === "pending") {
     return page("Waiting for approval", `<p>Your request has been saved. Jo needs to approve your account before you can play.</p><p>You can come back to this page to check. You won't need to register again.</p><a class="button" href="/access">Check approval</a>${signedIn}${accountActions}`);

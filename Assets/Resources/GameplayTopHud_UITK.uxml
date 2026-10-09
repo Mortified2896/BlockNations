@@ -1,5 +1,7 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
     <Style src="project://database/Assets/Resources/GameplayTopHud_UITK.uss?fileID=7433441132597879392&amp;guid=c2bd795e91ad4aa9aeeb6c8650731428&amp;type=3#GameplayTopHud_UITK" />
+    <ui:Template name="FeedbackForm" src="Feedback_UITK.uxml" />
+    <Style src="Feedback_UITK.uss" />
     <ui:VisualElement name="GameplayTopHudRoot" class="gameplay-top-hud-root">
         <ui:VisualElement name="TopBar" class="gameplay-top-hud-bar">
             <ui:Label name="TurnLabel" text="Turn 1 - Player" class="gameplay-top-hud-label gameplay-top-hud-turn" />
@@ -19,5 +21,7 @@
             </ui:VisualElement>
             <ui:VisualElement name="TournamentStandingsRows" class="gameplay-tournament-standings-rows" />
         </ui:VisualElement>
+        <ui:Button name="FeedbackButton" text="Feedback" class="feedback-button" />
+        <ui:Instance template="FeedbackForm" name="FeedbackForm" class="feedback-template" picking-mode="Ignore" />
     </ui:VisualElement>
 </ui:UXML>

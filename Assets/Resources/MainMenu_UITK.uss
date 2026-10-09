@@ -1050,12 +1050,12 @@
 .version-label {
     position: absolute;
     top: 16px;
-    right: 16px;
+    left: 16px;
 
-    font-size: 35px;
+    font-size: 30px;
     color: rgba(255, 255, 255, 0.7);
 
-    -unity-text-align: upper-right;
+    -unity-text-align: upper-left;
 }
 
 .ui-responsive-root #MainPanel {
@@ -1123,8 +1123,8 @@
 
 .ui-responsive-root.ui-compact .version-label {
     top: 18px;
-    right: 18px;
-    font-size: 40px;
+    left: 18px;
+    font-size: 30px;
 }
 
 .ui-responsive-root.ui-compact #MultiplayerPanel .multiplayer-header-row {
@@ -1360,8 +1360,8 @@
 
 .ui-responsive-root.ui-regular .version-label {
     top: 24px;
-    right: 24px;
-    font-size: 74px;
+    left: 24px;
+    font-size: 30px;
 }
 
 .ui-responsive-root.ui-regular #MultiplayerPanel .multiplayer-game-card {
@@ -1527,8 +1527,8 @@
 
 .ui-responsive-root.ui-large .version-label {
     top: 28px;
-    right: 28px;
-    font-size: 92px;
+    left: 28px;
+    font-size: 30px;
 }
 
 .ui-responsive-root.ui-large #MultiplayerPanel .multiplayer-game-card {
@@ -1693,8 +1693,8 @@
 
 .ui-responsive-root.menu-phone-wide .version-label {
     top: 20px;
-    right: 20px;
-    font-size: 52px;
+    left: 20px;
+    font-size: 30px;
 }
 
 .ui-responsive-root.menu-phone-wide #ProfilePanel {

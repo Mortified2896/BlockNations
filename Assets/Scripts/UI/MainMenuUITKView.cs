@@ -90,6 +90,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Label detailsGameIdLabel;
     private Label statusLabel;
     private Label multiplayerRefreshCountdownLabel;
+    private FeedbackUITKController feedback;
     private Label versionLabel;
     private Label multiplayerVersionLabel;
     private Label titleLabel;
@@ -295,6 +296,8 @@ public class MainMenuUITKView : MonoBehaviour
         }
     }
 
+    public void OnBrowserFeedbackClosed() { feedback?.BrowserClosed(); }
+
     private void Update()
     {
         if (!enableUITK || !uiReady)
@@ -303,6 +306,7 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         ApplySafeArea(force: false);
+        feedback?.RefreshSafeArea();
         responsiveSizeTierController.Apply(root);
         ApplyMenuPhoneLayoutClasses();
         FitMainMenuTitleToWidth();
@@ -422,6 +426,8 @@ public class MainMenuUITKView : MonoBehaviour
         ConfigureActiveGamesList();
         RefreshVersionLabel();
         BindButtons();
+        feedback?.Dispose();
+        feedback = new FeedbackUITKController(this, root, FeedbackScreen, () => "Menu", () => 0);
         RefreshContinueButtonVisibility();
         RefreshProfileLabels();
         ClearProfileStatus();
@@ -3033,7 +3039,7 @@ public class MainMenuUITKView : MonoBehaviour
 
         if (versionLabel != null)
         {
-            versionLabel.style.display = DisplayStyle.None;
+            versionLabel.style.display = DisplayStyle.Flex;
         }
 
         if (multiplayerVersionLabel != null)
@@ -3101,7 +3107,7 @@ public class MainMenuUITKView : MonoBehaviour
 
         if (versionLabel != null)
         {
-            versionLabel.style.display = DisplayStyle.None;
+            versionLabel.style.display = DisplayStyle.Flex;
         }
 
         if (multiplayerVersionLabel != null)
@@ -3323,7 +3329,7 @@ public class MainMenuUITKView : MonoBehaviour
 
         if (versionLabel != null)
         {
-            versionLabel.style.display = DisplayStyle.None;
+            versionLabel.style.display = DisplayStyle.Flex;
         }
 
         if (multiplayerVersionLabel != null)
@@ -3369,7 +3375,7 @@ public class MainMenuUITKView : MonoBehaviour
                 SetVisible(multiplayerPanel, true);
                 if (versionLabel != null)
                 {
-                    versionLabel.style.display = DisplayStyle.None;
+                    versionLabel.style.display = DisplayStyle.Flex;
                 }
                 if (multiplayerVersionLabel != null)
                 {
@@ -4306,6 +4312,15 @@ public class MainMenuUITKView : MonoBehaviour
         return $"{prefix}...{suffix}";
     }
 
+    private string FeedbackScreen()
+    {
+        if (generalSettingsPanel != null && generalSettingsPanel.style.display == DisplayStyle.Flex) return "Menu/Settings";
+        if (profilePanel != null && profilePanel.style.display == DisplayStyle.Flex) return "Menu/Profile";
+        if (multiplayerPanel != null && multiplayerPanel.style.display == DisplayStyle.Flex) return "Menu/Multiplayer";
+        if (puzzleModePanel != null && puzzleModePanel.style.display == DisplayStyle.Flex) return "Menu/Puzzle";
+        return "Menu";
+    }
+
     private void RefreshVersionLabel()
     {
         string versionText = MenuVersionLabel.BuildVersionText();
@@ -4714,6 +4729,8 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void ClearCachedElements()
     {
+        feedback?.Dispose();
+        feedback = null;
         responsiveSizeTierController.Reset(root);
         generalSettingsBackgroundPane = GeneralSettingsBackgroundPane.None;
         root = null;

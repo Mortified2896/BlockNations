@@ -1,0 +1,33 @@
+.feedback-template { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }
+.feedback-button {
+    position: absolute; top: 16px; right: 16px;
+    min-width: 160px; min-height: 96px; padding: 12px 20px;
+    font-size: 30px; color: rgb(245, 248, 255); background-color: rgba(25, 38, 57, 0.94);
+    border-width: 2px; border-color: rgba(255, 255, 255, 0.3); border-radius: 12px;
+}
+.feedback-overlay {
+    position: absolute; left: 0; right: 0; top: 0; bottom: 0;
+    background-color: rgba(0, 0, 0, 0.8); align-items: center; justify-content: center;
+    padding: 24px;
+}
+.feedback-card {
+    width: 92%; max-width: 850px; max-height: 94%; padding: 24px;
+    background-color: rgb(24, 35, 50); border-radius: 16px;
+    color: rgb(244, 247, 253); font-size: 30px;
+}
+.feedback-title { font-size: 42px; -unity-font-style: bold; margin-bottom: 20px; }
+.feedback-card .unity-base-field { flex-direction: column; align-items: stretch; margin-bottom: 18px; }
+.feedback-card .unity-base-field__label { min-width: 0; white-space: normal; margin-bottom: 8px; color: rgb(244, 247, 253); }
+.feedback-card .unity-base-field__input { min-height: 64px; font-size: 30px; padding: 10px; }
+.feedback-description .unity-base-field__input { min-height: 150px; white-space: normal; }
+.feedback-card .unity-toggle { flex-direction: row; }
+.feedback-card .unity-toggle__input { min-height: 88px; }
+.feedback-screenshot { height: 190px; margin-bottom: 12px; }
+.feedback-note { white-space: normal; font-size: 26px; color: rgb(209, 222, 241); margin-top: 14px; margin-bottom: 14px; }
+.feedback-actions { flex-direction: row; justify-content: space-between; }
+.feedback-action { min-height: 96px; padding: 12px 24px; font-size: 30px; background-color: rgb(54, 112, 167); color: white; border-radius: 10px; }
+.feedback-secondary { background-color: rgb(52, 65, 82); }
+.ui-regular .feedback-button { top: 24px; right: 24px; }
+.ui-large .feedback-button { top: 28px; right: 28px; }
+.feedback-card .unity-popup-field__input { background-color: rgb(46, 63, 85); color: white; }
+.feedback-card .unity-text-field__input { background-color: rgb(245, 247, 250); color: rgb(22, 31, 44); }

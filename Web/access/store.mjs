@@ -25,7 +25,15 @@ export class AccessStore {
       code_hash TEXT PRIMARY KEY, uid TEXT NOT NULL, sid TEXT NOT NULL, audience TEXT NOT NULL,
       attempt_hash TEXT NOT NULL, session_expiry INTEGER NOT NULL, expires_at INTEGER NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS game_handoffs_expiry ON game_handoffs(expires_at);`);
+    CREATE INDEX IF NOT EXISTS game_handoffs_expiry ON game_handoffs(expires_at);
+    CREATE TABLE IF NOT EXISTS game_feedback (
+      id TEXT PRIMARY KEY, uid TEXT NOT NULL, origin TEXT NOT NULL,
+      category TEXT NOT NULL, description TEXT NOT NULL, version TEXT NOT NULL,
+      platform TEXT NOT NULL, screen TEXT NOT NULL, mode TEXT NOT NULL, turn INTEGER NOT NULL,
+      screenshot TEXT NOT NULL, created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS game_feedback_created ON game_feedback(created_at);
+    CREATE INDEX IF NOT EXISTS game_feedback_user ON game_feedback(uid,created_at);`);
   }
 
   tester(uid) {
@@ -75,6 +83,28 @@ export class AccessStore {
     const operation = new URL(request.url).pathname;
     if (request.method !== "POST") return new Response(null, { status: 405 });
     const input = await request.json();
+    if (operation === "/feedback-submit") {
+      // First successful write wins; retrying an acknowledged or timed-out send
+      // cannot silently replace its contents or attach a second screenshot.
+      const existing = this.sql.exec("SELECT uid FROM game_feedback WHERE id=?", input.id).toArray()[0];
+      if (existing) return Response.json({ limited: existing.uid !== input.uid });
+      const since = new Date(Date.now() - 3600000).toISOString();
+      const recent = this.sql.exec("SELECT COUNT(*) count FROM game_feedback WHERE uid=? AND created_at>?", input.uid, since).toArray()[0].count;
+      if (recent >= 10) return Response.json({ limited: true });
+      this.sql.exec("INSERT INTO game_feedback VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", input.id, input.uid, input.origin,
+        input.category, input.description, input.version, input.platform, input.screen, input.mode, input.turn,
+        input.screenshot, new Date().toISOString());
+      return Response.json({ saved: true });
+    }
+    if (operation === "/feedback-list") {
+      if (!Number.isSafeInteger(input.offset) || input.offset < 0) return new Response(null, { status: 400 });
+      return Response.json(this.sql.exec(`SELECT f.id,f.origin,f.category,f.description,f.version,f.platform,f.screen,f.mode,f.turn,f.created_at,
+        (f.screenshot<>'') has_screenshot,t.display_name FROM game_feedback f LEFT JOIN game_testers t ON t.auth_user_id=f.uid
+        ORDER BY f.created_at DESC,f.id LIMIT 26 OFFSET ?`, input.offset).toArray());
+    }
+    if (operation === "/feedback-image") {
+      return Response.json(this.sql.exec("SELECT screenshot FROM game_feedback WHERE id=?", input.id).toArray()[0] ?? null);
+    }
     if (operation === "/register") {
       const { user, reviewCookie, expiresAt } = input;
       if (!user?.auth_user_id || typeof reviewCookie !== "string" || !reviewCookie || reviewCookie.length > 4096 ||

@@ -1,5 +1,7 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
     <Style src="project://database/Assets/Resources/MainMenu_UITK.uss?fileID=7433441132597879392&amp;guid=1f9fc51f9f9a74a6f9abfc538ceeb4da&amp;type=3#MainMenu_UITK" />
+    <ui:Template name="FeedbackForm" src="Feedback_UITK.uxml" />
+    <Style src="Feedback_UITK.uss" />
     <ui:VisualElement name="MainMenuRoot" class="root">
         <ui:VisualElement name="MainPanel" class="panel">
             <ui:Label name="TitleLabel" text="Block Nations" class="title" />
@@ -328,5 +330,7 @@
         </ui:VisualElement>
 
         <ui:Label name="VersionLabel" text="" class="version-label" />
+        <ui:Button name="FeedbackButton" text="Feedback" class="feedback-button" />
+        <ui:Instance template="FeedbackForm" name="FeedbackForm" class="feedback-template" picking-mode="Ignore" />
     </ui:VisualElement>
 </ui:UXML>

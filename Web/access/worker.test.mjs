@@ -390,3 +390,52 @@ test("both deployment configs route every static asset through the gate", async 
     assert.equal(config.d1_databases, undefined); // No access to sensitive articles.
   }
 });
+
+test("feedback saves once across retries, escapes report text, and protects attachments from testers", async () => {
+  const tester = await signIn(await identity("feedback-player", "approved"));
+  const admin = await signIn(await identity("feedback-admin", "approved", "admin"));
+  const id = "a".repeat(32);
+  const screenshot = btoa("\xff\xd8\xffsynthetic-jpeg\xff\xd9");
+  const report = { id, category: "Bug", description: '<script>alert("report")</script>\nMissing button', version: "0.test", platform: "WebGLPlayer", screen: "Gameplay", mode: "VsAI", turn: 3, screenshot };
+  const send = (session, body = report, origin = GAME) => worker.fetch(new Request(GAME + "/api/feedback", {
+    method: "POST", headers: { Cookie: session, Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(body),
+  }), env);
+  assert.equal((await send("")).status, 403);
+  assert.equal((await send(tester.cookie, report, "https://other.example")).status, 403);
+  assert.equal((await send(tester.cookie)).status, 201);
+  assert.equal((await send(tester.cookie)).status, 201);
+  assert.equal((await request("/admin/feedback", { session: tester.cookie })).status, 403);
+  assert.equal((await request(`/admin/feedback/${id}/screenshot`, { session: tester.cookie })).status, 403);
+  const inbox = await request("/admin/feedback", { session: admin.cookie });
+  assert.equal(inbox.status, 200);
+  const html = await inbox.text();
+  assert.equal(html.split("Report " + id).length - 1, 1);
+  assert.match(html, /&lt;script&gt;alert/);
+  assert.doesNotMatch(html, /<script>alert/);
+  assert.match(html, /Turn 3/);
+  assert.match(inbox.headers.get("Content-Security-Policy"), /img-src 'self' data:/);
+  const image = await request(`/admin/feedback/${id}/screenshot`, { session: admin.cookie });
+  assert.equal(image.headers.get("Content-Type"), "image/jpeg");
+  assert.equal(image.headers.get("Cache-Control"), "private, no-store");
+  assert.deepEqual(new Uint8Array(await image.arrayBuffer()), Uint8Array.from(atob(screenshot), c => c.charCodeAt(0)));
+  // First write wins even if a caller changes a previously accepted ID.
+  assert.equal((await send(tester.cookie, { ...report, description: "replacement" })).status, 201);
+  assert.doesNotMatch(await (await request("/admin/feedback", { session: admin.cookie })).text(), />replacement</);
+});
+
+test("feedback validates size and attachments, accepts text-only reports, and bounds hourly writes", async () => {
+  const tester = await signIn(await identity("feedback-validation", "approved"));
+  const base = { id: "b".repeat(32), category: "Suggestion", description: "Improve the menu", version: "test", platform: "WebGLPlayer", screen: "Menu", mode: "Menu", turn: 0, screenshot: "" };
+  const send = body => worker.fetch(new Request(GAME + "/api/feedback", {
+    method: "POST", headers: { Cookie: tester.cookie, Origin: GAME, "Content-Type": "application/json" }, body: JSON.stringify(body),
+  }), env);
+  for (const change of [{ description: " " }, { category: "unknown" }, { turn: -1 }, { screenshot: "<svg/>" }, { screenshot: btoa("not jpeg") }, { description: "a".repeat(4001) }]) {
+    assert.equal((await send({ ...base, ...change })).status, 400);
+  }
+  assert.equal((await send({ ...base, screenshot: "a".repeat(1500001) })).status, 413);
+  for (let n = 0; n < 10; n++) assert.equal((await send({ ...base, id: n.toString(16).padStart(32, "0") })).status, 201);
+  assert.equal((await send(base)).status, 429);
+  // Retries remain possible even after reaching the hourly new-report limit.
+  assert.equal((await send({ ...base, id: "0".repeat(32) })).status, 201);
+  assert.equal((await request("/admin/feedback")).status, 403);
+});

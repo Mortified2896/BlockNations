@@ -30,6 +30,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
     private Label tournamentStandingsTitleLabel;
     private Label tournamentStandingsRankHeaderLabel;
     private Label tournamentStandingsScoreHeaderLabel;
+    private FeedbackUITKController feedback;
     private Label turnLabel;
     private Label goldLabel;
     private Label statusLabel;
@@ -67,6 +68,8 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         ClearUiCache();
     }
 
+    public void OnBrowserFeedbackClosed() { feedback?.BrowserClosed(); }
+
     private void Update()
     {
         if (!enableGameplayTopHudUITK)
@@ -94,6 +97,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
         RefreshLabels();
         ApplySafeArea(force: false);
+        feedback?.RefreshSafeArea();
         responsiveSizeTierController.Apply(root);
     }
 
@@ -211,6 +215,10 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             defaultStatusLabelWidth = statusLabel.style.width;
         }
         SetNonInteractive(root);
+        feedback?.Dispose();
+        feedback = new FeedbackUITKController(this, root, () => "Gameplay",
+            () => turnManager != null ? turnManager.currentMode.ToString() : "None",
+            () => turnManager != null ? turnManager.turnNumber : 0);
         ApplySafeArea(force: true);
         responsiveSizeTierController.Apply(root);
         uiReady = true;
@@ -223,6 +231,10 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         {
             return;
         }
+
+        // Preserve UI Toolkit's native text-field and scroll-view hit testing.
+        // The explicit feedback template is interactive; the status HUD is not.
+        if (element.name == "FeedbackForm") return;
 
         element.pickingMode = PickingMode.Ignore;
         foreach (VisualElement child in element.Children())
@@ -698,6 +710,8 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
     private void ClearUiCache()
     {
+        feedback?.Dispose();
+        feedback = null;
         responsiveSizeTierController.Reset(root);
         root = null;
         hudRoot = null;
