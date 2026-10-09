@@ -7,6 +7,7 @@ public class CameraController : MonoBehaviour
     private static string PlayByPostGameIdKey => DevClientInstanceScope.ScopePlayerPrefsKey(PlayByPostGameIdKeyRaw);
     private const int InitialFocusMaxWaitFrames = 180;
     private const float FitMarginTilesPerEdge = 0.5f;
+    private const float CompactBoardVisibleHeightFraction = 0.5f;
     private const float PanOverscrollTilesPerEdge = 15f;
 
     private struct PendingCameraRestoreState
@@ -233,6 +234,21 @@ public class CameraController : MonoBehaviour
         }
         else if (TryApplyPendingRestoreState())
         {
+            initialFocusApplied = true;
+            return true;
+        }
+
+        if ((turnManager.currentMode == TurnManager.GameMode.VsAI || allowPendingVsAiFocus) &&
+            turnManager.gridManager.width == 7 && turnManager.gridManager.height == 7 && cam.orthographic &&
+            TryGetBoardBounds(turnManager.gridManager, out Rect compactBounds))
+        {
+            // Compact games can show the full board. Reserve the upper/lower
+            // quarters for the HUD and panels; normal pan/zoom still applies.
+            float margin = GetGridTileSize(turnManager.gridManager) * FitMarginTilesPerEdge;
+            float fitHeight = (compactBounds.height * 0.5f + margin) / CompactBoardVisibleHeightFraction;
+            float fitWidth = (compactBounds.width * 0.5f + margin) / Mathf.Max(0.0001f, cam.aspect);
+            cam.orthographicSize = Mathf.Max(minOrthoSize, Mathf.Max(fitHeight, fitWidth));
+            SetCameraWorldPosition(GetBoardCenter(turnManager.gridManager));
             initialFocusApplied = true;
             return true;
         }
@@ -492,7 +508,10 @@ public class CameraController : MonoBehaviour
         float fitMargin = tileSize * FitMarginTilesPerEdge;
         float fitByHeight = boardBounds.height * 0.5f + fitMargin;
         float fitByWidth = (boardBounds.width * 0.5f + fitMargin) / Mathf.Max(0.0001f, cam.aspect);
-        return Mathf.Max(minOrthoSize, Mathf.Max(fitByHeight, fitByWidth));
+        bool compactSinglePlayer = gridManager.width == 7 && gridManager.height == 7 &&
+            TurnManager.Instance != null && TurnManager.Instance.currentMode == TurnManager.GameMode.VsAI;
+        float compactHudFit = compactSinglePlayer ? fitByHeight / CompactBoardVisibleHeightFraction : fitByHeight;
+        return Mathf.Max(minOrthoSize, Mathf.Max(compactHudFit, fitByWidth));
     }
 
     private GridManager GetActiveGridManager()

@@ -19,6 +19,12 @@ public static class SinglePlayerWebBuild
             throw new InvalidOperationException("Install Web Build Support for the version in ProjectVersion.txt.");
         if (File.Exists("Assets/Resources/PbpTransportSettings.asset"))
             throw new InvalidOperationException("Multiplayer credential asset must be absent from the web snapshot.");
+        var policy = Resources.Load<LearnedPolicyRelease>(LearnedPolicyRelease.ResourcePath);
+        if (policy == null) throw new InvalidOperationException("The frozen learned AI release is missing.");
+        policy.Validate(7);
+        foreach (BlockNations.AI.LearnedDifficulty difficulty in Enum.GetValues(typeof(BlockNations.AI.LearnedDifficulty)))
+            policy.ModelFor(difficulty);
+        LearnedPolicyReleaseBuilder.ValidateFrozenSource();
 
         string output = Environment.GetEnvironmentVariable("BLOCKNATIONS_WEB_OUTPUT");
         if (string.IsNullOrWhiteSpace(output)) throw new InvalidOperationException("Missing BLOCKNATIONS_WEB_OUTPUT.");

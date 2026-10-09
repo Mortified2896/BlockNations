@@ -264,6 +264,13 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             return;
         }
 
+        if (turnManager.currentMode == TurnManager.GameMode.VsAI && !string.IsNullOrEmpty(turnManager.LearnedAIStatusForUi))
+        {
+            statusLabel.text = turnManager.LearnedAIStatusForUi;
+            statusLabel.style.display = DisplayStyle.Flex;
+            return;
+        }
+
         string currentPbpGameId = turnManager.GetCurrentPlayByPostGameIdForUi();
         if (!ShouldKeepPbpSubmitStatusOverride(currentPbpGameId))
         {

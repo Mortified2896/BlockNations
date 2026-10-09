@@ -96,7 +96,8 @@ def main():
     if not (output/"index.html").exists(): raise RuntimeError("Unity did not produce the game page")
     shutil.copyfile(SOURCE/"Web/_headers", output/"_headers")
     (output/"release.json").write_text(json.dumps({"game":"Block Nations", "mode":"single-player",
-        "unity":version, "sourceHash":source_digest(), "ai":["Normal", "Rider Focus", "Hard"]}, indent=2)+"\n")
+        "unity":version, "sourceHash":source_digest(), "boardSize":7, "ai":["Easy", "Medium", "Hard"],
+        "policy": json.loads((SOURCE/"Assets/Resources/LearnedAI/manifest.json").read_text())}, indent=2)+"\n")
     subprocess.run([sys.executable, str(SOURCE/"Tools/WebRelease/audit.py"), str(output)], check=True)
 
 

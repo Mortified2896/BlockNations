@@ -33,7 +33,11 @@ public partial class TurnManager : MonoBehaviour
     {
         Default = 0,
         RiderFocus = 1,
-        HardTactician = 2
+        HardTactician = 2,
+        // 3 is reserved for the retired model experiment.
+        LearnedEasy = 4,
+        LearnedMedium = 5,
+        LearnedHard = 6
     }
 
     public enum AIDebugProfile
@@ -52,9 +56,10 @@ public partial class TurnManager : MonoBehaviour
 
     public enum MapSizePreset
     {
-        Unspecified,
-        Small,
-        Large
+        Unspecified = 0,
+        Small = 1,
+        Large = 2,
+        Standard7 = 3
     }
 
     //Dev only - Local seat selection for Play-by-Post testing only
@@ -166,6 +171,8 @@ public partial class TurnManager : MonoBehaviour
     private float playByPostLastNoTurnLogTime = -999f;
     private Coroutine aiVsAiDebugRoutine;
     private readonly HardAIRuntime hardAIRuntime = new HardAIRuntime();
+    private readonly LearnedAIRuntime learnedAIRuntime = new LearnedAIRuntime();
+    public string LearnedAIStatusForUi => learnedAIRuntime.LastFailure;
     private AIRecruitVariant aiVsAiSideARecruitVariant = AIRecruitVariant.Default;
     private AIRecruitVariant aiVsAiSideBRecruitVariant = AIRecruitVariant.Default;
     private bool aiVsAiDebugPaused = false;
@@ -265,7 +272,7 @@ public partial class TurnManager : MonoBehaviour
 
     public static MapSizePreset GetDefaultMapSizePreset()
     {
-        return MapSizePreset.Small;
+        return MapSizePreset.Standard7;
     }
 
     public string GetCurrentPlayByPostGameIdForUi()
@@ -386,6 +393,11 @@ public partial class TurnManager : MonoBehaviour
     {
         switch (preset)
         {
+            case MapSizePreset.Standard7:
+                boardWidth = 7;
+                boardHeight = 7;
+                return;
+
             case MapSizePreset.Small:
                 boardWidth = SmallBoardWidth;
                 boardHeight = SmallBoardHeight;
@@ -402,6 +414,7 @@ public partial class TurnManager : MonoBehaviour
 
     public static MapSizePreset ResolveMapSizePreset(int boardWidth, int boardHeight)
     {
+        if (boardWidth == 7 && boardHeight == 7) return MapSizePreset.Standard7;
         if ((boardWidth == SmallBoardWidth && boardHeight == SmallBoardHeight) ||
             (boardWidth == LegacySmallBoardWidth && boardHeight == LegacySmallBoardHeight))
         {
@@ -425,7 +438,8 @@ public partial class TurnManager : MonoBehaviour
             return parsedPreset;
         }
 
-        return GetDefaultMapSizePreset();
+        // Missing presets in supported legacy saves meant the original small board.
+        return MapSizePreset.Small;
     }
 
     // Controlled via Unity Scripting Define Symbols:
@@ -2268,6 +2282,7 @@ public partial class TurnManager : MonoBehaviour
     {
         PlayByPostSubmitResult -= OnPlayByPostSubmitResultForEndgame;
         hardAIRuntime.ResetKnowledge();
+        learnedAIRuntime.ResetKnowledge();
     }
 
     void Start()
@@ -3620,11 +3635,11 @@ public partial class TurnManager : MonoBehaviour
         if (aiGeneration != hardAIRuntime.KnowledgeGeneration || gameOver || currentMode != GameMode.VsAI || currentTurnSeatIndex != 1)
             yield break;
 
-        // Collect AI income at the start of its turn.
-        CollectAIGold();
+        // Grant income and reset action resources at the turn boundary, using
+        // the same authority as training. The learned policy never grants itself resources.
+        new SceneSimulationAdapter(this).BeginTurn(1);
 
         // AI actions: recruit and move units.
-        ResetRecruitmentForAICities();
         if (!disableAI)
         {
             TryCaptureAIDecisionSnapshot(false);
@@ -3808,7 +3823,7 @@ public partial class TurnManager : MonoBehaviour
             SetGameMode(GameMode.VsAI);
         }
 
-        MapSizePreset selectedMapSize = GetDefaultMapSizePreset();
+        MapSizePreset selectedMapSize = currentMode == GameMode.PlayByPost ? MapSizePreset.Small : GetDefaultMapSizePreset();
         if (MapSizeSelection.TryConsume(out MapSizePreset pendingMapSize))
         {
             selectedMapSize = pendingMapSize;
@@ -4194,7 +4209,11 @@ public partial class TurnManager : MonoBehaviour
     {
         if (!IsTurnOwnedBySeat(seatIndex)) yield break;
         AIRecruitVariant variant = GetAIRecruitVariantForSeat(seatIndex);
-        if (variant == AIRecruitVariant.HardTactician)
+        if (LearnedAIRuntime.IsLearned(variant))
+        {
+            yield return learnedAIRuntime.RunTurn(this, seatIndex, variant);
+        }
+        else if (variant == AIRecruitVariant.HardTactician)
         {
             IEnumerator turn = hardAIRuntime.RunTurn(this, seatIndex);
             while (turn.MoveNext()) yield return turn.Current;
@@ -4924,7 +4943,8 @@ public partial class TurnManager : MonoBehaviour
 
     private AILocalDecisionFeatures GetAILocalDecisionFeaturesForSide(bool actingSideIsPlayerOwned)
     {
-        if (GetAIRecruitVariantForSide(actingSideIsPlayerOwned) == AIRecruitVariant.HardTactician)
+        AIRecruitVariant variant = GetAIRecruitVariantForSide(actingSideIsPlayerOwned);
+        if (variant == AIRecruitVariant.HardTactician || LearnedAIRuntime.IsLearned(variant))
             return AILocalDecisionFeatures.None;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (IsAIVsAIDebugModeActive())
@@ -8059,6 +8079,7 @@ private void PBpDebugSyncNow_Context()
 
             // Invalidate any in-flight decision only after incoming state passes the load gates.
             hardAIRuntime.ResetKnowledge();
+            learnedAIRuntime.ResetKnowledge();
             EnsureBoardDimensions(savedBoardWidth, savedBoardHeight);
             currentMode = loadedMode;
             configuredPlayByPostSeatCount = currentMode == GameMode.PlayByPost

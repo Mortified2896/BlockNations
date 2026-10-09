@@ -7,6 +7,9 @@ public sealed class LocalAIOpponentCompatibilityTests
     [TestCase("HardTactician", TurnManager.AIRecruitVariant.HardTactician)]
     [TestCase("LunaPlaytest", TurnManager.AIRecruitVariant.HardTactician)]
     [TestCase("3", TurnManager.AIRecruitVariant.HardTactician)]
+    [TestCase("LearnedEasy", TurnManager.AIRecruitVariant.LearnedEasy)]
+    [TestCase("LearnedMedium", TurnManager.AIRecruitVariant.LearnedMedium)]
+    [TestCase("LearnedHard", TurnManager.AIRecruitVariant.LearnedHard)]
     [TestCase(null, TurnManager.AIRecruitVariant.Default)]
     [TestCase("", TurnManager.AIRecruitVariant.Default)]
     [TestCase("UnknownOpponent", TurnManager.AIRecruitVariant.Default)]
@@ -19,10 +22,14 @@ public sealed class LocalAIOpponentCompatibilityTests
     [TestCase(1, TurnManager.AIRecruitVariant.RiderFocus)]
     [TestCase(2, TurnManager.AIRecruitVariant.HardTactician)]
     [TestCase(3, TurnManager.AIRecruitVariant.HardTactician)]
+    [TestCase(4, TurnManager.AIRecruitVariant.LearnedEasy)]
+    [TestCase(5, TurnManager.AIRecruitVariant.LearnedMedium)]
+    [TestCase(6, TurnManager.AIRecruitVariant.LearnedHard)]
     [TestCase(99, TurnManager.AIRecruitVariant.Default)]
     public void SerializedOpponentValuesResolveToLocalPolicies(int value, TurnManager.AIRecruitVariant expected)
     {
         Assert.That(AIRecruitVariantSelection.ForCurrentRuntime((TurnManager.AIRecruitVariant)value), Is.EqualTo(expected));
-        Assert.That(System.Enum.GetValues(typeof(TurnManager.AIRecruitVariant)).Length, Is.EqualTo(3));
+        Assert.That(System.Enum.GetValues(typeof(TurnManager.AIRecruitVariant)), Has.No.Member((TurnManager.AIRecruitVariant)3),
+            "Keep the retired serialized value reserved.");
     }
 }

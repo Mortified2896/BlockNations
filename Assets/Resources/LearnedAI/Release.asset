@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1892116a738a48678edfaa30a0bd4277, type: 3}
+  m_Name: Release
+  m_EditorClassIdentifier: Assembly-CSharp::LearnedPolicyRelease
+  easyModel: {fileID: 5022602860645237092, guid: 194af031f19f4ce1b318b7d4d0f28bd0, type: 3}
+  mediumModel: {fileID: 5022602860645237092, guid: 194af031f19f4ce1b318b7d4d0f28bd0, type: 3}
+  hardModel: {fileID: 5022602860645237092, guid: 194af031f19f4ce1b318b7d4d0f28bd0, type: 3}
+  metadata: {fileID: 4900000, guid: d21bfef84b2142d9878e6162cd6b7137, type: 3}

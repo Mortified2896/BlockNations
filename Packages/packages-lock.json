@@ -106,7 +106,7 @@
     },
     "com.unity.ai.inference": {
       "version": "2.6.1",
-      "depth": 1,
+      "depth": 0,
       "source": "registry",
       "dependencies": {
         "com.unity.burst": "1.8.17",

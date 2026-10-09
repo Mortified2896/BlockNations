@@ -76,6 +76,7 @@ public class MainMenuUITKView : MonoBehaviour
     private VisualElement generalSettingsCard;
     private VisualElement generalSettingsAiSection;
     private VisualElement generalSettingsAiStyleSection;
+    private VisualElement generalSettingsLegacyAISection;
     private VisualElement generalSettingsPbpSection;
     private VisualElement generalSettingsDevSection;
     private VisualElement generalSettingsAIVsAIOptionsSection;
@@ -128,6 +129,9 @@ public class MainMenuUITKView : MonoBehaviour
     private Button generalSettingsAiStyleDefaultButton;
     private Button generalSettingsAiStyleRiderFocusButton;
     private Button generalSettingsAiStyleHardButton;
+    private Button generalSettingsAiEasyButton;
+    private Button generalSettingsAiMediumButton;
+    private Button generalSettingsAiHardButton;
     private Button generalSettingsStoreSnapshotHistoryButton;
     private Button generalSettingsWatchAIVsAIButton;
     private Button generalSettingsAIVsAiModeHeadToHeadButton;
@@ -212,7 +216,7 @@ public class MainMenuUITKView : MonoBehaviour
     private bool clearLocalPbpConfirmVisible;
     private TurnManager.MapSizePreset selectedMapSizePreset = TurnManager.GetDefaultMapSizePreset();
     private int selectedPlayByPostPlayerCount = PlayByPostSeatUtility.MinSeatCount;
-    private TurnManager.AIRecruitVariant selectedAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
+    private TurnManager.AIRecruitVariant selectedAIRecruitVariant = TurnManager.AIRecruitVariant.LearnedMedium;
     private bool selectedStoreSnapshotHistory;
     private bool selectedEnableAIVsAIDebugMode;
     private TurnManager.AIRecruitVariant selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
@@ -483,6 +487,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsCard = root.Q<VisualElement>("GeneralSettingsCard");
         generalSettingsAiSection = root.Q<VisualElement>("GeneralSettingsAiSection");
         generalSettingsAiStyleSection = root.Q<VisualElement>("GeneralSettingsAiStyleSection");
+        generalSettingsLegacyAISection = root.Q<VisualElement>("GeneralSettingsLegacyAISection");
         generalSettingsPbpSection = root.Q<VisualElement>("GeneralSettingsPbpSection");
         generalSettingsDevSection = root.Q<VisualElement>("GeneralSettingsDevSection");
         generalSettingsAIVsAIOptionsSection = root.Q<VisualElement>("GeneralSettingsAIVsAIOptionsSection");
@@ -546,6 +551,9 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAiStyleDefaultButton = root.Q<Button>("GeneralSettingsAiStyleDefaultButton");
         generalSettingsAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsAiStyleRiderFocusButton");
         generalSettingsAiStyleHardButton = root.Q<Button>("GeneralSettingsAiStyleHardButton");
+        generalSettingsAiEasyButton = root.Q<Button>("GeneralSettingsAiEasyButton");
+        generalSettingsAiMediumButton = root.Q<Button>("GeneralSettingsAiMediumButton");
+        generalSettingsAiHardButton = root.Q<Button>("GeneralSettingsAiHardButton");
         generalSettingsStoreSnapshotHistoryButton = root.Q<Button>("GeneralSettingsStoreSnapshotHistoryButton");
         generalSettingsWatchAIVsAIButton = root.Q<Button>("GeneralSettingsWatchAIVsAIButton");
         generalSettingsAIVsAiModeHeadToHeadButton = root.Q<Button>("GeneralSettingsAIVsAiModeHeadToHeadButton");
@@ -1096,6 +1104,9 @@ public class MainMenuUITKView : MonoBehaviour
         {
             generalSettingsAiStyleHardButton.clicked += HandleGeneralSettingsAiStyleHardClicked;
         }
+        if (generalSettingsAiEasyButton != null) generalSettingsAiEasyButton.clicked += HandleGeneralSettingsAiEasyClicked;
+        if (generalSettingsAiMediumButton != null) generalSettingsAiMediumButton.clicked += HandleGeneralSettingsAiMediumClicked;
+        if (generalSettingsAiHardButton != null) generalSettingsAiHardButton.clicked += HandleGeneralSettingsAiHardClicked;
 
 
         if (generalSettingsSideAAiStyleDefaultButton != null)
@@ -1467,6 +1478,9 @@ public class MainMenuUITKView : MonoBehaviour
         {
             generalSettingsAiStyleHardButton.clicked -= HandleGeneralSettingsAiStyleHardClicked;
         }
+        if (generalSettingsAiEasyButton != null) generalSettingsAiEasyButton.clicked -= HandleGeneralSettingsAiEasyClicked;
+        if (generalSettingsAiMediumButton != null) generalSettingsAiMediumButton.clicked -= HandleGeneralSettingsAiMediumClicked;
+        if (generalSettingsAiHardButton != null) generalSettingsAiHardButton.clicked -= HandleGeneralSettingsAiHardClicked;
 
 
         if (generalSettingsSideAAiStyleDefaultButton != null)
@@ -1878,7 +1892,8 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HandleGeneralSettingsMapSmallClicked()
     {
-        selectedMapSizePreset = TurnManager.MapSizePreset.Small;
+        selectedMapSizePreset = pendingGeneralSettingsMode == PendingGeneralSettingsMode.VsAI
+            ? TurnManager.MapSizePreset.Standard7 : TurnManager.MapSizePreset.Small;
         RefreshGeneralSettingsSelectionState();
     }
 
@@ -1914,6 +1929,24 @@ public class MainMenuUITKView : MonoBehaviour
             button.SetEnabled(enabled);
             button.tooltip = enabled ? string.Empty : "Hard Tactician uses its own search and evaluation.";
         }
+    }
+
+    private void HandleGeneralSettingsAiEasyClicked()
+    {
+        selectedAIRecruitVariant = TurnManager.AIRecruitVariant.LearnedEasy;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAiMediumClicked()
+    {
+        selectedAIRecruitVariant = TurnManager.AIRecruitVariant.LearnedMedium;
+        RefreshGeneralSettingsSelectionState();
+    }
+
+    private void HandleGeneralSettingsAiHardClicked()
+    {
+        selectedAIRecruitVariant = TurnManager.AIRecruitVariant.LearnedHard;
+        RefreshGeneralSettingsSelectionState();
     }
 
     private void HandleGeneralSettingsAiStyleDefaultClicked()
@@ -3269,9 +3302,10 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsBackgroundPane = IsVisible(multiplayerPanel)
             ? GeneralSettingsBackgroundPane.Multiplayer
             : GeneralSettingsBackgroundPane.Main;
-        selectedMapSizePreset = TurnManager.GetDefaultMapSizePreset();
+        selectedMapSizePreset = mode == PendingGeneralSettingsMode.PlayByPost
+            ? TurnManager.MapSizePreset.Small : TurnManager.GetDefaultMapSizePreset();
         selectedPlayByPostPlayerCount = PlayByPostSeatUtility.MinSeatCount;
-        selectedAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
+        selectedAIRecruitVariant = TurnManager.AIRecruitVariant.LearnedMedium;
         selectedStoreSnapshotHistory = false;
         selectedEnableAIVsAIDebugMode = false;
         selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
@@ -3408,6 +3442,13 @@ public class MainMenuUITKView : MonoBehaviour
                 : DisplayStyle.None;
         }
 
+        if (generalSettingsLegacyAISection != null)
+            generalSettingsLegacyAISection.style.display = IsDevBuild() ? DisplayStyle.Flex : DisplayStyle.None;
+        if (generalSettingsMapSmallButton != null)
+            generalSettingsMapSmallButton.text = isVsAi ? "Standard 7×7" : "Small 11×11";
+        if (generalSettingsMapLargeButton != null)
+            generalSettingsMapLargeButton.style.display = isVsAi ? DisplayStyle.None : DisplayStyle.Flex;
+
         if (generalSettingsAiStyleSection != null)
         {
             generalSettingsAiStyleSection.style.display = hideGlobalAiStyle
@@ -3484,7 +3525,7 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsSubtitleLabel != null)
             generalSettingsSubtitleLabel.text = isSimulation
                 ? "Choose the map and opponents for this simulation."
-                : isVsAi ? "Choose your map size and AI level."
+                : isVsAi ? "7×7 · choose your AI difficulty."
                 : "Choose your map size and player count for this new play-by-post match.";
         if (generalSettingsConfirmButton != null)
             generalSettingsConfirmButton.text = isSimulation
@@ -3493,7 +3534,7 @@ public class MainMenuUITKView : MonoBehaviour
 
         UpdateGeneralSettingsSelectionButton(
             generalSettingsMapSmallButton,
-            selectedMapSizePreset == TurnManager.MapSizePreset.Small);
+            selectedMapSizePreset == (isVsAi ? TurnManager.MapSizePreset.Standard7 : TurnManager.MapSizePreset.Small));
         UpdateGeneralSettingsSelectionButton(
             generalSettingsMapLargeButton,
             selectedMapSizePreset == TurnManager.MapSizePreset.Large);
@@ -3506,6 +3547,9 @@ public class MainMenuUITKView : MonoBehaviour
             generalSettingsAiStyleRiderFocusButton,
             selectedAIRecruitVariant == TurnManager.AIRecruitVariant.RiderFocus);
         UpdateGeneralSettingsSelectionButton(generalSettingsAiStyleHardButton, selectedAIRecruitVariant == TurnManager.AIRecruitVariant.HardTactician);
+        UpdateGeneralSettingsSelectionButton(generalSettingsAiEasyButton, selectedAIRecruitVariant == TurnManager.AIRecruitVariant.LearnedEasy);
+        UpdateGeneralSettingsSelectionButton(generalSettingsAiMediumButton, selectedAIRecruitVariant == TurnManager.AIRecruitVariant.LearnedMedium);
+        UpdateGeneralSettingsSelectionButton(generalSettingsAiHardButton, selectedAIRecruitVariant == TurnManager.AIRecruitVariant.LearnedHard);
         UpdateGeneralSettingsSelectionButton(
             generalSettingsAIVsAiModeHeadToHeadButton,
             !isTournamentMode);
@@ -4686,6 +4730,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsCard = null;
         generalSettingsAiSection = null;
         generalSettingsAiStyleSection = null;
+        generalSettingsLegacyAISection = null;
         generalSettingsPbpSection = null;
         generalSettingsDevSection = null;
         generalSettingsAIVsAIOptionsSection = null;
@@ -4742,6 +4787,9 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAiStyleDefaultButton = null;
         generalSettingsAiStyleRiderFocusButton = null;
         generalSettingsAiStyleHardButton = null;
+        generalSettingsAiEasyButton = null;
+        generalSettingsAiMediumButton = null;
+        generalSettingsAiHardButton = null;
         generalSettingsStoreSnapshotHistoryButton = null;
         generalSettingsWatchAIVsAIButton = null;
         generalSettingsAIVsAiModeHeadToHeadButton = null;

@@ -5,9 +5,9 @@ It requires Google sign-in and tester approval; the hostname is publicly reachab
 `https://staging.blocknations.moneymattersmedia.com` is reserved for internal development.
 These are distinct release targets; publishing the public game must not overwrite the staging service or its saved matches.
 
-The browser release runs the game and Normal, Rider Focus, and Hard locally on the player's device.
-The local training worker, Python, training spectator, native policy playtest, and external model/API experiments are excluded.
-A trained-policy browser mode requires separate inference and device validation before release.
+The currently published browser release runs the game and Normal, Rider Focus, and Hard locally on the player's device.
+The next [learned-AI browser candidate](Learned_AI_Browser_Playtest.md) uses 7×7 with Easy, Medium and Hard presets and bundled local Inference Engine models. It is held for review before public publication.
+The local training worker, Python, training spectator, native policy playtest, and external model/API experiments are excluded from both releases.
 
 ## Build isolation and credentials
 
@@ -21,7 +21,7 @@ The script uses the Editor version in `ProjectSettings/ProjectVersion.txt` and r
 The snapshot must be outside the repository and either empty or marked as an owned web snapshot.
 Generated output must be a subdirectory of `Build/`; the script rejects source paths before it clears old output.
 It copies Assets, Packages, and ProjectSettings into an isolated project outside the working checkout.
-It excludes the `Resources/PbpTransportSettings.asset` credential, local training scenes/code/models, and the Unity AI Assistant and ML-Agents packages.
+It excludes the `Resources/PbpTransportSettings.asset` credential, local training scenes/code/models, and the Unity AI Assistant and ML-Agents packages. The frozen `Resources/LearnedAI` model/catalog and direct Inference Engine dependency remain for local browser inference.
 UserSettings, local trainer files, and deployment credentials are never copied into the snapshot.
 The working project, multiplayer settings, running trainer, and supported save formats are preserved.
 

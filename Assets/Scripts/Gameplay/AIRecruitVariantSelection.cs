@@ -3,7 +3,7 @@
 /// </summary>
 public static class AIRecruitVariantSelection
 {
-    private static TurnManager.AIRecruitVariant pendingVariant = TurnManager.AIRecruitVariant.Default;
+    private static TurnManager.AIRecruitVariant pendingVariant = TurnManager.AIRecruitVariant.LearnedMedium;
 
     public static void SetPending(TurnManager.AIRecruitVariant variant)
     {
@@ -13,7 +13,7 @@ public static class AIRecruitVariantSelection
     public static bool TryConsume(out TurnManager.AIRecruitVariant variant)
     {
         variant = pendingVariant;
-        pendingVariant = TurnManager.AIRecruitVariant.Default;
+        pendingVariant = TurnManager.AIRecruitVariant.LearnedMedium;
         return true;
     }
 
@@ -26,6 +26,9 @@ public static class AIRecruitVariantSelection
             case TurnManager.AIRecruitVariant.Default:
             case TurnManager.AIRecruitVariant.RiderFocus:
             case TurnManager.AIRecruitVariant.HardTactician:
+            case TurnManager.AIRecruitVariant.LearnedEasy:
+            case TurnManager.AIRecruitVariant.LearnedMedium:
+            case TurnManager.AIRecruitVariant.LearnedHard:
                 return variant;
             case (TurnManager.AIRecruitVariant)3:
                 return TurnManager.AIRecruitVariant.HardTactician;

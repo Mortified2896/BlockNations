@@ -1,6 +1,7 @@
 import gzip
 from pathlib import Path
 import tempfile
+import struct
 import unittest
 from unittest.mock import patch
 import audit
@@ -40,6 +41,40 @@ class ReleaseAuditTests(unittest.TestCase):
         result = audit.inspect(self.root)
         self.assertEqual(result["credentialMatches"], 0)
         self.assertEqual(result["files"], 2)
+
+    def unity_container(self, strings, version=39):
+        indices, position = [0], 0
+        for value in strings:
+            position += len(value); indices.append(position)
+        records = struct.pack("<" + str(len(indices)) + "I", *indices)
+        literal_start = 32 + len(records)
+        metadata = struct.pack("<8I", 0xFAB11BAF, version, 32, len(records), len(indices), literal_start,
+                               position, len(strings)) + records + b"".join(strings)
+        name = b"Il2CppData/Metadata/global-metadata.dat"
+        end = 20 + 12 + len(name)
+        return b"UnityWebData1.0\0" + struct.pack("<I", end) + struct.pack("<III", end, len(metadata), len(name)) + name + metadata
+
+    def test_adjacent_culture_and_identifier_literals_are_not_a_key(self):
+        (self.root/"game.data.unityweb").write_bytes(gzip.compress(self.unity_container([b"sk-SK", b"slice" * 8])))
+        self.assertEqual(audit.inspect(self.root)["credentialMatches"], 0)
+
+    def test_real_key_in_a_managed_literal_is_still_rejected(self):
+        (self.root/"game.data").write_bytes(self.unity_container([b"sk-SK", b"sk-proj-" + b"A" * 64]))
+        with self.assertRaisesRegex(ValueError, "Credential signature"): audit.inspect(self.root)
+
+    def test_key_outside_managed_literals_is_still_rejected(self):
+        (self.root/"game.data").write_bytes(self.unity_container([b"sk-SK", b"slice" * 8]) + b"sk-proj-" + b"A" * 64)
+        with self.assertRaisesRegex(ValueError, "Credential signature"): audit.inspect(self.root)
+
+    def test_unknown_metadata_keeps_the_raw_scan(self):
+        (self.root/"game.data").write_bytes(self.unity_container([b"sk-SK", b"slice" * 8], version=40))
+        with self.assertRaisesRegex(ValueError, "Credential signature"): audit.inspect(self.root)
+
+    def test_known_secret_is_compared_even_across_literal_boundaries(self):
+        credential = b"sk-" + b"A" * 64
+        (self.root/"game.data").write_bytes(self.unity_container([credential[:30], credential[30:]]))
+        with patch.object(audit, "known_secrets", return_value=[credential]):
+            with self.assertRaisesRegex(ValueError, "Known credential"): audit.inspect(self.root)
 
 
 if __name__ == "__main__": unittest.main()

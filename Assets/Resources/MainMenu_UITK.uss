@@ -1923,6 +1923,11 @@
     min-width: 260px;
 }
 
+#GeneralSettingsAiDifficultyRow > .general-settings-option-button {
+    min-width: 0;
+    flex-shrink: 1;
+}
+
 .general-settings-option-row > .general-settings-option-button.general-settings-option-button--row-end {
     margin-right: 0;
 }

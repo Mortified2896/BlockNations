@@ -157,7 +157,7 @@
                     <ui:VisualElement class="general-settings-section">
                         <ui:Label text="Map Size" class="general-settings-section-label" />
                         <ui:VisualElement class="general-settings-option-row">
-                            <ui:Button name="GeneralSettingsMapSmallButton" text="Small 11x11" class="menu-button general-settings-option-button" />
+                            <ui:Button name="GeneralSettingsMapSmallButton" text="Standard 7×7" class="menu-button general-settings-option-button" />
                             <ui:Button name="GeneralSettingsMapLargeButton" text="Large 15x15" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
                         </ui:VisualElement>
                     </ui:VisualElement>
@@ -177,9 +177,17 @@
                     </ui:VisualElement>
 
                     <ui:VisualElement name="GeneralSettingsAiSection" class="general-settings-section">
-                        <ui:Label text="AI" class="general-settings-section-label" />
                         <ui:VisualElement name="GeneralSettingsAiStyleSection">
-                            <ui:Label text="AI Style" class="general-settings-section-label" />
+                            <ui:Label text="AI Difficulty" class="general-settings-section-label" />
+                            <ui:VisualElement name="GeneralSettingsAiDifficultyRow" class="general-settings-option-row">
+                                <ui:Button name="GeneralSettingsAiEasyButton" text="Easy" class="menu-button general-settings-option-button" />
+                                <ui:Button name="GeneralSettingsAiMediumButton" text="Medium" class="menu-button general-settings-option-button" />
+                                <ui:Button name="GeneralSettingsAiHardButton" text="Hard" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
+                            </ui:VisualElement>
+                            <ui:Label text="Learned AI playtest · varied moves" class="general-settings-help-text" />
+                        </ui:VisualElement>
+                        <ui:VisualElement name="GeneralSettingsLegacyAISection" style="display: none;">
+                            <ui:Label text="Development controls" class="general-settings-section-label" />
                             <ui:VisualElement class="general-settings-option-row">
                                 <ui:Button name="GeneralSettingsAiStyleDefaultButton" text="Default" class="menu-button general-settings-option-button" />
                                 <ui:Button name="GeneralSettingsAiStyleRiderFocusButton" text="Rider Focus" class="menu-button general-settings-option-button general-settings-option-button--row-end" />
