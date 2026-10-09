@@ -41,6 +41,16 @@ The viewer independently reads snapshots at 2 Hz, caches their projections, and 
 
 Replay files, match journals, logs and exports remain under the owned training root and count toward the shared allowance. Trainer diagnostics retain the existing bound; viewer diagnostics have a 2 MB rotation bound with at most four older logs. Match journals retain one rotated 8 MiB predecessor. Checkpoint/log retention, the 512 MB final-write reserve, the 20 GB free-disk guard and protected/pinned models retain their prior behavior. Hours zero means no timer; normal retention can keep the run below the allowance indefinitely. The safe storage stop threshold for the current defaults is 19.488 GB, reserving final checkpoint space.
 
+### Checkpoint retention reliability (2026-10-10)
+
+The installed ML-Agents 1.1.0 checkpoint manager deletes older numbered `.pt` and `.onnx` files after each save to enforce `keep_checkpoints: 5`. A supervisor inventory is concurrent with that deletion. On 2026-10-09 at 14:50 UTC, the supervisor enumerated a checkpoint that the trainer subsequently removed, then failed while reading its timestamp. The trainer handled the resulting shutdown and saved step 15,120,003, but the supervisor's final status incorrectly remained `running`.
+
+Storage inventory now caches each surviving regular file's metadata once and tolerates a file disappearing before inspection or deletion. Other filesystem errors remain errors. The supervisor still leaves active-run checkpoint retention to ML-Agents; increasing the storage allowance or disabling trainer retention is unnecessary. Unexpected monitoring failures now publish `failed / supervisor_failure`, request a graceful trainer save, join log capture and release the owned process lock and sleep assertion.
+
+Regression checks reproduce the enumeration/deletion race, deletion after inventory, concurrent log rotation, real permission errors and failure-time checkpoint saving/status/lock release. The original implementation fails the deterministic checkpoint race; the corrected implementation passes it. All 34 supervisor, runtime, run-limit, training-time and frozen-playtest checks pass in the configured Python environment. The existing 7×7 run remains stopped for the owner's requested human playtest; this repair has not been verified by resuming that run.
+
+For an unattended CLI continuation, `--no-auto-viewer` keeps the optional Unity viewer closed while retaining explicit viewer requests and human-playtest availability. It does not change the learner or its model. Completed models selected for releases should be copied outside ML-Agents' rolling checkpoint directory. Supervisor pins cannot prevent the SDK from deleting files inside that directory. Keep those frozen copies inside the owned training budget, or export only the actor into the versioned game release.
+
 ## Acceptance evidence
 
 Validation uses the installed Unity 6000.4.0f1 in an isolated snapshot and the scoped Python 3.10 / CPU PyTorch 2.2.2 / ML-Agents 1.1.0 environment. No watched strength tournament ran.

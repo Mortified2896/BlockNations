@@ -1,8 +1,10 @@
 import importlib.util
+import io
 import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("training_supervisor", Path(__file__).with_name("supervisor.py"))
 supervisor = importlib.util.module_from_spec(spec)
@@ -76,6 +78,106 @@ class RetentionTests(unittest.TestCase):
         supervisor.prune(self.root, self.run_directory("active"), target_bytes=0)
         self.assertTrue(keep.exists())
         self.assertTrue(newer.exists())
+
+    def test_trainer_deletes_checkpoint_between_enumeration_and_stat(self):
+        active = self.run_directory("active")
+        obsolete, current = active / "Policy-1.pt", active / "Policy-2.pt"
+        obsolete.write_bytes(b"expired by ML-Agents")
+        current.write_bytes(b"latest weights")
+        original = supervisor.files
+
+        def retire_before_stat(root):
+            for path in original(root):
+                if path == obsolete:
+                    obsolete.unlink(missing_ok=True)
+                yield path
+
+        with patch.object(supervisor, "files", retire_before_stat):
+            self.assertIn(current, supervisor.protected_files(active))
+            supervisor.prune(self.root, active, target_bytes=0)
+        self.assertTrue(current.exists())
+        self.assertFalse(obsolete.exists())
+
+    def test_checkpoint_inventory_does_not_stat_paths_again_while_sorting(self):
+        old = self.run_directory("old")
+        victim, latest = old / "Policy-1.pt", old / "Policy-2.pt"
+        victim.write_bytes(b"expired")
+        latest.write_bytes(b"latest")
+        original = supervisor.file_snapshot
+
+        def retire_after_snapshot(root):
+            snapshot = original(root)
+            if root == old:
+                victim.unlink(missing_ok=True)
+            return snapshot
+
+        with patch.object(supervisor, "file_snapshot", retire_after_snapshot):
+            supervisor.prune(self.root, self.run_directory("active"), target_bytes=0)
+        self.assertTrue(latest.exists())
+
+    def test_concurrent_log_rotation_and_removal_are_benign(self):
+        active = self.run_directory("active")
+        log = active / "trainer.log.1"
+        log.write_bytes(b"rotated log")
+        original = Path.unlink
+
+        def remove_before_unlink(path, *args, **kwargs):
+            if path == log and path.exists():
+                original(path)
+            return original(path, *args, **kwargs)
+
+        with patch.object(Path, "unlink", remove_before_unlink):
+            supervisor.prune(self.root, active, target_bytes=0, log_limit=0)
+        self.assertFalse(log.exists())
+
+    def test_storage_permission_errors_are_not_hidden_as_missing_files(self):
+        run = self.run_directory("active")
+        victim = run / "Policy-1.pt"
+        victim.write_bytes(b"weights")
+        original = Path.stat
+
+        def denied(path, *args, **kwargs):
+            if path == victim and kwargs.get("follow_symlinks") is False:
+                raise PermissionError("denied storage inventory")
+            return original(path, *args, **kwargs)
+
+        with patch.object(Path, "stat", denied), self.assertRaises(PermissionError):
+            supervisor.prune(self.root, run, target_bytes=0)
+
+    def test_unexpected_supervisor_failure_saves_child_and_records_failed_status(self):
+        run = self.root / "runs" / "failure"
+
+        class Trainer:
+            pid = 123456
+            returncode = None
+            stdout = io.BytesIO()
+
+            def poll(self):
+                return self.returncode
+
+            def send_signal(self, signal):
+                (run / "final.pt").write_bytes(b"saved on interrupt")
+                self.returncode = 0
+
+            def wait(self, timeout=None):
+                return self.returncode
+
+        child = Trainer()
+        argv = ["supervisor.py", "--root", str(self.root), "--run-id", "failure", "--board-size", "7"]
+        with patch.object(supervisor.sys, "argv", argv), patch.object(supervisor.sys, "platform", "linux"), \
+                patch.object(supervisor.signal, "signal"), patch.object(supervisor.subprocess, "Popen", return_value=child), \
+                patch.object(supervisor, "prune", side_effect=[[], PermissionError("denied storage inventory")]):
+            with self.assertRaises(PermissionError):
+                supervisor.main()
+        status = supervisor.read_json(run / "supervisor-status.json")
+        self.assertEqual(status["state"], "failed")
+        self.assertEqual(status["stopReason"], "supervisor_failure")
+        self.assertIn("PermissionError", status["error"])
+        self.assertEqual(status["exitCode"], 1)
+        self.assertEqual(status["trainerExitCode"], 0)
+        self.assertEqual(status["checkpointCount"], 1)
+        self.assertEqual((run / "final.pt").read_bytes(), b"saved on interrupt")
+        self.assertFalse((self.root / "supervisor.lock").exists())
 
     def test_log_rotation_has_a_fixed_upper_bound(self):
         path = self.run_directory("active") / "trainer.log"

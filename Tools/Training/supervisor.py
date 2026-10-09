@@ -17,6 +17,7 @@ from pathlib import Path
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import threading
@@ -70,13 +71,25 @@ def files(root: Path) -> Iterable[Path]:
 
 
 def size(root: Path) -> int:
-    total = 0
+    return sum(entry.st_size for entry in file_snapshot(root).values())
+
+
+def file_snapshot(root: Path) -> dict[Path, os.stat_result]:
+    """Inventory surviving regular files without racing the trainer's retention.
+
+    Directory enumeration does not reserve a file. ML-Agents may remove an old
+    checkpoint (or a writer may rotate a log) before we can stat it. Cache the
+    metadata once; only a vanished file is benign, not other filesystem errors.
+    """
+    snapshot = {}
     for path in files(root):
         try:
-            total += path.stat().st_size
+            entry = path.stat(follow_symlinks=False)
         except FileNotFoundError:
-            pass
-    return total
+            continue
+        if stat.S_ISREG(entry.st_mode):
+            snapshot[path] = entry
+    return snapshot
 
 
 def process_tree_rss(pid: int) -> int | None:
@@ -102,7 +115,7 @@ def owned_runs(root: Path) -> list[Path]:
             if run.is_dir() and not run.is_symlink() and read_json(run / RUN_MARKER).get("owner") == "BlockNations.LocalTraining.v1"]
 
 
-def protected_files(run: Path) -> set[Path]:
+def protected_files(run: Path, snapshot: dict[Path, os.stat_result] | None = None) -> set[Path]:
     protected = set()
     pins = read_json(run / "pins.json").get("files", [])
     for relative in pins:
@@ -124,14 +137,16 @@ def protected_files(run: Path) -> set[Path]:
                 protected.add(checkpoint.parent / candidate.name)
     # Trainer releases differ in checkpoint metadata location. Always retain the
     # newest .pt per behavior directory even if metadata cannot be interpreted.
+    if snapshot is None:
+        snapshot = file_snapshot(run)
     checkpoints: dict[Path, list[Path]] = {}
-    for path in files(run):
+    for path in snapshot:
         if path.suffix == ".pt":
             checkpoints.setdefault(path.parent, []).append(path)
         if path.suffix == ".onnx" and not re.search(r"-\d+\.onnx$", path.name):
             protected.add(path)  # final/latest reference export
     for entries in checkpoints.values():
-        latest = max(entries, key=lambda path: path.stat().st_mtime_ns)
+        latest = max(entries, key=lambda path: snapshot[path].st_mtime_ns)
         protected.update((latest, latest.with_suffix(".onnx")))
     return protected
 
@@ -140,9 +155,12 @@ def prune(root: Path, active: Path, target_bytes: int, log_limit: int = 500 * MB
     removed = []
     candidates = []
     logs = []
+    snapshot = {}
     for run in owned_runs(root):
-        protected = protected_files(run)
-        for path in files(run):
+        run_snapshot = file_snapshot(run)
+        snapshot.update(run_snapshot)
+        protected = protected_files(run, run_snapshot)
+        for path in run_snapshot:
             if path in protected:
                 continue
             if path.name.endswith(".log") or ".log." in path.name or path.name.startswith("events.out.tfevents"):
@@ -151,25 +169,30 @@ def prune(root: Path, active: Path, target_bytes: int, log_limit: int = 500 * MB
                     logs.append(path)
             elif run != active and path.suffix in (".pt", ".onnx") and re.search(r"-\d+\.", path.name):
                 candidates.append(path)
-    logs.sort(key=lambda path: path.stat().st_mtime_ns)
-    all_log_size = sum(path.stat().st_size for run in owned_runs(root) for path in files(run)
+    logs.sort(key=lambda path: snapshot[path].st_mtime_ns)
+    all_log_size = sum(entry.st_size for path, entry in snapshot.items()
                        if path.name.endswith(".log") or ".log." in path.name or path.name.startswith("events.out.tfevents"))
     for path in logs:
         if all_log_size <= log_limit:
             break
-        amount = path.stat().st_size
-        path.unlink()
-        all_log_size -= amount
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            all_log_size -= snapshot[path].st_size
+            continue
+        all_log_size -= snapshot[path].st_size
         removed.append(str(path.relative_to(root)))
-    candidates.extend(path for path in logs if path.exists())
-    candidates.sort(key=lambda path: path.stat().st_mtime_ns)
+    candidates.extend(path for path in logs if str(path.relative_to(root)) not in removed)
+    candidates.sort(key=lambda path: snapshot[path].st_mtime_ns)
     used = size(root)
     for path in candidates:
         if used <= target_bytes:
             break
-        amount = path.stat().st_size
-        path.unlink()
-        used -= amount
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            continue
+        used -= snapshot[path].st_size
         removed.append(str(path.relative_to(root)))
     return removed
 
@@ -246,6 +269,7 @@ def main() -> int:
     parser.add_argument("--backend", choices=("unity", "dotnet"), default="unity")
     parser.add_argument("--worker", type=Path, default=Path(__file__).resolve().parents[2] / "Build/TrainingWorker/BlockNations.TrainingWorker.dll")
     parser.add_argument("--parallel-games", type=int, choices=(1, 2, 4), default=2)
+    parser.add_argument("--no-auto-viewer", action="store_true", help="Keep the optional viewer closed until explicitly requested.")
     args = parser.parse_args()
     if args.backend == "dotnet" and not args.worker.is_file():
         raise ValueError("Build the C# simulation worker before starting decoupled training.")
@@ -340,8 +364,11 @@ def main() -> int:
                         "--training-board-size", str(args.board_size)])
     process = None
     assertion = None
+    output_thread = None
     playtest = PlaytestSession(run, args.env)
     viewer = ViewerSession(run, args.env, enabled=args.backend == "dotnet")
+    if args.no_auto_viewer:
+        viewer.initial_launch = False
     training_time = TrainingTime.load(run, args.run_id, args.board_size)
     started = time.monotonic()
     state = {"runId": args.run_id, "supervisorPid": os.getpid(), "state": "starting", "trainerReady": False, "budgetBytes": budget,
@@ -419,19 +446,36 @@ def main() -> int:
                       "checkpointCount": len(checkpoints), "exportCount": len(exports)})
         atomic_json(run / "supervisor-status.json", state)
         return process.returncode or (1 if failed else 0)
+    except Exception as error:
+        # Cleanup still asks the trainer to save. Publish the supervisor failure
+        # first so even an interrupted cleanup cannot leave a stale Running label.
+        state.update(state="failed", stopReason="supervisor_failure", exitCode=1,
+                     error=f"{type(error).__name__}: {error}",
+                     elapsedSeconds=time.monotonic() - started,
+                     updatedUtc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+        atomic_json(run / "supervisor-status.json", state)
+        raise
     finally:
-        viewer.close()
-        if args.backend == "dotnet":
+        try:
+            if process is not None and process.poll() is None:
+                interrupt_trainer(process)
+            if output_thread is not None:
+                output_thread.join(timeout=5)
+            playtest.close()
+            viewer.close()
             state["viewerPid"] = 0
+            state["updatedUtc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            if state.get("stopReason") == "supervisor_failure" and process is not None:
+                state["trainerExitCode"] = process.returncode
+                state["checkpointCount"] = len(list(run.rglob("*.pt")))
+                state["exportCount"] = len(list(run.rglob("*.onnx")))
             atomic_json(run / "supervisor-status.json", state)
-        playtest.close()
-        if process is not None and process.poll() is None:
-            interrupt_trainer(process)
-        if assertion is not None:
-            assertion.terminate()
-            assertion.wait(timeout=5)
-        if lock.exists() and lock.read_text() == str(os.getpid()):
-            lock.unlink()
+        finally:
+            if assertion is not None:
+                assertion.terminate()
+                assertion.wait(timeout=5)
+            if lock.exists() and lock.read_text() == str(os.getpid()):
+                lock.unlink()
 
 
 if __name__ == "__main__":
