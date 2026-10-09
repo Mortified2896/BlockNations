@@ -896,6 +896,7 @@ GameObject:
   - component: {fileID: 807338925}
   - component: {fileID: 807338924}
   - component: {fileID: 807338926}
+  - component: {fileID: 807338927}
   m_Layer: 0
   m_Name: LocalTrainingArena
   m_TagString: Untagged
@@ -930,6 +931,7 @@ MonoBehaviour:
   humanSeatIndex: -1
   statusPath:
   humanPresentation: {fileID: 807338926}
+  viewerOnly: 0
 --- !u!4 &807338925
 Transform:
   m_ObjectHideFlags: 0
@@ -972,6 +974,27 @@ MonoBehaviour:
   - {fileID: 1120547148}
   - {fileID: 1292175163}
   - {fileID: 311232537}
+--- !u!114 &807338927
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 807338923}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cccb8ba5486b46b4b106b5b16fe5fd5e, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::TrainingViewer
+  turnManager: {fileID: 509509618}
+  trainingArena: {fileID: 807338924}
+  seats:
+  - {fileID: 1987025042}
+  - {fileID: 2037586052}
+  boardCamera: {fileID: 519420031}
+  humanPresentation: {fileID: 807338926}
+  viewerMode: 0
+  runDirectory:
 --- !u!1 &878665045
 GameObject:
   m_ObjectHideFlags: 0

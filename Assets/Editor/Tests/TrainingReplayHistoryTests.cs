@@ -2,6 +2,26 @@ using NUnit.Framework;
 
 public sealed class TrainingReplayHistoryTests
 {
+    [Test]
+    public void AutomaticReplayFinishesCurrentGameBeforeFollowingNewRecordsAndPreservesPause()
+    {
+        var old = new TrainingReplayHistory.Game { number = 1, sourceKey = "old" };
+        old.frames.Add(Frame("opening")); old.frames.Add(Frame("terminal"));
+        var history = new TrainingReplayHistory { FollowRecent = true };
+        history.SetCompletedGames(new[] { old }); history.Inspect(0);
+        var latest = new TrainingReplayHistory.Game { number = 2, sourceKey = "new" };
+        latest.frames.Add(Frame("new opening")); latest.frames.Add(Frame("new terminal"));
+        history.SetCompletedGames(new[] { latest });
+        Assert.That(history.CurrentGame, Is.SameAs(old));
+        history.Step(2); Assert.That(history.CurrentFrame.description, Is.EqualTo("terminal"));
+        history.Playing = false;
+        history.Tick(100); Assert.That(history.CurrentGame, Is.SameAs(old));
+        history.Step(100); Assert.That(history.CurrentGame, Is.SameAs(latest));
+        Assert.That(history.Playing, Is.False);
+        history.SetLiveFrames(Frame("live opening"), Frame("live move"));
+        Assert.That(history.CurrentFrame.description, Is.EqualTo("new opening"));
+        history.BackToLive(); Assert.That(history.LatestFrame.description, Is.EqualTo("live move"));
+    }
     private static TrainingReplayHistory.Frame Frame(string description = "action", int pieces = 2) =>
         new TrainingReplayHistory.Frame { description = description, pieces = new TrainingReplayHistory.Piece[pieces] };
 

@@ -70,3 +70,8 @@ Tools/Simulation/bin/
 Assets/ML-Agents.meta
 Assets/ML-Agents/Timers/
 Assets/ML-Agents/Timers.meta
+
+# Shared C# training worker sources are authored; its runtime/build output is local.
+!Tools/Training/SimulationWorker/BlockNations.TrainingWorker.csproj
+/Tools/Training/SimulationWorker/bin/
+/Tools/Training/SimulationWorker/obj/

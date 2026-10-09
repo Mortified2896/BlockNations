@@ -13,6 +13,7 @@ Start with the current state, then use the relevant implementation/setup referen
 | [Local ML Training MVP](ML_Training_MVP.md) | Mac self-play controls, storage/sleep limits, saved/resumed checkpoints, local model playtesting, schema and validation limits. |
 | [General AI Training Direction](AI_Training_Direction.md) | Proposed shared simulation, adaptable policy representation, fair memory, reproducible experiments, and local phone inference. |
 | [Shared C# Simulation](Shared_Simulation_Implementation.md) | Implemented rules kernel, gameplay/training adapters, compatibility corrections, parity checks, measured throughput and remaining boundaries. |
+| [Decoupled Training and Viewer](Decoupled_Training_Implementation.md) | Shared C# parallel arenas, one PPO learner, independent replay/live viewer, resume compatibility and measured Mac throughput. |
 | [Development Follow-ups](Development_Followups.md) | Known issues, proposed boundaries, unresolved decisions, targeted checks. |
 | [PBp Compatibility Policy](PBp-Compatibility.md) | Current protocol/app-version gates and retirement policy. |
 | [PBp Migration Ledger](PbP_Migration_Ledger.md) | Protocol 3/4/5 history and current migration window. |

@@ -9,11 +9,12 @@ public sealed class TrainingOverlay
     private Vector2 scroll;
     private readonly int[] displayedGold = new int[2];
     private double nextGoldRefresh;
+    private bool showRunFolder;
     private readonly TrainingReplayView replayView = new TrainingReplayView();
     public static float Scale => Mathf.Clamp(Screen.height / 900f, 0.8f, 2.5f);
     public static float ReservedWidth => Mathf.Min(370f * Scale, Screen.width * 0.4f);
 
-    public void Draw(TrainingArena arena)
+    public void Draw(ITrainingView arena)
     {
         if (title == null)
         {
@@ -35,6 +36,7 @@ public sealed class TrainingOverlay
                 replayView.Draw(arena.Replay.LatestFrame, arena.Replay.OpeningFrame, arena.BoardSize, vision, arena.SpectatorBackgroundColor, showActionMarkers: false);
             GUILayout.BeginArea(new Rect(24, 24, width - 24, Screen.height / Scale - 48));
             scroll = GUILayout.BeginScrollView(scroll, false, false);
+            if (arena is ITrainingSpectator spectator) DrawSpectatorControls(spectator);
             if (arena.IsTraining) DrawVision();
             if (arena.Replay.Inspecting)
             {
@@ -43,7 +45,8 @@ public sealed class TrainingOverlay
                 GUILayout.EndArea();
                 return;
             }
-            GUILayout.Label(arena.IsHumanPlaytest ? "Local policy playtest" : arena.IsRatingCheck ? "Frozen policy rating check" : "Live self-play training", title);
+            GUILayout.Label(arena is ITrainingSpectator ? "Simulation spectator" : arena.IsHumanPlaytest ? "Local policy playtest" : arena.IsRatingCheck ? "Frozen policy rating check" : "Live self-play training", title);
+            if (arena is ITrainingSpectator waiting && !waiting.ShowingLive) GUILayout.Label("Waiting for the first completed replay…", label);
             GUILayout.Space(12);
             if (arena.IsTraining) { DrawPlaytest(arena); DrawTrainingTime(arena); DrawStorage(arena); }
             if (arena.IsHumanPlaytest)
@@ -79,7 +82,7 @@ public sealed class TrainingOverlay
             GUILayout.Label($"Captures {arena.Captures} · limits {arena.Interruptions}", label);
             GUILayout.Label($"{arena.Actions:N0} actions · {(arena.Elapsed > 0 ? arena.Decisions / arena.Elapsed : 0):F1} decisions/s", small);
             if (!string.IsNullOrEmpty(arena.Failure)) GUILayout.Label(arena.Failure, small);
-            if (arena.IsTraining)
+            if (arena.IsTraining && !(arena is ITrainingSpectator))
             {
                 GUI.enabled = arena.Replay.CanInspect;
                 if (GUILayout.Button("Inspect recent games", button)) arena.Replay.Inspect(Time.realtimeSinceStartupAsDouble);
@@ -88,7 +91,7 @@ public sealed class TrainingOverlay
             GUI.enabled = arena.CanContinue;
             string pauseLabel = arena.IsHumanPlaytest ? (arena.Paused ? "Continue match" : "Pause match") :
                 (arena.Paused ? "Continue live run" : "Pause live run");
-            if (GUILayout.Button(pauseLabel, button)) arena.Paused = !arena.Paused;
+            if (!(arena is ITrainingSpectator) && GUILayout.Button(pauseLabel, button)) arena.Paused = !arena.Paused;
             GUI.enabled = true;
             if (arena.CanEndHumanTurn && GUILayout.Button("End your turn", button)) arena.EndHumanTurn();
             if (arena.CanStartNewMatch && GUILayout.Button("New playtest match", button)) arena.NewHumanMatch();
@@ -136,24 +139,25 @@ public sealed class TrainingOverlay
         finally { GUI.matrix = matrix; GUI.color = color; GUI.enabled = true; }
     }
 
-    private void DrawInspection(TrainingArena arena)
+    private void DrawInspection(ITrainingView arena)
     {
         TrainingReplayHistory replay = arena.Replay;
         TrainingReplayHistory.Game game = replay.CurrentGame;
         TrainingReplayHistory.Frame frame = replay.CurrentFrame;
         double now = Time.realtimeSinceStartupAsDouble;
         GUILayout.Label("Recent match replay", title);
+        GUILayout.Label($"Match {game.number} · {game.boardSize} × {game.boardSize} · round {frame.round}", label);
+        GUILayout.Label($"Blue gold {frame.blueGold}    Red gold {frame.redGold}", label);
+        GUILayout.Label($"Simulation {game.worker + 1} · {(game.firstSeat == 0 ? "Blue" : "Red")} moved first", small);
         DrawTrainingTime(arena);
         DrawStorage(arena);
-        GUILayout.Label(arena.Paused ? "Live training is paused." : "Training continues at full speed.", small);
-        if (GUILayout.Button("Back to Live", button)) { replay.BackToLive(); return; }
+        GUILayout.Label(!arena.CanContinue ? "Training is stopped or disconnected." : arena.Paused ? "Live training is paused." : "Training continues at full speed.", small);
+        if (!(arena is ITrainingSpectator) && GUILayout.Button("Back to Live", button)) { replay.BackToLive(); return; }
         DrawPlaytest(arena);
         GUILayout.Space(12);
-        GUILayout.Label($"Recorded match {game.number} · {game.boardSize} × {game.boardSize}", label);
+        if (!string.IsNullOrEmpty(game.sourceKey)) GUILayout.Label(game.policyLabel, small);
         GUILayout.Label($"Recent game {replay.PlaylistIndex + 1}/{replay.PlaylistCount} · round {frame.round}", small);
-        GUILayout.Label((game.firstSeat == 0 ? "Blue" : "Red") + " moved first", small);
         GUILayout.Space(12);
-        GUILayout.Label($"Blue gold {frame.blueGold}    Red gold {frame.redGold}", label);
         GUILayout.Label($"State {replay.FrameIndex + 1}/{game.frames.Count}", small);
         GUILayout.Label(frame.description, label);
         GUILayout.Space(12);
@@ -169,14 +173,53 @@ public sealed class TrainingOverlay
         speed = GUILayout.Toolbar(speed, new[] { "0.6 s", "1.2 s", "2 s" });
         replay.SecondsPerAction = speed == 0 ? .6 : speed == 1 ? 1.2 : 2;
         GUILayout.Space(12);
-        GUILayout.Label("Recorded actions, not a new match. These recent games stay fixed while you inspect. Re-enter inspection to load newer games.", small);
+        GUILayout.Label(replay.FollowRecent ? "Playback is independent of learning. A newer game is selected after this replay finishes." :
+            "Recorded actions, not a new match. These recent games stay fixed while you inspect. Re-enter inspection to load newer games.", small);
         if (game.truncated) GUILayout.Label("Long match: replay buffer kept the opening and final state; some later actions are omitted.", small);
         if (!string.IsNullOrEmpty(arena.Failure)) GUILayout.Label(arena.Failure, small);
         GUILayout.Space(12);
         GUILayout.Label($"Live run: {arena.Games:N0} matches · {arena.Actions:N0} actions", small);
+        if (arena is ITrainingSpectator)
+        {
+            GUILayout.Label($"Training: {(arena.Elapsed > 0 ? arena.Decisions / arena.Elapsed : 0):F1} decisions/s", small);
+            if (arena.EloHistory != null)
+            {
+                GUILayout.Space(12);
+                GUILayout.Label("Match-result Elo", title);
+                GUILayout.Label($"{arena.EloHistory.points[arena.EloHistory.points.Count - 1].elo:F0} Elo · relative to training opponents", label);
+                DrawChart(GUILayoutUtility.GetRect(1, 140, GUILayout.ExpandWidth(true)), arena.EloHistory);
+                GUILayout.Label($"Rated {arena.EloHistory.wins + arena.EloHistory.losses:N0} · self-play telemetry, not human Elo", small);
+            }
+            int captures = arena.Progress.firstPlayerWins + arena.Progress.secondPlayerWins;
+            if (captures > 0) GUILayout.Label($"First-player wins {100f * arena.Progress.firstPlayerWins / captures:F1}% · second {100f * arena.Progress.secondPlayerWins / captures:F1}% · {captures:N0} captures", small);
+        }
     }
 
-    private void DrawTrainingTime(TrainingArena arena)
+    private void DrawSpectatorControls(ITrainingSpectator spectator)
+    {
+        GUILayout.Label("Training viewer", title);
+        GUILayout.Label($"{spectator.WorkerCount} parallel {(spectator.WorkerCount == 1 ? "game" : "games")} · learning runs independently", small);
+        if (GUILayout.Button(spectator.ShowingLive ? "Watch recent games" : "Watch live training", button))
+        { if (spectator.ShowingLive) spectator.WatchRecent(); else spectator.WatchLive(); }
+        if (spectator.ShowingLive)
+        {
+            string[] names = new string[spectator.WorkerCount];
+            for (int i = 0; i < names.Length; i++) names[i] = (i + 1).ToString();
+            GUILayout.Label("Live simulation", small);
+            int selected = GUILayout.Toolbar(spectator.SelectedWorker, names);
+            if (selected != spectator.SelectedWorker) spectator.SelectedWorker = selected;
+        }
+        GUI.enabled = spectator.CanContinue;
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button(spectator.Paused ? "Resume training" : "Pause training", button)) spectator.Paused = !spectator.Paused;
+        if (GUILayout.Button("Stop & save", button)) spectator.StopAndSave();
+        GUILayout.EndHorizontal();
+        GUI.enabled = true;
+        GUILayout.Label("Closing this viewer leaves training running.", small);
+        GUILayout.Space(12);
+    }
+
+    private void DrawTrainingTime(ITrainingView arena)
     {
         if (arena.TotalTrainingSeconds < 0) { GUILayout.Label("Total training time: awaiting telemetry", small); return; }
         double seconds = arena.TotalTrainingSeconds;
@@ -186,18 +229,18 @@ public sealed class TrainingOverlay
         GUILayout.Label(arena.TrainingTimeEstimated ? "Includes estimated earlier sessions." : "Active time across resumes · pauses excluded", small);
     }
 
-    private void DrawPlaytest(TrainingArena arena)
+    private void DrawPlaytest(ITrainingView arena)
     {
         GUI.enabled = arena.Playtest.Available && !arena.Playtest.Busy && arena.CanContinue;
         if (GUILayout.Button("Play against recent AI", button)) arena.Playtest.Start(arena);
         GUI.enabled = true;
-        GUILayout.Label("Opens a separate match with fixed weights. Training keeps running in this window.", small);
+        GUILayout.Label("Opens a separate match with fixed weights. Training continues independently.", small);
         if (!arena.Playtest.Available && !arena.Playtest.Busy)
             GUILayout.Label("Requires a standalone run with a saved checkpoint.", small);
         if (!string.IsNullOrEmpty(arena.Playtest.Message)) GUILayout.Label(arena.Playtest.Message, small);
     }
 
-    private void DrawStorage(TrainingArena arena)
+    private void DrawStorage(ITrainingView arena)
     {
         GUILayout.Space(8);
         TrainingStorageStatus storage = arena.StorageStatus;
@@ -208,13 +251,24 @@ public sealed class TrainingOverlay
             Fill(bar, new Color(0.02f, 0.09f, 0.14f));
             Fill(new Rect(bar.x, bar.y, bar.width * storage.Fraction, bar.height), new Color(0.55f, 0.85f, 0.8f));
         }
-        GUILayout.Label("Budget is shared across all training runs.", small);
         string folder = arena.TrainingRunDirectory;
         if (!string.IsNullOrEmpty(folder))
         {
-            GUILayout.Label("Run folder · checkpoints and match results", small);
-            GUILayout.Label(folder, small);
-            if (GUILayout.Button("Copy run folder", button)) GUIUtility.systemCopyBuffer = folder;
+            if (arena is ITrainingSpectator)
+            {
+                showRunFolder = GUILayout.Toggle(showRunFolder, "Show training run folder");
+                if (showRunFolder)
+                {
+                    GUILayout.Label(folder, small);
+                    if (GUILayout.Button("Copy run folder", button)) GUIUtility.systemCopyBuffer = folder;
+                }
+            }
+            else
+            {
+                GUILayout.Label("Run folder · checkpoints and match results", small);
+                GUILayout.Label(folder, small);
+                if (GUILayout.Button("Copy run folder", button)) GUIUtility.systemCopyBuffer = folder;
+            }
         }
         GUILayout.Space(8);
     }

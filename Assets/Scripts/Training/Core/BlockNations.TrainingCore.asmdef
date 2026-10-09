@@ -1,0 +1,6 @@
+{
+    "name": "BlockNations.TrainingCore",
+    "references": ["BlockNations.Simulation", "BlockNations.AI"],
+    "autoReferenced": true,
+    "noEngineReferences": true
+}

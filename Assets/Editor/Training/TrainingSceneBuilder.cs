@@ -85,6 +85,8 @@ public static class TrainingSceneBuilder
         Set(arena, "useCurriculum", curriculum);
         Set(arena, "requireTrainer", requireTrainer);
         Set(arena, "humanSeatIndex", human ? 0 : -1);
+        Set(arena, "viewerOnly", false);
+        Set(arena.GetComponent<TrainingViewer>(), "viewerMode", false);
         Set(manager, "externalHumanSeatIndex", human ? 0 : -1);
         foreach (BehaviorParameters behavior in scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<BehaviorParameters>(true)))
         {
@@ -155,6 +157,27 @@ public static class TrainingSceneBuilder
         for (int i = 0; i < documents.Length; i++) documentReferences.GetArrayElementAtIndex(i).objectReferenceValue = documents[i];
         fields.ApplyModifiedPropertiesWithoutUndo();
         Set(arena, "humanPresentation", presentation);
+        TrainingViewer viewer = arena.GetComponent<TrainingViewer>();
+        if (viewer == null) viewer = arena.gameObject.AddComponent<TrainingViewer>();
+        Set(viewer, "trainingArena", arena);
+        Set(viewer, "turnManager", Root<TurnManager>(scene, "TurnManager"));
+        Set(viewer, "boardCamera", Root<Camera>(scene, "Main Camera"));
+        Set(viewer, "humanPresentation", presentation);
+        SerializedObject viewerFields = new SerializedObject(viewer);
+        SerializedProperty viewerSeats = viewerFields.FindProperty("seats");
+        SerializedProperty arenaSeats = new SerializedObject(arena).FindProperty("seats");
+        viewerSeats.arraySize = arenaSeats.arraySize;
+        for (int i = 0; i < arenaSeats.arraySize; i++) viewerSeats.GetArrayElementAtIndex(i).objectReferenceValue = arenaSeats.GetArrayElementAtIndex(i).objectReferenceValue;
+        viewerFields.ApplyModifiedPropertiesWithoutUndo();
+    }
+
+    public static TrainingViewer PrepareViewer(string runDirectory)
+    {
+        TrainingArena arena = Prepare("", 42, false, false);
+        Set(arena, "viewerOnly", true);
+        TrainingViewer viewer = arena.GetComponent<TrainingViewer>();
+        Set(viewer, "viewerMode", true); Set(viewer, "runDirectory", runDirectory);
+        return viewer;
     }
 
     private static T Root<T>(Scene scene, string name) where T : Component

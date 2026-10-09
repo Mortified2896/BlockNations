@@ -33,7 +33,9 @@ public static class TrainingEditorCommands
                 case "create": TrainingSceneBuilder.Create(); break;
                 case "openControls": LocalTrainingWindow.Open(); break;
                 case "start": LocalTrainingWindow.Launch(request.runId, request.resume, request.hours, request.budgetGB,
-                    request.seed, request.curriculum, request.maxSteps, request.checkpointInterval, request.playerPath, request.boardSize); break;
+                    request.seed, request.curriculum, request.maxSteps, request.checkpointInterval, request.playerPath, request.boardSize,
+                    request.decoupled, request.parallelGames); break;
+                case "showViewer": File.WriteAllText(Path.Combine(LocalTrainingWindow.RunDirectory, "viewer.request"), "Open viewer.\n"); break;
                 case "stop": LocalTrainingWindow.RequestStop(); break;
                 case "exitPlay": EditorApplication.isPlaying = false; break;
                 case "playModel": LocalTrainingWindow.PlayModel(request.modelPath, request.human); break;
@@ -66,9 +68,11 @@ public static class TrainingEditorCommands
     {
         public string command, runId, modelPath, playerPath;
         public bool resume, human, curriculum = true;
+        public bool decoupled;
         public double hours = 8, budgetGB = 20;
         public int boardSize = 11;
         public int seed = 42, maxSteps = 1_000_000, checkpointInterval = 5000;
+        public int parallelGames = 2;
     }
     [Serializable] private sealed class Reply { public string command, message; public bool ok; }
     private sealed class Results : ICallbacks

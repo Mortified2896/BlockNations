@@ -6,6 +6,21 @@ from match_rating import MatchRating, MatchJournalReader
 
 
 class MatchRatingTests(unittest.TestCase):
+    def test_concurrent_matches_remain_separate_and_changed_weights_are_unrated(self):
+        rating=MatchRating('run',5)
+        context=dict(learningSeat=0,learner='a',opponent='b')
+        sequence=0
+        for worker in range(4):
+            sequence+=1
+            rating.accept(dict(self.event(sequence,'begin'),worker=worker),context)
+        self.assertEqual(rating.data['abandoned'],0)
+        for worker in (2,0,3,1):
+            sequence+=1
+            event=dict(self.event(sequence,'end',winner=worker%2),worker=worker,policyChanged=worker==3)
+            rating.accept(event,current_ids=('a','b'))
+        self.assertEqual((rating.data['matches'],rating.data['wins'],rating.data['losses'],rating.data['unrated']),(4,2,1,1))
+        self.assertTrue(all(rating.pending_for(worker) is None for worker in range(4)))
+
     def event(self, sequence, kind, match=1, winner=0, interrupted=False):
         return dict(version=1, boardSize=5, session='session', sequence=sequence,
                     kind=kind, match=match, winner=winner, interrupted=interrupted)

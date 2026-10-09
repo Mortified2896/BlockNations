@@ -10,7 +10,7 @@ using Object = UnityEngine.Object;
 
 // One visible arena. Policy state is seat-specific; presentation is a separate spectator.
 [DefaultExecutionOrder(-1000)]
-public sealed class TrainingArena : MonoBehaviour
+public sealed class TrainingArena : MonoBehaviour, ITrainingView
 {
     [SerializeField] private TurnManager turnManager;
     [SerializeField] private TrainingSeatAgent[] seats;
@@ -25,6 +25,7 @@ public sealed class TrainingArena : MonoBehaviour
     [SerializeField] private int humanSeatIndex = -1;
     [SerializeField] private string statusPath;
     [SerializeField] private TrainingHumanPresentation humanPresentation;
+    [SerializeField] private bool viewerOnly;
     private readonly TrainingOverlay overlay = new TrainingOverlay();
     public TrainingPlaytestBridge Playtest { get; } = new TrainingPlaytestBridge();
     public string HumanPolicyVersion { get; private set; }
@@ -116,6 +117,13 @@ public sealed class TrainingArena : MonoBehaviour
     private void Awake()
     {
         ReadConfiguration();
+        if (viewerOnly)
+        {
+            foreach (TrainingSeatAgent agent in seats) if (agent != null) agent.gameObject.SetActive(false);
+            if (humanPresentation != null) humanPresentation.SetHumanMode(false);
+            enabled = false;
+            return;
+        }
         if (IsHumanPlaytest)
         {
             turnManager.ConfigureExternalHumanSeat(humanSeatIndex);
@@ -161,7 +169,8 @@ public sealed class TrainingArena : MonoBehaviour
         string[] arguments = Environment.GetCommandLineArgs();
         for (int i = 0; i + 1 < arguments.Length; i++)
         {
-            if (arguments[i] == "--rating-check" && bool.TryParse(arguments[++i], out bool check)) ratingCheck = check;
+            if (arguments[i] == "--training-viewer" && bool.TryParse(arguments[++i], out bool viewer)) viewerOnly = viewer;
+            else if (arguments[i] == "--rating-check" && bool.TryParse(arguments[++i], out bool check)) ratingCheck = check;
             else if (arguments[i] == "--training-simulation") directSimulation = arguments[++i] != "scene";
             else if (arguments[i] == "--training-human-seat" && int.TryParse(arguments[++i], out int humanSeat)) humanSeatIndex = humanSeat;
             else if (arguments[i] == "--training-policy-version") HumanPolicyVersion = arguments[++i];
@@ -467,7 +476,7 @@ public sealed class TrainingArena : MonoBehaviour
     [Serializable] public sealed class ArenaStatus
     {
         public long decisions, actions;
-        public int games, captures, interruptions, rejections, trainerResets, round, seat, curriculumDistance, seed, roundLimit;
+        public int games, captures, interruptions, rejections, trainerResets, round, seat, curriculumDistance, seed, roundLimit, workerCount;
         public double elapsedSeconds, decisionsPerSecond;
         public bool paused, trainerConnected, fullOpening, humanPlaytest, returnRequested;
         public int gold0, gold1, startingDistance, boardSize, schema;
@@ -553,6 +562,7 @@ public sealed class TrainingArena : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (viewerOnly) return;
         if (boardCamera != null && cameraPresentationInitialized)
         {
             boardCamera.rect = originalCameraRect;

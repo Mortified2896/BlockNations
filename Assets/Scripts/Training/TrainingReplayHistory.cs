@@ -43,7 +43,8 @@ public sealed class TrainingReplayHistory
     }
     public sealed class Game
     {
-        public int number, boardSize, firstSeat;
+        public int number, boardSize, firstSeat, worker;
+        public string sourceKey, policyLabel;
         public bool truncated;
         public readonly List<Frame> frames = new List<Frame>();
     }
@@ -57,6 +58,7 @@ public sealed class TrainingReplayHistory
     public Frame OpeningFrame { get; private set; }
     public bool Inspecting => playlist != null;
     public bool Playing { get; set; } = true;
+    public bool FollowRecent { get; set; }
     public double SecondsPerAction { get; set; } = 1.2;
     public bool CanInspect => completed.Count > 0;
     public bool CanRecord => recording != null && !recording.truncated;
@@ -110,6 +112,17 @@ public sealed class TrainingReplayHistory
         return true;
     }
     public void BackToLive() { playlist = null; }
+    public void SetCompletedGames(IEnumerable<Game> games)
+    {
+        completed.Clear();
+        foreach (Game game in games)
+        {
+            if (game == null || game.frames.Count == 0 || game.frames.Count > MaximumFrames) throw new ArgumentException("Invalid replay game.");
+            completed.Add(game);
+            if (completed.Count > MaximumGames) completed.RemoveAt(0);
+        }
+    }
+    public void SetLiveFrames(Frame opening, Frame current) { OpeningFrame = opening; LatestFrame = current; }
     public void Tick(double now)
     {
         if (!Inspecting || !Playing || now < nextFrameTime) return;
@@ -118,7 +131,12 @@ public sealed class TrainingReplayHistory
     public void Step(double now)
     {
         if (!Inspecting) return;
-        if (++frameIndex >= CurrentGame.frames.Count) SelectGame(1, now);
+        if (++frameIndex >= CurrentGame.frames.Count)
+        {
+            if (FollowRecent && CanInspect && completed[completed.Count - 1].sourceKey != CurrentGame.sourceKey)
+            { bool playing = Playing; Inspect(now); Playing = playing; }
+            else SelectGame(1, now);
+        }
         else nextFrameTime = now + (frameIndex == CurrentGame.frames.Count - 1 ? 2 : SecondsPerAction);
     }
     public void SelectGame(int offset, double now)

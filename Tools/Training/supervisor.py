@@ -9,6 +9,8 @@ import argparse
 from training_time import TrainingTime
 from run_limits import RunLimits, continuous_config, is_continuous
 from playtest import PlaytestSession
+from decoupled_runtime import configure as configure_decoupled, ViewerSession
+from bounded_log import BoundedLog
 import json
 import os
 from pathlib import Path
@@ -172,27 +174,6 @@ def prune(root: Path, active: Path, target_bytes: int, log_limit: int = 500 * MB
     return removed
 
 
-class BoundedLog:
-    def __init__(self, path: Path, limit: int = 20 * MB):
-        self.path, self.limit = path, limit
-        self.stream = path.open("ab")
-
-    def append(self, chunk: bytes) -> None:
-        if self.stream.tell() + len(chunk) > self.limit:
-            self.stream.close()
-            for index in range(3, 0, -1):
-                previous = self.path.with_name(self.path.name + f".{index}")
-                following = self.path.with_name(self.path.name + f".{index + 1}")
-                if previous.exists():
-                    previous.replace(following)
-            self.path.replace(self.path.with_name(self.path.name + ".1"))
-            self.stream = self.path.open("wb")
-        self.stream.write(chunk)
-        self.stream.flush()
-
-    def close(self) -> None:
-        self.stream.close()
-
 
 def trainer_config(max_steps: int, checkpoint_interval: int, self_play: bool = True) -> dict:
     behavior = {
@@ -262,7 +243,12 @@ def main() -> int:
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--full-openings", action="store_true", help="Disable the tactical opening curriculum for a new run.")
     parser.add_argument("--env", type=Path)
+    parser.add_argument("--backend", choices=("unity", "dotnet"), default="unity")
+    parser.add_argument("--worker", type=Path, default=Path(__file__).resolve().parents[2] / "Build/TrainingWorker/BlockNations.TrainingWorker.dll")
+    parser.add_argument("--parallel-games", type=int, choices=(1, 2, 4), default=2)
     args = parser.parse_args()
+    if args.backend == "dotnet" and not args.worker.is_file():
+        raise ValueError("Build the C# simulation worker before starting decoupled training.")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,80}", args.run_id):
         raise ValueError("Invalid run id.")
     limits = RunLimits(args.hours, args.budget_gb, args.free_gb, args.reserve_mb)
@@ -336,12 +322,14 @@ def main() -> int:
     atomic_json(run / "rating-session.json", {"session": rating_session})
     environment.update({"BLOCKNATIONS_RATING_RUN": str(run), "BLOCKNATIONS_RATING_BOARD": str(args.board_size),
                         "BLOCKNATIONS_RATING_SESSION": rating_session})
+    args.curriculum, args.curriculum_distance = curriculum, curriculum_distance
+    configure_decoupled(args, run, environment)
     command = [sys.executable, str(Path(__file__).with_name("rated_training.py")), str(config), "--run-id", args.run_id,
                "--results-dir", str(run / "checkpoints"), "--seed", str(args.seed), "--timeout-wait", "300",
                "--torch-device", "cpu"]
     if args.resume:
         command.append("--resume")
-    if args.env:
+    if args.env and args.backend == "unity":
         if not args.env.exists():
             lock.unlink()
             raise ValueError("Standalone training player does not exist.")
@@ -353,6 +341,7 @@ def main() -> int:
     process = None
     assertion = None
     playtest = PlaytestSession(run, args.env)
+    viewer = ViewerSession(run, args.env, enabled=args.backend == "dotnet")
     training_time = TrainingTime.load(run, args.run_id, args.board_size)
     started = time.monotonic()
     state = {"runId": args.run_id, "supervisorPid": os.getpid(), "state": "starting", "trainerReady": False, "budgetBytes": budget,
@@ -360,6 +349,8 @@ def main() -> int:
              "continuousTraining": is_continuous(plan),
              "trainingStepLimit": 0 if is_continuous(plan) else plan.get("behaviors", {}).get("BlockNationsSeatV2", {}).get("max_steps", args.max_steps),
              "removedArtifacts": removed[-20:], "playtestAvailable": args.env is not None}
+    state.update(backend="standalone-dotnet" if args.backend == "dotnet" else "unity",
+                 workerCount=args.parallel_games if args.backend == "dotnet" else 1)
     try:
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                    stdin=subprocess.DEVNULL, env=environment, cwd=run)
@@ -393,6 +384,7 @@ def main() -> int:
             atomic_json(root / "active.json", {"runId": args.run_id, "supervisorPid": os.getpid()})
             arena = read_json(run / "arena-status.json")
             playtest.poll(arena)
+            viewer.poll(arena, state)
             training_time.tick(time.monotonic(), bool(arena.get("trainerConnected")) and
                                not arena.get("paused", False) and not arena.get("failure"))
             atomic_json(run / "training-time.json", training_time.snapshot())
@@ -428,6 +420,10 @@ def main() -> int:
         atomic_json(run / "supervisor-status.json", state)
         return process.returncode or (1 if failed else 0)
     finally:
+        viewer.close()
+        if args.backend == "dotnet":
+            state["viewerPid"] = 0
+            atomic_json(run / "supervisor-status.json", state)
         playtest.close()
         if process is not None and process.poll() is None:
             interrupt_trainer(process)

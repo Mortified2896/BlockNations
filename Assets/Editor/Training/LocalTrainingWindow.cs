@@ -21,12 +21,15 @@ public sealed class LocalTrainingWindow : EditorWindow
     private static double nextPoll;
     private static string launchError;
     private static Process supervisor;
-    private double hours = 8, budgetGB = 20;
-    private int seed = 42, boardSize = 11;
-    private bool curriculum = true;
-    private bool useStandalone;
-    private string playerPath = "";
-    private string runId = "", modelPath = "";
+    [SerializeField] private double hours = 8, budgetGB = 20;
+    [SerializeField] private int seed = 42, boardSize = 11;
+    [SerializeField] private bool curriculum = true;
+    [SerializeField] private bool useStandalone;
+    [SerializeField] private bool decoupled = true;
+    [SerializeField] private int parallelGames = 4;
+    [SerializeField] private string playerPath = "";
+    [SerializeField] private string runId = "", modelPath = "";
+    private string adoptedRun;
     private Vector2 scroll;
     public static string RootPath => EditorPrefs.GetString(RootKey,
         Application.platform == RuntimePlatform.OSXEditor
@@ -49,7 +52,10 @@ public sealed class LocalTrainingWindow : EditorWindow
         // They must not adopt or stop that Editor's independent training run.
         if (Application.isBatchMode) return;
         EditorApplication.update += Poll;
-        EditorApplication.quitting += RequestStop;
+        EditorApplication.quitting += () => {
+            SupervisorStatus status = Read<SupervisorStatus>(Path.Combine(RunDirectory ?? "", "supervisor-status.json"));
+            if (status == null || status.backend != "standalone-dotnet") RequestStop();
+        };
     }
 
     [MenuItem("Tools/Block Nations/Local ML Training/Open Controls")]
@@ -61,20 +67,44 @@ public sealed class LocalTrainingWindow : EditorWindow
         if (string.IsNullOrEmpty(runId)) runId = ActiveRun;
     }
 
+    private void AdoptRunSettings()
+    {
+        if (string.IsNullOrEmpty(ActiveRun) || adoptedRun == ActiveRun) return;
+        RunManifest manifest = Read<RunManifest>(Path.Combine(RunDirectory, "run.json"));
+        SupervisorStatus status = Read<SupervisorStatus>(Path.Combine(RunDirectory, "supervisor-status.json"));
+        if (manifest == null || status == null) return;
+        adoptedRun = ActiveRun; runId = ActiveRun;
+        boardSize = manifest.boardSize; seed = manifest.seed; curriculum = manifest.curriculum;
+        hours = status.durationSeconds / 3600; budgetGB = status.budgetBytes / 1e9;
+        if (status.backend == "standalone-dotnet")
+        { decoupled = true; parallelGames = status.workerCount; }
+    }
+
     private void OnGUI()
     {
         scroll = EditorGUILayout.BeginScrollView(scroll);
+        AdoptRunSettings();
         bool active = IsRunActive();
         EditorGUILayout.LabelField("Local self-play", EditorStyles.boldLabel);
-        EditorGUILayout.HelpBox("Start runs successive matches automatically and shows the live board. Capture wins/losses train the policy. Round limits are recorded as interruptions. Comparison tournaments are separate.", MessageType.Info);
+        EditorGUILayout.HelpBox("Self-play runs automatically. Decoupled C# training runs outside Unity; its optional viewer plays recent games by default. Capture results train the policy; turn limits interrupt episodes. Comparison tournaments are separate.", MessageType.Info);
         using (new EditorGUI.DisabledScope(active))
         {
             string root = EditorGUILayout.TextField("Training storage", RootPath);
             string python = EditorGUILayout.TextField("Trainer Python", PythonPath);
             if (root != RootPath) EditorPrefs.SetString(RootKey, root);
             if (python != PythonPath) EditorPrefs.SetString(PythonKey, python);
-            useStandalone = EditorGUILayout.Toggle("Use standalone training player", useStandalone);
-            if (useStandalone) playerPath = EditorGUILayout.TextField("Training player (.app)", string.IsNullOrEmpty(playerPath) ? Path.GetFullPath("Build/LocalTrainingV2.app") : playerPath);
+            decoupled = EditorGUILayout.Toggle("Decoupled C# training", decoupled);
+            if (decoupled)
+            {
+                parallelGames = EditorGUILayout.IntPopup("Parallel games", parallelGames, new[] { "1", "2", "4" }, new[] { 1, 2, 4 });
+                EditorGUILayout.LabelField("Simulation worker", TrainingSimulationWorkerBuild.WorkerPath);
+                playerPath = EditorGUILayout.TextField("Viewer/playtest player (.app)", string.IsNullOrEmpty(playerPath) ? Path.GetFullPath("Build/LocalTrainingV2.app") : playerPath);
+            }
+            else
+            {
+                useStandalone = EditorGUILayout.Toggle("Use standalone training player", useStandalone);
+                if (useStandalone) playerPath = EditorGUILayout.TextField("Training player (.app)", string.IsNullOrEmpty(playerPath) ? Path.GetFullPath("Build/LocalTrainingV2.app") : playerPath);
+            }
         }
         hours = EditorGUILayout.DoubleField(new GUIContent("Maximum hours", "0 enables continuing learning with no time limit."), hours);
         EditorGUILayout.HelpBox(hours == 0 ?
@@ -89,7 +119,7 @@ public sealed class LocalTrainingWindow : EditorWindow
         EditorGUILayout.LabelField("New run", $"Automatic ID · {boardSize} × {boardSize} · fresh weights");
         runId = EditorGUILayout.TextField("Saved run ID", runId);
         EditorGUILayout.HelpBox("Start New Training creates a unique run ID for the selected board. Resume Saved Run uses the saved ID above and restores that run's board and weights.", MessageType.None);
-        EditorGUILayout.HelpBox("Default: 20 GB shared across all runs, 512 MB checkpoint reserve, 20 GB free disk guard. Five recent checkpoints per active behavior, pinned models protected, bounded trainer logs, videos/replays off. Plug in and keep the lid open; screen locking is supported.", MessageType.None);
+        EditorGUILayout.HelpBox("Default: 20 GB shared across all runs, 512 MB checkpoint reserve, 20 GB free disk guard. Recent checkpoints, logs and small replay records are bounded; pinned models are protected. Plug in and keep the lid open; screen locking is supported.", MessageType.None);
         using (new EditorGUI.DisabledScope(active || EditorApplication.isPlaying || EditorApplication.isCompiling))
         {
             if (GUILayout.Button("Start New Training")) LaunchFromControls(false);
@@ -113,7 +143,7 @@ public sealed class LocalTrainingWindow : EditorWindow
                 else if (status.continuousTraining) EditorGUILayout.LabelField("Session time limit", "None");
                 EditorGUILayout.LabelField("Storage", $"{status.usedBytes / 1e9:F3} / {status.budgetBytes / 1e9:F1} GB; free {status.freeBytes / 1e9:F1} GB");
                 EditorGUILayout.LabelField("Saved artifacts", $"Checkpoints {status.checkpointCount}, exports {status.exportCount}");
-                if (status.peakResidentBytes > 0) EditorGUILayout.LabelField("Peak trainer + player RAM", $"{status.peakResidentBytes / 1e9:F2} GB resident");
+                if (status.peakResidentBytes > 0) EditorGUILayout.LabelField(status.backend == "standalone-dotnet" ? "Peak learner + worker RAM" : "Peak trainer + player RAM", $"{status.peakResidentBytes / 1e9:F2} GB resident");
             }
             TrainingArena.ArenaStatus arena = Read<TrainingArena.ArenaStatus>(Path.Combine(RunDirectory, "arena-status.json"));
             if (arena != null)
@@ -124,6 +154,8 @@ public sealed class LocalTrainingWindow : EditorWindow
                 if (!string.IsNullOrEmpty(arena.failure)) EditorGUILayout.HelpBox(arena.failure, MessageType.Error);
             }
             if (GUILayout.Button("Show Run Files")) EditorUtility.RevealInFinder(RunDirectory);
+            if (active && status != null && status.viewerAvailable && GUILayout.Button("Show Training Viewer"))
+                File.WriteAllText(Path.Combine(RunDirectory, "viewer.request"), "Open viewer.\n");
         }
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("Play a saved policy locally", EditorStyles.boldLabel);
@@ -139,18 +171,26 @@ public sealed class LocalTrainingWindow : EditorWindow
         try
         {
             Launch(resume ? runId : null, resume, hours, budgetGB, seed, curriculum,
-                player: useStandalone ? playerPath : null, boardSize: boardSize);
+                player: decoupled || useStandalone ? playerPath : null, boardSize: boardSize,
+                decoupled: decoupled, parallelGames: parallelGames);
         }
         catch (Exception error) when (!(error is ExitGUIException)) { launchError = error.Message; }
     }
 
     public static void Launch(string id, bool resume, double durationHours = 8, double storageGB = 20,
-        int runSeed = 42, bool useCurriculum = true, int maxSteps = 1_000_000, int checkpointInterval = 5000, string player = null, int boardSize = 11)
+        int runSeed = 42, bool useCurriculum = true, int maxSteps = 1_000_000, int checkpointInterval = 5000, string player = null, int boardSize = 11,
+        bool decoupled = false, int parallelGames = 2)
     {
         if (!BlockNations.AI.LearnedActionSchema.SupportsBoard(boardSize)) throw new ArgumentException("Choose a supported training board size.");
         if (IsRunActive() || EditorApplication.isPlaying || EditorApplication.isCompiling)
             throw new InvalidOperationException("Finish the active run and leave Play Mode before starting another.");
         if (!File.Exists(PythonPath)) throw new FileNotFoundException("Install the scoped trainer environment described in Docs/ML_Training_MVP.md.", PythonPath);
+        if (decoupled)
+        {
+            if (!File.Exists(TrainingSimulationWorkerBuild.WorkerPath)) throw new FileNotFoundException("Build the Mac training player and C# worker first.", TrainingSimulationWorkerBuild.WorkerPath);
+            if (parallelGames != 1 && parallelGames != 2 && parallelGames != 4) throw new ArgumentException("Choose 1, 2 or 4 parallel games.");
+            if (string.IsNullOrEmpty(player)) player = Path.GetFullPath("Build/LocalTrainingV2.app");
+        }
         id = TrainingRunSelection.ResolveId(RootPath, id, resume, boardSize, DateTime.UtcNow);
         ValidateRunLimits(durationHours, storageGB);
         string directory = Path.Combine(RootPath, "runs", id);
@@ -182,6 +222,7 @@ public sealed class LocalTrainingWindow : EditorWindow
         string command = string.Join(" ", arguments.Select(Quote)) + (resume ? " --resume" : "");
         if (!useCurriculum) command += " --full-openings";
         if (!string.IsNullOrEmpty(player)) command += " --env " + Quote(Path.GetFullPath(player));
+        if (decoupled) command += " --backend dotnet --parallel-games " + parallelGames + " --worker " + Quote(TrainingSimulationWorkerBuild.WorkerPath);
         launchError = null;
         supervisor = new Process { StartInfo = new ProcessStartInfo(PythonPath, command)
         { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, RedirectStandardOutput = true } };
@@ -196,6 +237,7 @@ public sealed class LocalTrainingWindow : EditorWindow
         window.runId = id; window.hours = durationHours; window.budgetGB = storageGB;
         window.seed = runSeed; window.curriculum = useCurriculum; window.boardSize = boardSize;
         window.useStandalone = !string.IsNullOrEmpty(player); window.playerPath = player ?? "";
+        window.decoupled = decoupled; window.parallelGames = parallelGames;
         Debug.Log("[ML Training] Starting supervised local run " + id);
     }
 
@@ -340,12 +382,12 @@ public sealed class LocalTrainingWindow : EditorWindow
     }
     [Serializable] public sealed class SupervisorStatus
     {
-        public string runId, state, stopReason;
-        public int supervisorPid, trainerPid, checkpointCount, exportCount, exitCode;
+        public string runId, state, stopReason, backend;
+        public int supervisorPid, trainerPid, checkpointCount, exportCount, exitCode, workerCount = 1;
         public long usedBytes, freeBytes, budgetBytes, peakResidentBytes;
         public long trainingStepLimit;
         public double elapsedSeconds, durationSeconds;
-        public bool trainerReady, continuousTraining;
+        public bool trainerReady, continuousTraining, viewerAvailable;
     }
     [Serializable] private sealed class RunManifest { public string owner; public int schema, observationSize, actionCount, seed, boardSize = 11; public bool curriculum = true; }
     [Serializable] private sealed class ActiveRunInfo { public string runId; }

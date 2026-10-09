@@ -20,7 +20,7 @@ public sealed class TrainingPlaytestBridge
     public bool Busy => requestId != null;
     public string Message { get; private set; }
 
-    public void Poll(TrainingArena arena)
+    public void Poll(ITrainingView arena)
     {
         if ((!arena.IsTraining && !arena.CanReturnToTraining) || string.IsNullOrEmpty(arena.TrainingRunDirectory) || Time.realtimeSinceStartupAsDouble < nextPoll) return;
         nextPoll = Time.realtimeSinceStartupAsDouble + .5;
@@ -56,7 +56,7 @@ public sealed class TrainingPlaytestBridge
         catch (IOException error) { Message = "Cannot read playtest status: " + error.Message; }
     }
 
-    public void Start(TrainingArena arena)
+    public void Start(ITrainingView arena)
     {
         if (!Available || Busy || !arena.CanContinue) return;
         string path = Path.Combine(arena.TrainingRunDirectory, "playtest.request.json");

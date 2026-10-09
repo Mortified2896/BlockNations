@@ -54,6 +54,17 @@ class MatchRating:
             ratings[identifier] = self.data['elo'] if inherited is None else inherited
         return ratings[identifier]
 
+    def pending_for(self, worker=0):
+        return self.data['pending'] if worker == 0 else self.data.get('pendingWorkers', {}).get(str(worker))
+
+    def set_pending(self, worker, value):
+        if worker == 0:
+            self.data['pending'] = value
+        elif value is None:
+            self.data.setdefault('pendingWorkers', {}).pop(str(worker), None)
+        else:
+            self.data.setdefault('pendingWorkers', {})[str(worker)] = value
+
     def accept(self, event, context=None, current_ids=None):
         if event.get('version') != 1 or event.get('boardSize') != self.data['boardSize']:
             raise ValueError('Match result protocol/board mismatch.')
@@ -66,17 +77,20 @@ class MatchRating:
         if len(self.data['sequences']) > 128:
             del self.data['sequences'][next(iter(self.data['sequences']))]
         kind = event['kind']
+        worker = event.get('worker', 0)
+        if not isinstance(worker, int) or not 0 <= worker < 16:
+            raise ValueError('Invalid match worker identity.')
         if kind == 'begin':
-            if self.data['pending'] is not None:
+            if self.pending_for(worker) is not None:
                 self.data['abandoned'] += 1  # SDK reset discarded an unfinished episode.
-            self.data['pending'] = dict(session=session, match=event['match'], context=context)
+            self.set_pending(worker, dict(session=session, match=event['match'], context=context))
             if context:
                 self.register(context['learner']); self.register(context['opponent'])
             return True
-        pending = self.data['pending']
+        pending = self.pending_for(worker)
         if pending is None or pending['session'] != session or pending['match'] != event['match']:
             raise ValueError('Terminal result has no matching opening event.')
-        self.data['pending'] = None
+        self.set_pending(worker, None)
         self.data['matches'] += 1
         if event['interrupted']:
             self.data['interruptions'] += 1
@@ -85,7 +99,7 @@ class MatchRating:
         if winner not in (0, 1):
             raise ValueError('Capture result has no valid winning seat.')
         saved = pending['context']
-        if saved is None or (current_ids is not None and
+        if saved is None or event.get('policyChanged', False) or (current_ids is not None and
                 (saved['learner'], saved['opponent']) != current_ids):
             self.data['unrated'] += 1
             return True
@@ -106,9 +120,10 @@ class MatchRating:
 
     def retain(self, identifiers):
         keep = set(identifiers)
-        if self.data['pending'] and self.data['pending']['context']:
-            context = self.data['pending']['context']
-            keep.update((context['learner'], context['opponent']))
+        for pending in [self.data['pending']] + list(self.data.get('pendingWorkers', {}).values()):
+            if pending and pending['context']:
+                context = pending['context']
+                keep.update((context['learner'], context['opponent']))
         self.data['ratings'] = {key: value for key, value in self.data['ratings'].items() if key in keep}
 
     def save(self, path):
