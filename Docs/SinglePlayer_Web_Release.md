@@ -72,7 +72,8 @@ Never put Cloudflare credentials, PBp credentials, or private training/human mat
 
 - Public Worker: `blocknations-web`, version `371e089b-2517-405c-bc80-50b85f0c2780`.
 - Preview: `https://blocknations-web-preview.johannes-gaebler.workers.dev`, version `f23f769f-24c5-4773-ba28-deba2203de57`.
-- Public HTTPS serves the exact reviewed HTML, release metadata, loader, framework, data, and Wasm bytes.
+- Raw files downloaded with curl over public HTTPS matched the reviewed HTML, release metadata, loader, framework, data, and Wasm bytes.
+- A public Chromium match completed Hard's turn and returned control at round two with player gold four. Network inspection showed no external model requests. Cloudflare attempted to load its Web Analytics beacon, which the release Content Security Policy blocked.
 - Export: 24.83 MiB total; largest asset 13.71 MiB. Export audit found zero credential matches, including checks inside decompressed payloads. Separate comparisons against five local Codex/Cloudflare authentication tokens also found zero matches.
 - Local and preview Chromium verification covered Hard on 11×11, recruiting a Rider, moving, panning the camera, completing the AI turn, and reloading/continuing a saved match. A 390×844 touch viewport with device pixel ratio two could select Hard and start a game.
 - The saved match reopened at round two with the same player gold after a full preview page reload.
