@@ -279,6 +279,86 @@ test("game logout is same-origin and does not alter shared identity or approvals
   assert.equal((await request("/release.json", { session: login.cookie })).status, 403);
 });
 
+test("account switching requires an explicit same-origin POST and shows the picker despite a warm Review session", async () => {
+  const person = await identity("switch-from", "approved"); const login = await signIn(person);
+  assert.match(await (await request("/access", { session: login.cookie })).text(), /Switch Google account/);
+  for (const sourceOrigin of [undefined, "https://evil.test", REVIEW]) {
+    assert.equal((await request("/auth/switch-account", { session: login.cookie, sourceOrigin, method: "POST" })).status, 403);
+  }
+  assert.equal((await request("/auth/switch-account", { session: login.cookie })).status, 403);
+  assert.equal((await request("/release.json", { session: login.cookie })).status, 200);
+  const switched = await request("/auth/switch-account", { session: login.cookie, method: "POST", sourceOrigin: GAME });
+  assert.equal(switched.status, 303);
+  assert.ok(switched.headers.getSetCookie().some(value => value.startsWith(SESSION_COOKIE) && value.includes("Max-Age=0")));
+  assert.equal((await request("/release.json", { session: login.cookie })).status, 403);
+  const attemptCookie = responseCookie(switched, ATTEMPT_COOKIE);
+  const ticket = await open(env.SESSION_SECRET, attemptCookie.split("=")[1], "attempt", REVIEW);
+  assert.equal(ticket.chooseAccount, true);
+  const before = reviewCalls.length;
+  const picker = await worker.fetch(new Request(switched.headers.get("Location"), {
+    headers: { Cookie: "__Secure-better-auth.session_token=" + person.sid },
+  }), env);
+  assert.equal(picker.status, 200);
+  assert.equal(reviewCalls.length, before); // Do not silently reuse the wrong account.
+  const html = await picker.text();
+  assert.match(html, /additionalParams:\{prompt:'select_account'\}/);
+  assert.match(html, /google_return=1/);
+  assert.match(html, /also changes the account signed in on the Review website/);
+  assert.ok(await env.REVIEW_DB.prepare("SELECT id FROM auth_session WHERE id=?").bind(person.sid).first());
+
+  const next = await identity("switch-to-pending");
+  const completed = new URL(switched.headers.get("Location"));
+  completed.searchParams.set("google_return", "1");
+  const handoff = await worker.fetch(new Request(completed, {
+    headers: { Cookie: "__Secure-better-auth.session_token=" + next.sid },
+  }), env);
+  assert.equal(handoff.status, 303);
+  const callback = new URL(handoff.headers.get("Location"));
+  const accepted = await request(callback.pathname + callback.search, { session: attemptCookie });
+  assert.equal(accepted.status, 303);
+  assert.equal(accepted.headers.get("Location"), "/access");
+  const nextCookie = responseCookie(accepted, SESSION_COOKIE);
+  assert.match(await (await request("/access", { session: nextCookie })).text(), /switch-to-pending@example.test/);
+  assert.equal((await request("/release.json", { session: nextCookie })).status, 403);
+  assert.equal((await env.REVIEW_DB.prepare("SELECT status FROM users WHERE auth_user_id=?").bind(next.uid).first()).status, "pending");
+  assert.equal((await request(callback.pathname + callback.search, { session: attemptCookie })).status, 400);
+});
+
+test("failed or unauthenticated account switching cannot restore the previous game session", async () => {
+  const person = await identity("switch-cancel", "approved"); const login = await signIn(person);
+  const start = await request("/auth/switch-account", { session: login.cookie, method: "POST", sourceOrigin: GAME });
+  const callback = new URL(start.headers.get("Location"));
+  callback.searchParams.set("google_return", "1");
+  callback.searchParams.set("login_error", "1");
+  const failed = await worker.fetch(new Request(callback, {
+    headers: { Cookie: "__Secure-better-auth.session_token=" + person.sid },
+  }), env);
+  assert.equal(failed.status, 200);
+  const html = await failed.text();
+  assert.match(html, /Sign-in wasn&#39;t completed|Sign-in wasn't completed/);
+  assert.doesNotMatch(html, /document.getElementById\('google'\).click\(\)/);
+  assert.doesNotMatch(html, /login_error=1&amp;login_error|login_error=1&login_error/);
+  assert.equal((await request("/release.json", { session: login.cookie })).status, 403);
+  callback.searchParams.delete("login_error");
+  assert.equal((await worker.fetch(new Request(callback), env)).status, 200);
+  const ordinary = await beginSignIn(person);
+  assert.ok(ordinary.token); // Normal warm sign-in still skips Google.
+});
+
+test("pending and disabled testers can switch accounts; the picker cannot bypass identity checks", async () => {
+  const person = await identity("switch-disabled", "approved"); const login = await signIn(person);
+  await storeCall(env, "decide", { uid: person.uid, status: "disabled", actor: "synthetic-owner" });
+  assert.match(await (await request("/access", { session: login.cookie })).text(), /Switch Google account/);
+  const start = await request("/auth/switch-account", { session: login.cookie, method: "POST", sourceOrigin: GAME });
+  const callback = new URL(start.headers.get("Location"));
+  callback.searchParams.set("google_return", "1");
+  const cold = await worker.fetch(new Request(callback), env);
+  assert.equal(cold.status, 200);
+  assert.match(await cold.text(), /Choose Google account/);
+  assert.equal((await request("/Build/game.wasm.unityweb")).status, 403);
+  assert.match(await (await request("/access")).text(), /Use a different Google account/);
+});
+
 test("database/auth outages and missing configuration never fall back to public assets", async () => {
   const before = assetsRead;
   assert.equal((await request("/Build/game.wasm.unityweb", { environment: { ...env, SESSION_SECRET: undefined } })).status, 503);

@@ -65,6 +65,16 @@ function withReviewCookies(response, sources) {
   return response;
 }
 
+async function beginLogin(env, chooseAccount = false) {
+  const ticket = await seal(env.SESSION_SECRET, {
+    kind: "attempt", aud: REVIEW_ORIGIN, game: env.GAME_ORIGIN,
+    nonce: randomToken(), chooseAccount, exp: Date.now() + ATTEMPT_LIFETIME,
+  });
+  const response = redirect(REVIEW_ORIGIN + authPath(env) + "?ticket=" + encodeURIComponent(ticket));
+  response.headers.append("Set-Cookie", setCookie(ATTEMPT_COOKIE, ticket, ATTEMPT_LIFETIME / 1000));
+  return response;
+}
+
 async function authorize(request, env) {
   const url = new URL(request.url);
   if (request.method !== "GET" || url.pathname !== authPath(env)) return json({ error: "Not found." }, 404);
@@ -72,6 +82,15 @@ async function authorize(request, env) {
   const attempt = await open(env.SESSION_SECRET, ticket, "attempt", REVIEW_ORIGIN);
   if (!attempt || !gameOrigins(env).includes(attempt.game) || typeof attempt.nonce !== "string") {
     return page("Sign-in expired", '<p>Please return to Block Nations and start sign-in again.</p>', { status: 400 });
+  }
+  const failed = url.searchParams.has("login_error");
+  // This marker only selects the page flow. Identity still comes exclusively
+  // from a verified Review session and the ordinary one-use handoff below.
+  const returnedFromGoogle = url.searchParams.get("google_return") === "1";
+  url.searchParams.delete("login_error");
+  if (attempt.chooseAccount && (!returnedFromGoogle || failed)) {
+    url.searchParams.set("google_return", "1");
+    return googlePage(url.href, failed, true);
   }
   // The browser sends its host-only Review cookie only on this hostname. The
   // service binding verifies it inside Review; its Google secrets stay there.
@@ -83,7 +102,7 @@ async function authorize(request, env) {
   if (!sessionResponse.ok) throw new Error("Review sign-in unavailable");
   const identity = await sessionResponse.json();
   if (!identity?.user?.emailVerified || !identity?.session?.id || !identity?.user?.id) {
-    return withReviewCookies(googlePage(url.href, url.searchParams.has("login_error")), [sessionResponse]);
+    return withReviewCookies(googlePage(url.href, failed, Boolean(attempt.chooseAccount)), [sessionResponse]);
   }
   // /api/me idempotently creates the normal pending Review profile for newcomers.
   const meResponse = await env.REVIEW.fetch(new Request(REVIEW_ORIGIN + "/api/me", { headers }));
@@ -142,6 +161,14 @@ async function handle(request, env) {
   if (url.origin === REVIEW_ORIGIN) return authorize(request, env);
   if (url.origin !== env.GAME_ORIGIN || !gameOrigins(env).includes(url.origin)) return json({ error: "Not found." }, 404);
   if (url.pathname === "/auth/callback") return callback(request, env);
+  if (url.pathname === "/auth/switch-account") {
+    if (request.method !== "POST" || request.headers.get("Origin") !== env.GAME_ORIGIN) return json({ error: "Request origin rejected." }, 403);
+    const session = await open(env.SESSION_SECRET, cookie(request, SESSION_COOKIE), "session", env.GAME_ORIGIN);
+    if (session) await storeCall(env, "logout", { id: session.sid });
+    const response = await beginLogin(env, true);
+    response.headers.append("Set-Cookie", setCookie(SESSION_COOKIE, "", 0));
+    return response;
+  }
   if (url.pathname === "/auth/logout") {
     if (request.method !== "POST" || request.headers.get("Origin") !== env.GAME_ORIGIN) return json({ error: "Request origin rejected." }, 403);
     const session = await open(env.SESSION_SECRET, cookie(request, SESSION_COOKIE), "session", env.GAME_ORIGIN);
@@ -160,13 +187,7 @@ async function handle(request, env) {
   }
   if (!["GET", "HEAD"].includes(request.method)) return json({ error: "Method not allowed." }, 405);
   if (url.pathname === "/auth/login") {
-    const ticket = await seal(env.SESSION_SECRET, {
-      kind: "attempt", aud: REVIEW_ORIGIN, game: env.GAME_ORIGIN,
-      nonce: randomToken(), exp: Date.now() + ATTEMPT_LIFETIME,
-    });
-    const response = redirect(REVIEW_ORIGIN + authPath(env) + "?ticket=" + encodeURIComponent(ticket));
-    response.headers.append("Set-Cookie", setCookie(ATTEMPT_COOKIE, ticket, ATTEMPT_LIFETIME / 1000));
-    return response;
+    return beginLogin(env);
   }
   const user = await gameProfile(request, env);
   if (url.pathname === "/access" || ((!user || user.status !== "approved") && ["/", "/index.html"].includes(url.pathname))) {

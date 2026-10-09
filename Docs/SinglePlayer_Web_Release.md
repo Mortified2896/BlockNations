@@ -89,6 +89,9 @@ The game session cookie is encrypted, `Secure`, `HttpOnly`, `SameSite=Lax` and h
 The Google credentials stay in Review. The game has no binding to the article database; it calls only the Review authentication/session APIs. Review session cookies stay in private server storage, outside game assets and browser responses.
 Sign-out from BlockNations revokes its server session and clears its cookies while leaving Review signed in. Review sign-out or expiration invalidates the linked game session on its next request.
 
+The browser game includes an **Account** link beneath the canvas. It opens `/access` in another tab so the player can manage sign-in without leaving the running game. Approved, pending and disabled testers have a **Switch Google account** button there; the signed-out page also offers **Use a different Google account**.
+Switching is an origin-checked POST that revokes the current game session and starts a fresh browser-bound sign-in attempt. It deliberately skips warm Review-session reuse on the first broker visit and sends `prompt=select_account` only for this explicit action. Ordinary sign-in keeps reusing valid sessions. A successful Google callback replaces the Review identity in this browser too; game and article approvals remain separate. Cancelling or failing the switch leaves the game signed out, with a manual retry.
+
 `Web/wrangler.access.jsonc` owns the private admission/session storage and has no public URL, preview URL or route.
 Deploy it before either game Worker. Install the **same** high-entropy `SESSION_SECRET` in production and preview through Wrangler's hidden-input secret workflow before publishing the gate; missing secrets fail closed.
 The initial secret is kept outside Git at `~/.config/blocknations/access.json`, directory mode 700 and file mode 600. Never print it or put it in the export.
