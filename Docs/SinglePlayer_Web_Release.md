@@ -147,3 +147,9 @@ The browser playtest includes the existing local AI opponents; the recently trai
 - Production version: `81ec433f-6dba-4d1e-a9b9-6a645273b003`; preview version: `cc56f8f5-9116-4282-9cb6-abe780d99056`. Both deployments uploaded no changed game assets.
 - All 17 access regressions passed. Desktop 1280×800 and mobile 390×844 captures were inspected; the live mobile sign-in page had no horizontal overflow and a 48-pixel primary button. The pending page was also inspected with a synthetic identity.
 - Anonymous preview and production loader requests remained denied with 403. Captures are under ignored `output/playwright/blocknations-brand-*.png`.
+
+## Phone background fill: 2026-10-09
+
+- The game HTML's browser theme color, page/body background and loading overlay now use `#314d79`, matching the main menu's `rgb(49, 77, 121)`. This replaces the lighter `#22658c` fill visible around the game on the phone.
+- Production version: `f752def9-425d-4b8f-959d-a61cc958caea`; preview version: `b47e2b5b-22c5-4f99-a4a5-2c62f1cb2568`. Only `index.html` changed in the published assets; every other preserved asset hash matched.
+- Signed-in browser checks verified the theme metadata and computed backgrounds on both targets. The source WebGL template has the same values for future builds. Physical iPhone browser-bar tint remains a device-side check after reload.
