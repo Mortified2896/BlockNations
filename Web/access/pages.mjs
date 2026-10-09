@@ -9,14 +9,19 @@ export function page(title, content, { status = 200, script = "", formOrigins = 
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="data:,"><title>${escape(title)} · Block Nations</title>
 <style nonce="${nonce}">
-*{box-sizing:border-box}body{margin:0;min-height:100svh;display:grid;place-items:center;padding:24px;background:#e8eee2;color:#192b24;font-family:system-ui,-apple-system,sans-serif}
-main{width:min(100%,440px);padding:38px 32px;background:#fffef8;border:1px solid #cad4c3;border-radius:18px;box-shadow:0 16px 60px #1a332418}
-.mark{display:flex;gap:5px;margin-bottom:24px}.mark span{width:20px;height:20px;background:#426848;border-radius:3px}.mark span:nth-child(2){background:#abc45b}.mark span:nth-child(3){background:#d7b965}
-.eyebrow{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#52634c;font-weight:650}h1{font-size:28px;letter-spacing:-.03em;margin:12px 0 18px;line-height:1.15}p{line-height:1.6;font-size:15px;overflow-wrap:anywhere}a{color:#315c3d;text-underline-offset:3px}
-.button,button{display:flex;justify-content:center;align-items:center;min-height:48px;width:100%;margin-top:24px;padding:12px 16px;background:#315c3d;color:white;border:0;border-radius:8px;font:600 15px system-ui;text-decoration:none;cursor:pointer}
-button:disabled{opacity:.65;cursor:wait}.secondary{background:#edf1e8;color:#315c3d;margin-top:12px}a:focus-visible,button:focus-visible{outline:3px solid #9da942;outline-offset:4px}.note{font-size:13px;color:#65705d;margin-top:24px}.tester{border-top:1px solid #cad4c3;padding-top:16px;margin-top:24px}#error{color:#9e321c}form{margin:0}@media(max-width:420px){main{padding:30px 24px}body{padding:18px}}
-</style></head><body><main><div class="mark" aria-hidden="true"><span></span><span></span><span></span></div>
+:root{color-scheme:light;--ink:#202020;--muted:#696969;--line:#e9e9e9;--paper:#fff;--sans:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;--serif:Georgia,"Times New Roman",serif;font-synthesis:none;text-rendering:optimizeLegibility}
+*{box-sizing:border-box}body{margin:0;min-height:100svh;display:flex;flex-direction:column;background:var(--paper);color:var(--ink);font-family:var(--sans)}
+.site-header,.site-footer{width:min(calc(100% - 80px),1120px);margin-inline:auto;display:flex;justify-content:space-between;align-items:center;gap:20px}
+.site-header{padding:24px 0;border-bottom:1px solid var(--line)}.wordmark{font-family:var(--serif);font-size:32px;font-weight:700;letter-spacing:-.09em;text-decoration:none;line-height:1}.site-name{font-size:13px;color:var(--muted)}
+main{flex:1;width:min(calc(100% - 80px),480px);margin-inline:auto;padding:80px 0}.eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:550}
+h1{font-family:var(--serif);font-size:42px;font-weight:500;letter-spacing:-.045em;margin:18px 0 24px;line-height:1.12;text-wrap:pretty}p{line-height:1.65;font-size:15px;overflow-wrap:anywhere;color:var(--muted)}a{color:var(--ink);text-underline-offset:4px}
+.button,button{display:flex;justify-content:center;align-items:center;min-height:48px;width:100%;margin-top:28px;padding:12px 16px;background:var(--ink);color:var(--paper);border:1px solid var(--ink);border-radius:2px;font-family:inherit;font-size:14px;font-weight:600;text-decoration:none;cursor:pointer}
+.button:hover,button:hover{background:#3a3a3a;border-color:#3a3a3a}button:disabled{opacity:.65;cursor:wait}.secondary{background:var(--paper);color:var(--ink);border-color:var(--line);margin-top:12px}.secondary:hover{background:#f6f6f6;border-color:#bdbdbd}
+a:focus-visible,button:focus-visible{outline:2px solid var(--ink);outline-offset:5px}.note{font-size:13px;color:var(--muted);margin-top:24px}.tester{border-top:1px solid var(--line);padding-top:16px;margin-top:28px}.tester strong{color:var(--ink)}#error{color:var(--ink);font-weight:600}#error:empty{display:none}form{margin:0}
+.site-footer{border-top:1px solid var(--line);padding:24px 0;font-size:12px;color:var(--muted)}@media(max-width:600px){.site-header,.site-footer{width:calc(100% - 44px)}.site-header{padding:20px 0}.wordmark{font-size:27px}.site-name{font-size:12px}main{width:calc(100% - 44px);padding:56px 0 64px}h1{font-size:36px}.site-footer{font-size:11px;flex-wrap:wrap;gap:10px}}
+</style></head><body><header class="site-header"><a class="wordmark" href="https://moneymattersmedia.com/" aria-label="Money Matters Media home">MMM.</a><span class="site-name">Block Nations</span></header><main>
 <div class="eyebrow">Block Nations · Private playtest</div><h1>${escape(title)}</h1>${content}</main>
+<footer class="site-footer"><span>Money Matters Media</span><span>Friends &amp; invited testers</span></footer>
 ${script ? `<script nonce="${nonce}">${script}</script>` : ""}</body></html>`;
   return new Response(html, {
     status,

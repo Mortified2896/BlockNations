@@ -140,3 +140,10 @@ The browser playtest includes the existing local AI opponents; the recently trai
 - A fresh browser session reached the existing Google sign-in flow. A complete new-person Google login was not performed; pending registration and game-only approval were verified with synthetic identities in the regression suite.
 - The sign-in page was visually checked at desktop 1280×800 and mobile 390×844. Physical phones and Safari remain separate acceptance work.
 - Deployment reused the exact previously published game assets from version `cb3f824c-0b63-4fa9-9b75-0805da24b62d`, with no updated static files to upload. The preserved export passed the credential audit. Staging still resolves to `91.98.79.206`, and Review authentication remains ready.
+
+## MMM branding follow-up: 2026-10-09
+
+- The shared sign-in, account, pending, unavailable and admin pages use MMM's minimal editorial style: white background, grayscale text, serif wordmark/headings, thin dividers and black primary buttons.
+- Production version: `81ec433f-6dba-4d1e-a9b9-6a645273b003`; preview version: `cc56f8f5-9116-4282-9cb6-abe780d99056`. Both deployments uploaded no changed game assets.
+- All 17 access regressions passed. Desktop 1280×800 and mobile 390×844 captures were inspected; the live mobile sign-in page had no horizontal overflow and a 48-pixel primary button. The pending page was also inspected with a synthetic identity.
+- Anonymous preview and production loader requests remained denied with 403. Captures are under ignored `output/playwright/blocknations-brand-*.png`.
