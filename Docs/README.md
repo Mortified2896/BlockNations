@@ -20,6 +20,7 @@ Start with the current state, then use the relevant implementation/setup referen
 | [HTTP PBp Transport Contract](HTTP_PBp_Transport_Contract.md) | Active relay endpoints, sequences, errors, persistence limits. |
 | [Local Server Setup](Local_Server_Setup.md) | Local authenticated Node relay and client configuration. |
 | [VPS Deployment](VPS_Deploy_MVP.md) | Supported Node entry point, deployment, platform credentials, hosting choices. |
+| [Single-player Web Release](SinglePlayer_Web_Release.md) | Isolated credential-free browser build, local AI, Cloudflare release targets and validation. |
 | [Unity Testing](Unity_Testing.md) | PlayMode/EditMode commands and graphics/licensing constraints. |
 | [Git Workflow](BlockNations_Git_Workflow.md) | Existing local Git identity, SSH, and completion workflow. |
 

@@ -75,3 +75,8 @@ Assets/ML-Agents/Timers.meta
 !Tools/Training/SimulationWorker/BlockNations.TrainingWorker.csproj
 /Tools/Training/SimulationWorker/bin/
 /Tools/Training/SimulationWorker/obj/
+Tools/WebRelease/__pycache__/
+Web/.wrangler/
+.wrangler/
+output/playwright/
+.playwright-cli/

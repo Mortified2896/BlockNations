@@ -1,0 +1,13 @@
+{
+  "name": "blocknations-web-release",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "preview": "wrangler dev --config wrangler.jsonc --local",
+    "deploy:preview": "python3 ../Tools/WebRelease/audit.py ../Build/WebRelease && wrangler deploy --config wrangler.jsonc",
+    "deploy:production": "python3 ../Tools/WebRelease/audit.py ../Build/WebRelease && wrangler deploy --config wrangler.production.jsonc"
+  },
+  "devDependencies": {
+    "wrangler": "4.149.0"
+  }
+}

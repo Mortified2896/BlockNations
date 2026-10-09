@@ -1,0 +1,8 @@
+{
+  "name": "blocknations-web-preview",
+  "account_id": "6635ddbbb1755e951c11e0898f447f75",
+  "compatibility_date": "2026-10-08",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": { "directory": "../Build/WebRelease", "not_found_handling": "404-page" }
+}

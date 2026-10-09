@@ -703,6 +703,9 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
     private static string GetConfiguredPbpApiKey()
     {
+#if BLOCKNATIONS_SINGLE_PLAYER_WEB
+        return string.Empty;
+#else
         string provisionedMacStandalonePath = string.Empty;
         string provisionedMacStandaloneExists = "false";
         string provisionedMacStandaloneEmpty = "unknown";
@@ -849,6 +852,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
             fromScopedPrefs,
             fromLegacyPrefs);
         return string.Empty;
+#endif
     }
 
     // Match the local project secret file to the configured PBp backend so live does not silently use staging auth.
@@ -961,10 +965,14 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
     private static string GetConfiguredBaseUrl()
     {
+#if BLOCKNATIONS_SINGLE_PLAYER_WEB
+        return null;
+#else
         PbpTransportSettings sharedSettings = LoadTransportSettings();
         return sharedSettings != null
             ? NormalizeBaseUrl(sharedSettings.playByPostBaseUrl)
             : null;
+#endif
     }
 
     private static string TryReadApiKeyAtAbsolutePath(

@@ -193,6 +193,11 @@ public class MainMenuController : MonoBehaviour
 
     IEnumerator Start()
     {
+        if (PublicWebBuild.IsSinglePlayer)
+        {
+            // This release never initializes multiplayer polling or notifications.
+            yield break;
+        }
         LocalPlayerProfileStore.GetOrCreateProfile();
         IosBadgePermissionAdapter.EnsureBadgeAuthorizationRequested();
         pendingCreateShareReadyGameId = PlayerPrefs.GetString(PendingCreateShareReadyGameIdKey, string.Empty);
@@ -640,6 +645,7 @@ public class MainMenuController : MonoBehaviour
 
     public void OpenMultiplayerScreen()
     {
+        if (PublicWebBuild.IsSinglePlayer) return;
         ApplyVisibleMenuPaneState(multiplayerVisible: true, resetRefreshWindow: true);
         MultiplayerScreenRequested?.Invoke();
         TryEmitPendingCreateSuccess();
@@ -696,6 +702,7 @@ public class MainMenuController : MonoBehaviour
 
     private void RefreshMultiplayerListInternal(bool bypassRemoteCooldown)
     {
+        if (PublicWebBuild.IsSinglePlayer) return;
         ResolveServerCheckSources();
         activePbpGames = SaveManifestService.GetActivePlayByPostGames();
         archivedPbpGames = SaveManifestService.GetArchivedPlayByPostGames();

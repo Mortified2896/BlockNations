@@ -426,6 +426,14 @@ public class MainMenuUITKView : MonoBehaviour
         RefreshMultiplayerBadge();
         RefreshMultiplayerRefreshCountdown();
 
+        if (PublicWebBuild.IsSinglePlayer)
+        {
+            SetVisible(multiplayerButton, false);
+            SetVisible(profileButton, false);
+            SetVisible(puzzleModeButton, false);
+            SetVisible(quitButton, false);
+        }
+
         SetVisible(mainPanel, true);
         SetVisible(multiplayerPanel, false);
         SetVisible(profilePanel, false);
@@ -3868,6 +3876,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private static bool IsDevBuild()
     {
+        if (PublicWebBuild.IsSinglePlayer) return false;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         return true;
 #else
