@@ -47,10 +47,15 @@ public partial class TurnManager
     public bool TryAdvanceExternalMatchTurn(int completedSeat)
     {
         if (!externallyDrivenMatch || !ExternalMatchReady || gameOver || !IsTurnOwnedBySeat(completedSeat)) return false;
+        var recordedState = HasSimulationCommandObservers ? new SceneSimulationAdapter(this).State : null;
+        var command = new BlockNations.Simulation.MatchCommand(BlockNations.Simulation.MatchActionKind.EndTurn, completedSeat);
+        if (recordedState != null) NotifySimulationCommandPreparing(recordedState, command);
         int nextSeat = BlockNations.Simulation.SimulationRules.NextSeat(completedSeat, RuntimeSeatCount);
         turnNumber = BlockNations.Simulation.SimulationRules.NextRound(turnNumber, nextSeat, ExternalFirstSeatIndex);
         SetCurrentTurnSeatIndexForRuntime(nextSeat, RuntimeSeatCount);
         BeginSeatTurn(currentTurnSeatIndex, playTurnStartSound: false);
+        if (recordedState != null) NotifySimulationCommandCompleted(new SceneSimulationAdapter(this).State, command,
+            new BlockNations.Simulation.MatchTransition(true));
         return true;
     }
 

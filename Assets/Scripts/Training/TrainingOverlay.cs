@@ -10,6 +10,15 @@ public sealed class TrainingOverlay
     private readonly int[] displayedGold = new int[2];
     private double nextGoldRefresh;
     private bool showRunFolder;
+    private double nextHumanLearningRefresh;
+    private string humanLearningDirectory;
+    private HumanLearningStatus humanLearning;
+    [Serializable] private sealed class HumanLearningStatus
+    {
+        public int version, boardSize, savedGames, winningGames, updates;
+        public long usedExamples;
+        public string runId, rulesVersion, error;
+    }
     private readonly TrainingReplayView replayView = new TrainingReplayView();
     public static float Scale => Mathf.Clamp(Screen.height / 900f, 0.8f, 2.5f);
     public static float ReservedWidth => Mathf.Min(370f * Scale, Screen.width * 0.4f);
@@ -38,6 +47,7 @@ public sealed class TrainingOverlay
             scroll = GUILayout.BeginScrollView(scroll, false, false);
             if (arena is ITrainingSpectator spectator) DrawSpectatorControls(spectator);
             if (arena.IsTraining) DrawVision();
+            if (arena.IsTraining) DrawHumanLearning(arena);
             if (arena.Replay.Inspecting)
             {
                 DrawInspection(arena);
@@ -53,7 +63,10 @@ public sealed class TrainingOverlay
             {
                 GUILayout.Label("You are Blue and move first. Select your city to recruit, then select units to move or attack.", small);
                 if (!string.IsNullOrEmpty(arena.HumanPolicyVersion)) GUILayout.Label("Frozen version: " + arena.HumanPolicyVersion, small);
-                GUILayout.Label(arena.CanEndHumanTurn ? "Your turn" : arena.CanStartNewMatch ? "Match finished" : "AI's turn", label);
+                if (arena is TrainingArena human && !string.IsNullOrEmpty(human.HumanRecordingMessage))
+                    GUILayout.Label(human.HumanRecordingMessage, small);
+                GUILayout.Label(arena.CanStartNewMatch ? "Match finished" : arena.Paused ? "Match paused" :
+                    arena.CanEndHumanTurn ? "Your turn" : "AI's turn", label);
                 if (arena.CanStartNewMatch) GUILayout.Label(arena.LastAction, label);
                 if (arena.CanReturnToTraining && GUILayout.Button("Back to training", button)) arena.ReturnToTraining();
             }
@@ -137,6 +150,37 @@ public sealed class TrainingOverlay
             GUILayout.EndArea();
         }
         finally { GUI.matrix = matrix; GUI.color = color; GUI.enabled = true; }
+    }
+
+    private void DrawHumanLearning(ITrainingView arena)
+    {
+        if (Time.realtimeSinceStartupAsDouble >= nextHumanLearningRefresh || humanLearningDirectory != arena.TrainingRunDirectory)
+        {
+            nextHumanLearningRefresh = Time.realtimeSinceStartupAsDouble + 5;
+            humanLearningDirectory = arena.TrainingRunDirectory;
+            humanLearning = null;
+            if (!string.IsNullOrEmpty(humanLearningDirectory))
+            {
+                string path = System.IO.Path.Combine(humanLearningDirectory, "human-learning-status.json");
+                try
+                {
+                    if (System.IO.File.Exists(path))
+                    {
+                        var status = JsonUtility.FromJson<HumanLearningStatus>(System.IO.File.ReadAllText(path));
+                        if (status != null && status.version == 1 && status.boardSize == arena.BoardSize &&
+                            status.runId == new System.IO.DirectoryInfo(humanLearningDirectory).Name &&
+                            status.rulesVersion == BlockNations.Simulation.SimulationRules.Version) humanLearning = status;
+                    }
+                }
+                catch (System.IO.IOException) { }
+                catch (ArgumentException) { }
+            }
+        }
+        if (humanLearning == null) return;
+        GUILayout.Label($"Human games: {humanLearning.savedGames} recorded · {humanLearning.winningGames} winning examples", small);
+        GUILayout.Label($"Human learning: {humanLearning.updates:N0} updates · {humanLearning.usedExamples:N0} examples used", small);
+        if (!string.IsNullOrEmpty(humanLearning.error)) GUILayout.Label(humanLearning.error, small);
+        GUILayout.Space(8);
     }
 
     private void DrawInspection(ITrainingView arena)

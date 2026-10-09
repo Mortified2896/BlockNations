@@ -45,14 +45,19 @@ public sealed class TrainingReplayView
         // World health canvases sort above every sprite; keep the same ordering.
         foreach (var piece in frame.pieces)
         {
-            if (!piece.hasHealthPresentation || !frame.Visible(piece.x, piece.y, vision)) continue;
-            var presentation = piece.healthPresentation;
-            Rect badge = Project(presentation.bounds, center, pixelsPerWorldUnit);
-            Fill(badge, presentation.badgeColor);
-            health.fontSize = Mathf.Max(1, Mathf.RoundToInt(presentation.fontWorldSize * pixelsPerWorldUnit));
-            health.normal.textColor = GuiColor(presentation.textColor);
-            GUI.Label(badge, presentation.text, health);
+            if (!frame.Visible(piece.x, piece.y, vision)) continue;
+            if (piece.hasHealthPresentation) DrawBadge(piece.healthPresentation, center, pixelsPerWorldUnit);
+            if (piece.hasSurprisePresentation) DrawBadge(piece.surprisePresentation, center, pixelsPerWorldUnit);
         }
+    }
+
+    private void DrawBadge(UnitHealthLabel.Presentation presentation, Vector2 center, float pixelsPerWorldUnit)
+    {
+        Rect rect = Project(presentation.bounds, center, pixelsPerWorldUnit);
+        Fill(rect, presentation.badgeColor);
+        health.fontSize = Mathf.Max(1, Mathf.RoundToInt(presentation.fontWorldSize * pixelsPerWorldUnit));
+        health.normal.textColor = GuiColor(presentation.textColor);
+        GUI.Label(rect, presentation.text, health);
     }
 
     private static Rect Project(Rect world, Vector2 center, float pixelsPerWorldUnit) => new Rect(

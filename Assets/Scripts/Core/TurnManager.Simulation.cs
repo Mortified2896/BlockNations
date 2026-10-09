@@ -3,6 +3,15 @@ using System.Collections.Generic;
 
 public partial class TurnManager
 {
+    // Optional observers receive command boundaries. They never choose or modify
+    // actions; development recordings subscribe explicitly to this manager.
+    public event System.Action<MatchState, MatchCommand> SimulationCommandPreparing;
+    public event System.Action<MatchState, MatchCommand, MatchTransition> SimulationCommandCompleted;
+    internal bool HasSimulationCommandObservers => SimulationCommandPreparing != null || SimulationCommandCompleted != null;
+    internal void NotifySimulationCommandPreparing(MatchState state, MatchCommand command) => SimulationCommandPreparing?.Invoke(state, command);
+    internal void NotifySimulationCommandCompleted(MatchState state, MatchCommand command, MatchTransition transition) =>
+        SimulationCommandCompleted?.Invoke(state, command, transition);
+
     // Legacy opponents keep their candidate-selection policies; execution is shared.
     private bool TryApplyLegacyAttack(Unit unit, Unit target, HashSet<TileVisibility> visible)
     {

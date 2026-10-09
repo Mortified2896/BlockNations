@@ -16,6 +16,17 @@ public class Unit : MonoBehaviour
     public bool hasMovedThisTurn => UsesCommittedMoveActionThisTurn() ? movesUsedThisTurn > 0 : movesUsedThisTurn >= maxMovesPerTurn;
     public int maxAttacksPerTurn = 1;
     [HideInInspector] public int attacksUsedThisTurn = 0;
+    // Presentation status, separate from the action budget and gameplay save format.
+    public int SurprisedRound { get; private set; } = -1;
+    public bool IsSurprised { get; private set; }
+    public void SetSurprisedRound(int round, int currentRound)
+    {
+        SurprisedRound = round;
+        IsSurprised = round >= 1 && round == currentRound;
+        UnitSurpriseLabel label = GetComponent<UnitSurpriseLabel>();
+        if (label == null && round >= 1) label = gameObject.AddComponent<UnitSurpriseLabel>();
+        if (label != null) label.Refresh(this);
+    }
 
     public bool CanMoveThisTurn()
     {
@@ -238,6 +249,9 @@ public class Unit : MonoBehaviour
 
     public void RefreshHealthPresentation()
     {
+        UnitSurpriseLabel surprise = GetComponent<UnitSurpriseLabel>();
+        if (surprise == null) surprise = gameObject.AddComponent<UnitSurpriseLabel>();
+        surprise.Refresh(this);
         if (healthLabel == null)
         {
             healthLabel = GetComponent<UnitHealthLabel>();

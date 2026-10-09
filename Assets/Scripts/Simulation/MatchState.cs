@@ -12,11 +12,14 @@ namespace BlockNations.Simulation
         public int Health { get; internal set; }
         public int MovesUsed { get; internal set; }
         public int AttacksUsed { get; internal set; }
+        public int SurprisedRound { get; internal set; }
+        public bool IsSurprised(int round) => SurprisedRound == round;
         public int RemainingMoves => SimulationRules.RemainingMoves(Definition.UsesCommittedMoveAction, Definition.MaxMovesPerTurn, MovesUsed,
             Definition.AttackEndsMovement, AttacksUsed);
         public bool CanAttack => SimulationRules.CanAttack(Definition.CanAttackAfterMoving, Definition.MaxAttacksPerTurn, AttacksUsed, MovesUsed);
 
-        public SimulationUnit(int id, int seat, int position, UnitDefinition definition, int health = -1, int movesUsed = 0, int attacksUsed = 0)
+        public SimulationUnit(int id, int seat, int position, UnitDefinition definition, int health = -1, int movesUsed = 0, int attacksUsed = 0,
+            int surprisedRound = -1)
         {
             if (id == 0) throw new ArgumentOutOfRangeException(nameof(id));
             Id = id; Seat = seat; Position = position;
@@ -24,8 +27,9 @@ namespace BlockNations.Simulation
             Health = health < 0 ? definition.MaxHealthUnits : Math.Min(definition.MaxHealthUnits, health);
             MovesUsed = SimulationRules.Consume(movesUsed, definition.MaxMovesPerTurn, 0);
             AttacksUsed = SimulationRules.Consume(attacksUsed, definition.MaxAttacksPerTurn, 0);
+            SurprisedRound = surprisedRound;
         }
-        internal SimulationUnit Copy() => new SimulationUnit(Id, Seat, Position, Definition, Health, MovesUsed, AttacksUsed);
+        internal SimulationUnit Copy() => new SimulationUnit(Id, Seat, Position, Definition, Health, MovesUsed, AttacksUsed, SurprisedRound);
     }
 
     public sealed class SimulationCity

@@ -722,6 +722,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
 
         if (menuButton != null)
         {
+            menuButton.text = gameMenuActions != null ? gameMenuActions.MenuLabel : "Menu";
             menuButton.SetEnabled(showDefaultBottom && gameMenuActions != null);
         }
 

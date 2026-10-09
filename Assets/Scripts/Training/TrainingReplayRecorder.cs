@@ -26,6 +26,9 @@ public static class TrainingReplayRecorder
             piece.health = unit.currentHealthUnits; piece.maxHealth = unit.maxHealthUnits;
             UnitHealthLabel label = unit.GetComponent<UnitHealthLabel>();
             if (label != null) piece.hasHealthPresentation = label.TryGetPresentation(out piece.healthPresentation);
+            UnitSurpriseLabel surprise = unit.GetComponent<UnitSurpriseLabel>();
+            if (surprise != null && unit.IsSurprised)
+            { piece.hasSurprisePresentation = true; piece.surprisePresentation = surprise.Presentation(); }
             bool active = !manager.gameOver && unit.ownerSeatIndex == manager.currentTurnSeatIndex;
             bool hasAttackTarget = false;
             if (active && !unit.CanMoveThisTurn() && unit.CanAttackThisTurn())

@@ -49,6 +49,40 @@ public sealed class TrainingHumanPlaytestTests
     [Serializable] private sealed class Request { public string requestId; }
 
     [Test]
+    public void PlaytestMenuInvokesItsExplicitExitWithoutLoadingMainMenu()
+    {
+        var root = new GameObject("Playtest exit"); root.SetActive(false);
+        try
+        {
+            var menu = root.AddComponent<GameMenuActions>();
+            TrainingSceneBuilder.Set(menu, "useAlternateExit", true);
+            menu.mainMenuSceneName = "Missing scene must not be loaded";
+            int exited = 0; menu.AlternateExit.AddListener(() => exited++);
+            menu.QuitToMainMenu();
+            Assert.That(exited, Is.EqualTo(1));
+            Assert.That(menu.MenuLabel, Is.EqualTo("Back to training"));
+            LogAssert.NoUnexpectedReceived();
+        }
+        finally { UnityEngine.Object.DestroyImmediate(root); }
+    }
+
+    [Test]
+    public void AuthoredTrainingMenuExitTargetsItsArenaAndProductMenuIsPreserved()
+    {
+        try
+        {
+            var arena = TrainingSceneBuilder.Prepare("", 42, false, false, human: true);
+            var menu = UnityEngine.Object.FindFirstObjectByType<GameMenuActions>();
+            Assert.That(menu.AlternateExit.GetPersistentEventCount(), Is.EqualTo(1));
+            Assert.That(menu.AlternateExit.GetPersistentTarget(0), Is.SameAs(arena));
+            Assert.That(menu.AlternateExit.GetPersistentMethodName(0), Is.EqualTo(nameof(TrainingArena.ReturnToTraining)));
+            EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Single);
+            Assert.That(UnityEngine.Object.FindFirstObjectByType<GameMenuActions>().MenuLabel, Is.EqualTo("Menu"));
+        }
+        finally { EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single); }
+    }
+
+    [Test]
     public void SupervisorOpenedPlaytestIsDetectedWithoutPausingTraining()
     {
         string directory = Path.Combine(Path.GetTempPath(), "bn-human-restore-" + Guid.NewGuid().ToString("N"));
@@ -171,9 +205,62 @@ public sealed class TrainingHumanPlaytestTests
         presentation.SetViewport(new Rect(TrainingOverlay.ReservedWidth / Screen.width, 0, 1 - TrainingOverlay.ReservedWidth / Screen.width, 1));
         for (int frame = 0; frame < 4; frame++) yield return null;
         string screenshot = TakeScreenshotMenu.RequestScreenshot("human-playtest-hud-fixed");
-        for (int frame = 0; frame < 120 && !File.Exists(screenshot); frame++) yield return null;
+        float deadline = Time.realtimeSinceStartup + 5;
+        while (!File.Exists(screenshot) && Time.realtimeSinceStartup < deadline) yield return null;
         Assert.That(File.Exists(screenshot), Is.True);
         TestContext.WriteLine("Layout screenshot: " + screenshot);
+        yield return new ExitPlayMode();
+    }
+
+    [UnityTest]
+    public IEnumerator HumanSurpriseBadgeAndReturnButtonAreRenderedInTheGameView()
+    {
+        var configured = TrainingSceneBuilder.Prepare("", 42, false, false, human: true);
+        TrainingSceneBuilder.Set(configured, "boardSize", 7);
+        TrainingSceneBuilder.ShowBoard();
+        yield return new EnterPlayMode();
+        var arena = UnityEngine.Object.FindFirstObjectByType<TrainingArena>();
+        arena.Paused = true;
+        for (int i = 0; i < 12; i++) yield return null;
+        var manager = UnityEngine.Object.FindFirstObjectByType<TurnManager>();
+        var grid = manager.gridManager;
+        grid.TryGetTile(1, 2, out TileVisibility origin); grid.TryGetTile(3, 2, out TileVisibility hidden);
+        Unit own = manager.InstantiateConfiguredUnit(UnitRegistry.RiderTypeId, manager.GetUnitPrefabForType(UnitRegistry.RiderTypeId),
+            origin.transform.position, 0, null, true).GetComponent<Unit>();
+        manager.InstantiateConfiguredUnit(UnitRegistry.WarriorTypeId, manager.GetUnitPrefabForType(UnitRegistry.WarriorTypeId),
+            hidden.transform.position, 1, null, true);
+        manager.RecalculatePlayerVisibility();
+        var input = UnityEngine.Object.FindFirstObjectByType<UnitSelectionManager>();
+        input.SelectUnit(own); input.TryMoveOrAttackAtPosition(hidden.transform.position);
+        manager.RecalculatePlayerVisibility();
+        for (int i = 0; i < 5; i++) yield return null;
+        Assert.That(own.IsSurprised, Is.True);
+        Assert.That(own.transform.Find("SurprisedLabelCanvas").gameObject.activeInHierarchy, Is.True);
+        // Use the fully wired human scene for the scene/direct presentation check.
+        var state = new SceneSimulationAdapter(manager).State;
+        var live = TrainingReplayRecorder.Capture(manager, "Hidden enemy");
+        var projected = new SimulationReplayProjector(manager, state).Capture(state, "Hidden enemy");
+        var actualPiece = System.Linq.Enumerable.Single(live.pieces, piece => !piece.city && piece.seat == 0);
+        var cachedPiece = System.Linq.Enumerable.Single(projected.pieces, piece => !piece.city && piece.seat == 0);
+        Assert.That(actualPiece.hasSurprisePresentation && cachedPiece.hasSurprisePresentation, Is.True);
+        Rect actualBounds = actualPiece.surprisePresentation.bounds, cachedBounds = cachedPiece.surprisePresentation.bounds;
+        Assert.That(cachedBounds.x, Is.EqualTo(actualBounds.x).Within(.00001f));
+        Assert.That(cachedBounds.y, Is.EqualTo(actualBounds.y).Within(.00001f));
+        Assert.That(cachedBounds.width, Is.EqualTo(actualBounds.width).Within(.00001f));
+        Assert.That(cachedBounds.height, Is.EqualTo(actualBounds.height).Within(.00001f));
+        input.ClearSelection();
+        for (int i = 0; i < 5; i++) yield return null;
+        string screenshot = TakeScreenshotMenu.RequestScreenshot("human-surprised-and-return");
+        float deadline = Time.realtimeSinceStartup + 5;
+        while (!File.Exists(screenshot) && Time.realtimeSinceStartup < deadline) yield return null;
+        Assert.That(File.Exists(screenshot), Is.True);
+        TestContext.WriteLine("Surprise/return screenshot: " + screenshot);
+        own.SetFogVisibility(false, false);
+        Assert.That(own.transform.Find("SurprisedLabelCanvas").gameObject.activeSelf, Is.False);
+        manager.TryAdvanceExternalMatchTurn(0);
+        Assert.That(own.IsSurprised, Is.True);
+        manager.TryAdvanceExternalMatchTurn(1);
+        Assert.That(own.IsSurprised, Is.False);
         yield return new ExitPlayMode();
     }
 }

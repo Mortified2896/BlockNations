@@ -10,6 +10,7 @@ namespace BlockNations.Training
     [Serializable] public sealed class TraceUnit
     {
         public int id, seat, position, health, movesUsed, attacksUsed;
+        public int surprisedRound = -1;
         public string type;
     }
     [Serializable] public sealed class TrainingTraceState
@@ -31,7 +32,8 @@ namespace BlockNations.Training
                 tiles = (bool[])state.Tiles.Clone(), description = description,
                 cities = state.Cities.Select(c => new TraceCity { id = c.Id, seat = c.Seat, position = c.Position, recruited = c.Recruited }).ToArray(),
                 units = state.Units.Select(u => new TraceUnit { id = u.Id, seat = u.Seat, position = u.Position,
-                    type = u.Definition.TypeId, health = u.Health, movesUsed = u.MovesUsed, attacksUsed = u.AttacksUsed }).ToArray()
+                    type = u.Definition.TypeId, health = u.Health, movesUsed = u.MovesUsed, attacksUsed = u.AttacksUsed,
+                    surprisedRound = u.SurprisedRound }).ToArray()
             };
 
         public MatchState Restore(IEnumerable<UnitDefinition> roster)
@@ -45,7 +47,7 @@ namespace BlockNations.Training
             foreach (TraceUnit unit in units)
                 state.AddUnit(new SimulationUnit(unit.id, unit.seat, unit.position,
                     state.RecruitType(unit.type) ?? throw new ArgumentException("Unknown replay unit: " + unit.type),
-                    unit.health, unit.movesUsed, unit.attacksUsed));
+                    unit.health, unit.movesUsed, unit.attacksUsed, unit.surprisedRound));
             state.RestoreOutcome(gameOver || terminal, winner);
             return state;
         }

@@ -49,6 +49,9 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
     private System.Random random;
     private bool ready, needsReset, ending;
     private bool humanReturnRequested;
+    private TrainingHumanGameRecorder humanRecorder;
+    public string HumanRecordingMessage => humanRecorder == null ? "" : humanRecorder.Failure ??
+        (humanRecorder.SavedPath != null ? "Human game recorded." : "Recording your game. Completed wins help train future versions.");
     private bool previousBackground, previousAutomaticStepping;
     private bool previousCommunicatorEnabled, registeredTrainerFactory, trainerStopping;
     private ICommunicator trainerCommunicator;
@@ -107,10 +110,15 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
     public void PublishStatus() => WriteStatusIfDue(force: true);
     public void ReturnToTraining()
     {
-        if (!CanReturnToTraining) return;
+        if (!CanReturnToTraining && !IsHumanPlaytest) return;
         humanReturnRequested = true;
+        humanRecorder?.Dispose();
         PublishStatus();
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
         Application.Quit();
+#endif
     }
     public int NextRandom(int exclusiveMaximum) => random.Next(exclusiveMaximum);
 
@@ -342,6 +350,7 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
     {
         ending = true;
         int winner = simulation != null ? simulation.WinnerSeat : turnManager.ExternalWinnerSeatIndex;
+        humanRecorder?.Complete(interrupted ? -1 : winner);
         if (!interrupted && (winner < 0 || winner > 1)) { Fail("Terminal match has no capture winner."); return; }
         if (matchJournal != null)
         {
@@ -407,6 +416,14 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
                     publicCities.Add(new AICityState { Seat = city.ownerSeatIndex, X = city.x, Y = city.y });
         observationSource.SetPublicStartingCities(publicCities.ToArray());
         simulationObservations.SetPublicStartingCities(publicCities.ToArray());
+        if (IsHumanPlaytest && CanReturnToTraining && !string.IsNullOrEmpty(TrainingRunDirectory))
+        {
+            humanRecorder?.Dispose();
+            // The supervisor's temporary inference folder is replaced per playtest.
+            // Keep accepted human games in the owning run's shared-budget directory.
+            string run = Directory.GetParent(TrainingRunDirectory).FullName;
+            humanRecorder = new TrainingHumanGameRecorder(turnManager, Path.Combine(run, "human-games"), humanSeatIndex, HumanPolicyVersion);
+        }
         if (IsTraining) Replay.Begin(Games + 1, boardSize, ActingSeat,
             CaptureFrame((ActingSeat == 0 ? "Blue" : "Red") + " moves first"));
         startingDistance = publicCities.Count == 2 ? Math.Max(Math.Abs(publicCities[0].X - publicCities[1].X),
@@ -562,6 +579,7 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
 
     private void OnDestroy()
     {
+        humanRecorder?.Dispose();
         if (viewerOnly) return;
         if (boardCamera != null && cameraPresentationInitialized)
         {

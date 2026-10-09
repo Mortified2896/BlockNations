@@ -38,7 +38,7 @@ public sealed class SceneSimulationAdapter
                 !grid.TryGetTileAtWorldPosition(unit.transform.position, out TileVisibility tile)) continue;
             Units.Add(unit.GetInstanceID(), unit);
             State.AddUnit(new SimulationUnit(unit.GetInstanceID(), unit.ownerSeatIndex, State.Position(tile.gridX, tile.gridY),
-                DefinitionForUnit(unit), unit.currentHealthUnits, unit.movesUsedThisTurn, unit.attacksUsedThisTurn));
+                DefinitionForUnit(unit), unit.currentHealthUnits, unit.movesUsedThisTurn, unit.attacksUsedThisTurn, unit.SurprisedRound));
         }
     }
 
@@ -93,8 +93,9 @@ public sealed class SceneSimulationAdapter
         GameObject recruitPrefab = action.ActionType == LegalActionType.CityRecruit ? manager.GetUnitPrefabForType(action.RecruitUnitTypeId) : null;
         if (action.ActionType == LegalActionType.CityRecruit && (recruitPrefab == null || recruitPrefab.GetComponent<Unit>() == null)) return false;
         MatchCommand command = Command(action);
+        manager.NotifySimulationCommandPreparing(State, command);
         MatchTransition transition = MatchEngine.Apply(State, command);
-        if (!transition.Applied) return false;
+        if (!transition.Applied) { manager.NotifySimulationCommandCompleted(State, command, transition); return false; }
         if (transition.RecruitedUnitId != 0)
         {
             SimulationUnit recruited = State.GetUnit(transition.RecruitedUnitId);
@@ -108,6 +109,7 @@ public sealed class SceneSimulationAdapter
         if (action.ActionType == LegalActionType.UnitAttack && SoundManager.Instance != null && !manager.ShouldSuppressAIVsAIAudio())
             SoundManager.Instance.PlayAttack();
         if (transition.MovedSteps > 0 && SoundManager.Instance != null && !manager.ShouldSuppressAIVsAIAudio()) SoundManager.Instance.PlayMove();
+        manager.NotifySimulationCommandCompleted(State, command, transition);
         if (transition.CapturedCityId != 0) manager.OnCityCaptured(command.Seat, Cities[transition.CapturedCityId]);
         return true;
     }
@@ -132,6 +134,7 @@ public sealed class SceneSimulationAdapter
             if (unit == null) { live.SetCurrentHealthUnits(0); live.Die(); continue; }
             if (live.currentHealthUnits != unit.Health) live.SetCurrentHealthUnits(unit.Health);
             live.movesUsedThisTurn = unit.MovesUsed; live.attacksUsedThisTurn = unit.AttacksUsed;
+            live.SetSurprisedRound(unit.SurprisedRound, State.Round);
             manager.gridManager.TryGetTile(unit.Position % State.Width, unit.Position / State.Width, out TileVisibility tile);
             Vector3 position = tile.transform.position; position.z = live.transform.position.z; live.transform.position = position;
             live.currentCity = null;

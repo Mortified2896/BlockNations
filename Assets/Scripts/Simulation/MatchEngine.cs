@@ -104,7 +104,11 @@ namespace BlockNations.Simulation
                 }
                 if (moved > 0) state.Move(unit, legal.Path[moved - 1]);
                 unit.MovesUsed = SimulationRules.Consume(unit.MovesUsed, unit.Definition.MaxMovesPerTurn, consumed);
-                if (hiddenBlocker) unit.AttacksUsed = unit.Definition.MaxAttacksPerTurn;
+                if (hiddenBlocker)
+                {
+                    unit.AttacksUsed = unit.Definition.MaxAttacksPerTurn;
+                    unit.SurprisedRound = state.Round;
+                }
                 int captured = CaptureAtUnit(state, unit);
                 return new MatchTransition(consumed > 0, moved, hiddenBlocker, capturedCityId: captured);
             }
@@ -149,7 +153,10 @@ namespace BlockNations.Simulation
             foreach (SimulationCity city in state.Cities)
                 if (city.Seat == seat) city.Recruited = false;
             foreach (SimulationUnit unit in state.Units)
+            {
                 if (unit.Seat == seat) { unit.MovesUsed = 0; unit.AttacksUsed = 0; }
+                if (unit.SurprisedRound != state.Round) unit.SurprisedRound = -1;
+            }
         }
 
         public static void CollectIncome(MatchState state, int seat)

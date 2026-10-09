@@ -191,6 +191,91 @@ public sealed class SceneSimulationParityTests
         yield return new ExitPlayMode();
     }
 
+    [UnityTest]
+    public IEnumerator HumanRiderAttacksEndMovementWithAndWithoutKills()
+    {
+        EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        yield return new EnterPlayMode();
+        CreateArena(7);
+        var input = new GameObject("Rider human input").AddComponent<UnitSelectionManager>();
+        input.enabled = false; input.turnManager = manager;
+        foreach (bool movedFirst in new[] { false, true })
+        foreach (bool kill in new[] { false, true })
+        {
+            manager.ResetExternalMatch(2, 0);
+            TrainingSceneBuilder.Set(manager, "externalHumanSeatIndex", 0);
+            grid.TryGetTile(2, 2, out TileVisibility origin);
+            grid.TryGetTile(3, 2, out TileVisibility moved);
+            grid.TryGetTile(movedFirst ? 4 : 3, 2, out TileVisibility defender);
+            grid.TryGetTile(4, 3, out TileVisibility extra);
+            Unit own = manager.InstantiateConfiguredUnit(UnitRegistry.RiderTypeId, manager.GetUnitPrefabForType(UnitRegistry.RiderTypeId),
+                origin.transform.position, 0, null, true).GetComponent<Unit>();
+            Unit target = manager.InstantiateConfiguredUnit(UnitRegistry.WarriorTypeId, manager.GetUnitPrefabForType(UnitRegistry.WarriorTypeId),
+                defender.transform.position, 1, null, true).GetComponent<Unit>();
+            target.SetCurrentHealthUnits(kill ? 5 : 10);
+            manager.RecalculatePlayerVisibility(); input.SelectUnit(own);
+            if (movedFirst) input.TryMoveOrAttackAtPosition(moved.transform.position);
+            Assert.That(own.CanAttackThisTurn(), Is.True);
+            input.TryMoveOrAttackAtPosition(defender.transform.position);
+            Assert.That(target.currentHealthUnits, Is.EqualTo(kill ? 0 : 5));
+            Vector3 stopped = own.transform.position;
+            Assert.That(own.CanMoveThisTurn(), Is.False);
+            input.TryMoveOrAttackAtPosition(extra.transform.position);
+            Assert.That(own.transform.position, Is.EqualTo(stopped));
+            yield return null;
+        }
+        yield return new ExitPlayMode();
+    }
+
+    [UnityTest]
+    public IEnumerator CompletedHumanWinIsRecordedThroughActualInputAndTurnHooks()
+    {
+        EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        yield return new EnterPlayMode();
+        CreateArena(5); manager.ResetExternalMatch(2, 0);
+        TrainingSceneBuilder.Set(manager, "externalHumanSeatIndex", 0);
+        string folder = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "bn-human-record-" + Guid.NewGuid().ToString("N"));
+        var recorder = new TrainingHumanGameRecorder(manager, folder, 0, "frozen-test");
+        City ownCity = Object.FindObjectsByType<City>().Single(city => city.ownerSeatIndex == 0);
+        City targetCity = Object.FindObjectsByType<City>().Single(city => city.ownerSeatIndex == 1);
+        var adapter = new SceneSimulationAdapter(manager);
+        var recruit = MatchEngine.LegalActions(adapter.State, 0).Single(a => a.Command.Kind == MatchActionKind.Recruit &&
+            a.Command.RecruitType == UnitRegistry.RiderTypeId);
+        Assert.That(adapter.TryApply(adapter.SceneAction(recruit)), Is.True);
+        Unit rider = Object.FindObjectsByType<Unit>().Single(unit => unit.ownerSeatIndex == 0);
+        var input = new GameObject("Demonstration human input").AddComponent<UnitSelectionManager>();
+        input.enabled = false; input.turnManager = manager;
+        manager.RecalculatePlayerVisibility(); input.SelectUnit(rider);
+        input.TryMoveOrAttackAtPosition(targetCity.transform.position);
+        Assert.That(manager.gameOver, Is.True);
+        Assert.That(recorder.SavedPath, Is.Not.Null);
+        var game = JsonUtility.FromJson<TrainingHumanGameRecorder.Game>(System.IO.File.ReadAllText(recorder.SavedPath));
+        Assert.That(game.completed, Is.True); Assert.That(game.winnerSeat, Is.EqualTo(0));
+        Assert.That(game.samples.Count, Is.EqualTo(4), "Recruit and movement each have source and target choices.");
+        foreach (var example in game.samples)
+        {
+            Assert.That(example.legal, Does.Contain(example.action));
+            Assert.That(Convert.FromBase64String(example.observation).Length, Is.EqualTo(LearnedActionSchema.ObservationSize * sizeof(float)));
+        }
+        string fixtureOutput = Environment.GetEnvironmentVariable("BLOCKNATIONS_HUMAN_FIXTURE_OUTPUT");
+        if (!string.IsNullOrEmpty(fixtureOutput))
+        {
+            System.IO.Directory.CreateDirectory(fixtureOutput);
+            System.IO.File.Copy(recorder.SavedPath, System.IO.Path.Combine(fixtureOutput, System.IO.Path.GetFileName(recorder.SavedPath)), true);
+        }
+        // A departed unfinished game must be kept separate from completed wins.
+        recorder.Dispose(); Assert.That(System.IO.Directory.GetFiles(folder, "*.json").Length, Is.EqualTo(1));
+        manager.ResetExternalMatch(2, 0);
+        var interrupted = new TrainingHumanGameRecorder(manager, folder, 0, "frozen-test");
+        Assert.That(manager.TryAdvanceExternalMatchTurn(0), Is.True);
+        interrupted.Dispose();
+        var unfinished = JsonUtility.FromJson<TrainingHumanGameRecorder.Game>(System.IO.File.ReadAllText(interrupted.SavedPath));
+        Assert.That(unfinished.completed, Is.False);
+        Assert.That(unfinished.samples.Single().action, Is.EqualTo(LearnedActionSchema.EndTurn));
+        System.IO.Directory.Delete(folder, true);
+        yield return new ExitPlayMode();
+    }
+
     private static void SameRect(Rect a, Rect b)
     {
         Assert.That(a.x, Is.EqualTo(b.x).Within(.00001f)); Assert.That(a.y, Is.EqualTo(b.y).Within(.00001f));
@@ -201,5 +286,5 @@ public sealed class SceneSimulationParityTests
         $"{state.CurrentTurnSeat}/{state.Round}/{state.GameOver}/{state.WinnerSeat}/" +
         string.Join(",", Enumerable.Range(0, state.SeatCount).Select(state.GoldForSeat)) + "/" +
         string.Join(";", state.Cities.OrderBy(c => c.Position).Select(c => $"{c.Position},{c.Seat},{c.Recruited}")) + "/" +
-        string.Join(";", state.Units.OrderBy(u => u.Position).Select(u => $"{u.Position},{u.Seat},{u.Definition.TypeId},{u.Health},{u.MovesUsed},{u.AttacksUsed}"));
+        string.Join(";", state.Units.OrderBy(u => u.Position).Select(u => $"{u.Position},{u.Seat},{u.Definition.TypeId},{u.Health},{u.MovesUsed},{u.AttacksUsed},{u.SurprisedRound}"));
 }

@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.Events;
 
 /// <summary>
 /// Simple button hooks for saving/loading and returning to the main menu.
@@ -9,6 +10,12 @@ public class GameMenuActions : MonoBehaviour
 {
     [Header("Scenes")]
     public string mainMenuSceneName = "MainMenu";
+    [Header("Explicit alternate exit (development playtests)")]
+    [SerializeField] private bool useAlternateExit;
+    [SerializeField] private string alternateExitLabel = "Back to training";
+    [SerializeField] private UnityEvent alternateExit = new UnityEvent();
+    public UnityEvent AlternateExit => alternateExit;
+    public string MenuLabel => useAlternateExit ? alternateExitLabel : "Menu";
 
     private const string PlayByPostGameIdKeyRaw = "pbp_gameId";
     private const string ReturnToMultiplayerPaneKeyRaw = "ui_returnToMultiplayerPane";
@@ -46,6 +53,7 @@ public class GameMenuActions : MonoBehaviour
 
     private void DoQuitToMainMenu()
     {
+        if (useAlternateExit) { alternateExit.Invoke(); return; }
         TurnManager tm = TurnManager.Instance;
         bool shouldReturnToMultiplayerPane = tm != null
             ? tm.currentMode == TurnManager.GameMode.PlayByPost

@@ -23,6 +23,9 @@ public sealed class TrainingTraceReader
         long stamp = file.LastWriteTimeUtc.Ticks;
         if (cache.TryGetValue(path, out var saved) && saved.stamp == stamp) return saved.game;
         var trace = JsonUtility.FromJson<TrainingTrace>(File.ReadAllText(path));
+        // A resumed run may retain recent matches from its previous rules version.
+        // Preserve those files; do not reinterpret their action budgets as new rules.
+        if (trace != null && trace.rulesVersion != SimulationRules.Version) return null;
         if (trace == null || trace.version != TrainingTrace.Version || trace.rulesVersion != SimulationRules.Version ||
             !LearnedActionSchema.SupportsBoard(trace.boardSize) || trace.worker < 0 || trace.worker >= 16 || trace.match < 1 ||
             !Guid.TryParseExact(trace.session, "N", out _) || trace.frames == null || trace.frames.Count == 0 ||

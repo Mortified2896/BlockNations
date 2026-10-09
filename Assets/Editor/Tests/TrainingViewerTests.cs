@@ -24,7 +24,7 @@ public sealed class TrainingViewerTests
         File.WriteAllText(Path.Combine(replayFolder, "recent-1.json"), JsonUtility.ToJson(arena.CompletedTrace));
         File.WriteAllText(Path.Combine(run, "workers", "0", "live.json"), JsonUtility.ToJson(arena.CompletedTrace));
         var status = new TrainingArena.ArenaStatus { boardSize = 5, schema = 2, workerCount = 1, trainerConnected = true,
-            simulationBackend = "standalone-dotnet", simulationVersion = "blocknations-simulation-v2", games = 1, actions = 2,
+            simulationBackend = "standalone-dotnet", simulationVersion = BlockNations.Simulation.SimulationRules.Version, games = 1, actions = 2,
             decisions = 4, round = 1, seat = arena.State.CurrentTurnSeat, gold0 = arena.State.GoldForSeat(0), gold1 = arena.State.GoldForSeat(1), fullOpening = true };
         string serializedStatus = JsonUtility.ToJson(status);
         File.WriteAllText(Path.Combine(run, "arena-status.json"), serializedStatus);

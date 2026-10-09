@@ -17,6 +17,8 @@ public sealed class TrainingReplayHistory
         public Rect bounds;
         public bool flipX, flipY, hasHealthPresentation;
         public UnitHealthLabel.Presentation healthPresentation;
+        public bool hasSurprisePresentation;
+        public UnitHealthLabel.Presentation surprisePresentation;
         public Sprite outlineSprite;
         public Rect outlineBounds;
         public Color outlineColor;

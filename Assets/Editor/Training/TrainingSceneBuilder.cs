@@ -6,6 +6,7 @@ using Unity.MLAgents.Actuators;
 using Unity.MLAgents.Policies;
 using UnityEditor;
 using UnityEditor.SceneManagement;
+using UnityEditor.Events;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -134,6 +135,12 @@ public static class TrainingSceneBuilder
 
     private static void WireHumanPresentation(Scene scene, TrainingArena arena)
     {
+        GameMenuActions menu = Root<GameMenuActions>(scene, "GameMenuActions");
+        Set(menu, "useAlternateExit", true);
+        var callback = menu.AlternateExit;
+        while (callback.GetPersistentEventCount() > 0) UnityEventTools.RemovePersistentListener(callback, 0);
+        UnityEventTools.AddPersistentListener(callback, arena.ReturnToTraining);
+        EditorUtility.SetDirty(menu);
         TrainingHumanPresentation presentation = arena.GetComponent<TrainingHumanPresentation>();
         if (presentation == null) presentation = arena.gameObject.AddComponent<TrainingHumanPresentation>();
         string[] names = { "GameplayUnitPanelUITK", "UITK_GameplayHUD_SafeArea", "GameplayBottomHudUITK", "GameplayTopHudUITK",

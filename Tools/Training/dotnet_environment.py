@@ -17,9 +17,9 @@ import numpy as np
 from mlagents_envs.base_env import (BaseEnv, BehaviorSpec, ObservationSpec, DimensionProperty,
                                   ObservationType, ActionSpec, ActionTuple, DecisionSteps, TerminalSteps)
 from mlagents.trainers.env_manager import EnvManager, EnvironmentStep
+from training_contract import RULES_VERSION, OBSERVATIONS, ACTIONS
 
 BEHAVIOR = 'BlockNationsSeatV2'
-OBSERVATIONS, ACTIONS = 3120, 259
 NAMES = [BEHAVIOR + '?team=' + str(seat) for seat in (0, 1)]
 SPEC = BehaviorSpec([ObservationSpec((OBSERVATIONS,), (DimensionProperty.NONE,), ObservationType.DEFAULT, 'VectorSensor')],
                     ActionSpec.create_discrete((ACTIONS,)))
@@ -98,7 +98,7 @@ class DotNetEnvironment(BaseEnv):
             raise RuntimeError(str(response) + ' ' + self.stderr_tail) from response
         if (response.get('protocol') != 1 or response.get('behavior') != BEHAVIOR or
                 response.get('observationSize') != OBSERVATIONS or response.get('actionCount') != ACTIONS or
-                response.get('rulesVersion') != 'blocknations-simulation-v2'):
+                response.get('rulesVersion') != RULES_VERSION):
             raise ValueError('C# rules/model protocol mismatch; do not train on an incompatible worker.')
         self.stats = response['stats']
         if len(self.stats) != self.workers:

@@ -14,6 +14,7 @@ public sealed class SimulationReplayProjector
         public Unit.ActionOutlinePresentation Move, Attack;
         public UnitHealthLabel.PresentationTemplate Health;
         public bool HasHealthTemplate;
+        public UnitHealthLabel.Presentation Surprise;
     }
     private readonly Dictionary<string, UnitTemplate> units = new Dictionary<string, UnitTemplate>(StringComparer.Ordinal);
     private readonly Dictionary<int, TrainingReplayHistory.Piece> cities = new Dictionary<int, TrainingReplayHistory.Piece>();
@@ -42,6 +43,7 @@ public sealed class SimulationReplayProjector
             var template = new UnitTemplate { Piece = TrainingReplayRecorder.CaptureSprite(unit.PrimarySpriteRenderer, 0, 0, seat) };
             var health = sample.GetComponent<UnitHealthLabel>();
             if (health != null) template.HasHealthTemplate = health.TryGetPresentationTemplate(out template.Health);
+            template.Surprise = sample.GetComponent<UnitSurpriseLabel>().Presentation();
             unit.TryGetActionOutlinePresentation(true, false, out template.Move);
             unit.movesUsedThisTurn = unit.maxMovesPerTurn;
             unit.TryGetActionOutlinePresentation(true, true, out template.Attack);
@@ -71,6 +73,9 @@ public sealed class SimulationReplayProjector
             piece.bounds.position += center;
             piece.hasHealthPresentation = template.HasHealthTemplate &&
                 template.Health.Project(unit.Health, unit.Definition.MaxHealthUnits, center, out piece.healthPresentation);
+            piece.hasSurprisePresentation = unit.IsSurprised(state.Round);
+            piece.surprisePresentation = template.Surprise;
+            piece.surprisePresentation.bounds.position += center;
             if (!state.GameOver && unit.Seat == state.CurrentTurnSeat)
             {
                 Unit.ActionOutlinePresentation outline = default;

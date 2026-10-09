@@ -120,6 +120,50 @@ public sealed class SharedSimulationTests
         Assert.That(MatchEngine.LegalUnitActions(state, 0, warrior.Id), Is.Empty);
     }
 
+    [TestCase(0, false, false)] [TestCase(0, false, true)]
+    [TestCase(0, true, false)] [TestCase(0, true, true)]
+    [TestCase(1, false, false)] [TestCase(1, false, true)]
+    [TestCase(1, true, false)] [TestCase(1, true, true)]
+    public void RiderCanMoveThenAttackButCannotMoveAfterAnyAttack(int seat, bool movedFirst, bool kill)
+    {
+        MatchState state = Board(seat);
+        SimulationUnit rider = Add(state, 1, seat, 2, 2, UnitRegistry.Rider);
+        var defender = new UnitDefinition("target", "Target", 1, 1, "target", kill ? 5 : 10, 1, 1, true, 0, 1, 1);
+        SimulationUnit target = Add(state, 2, 1 - seat, movedFirst ? 4 : 3, 2, defender);
+        if (movedFirst)
+        {
+            Assert.That(MatchEngine.Apply(state, Move(state, rider, 3, 2)).Applied, Is.True);
+            Assert.That(rider.CanAttack, Is.True);
+        }
+        Assert.That(MatchEngine.Apply(state, Attack(rider, target)).Applied, Is.True);
+        Assert.That(rider.Position, Is.EqualTo(state.Position(kill ? movedFirst ? 4 : 3 : movedFirst ? 3 : 2, 2)));
+        Assert.That(rider.RemainingMoves, Is.Zero);
+        Assert.That(MatchEngine.LegalUnitActions(state, seat, rider.Id), Is.Empty);
+        Assert.That(MatchEngine.Apply(state, Move(state, rider, 4, 3)).Applied, Is.False);
+        Assert.That(MatchEngine.Apply(state, End(seat)).Applied, Is.True);
+        Assert.That(MatchEngine.Apply(state, End(1 - seat)).Applied, Is.True);
+        Assert.That(rider.RemainingMoves, Is.EqualTo(2));
+        Assert.That(rider.CanAttack, Is.True);
+    }
+
+    [TestCase(0)] [TestCase(1)]
+    public void HiddenEnemySurpriseLastsThroughTheRoundAndCopiesIntoSpectatorState(int seat)
+    {
+        MatchState state = Board(seat);
+        SimulationUnit rider = Add(state, 1, seat, 1, 1, UnitRegistry.Rider);
+        Add(state, 2, 1 - seat, 3, 1);
+        Assert.That(MatchEngine.Apply(state, Move(state, rider, 3, 1)).HiddenBlocker, Is.True);
+        Assert.That(rider.IsSurprised(state.Round), Is.True);
+        Assert.That(state.Copy().GetUnit(1).IsSurprised(state.Round), Is.True);
+        var trace = BlockNations.Training.TrainingTraceState.Capture(state, "Hidden enemy stop");
+        Assert.That(trace.Restore(state.Roster).GetUnit(1).IsSurprised(state.Round), Is.True);
+        MatchEngine.Apply(state, End(seat));
+        Assert.That(rider.IsSurprised(state.Round), Is.True, "Keep the explanation through the other seat's turn.");
+        MatchEngine.Apply(state, End(1 - seat));
+        Assert.That(rider.IsSurprised(state.Round), Is.False);
+        Assert.That(rider.SurprisedRound, Is.EqualTo(-1));
+    }
+
     [Test]
     public void CustomUnitCanEndMovementOnAttackWithoutATypeNameRule()
     {
@@ -130,6 +174,25 @@ public sealed class SharedSimulationTests
         Assert.That(MatchEngine.Apply(state, Attack(own, target)).Applied, Is.True);
         Assert.That(own.RemainingMoves, Is.Zero);
         Assert.That(own.CanAttack, Is.True, "This custom definition still has its second attack.");
+    }
+
+    [TestCase(0)] [TestCase(1)]
+    public void HumanDemonstrationsExcludeHiddenEnemyUnitsAndEnemyGold(int seat)
+    {
+        MatchState a = Board(seat); SimulationUnit own = Add(a, 1, seat, 1, 1, UnitRegistry.Rider);
+        Add(a, 2, 1 - seat, 6, 6);
+        MatchState b = Board(seat); Add(b, 91, seat, 1, 1, UnitRegistry.Rider);
+        Add(b, 92, 1 - seat, 5, 5, UnitRegistry.Archer); b.SetGold(1 - seat, 999);
+        var sourceA = new SimulationObservationSource(); var sourceB = new SimulationObservationSource();
+        var samplesA = TrainingHumanGameRecorder.EncodeCommand(sourceA.Observe(a, seat), Move(a, own, 2, 2));
+        var samplesB = TrainingHumanGameRecorder.EncodeCommand(sourceB.Observe(b, seat), new MatchCommand(MatchActionKind.Move, seat, 91, b.Position(2, 2)));
+        Assert.That(samplesA.Count, Is.EqualTo(2));
+        for (int i = 0; i < 2; i++)
+        {
+            Assert.That(samplesA[i].observation, Is.EqualTo(samplesB[i].observation));
+            Assert.That(samplesA[i].legal, Is.EqualTo(samplesB[i].legal));
+            Assert.That(samplesA[i].action, Is.EqualTo(samplesB[i].action));
+        }
     }
 
     [TestCase(0, false)] [TestCase(0, true)] [TestCase(1, false)] [TestCase(1, true)]
@@ -169,7 +232,7 @@ public sealed class SharedSimulationTests
         var armored = new UnitDefinition("armored", "Armor", 3, 1, "armor", 10, 10, 1, true, 6, 1, 1);
         SimulationUnit target = Add(state, 2, 1, 3, 2, armored);
         MatchEngine.Apply(state, Attack(rider, target));
-        Assert.That(target.Health, Is.EqualTo(10)); Assert.That(rider.RemainingMoves, Is.EqualTo(2));
+        Assert.That(target.Health, Is.EqualTo(10)); Assert.That(rider.RemainingMoves, Is.Zero);
         Assert.That(rider.AttacksUsed, Is.EqualTo(1));
     }
 

@@ -50,7 +50,8 @@ public static class UnitRegistry
                 CombatValues.FromDisplay(0),
                 2,
                 1,
-                usesCommittedMoveAction: true),
+                usesCommittedMoveAction: true,
+                attackEndsMovement: true),
             [ArcherTypeId] = new UnitDefinition(
                 ArcherTypeId,
                 "Archer",

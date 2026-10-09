@@ -15,6 +15,7 @@ from mlagents.trainers.behavior_id_utils import create_name_behavior_id
 from match_rating import MatchRating, MatchJournalReader, policy_id
 from interactive_environment import install as install_interactive_environment
 from dotnet_environment import install as install_dotnet_environment
+from training_contract import RULES_VERSION
 
 ACTIVE_TRAINER = None
 
@@ -26,6 +27,7 @@ class WholeMatchGhostTrainer(GhostTrainer):
         self.rating_path = self.run / 'match-elo.json'
         self.rating = MatchRating(self.run.name, int(os.environ['BLOCKNATIONS_RATING_BOARD']))
         self.rating.restore(self.rating_path)
+        self.rating.data['rulesVersion'] = RULES_VERSION
         for worker in range(16):
             pending = self.rating.pending_for(worker)
             if pending and pending['session'] != self.session:
@@ -127,6 +129,8 @@ def main():
         raise RuntimeError('Whole-match rating adapter requires audited ML-Agents 1.1.0.')
     import mlagents.trainers.trainer.trainer_factory as factory
     factory.GhostTrainer = WholeMatchGhostTrainer
+    from human_imitation import install as install_human_imitation
+    install_human_imitation(factory)
     def assignment():
         if ACTIVE_TRAINER is None:
             return None

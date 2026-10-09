@@ -25,7 +25,7 @@ class DecoupledRuntimeTests(unittest.TestCase):
             self.assertEqual(env['BLOCKNATIONS_PARALLEL_GAMES'],'4')
             record=json.loads((run/'execution-settings.json').read_text())
             self.assertEqual(record['modelSchema'],2)
-            self.assertEqual(record['rulesVersion'],'blocknations-simulation-v2')
+            self.assertEqual(record['rulesVersion'],'blocknations-simulation-v3')
 
     def test_optional_viewer_failure_leaves_training_status_intact(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -36,6 +36,20 @@ class DecoupledRuntimeTests(unittest.TestCase):
             self.assertEqual(state['state'],'running')
             self.assertEqual(state['trainerPid'],123)
             session.close()
+
+    def test_rules_transition_preserves_weights_and_archives_incomparable_rating(self):
+        with tempfile.TemporaryDirectory() as directory:
+            run=Path(directory); worker=run/'worker'; worker.touch()
+            (run/'execution-settings.json').write_text('{"rulesVersion":"blocknations-simulation-v2"}')
+            (run/'match-elo.json').write_text('{"elo":1700}')
+            (run/'checkpoint.pt').write_bytes(b'unchanged weights and optimizer')
+            args=SimpleNamespace(backend='dotnet',worker=worker,parallel_games=4,seed=42,curriculum=False,curriculum_distance=2)
+            configure(args,run,{})
+            self.assertEqual((run/'checkpoint.pt').read_bytes(), b'unchanged weights and optimizer')
+            self.assertFalse((run/'match-elo.json').exists())
+            self.assertEqual(len(list(run.glob('match-elo-before-*.json'))), 1)
+            configure(args,run,{})
+            self.assertEqual(len(list(run.glob('match-elo-before-*.json'))), 1)
 
     def test_closing_and_reopening_viewer_never_stops_a_learner(self):
         with tempfile.TemporaryDirectory() as directory:

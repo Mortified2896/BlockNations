@@ -7,6 +7,7 @@ import subprocess
 import threading
 import time
 from bounded_log import BoundedLog
+from training_contract import RULES_VERSION
 
 
 def read_json(path):
@@ -27,8 +28,17 @@ def configure(args, run, environment):
                        BLOCKNATIONS_SIMULATION_CURRICULUM=str(args.curriculum).lower(),
                        BLOCKNATIONS_SIMULATION_DISTANCE=str(args.curriculum_distance))
     (run / 'training-control.json').unlink(missing_ok=True)
+    previous = read_json(run / 'execution-settings.json')
+    if previous and previous.get('rulesVersion') != RULES_VERSION:
+        revision = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())
+        # Ratings measure a particular ruleset. Keep the old curve for reference;
+        # continuing its weights doesn't make old/new results comparable.
+        rating = run / 'match-elo.json'
+        if rating.exists():
+            rating.rename(run / ('match-elo-before-' + revision + '.json'))
+        (run / ('execution-settings-before-' + revision + '.json')).write_text(json.dumps(previous) + '\n')
     record = dict(version=1, backend='standalone-dotnet', workerCount=args.parallel_games,
-                  rulesVersion='blocknations-simulation-v2', modelSchema=2,
+                  rulesVersion=RULES_VERSION, modelSchema=2,
                   seedConvention='seed + arena * 7919', seed=args.seed,
                   updatedUtc=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()))
     (run / 'execution-settings.json.tmp').write_text(json.dumps(record) + '\n')

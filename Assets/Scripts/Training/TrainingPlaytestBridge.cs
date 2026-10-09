@@ -3,7 +3,8 @@ using System.IO;
 using UnityEngine;
 
 // The supervisor owns process/model loading. A playtest never changes the viewer's pause state.
-// A separate inference arena keeps human actions out of the learner and rating journal.
+// A separate inference arena keeps its opponent frozen. Human demonstrations are
+// ingested separately; inference games never masquerade as PPO/rating trajectories.
 public sealed class TrainingPlaytestBridge
 {
     [Serializable] private sealed class SupervisorStatus
