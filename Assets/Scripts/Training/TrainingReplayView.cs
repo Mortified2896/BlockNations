@@ -9,13 +9,28 @@ public sealed class TrainingReplayView
     public void Draw(TrainingReplayHistory.Frame frame, TrainingReplayHistory.Frame opening, int size,
         TrainingVision vision, Color backgroundColor, bool showActionMarkers)
     {
+        float left = TrainingOverlay.ReservedWidth / TrainingOverlay.Scale;
+        Draw(frame, opening, size, vision, backgroundColor, showActionMarkers,
+            new Rect(left, 0, Screen.width / TrainingOverlay.Scale - left, Screen.height / TrainingOverlay.Scale));
+    }
+
+    public void Draw(TrainingReplayHistory.Frame frame, TrainingReplayHistory.Frame opening, int size,
+        TrainingVision vision, Color backgroundColor, bool showActionMarkers, Rect viewport)
+    {
+        GUI.BeginGroup(viewport);
+        try { DrawBoard(frame, opening, size, vision, backgroundColor, showActionMarkers, viewport.size); }
+        finally { GUI.EndGroup(); }
+    }
+
+    private void DrawBoard(TrainingReplayHistory.Frame frame, TrainingReplayHistory.Frame opening, int size,
+        TrainingVision vision, Color backgroundColor, bool showActionMarkers, Vector2 viewportSize)
+    {
+        float width = viewportSize.x, height = viewportSize.y;
+        Fill(new Rect(0, 0, width, height), backgroundColor);
         if (frame == null) return;
         if (health == null) health = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter,
             fontStyle = FontStyle.Bold, padding = new RectOffset() };
-        float left = TrainingOverlay.ReservedWidth / TrainingOverlay.Scale;
-        float width = Screen.width / TrainingOverlay.Scale - left, height = Screen.height / TrainingOverlay.Scale;
-        Fill(new Rect(left, 0, width, height), backgroundColor);
-        Vector2 center = new Vector2(left + width / 2, height / 2);
+        Vector2 center = new Vector2(width / 2, height / 2);
         // Match the arena camera's orthographic projection, with tiles centered
         // at their native world positions rather than at a GUI rectangle corner.
         float pixelsPerWorldUnit = Mathf.Min(width, height) / (size + 2);

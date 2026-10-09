@@ -20,6 +20,7 @@ public sealed class TrainingOverlay
         public string runId, rulesVersion, error;
     }
     private readonly TrainingReplayView replayView = new TrainingReplayView();
+    private readonly TrainingMultiBoardView multiBoardView = new TrainingMultiBoardView();
     public static float Scale => Mathf.Clamp(Screen.height / 900f, 0.8f, 2.5f);
     public static float ReservedWidth => Mathf.Min(370f * Scale, Screen.width * 0.4f);
 
@@ -39,7 +40,9 @@ public sealed class TrainingOverlay
             GUI.matrix = Matrix4x4.Scale(new Vector3(Scale, Scale, 1));
             float width = ReservedWidth / Scale - 24;
             Fill(new Rect(12, 12, width, Screen.height / Scale - 24), new Color(0.035f, 0.13f, 0.20f, 0.97f));
-            if (arena.Replay.Inspecting)
+            bool allLive = arena is ITrainingSpectator multiple && multiple.ShowingAllLive;
+            if (allLive) multiBoardView.Draw((ITrainingSpectator)arena, vision);
+            else if (arena.Replay.Inspecting)
                 replayView.Draw(arena.Replay.CurrentFrame, arena.Replay.CurrentGame.frames[0], arena.Replay.CurrentGame.boardSize, vision, arena.SpectatorBackgroundColor, showActionMarkers: true);
             else if (arena.IsTraining)
                 replayView.Draw(arena.Replay.LatestFrame, arena.Replay.OpeningFrame, arena.BoardSize, vision, arena.SpectatorBackgroundColor, showActionMarkers: false);
@@ -70,7 +73,8 @@ public sealed class TrainingOverlay
                 if (arena.CanStartNewMatch) GUILayout.Label(arena.LastAction, label);
                 if (arena.CanReturnToTraining && GUILayout.Button("Back to training", button)) arena.ReturnToTraining();
             }
-            GUILayout.Label($"Match {arena.Games + 1} · round {arena.Round}/{arena.RoundLimit}", label);
+            if (allLive) GUILayout.Label($"{((ITrainingSpectator)arena).WorkerCount} live snapshots · {arena.BoardSize} × {arena.BoardSize}", label);
+            else GUILayout.Label($"Match {arena.Games + 1} · round {arena.Round}/{arena.RoundLimit}", label);
             GUILayout.Label(arena.FullOpening ? $"Standard opening · {arena.BoardSize} × {arena.BoardSize}" :
                 $"Curriculum stage {arena.CurriculumDistance} · distance {arena.StartingDistance}", small);
             GUILayout.Space(12);
@@ -80,7 +84,7 @@ public sealed class TrainingOverlay
                 for (int seat = 0; seat < 2; seat++) displayedGold[seat] = arena.GoldForSeat(seat);
                 nextGoldRefresh = Time.realtimeSinceStartupAsDouble + 1;
             }
-            for (int seat = 0; seat < 2; seat++)
+            for (int seat = 0; !allLive && seat < 2; seat++)
             {
                 Color seatColor = seat == 0 ? new Color(0.35f, 0.75f, 1f) : new Color(1f, 0.45f, 0.4f);
                 GUI.color = seatColor;
@@ -247,11 +251,21 @@ public sealed class TrainingOverlay
         { if (spectator.ShowingLive) spectator.WatchRecent(); else spectator.WatchLive(); }
         if (spectator.ShowingLive)
         {
-            string[] names = new string[spectator.WorkerCount];
-            for (int i = 0; i < names.Length; i++) names[i] = (i + 1).ToString();
-            GUILayout.Label("Live simulation", small);
-            int selected = GUILayout.Toolbar(spectator.SelectedWorker, names);
-            if (selected != spectator.SelectedWorker) spectator.SelectedWorker = selected;
+            if (spectator.WorkerCount > 1)
+            {
+                GUILayout.Label("Live layout", small);
+                int layout = GUILayout.Toolbar(spectator.ShowingAllLive ? 1 : 0, new[] { "One game", $"All {spectator.WorkerCount} games" });
+                if ((layout == 1) != spectator.ShowingAllLive) spectator.ShowingAllLive = layout == 1;
+            }
+            if (!spectator.ShowingAllLive)
+            {
+                string[] names = new string[spectator.WorkerCount];
+                for (int i = 0; i < names.Length; i++) names[i] = (i + 1).ToString();
+                GUILayout.Label("Live simulation", small);
+                int selected = GUILayout.Toolbar(spectator.SelectedWorker, names);
+                if (selected != spectator.SelectedWorker) spectator.SelectedWorker = selected;
+            }
+            GUILayout.Label("Sampled twice per second; intermediate actions are skipped. Training never waits for this display.", small);
         }
         GUI.enabled = spectator.CanContinue;
         GUILayout.BeginHorizontal();

@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using BlockNations.Simulation;
@@ -19,18 +20,18 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
     private readonly TrainingOverlay overlay = new TrainingOverlay();
     private TrainingTraceReader traces;
     private TrainingArena.ArenaStatus totals, worker;
-    private bool ready, showingLive;
+    private bool ready, showingLive, showingAllLive;
+    private TrainingLiveBoard[] liveBoards = Array.Empty<TrainingLiveBoard>();
     private int selectedWorker, width, height;
-    private double nextPoll;
+    private double nextPoll, nextRecentPoll;
     private Rect originalRect;
     private Color originalBackground;
-    private int originalCullingMask, originalFrameRate;
+    private int originalCullingMask, originalFrameRate, originalVSyncCount;
     private bool originalBackgroundExecution;
     private string readError;
     [Serializable] private sealed class Manifest { public string owner; public int schema, boardSize; }
     [Serializable] private sealed class Clock { public int version, boardSize; public string runId; public double totalSeconds; public bool estimated; }
     [Serializable] private sealed class Control { public bool paused; }
-    [Serializable] private sealed class Watch { public int worker; public bool live; }
     [Serializable] private sealed class RatingSession { public string session; }
 
     public TrainingReplayHistory Replay { get; } = new TrainingReplayHistory { FollowRecent = true };
@@ -72,7 +73,8 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
     public int CurriculumDistance => worker?.curriculumDistance ?? 2;
     public int StartingDistance => BoardSize - 3;
     public string LastAction => worker?.lastAction ?? "Waiting for simulation telemetry";
-    public string Failure => !string.IsNullOrEmpty(totals?.failure) ? totals.failure : readError;
+    public string Failure => !string.IsNullOrEmpty(totals?.failure) ? totals.failure :
+        !string.IsNullOrEmpty(totals?.spectatorFailure) ? totals.spectatorFailure : readError;
     public Color SpectatorBackgroundColor => boardCamera.backgroundColor;
     public int WorkerCount => Math.Max(1, totals?.workerCount ?? 1);
     public int SelectedWorker
@@ -81,6 +83,12 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
         set { selectedWorker = Mathf.Clamp(value, 0, WorkerCount - 1); nextPoll = 0; Replay.SetLiveFrames(null, null); }
     }
     public bool ShowingLive => showingLive;
+    public bool ShowingAllLive
+    {
+        get => showingLive && showingAllLive;
+        set { showingAllLive = value; WatchLive(); }
+    }
+    public IReadOnlyList<TrainingLiveBoard> LiveBoards => liveBoards;
     public int GoldForSeat(int seat) => seat == 0 ? worker?.gold0 ?? 0 : worker?.gold1 ?? 0;
     public void EndHumanTurn() { }
     public void NewHumanMatch() { }
@@ -90,7 +98,7 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
     {
         showingLive = false; Replay.FollowRecent = true;
         if (Replay.CanInspect) Replay.Inspect(Time.realtimeSinceStartupAsDouble);
-        nextPoll = 0;
+        nextPoll = nextRecentPoll = 0;
     }
     public void StopAndSave() { if (CanContinue) Write("stop.request", "Stop and save requested from the viewer.\n"); }
 
@@ -115,7 +123,8 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
         humanPresentation.SetHumanMode(false);
         originalBackgroundExecution = Application.runInBackground;
         Application.runInBackground = true;
-        originalFrameRate = Application.targetFrameRate; Application.targetFrameRate = 30;
+        originalFrameRate = Application.targetFrameRate; Application.targetFrameRate = 15;
+        originalVSyncCount = QualitySettings.vSyncCount; QualitySettings.vSyncCount = 0;
     }
 
     private IEnumerator Start()
@@ -169,17 +178,30 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
             if (clock != null && clock.version == 1 && clock.boardSize == BoardSize && clock.runId == runId && clock.totalSeconds >= 0 &&
                 !double.IsNaN(clock.totalSeconds) && !double.IsInfinity(clock.totalSeconds))
             { TotalTrainingSeconds = clock.totalSeconds; TrainingTimeEstimated = clock.estimated; }
-            Replay.SetCompletedGames(traces.Recent(runDirectory, WorkerCount));
-            if (!showingLive && !Replay.Inspecting && Replay.CanInspect) Replay.Inspect(Time.realtimeSinceStartupAsDouble);
-            Write("viewer-watch.json", JsonUtility.ToJson(new Watch { worker = selectedWorker, live = showingLive }));
+            // Live view only projects the small sampled frames. Full recent-game
+            // reconstruction is needed solely for replay, at a separate cadence.
+            if (!showingLive && Time.realtimeSinceStartupAsDouble >= nextRecentPoll)
+            {
+                nextRecentPoll = Time.realtimeSinceStartupAsDouble + 2;
+                Replay.SetCompletedGames(traces.Recent(runDirectory, WorkerCount));
+                if (!Replay.Inspecting && Replay.CanInspect) Replay.Inspect(Time.realtimeSinceStartupAsDouble);
+            }
             if (showingLive)
             {
-                string path = Path.Combine(runDirectory, "workers", selectedWorker.ToString(), "live.json");
                 var session = Read<RatingSession>(Path.Combine(runDirectory, "rating-session.json"));
-                var live = File.Exists(path) && (Paused || DateTime.UtcNow - File.GetLastWriteTimeUtc(path) < TimeSpan.FromSeconds(10)) ? traces.Read(path) : null;
-                if (live != null && session != null && live.sourceKey.StartsWith(session.session + ":" + selectedWorker + ":", StringComparison.Ordinal))
-                    Replay.SetLiveFrames(live.frames[0], live.frames[live.frames.Count - 1]);
-                else Replay.SetLiveFrames(null, null);
+                if (liveBoards.Length != WorkerCount) liveBoards = new TrainingLiveBoard[WorkerCount];
+                for (int i = 0; i < liveBoards.Length; i++)
+                {
+                    if (!showingAllLive && i != selectedWorker) continue;
+                    string path = Path.Combine(runDirectory, "workers", i.ToString(), "live.json");
+                    var live = File.Exists(path) && (Paused || DateTime.UtcNow - File.GetLastWriteTimeUtc(path) < TimeSpan.FromSeconds(10))
+                        ? traces.Read(path, showActionMarkers: false) : null;
+                    if (live == null || session == null || !live.sourceKey.StartsWith(session.session + ":" + i + ":", StringComparison.Ordinal)) live = null;
+                    var status = i == selectedWorker ? worker : Read<TrainingArena.ArenaStatus>(Path.Combine(runDirectory, "workers", i.ToString(), "arena-status.json"));
+                    liveBoards[i] = new TrainingLiveBoard(i, status?.roundLimit ?? 100, live);
+                }
+                var selected = liveBoards[selectedWorker];
+                Replay.SetLiveFrames(selected?.Opening, selected?.Current);
             }
             readError = null;
         }
@@ -200,6 +222,7 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
     {
         if (!viewerMode) return;
         Application.runInBackground = originalBackgroundExecution; Application.targetFrameRate = originalFrameRate;
+        QualitySettings.vSyncCount = originalVSyncCount;
         if (!ready || boardCamera == null) return;
         boardCamera.rect = originalRect; boardCamera.backgroundColor = originalBackground; boardCamera.cullingMask = originalCullingMask;
     }

@@ -497,7 +497,7 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
         public double elapsedSeconds, decisionsPerSecond;
         public bool paused, trainerConnected, fullOpening, humanPlaytest, returnRequested;
         public int gold0, gold1, startingDistance, boardSize, schema;
-        public string lastAction, failure, simulationVersion, simulationBackend, policyVersion;
+        public string lastAction, failure, simulationVersion, simulationBackend, policyVersion, spectatorFailure;
     }
 
     private void WriteStatusIfDue(bool force = false)

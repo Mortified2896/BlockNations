@@ -11,7 +11,6 @@ internal static class Program
     private static readonly JsonSerializerOptions Json = new() { IncludeFields = true };
     private sealed class ActionRequest { public int agent { get; set; } public int action { get; set; } }
     private sealed class Request { public string op { get; set; } public ActionRequest[] actions { get; set; } public PolicyAssignment policy { get; set; } }
-    private sealed class Watch { public int worker { get; set; } public bool live { get; set; } }
     private static void OwnedDirectory(string path)
     {
         if (Directory.Exists(path) && (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
@@ -53,8 +52,8 @@ internal static class Program
             OwnedDirectory(Path.Combine(run, "workers", arena.Worker.ToString(), "replays"));
         }
         long sequence = 0;
-        double nextPublish = 0, nextWatch = 0;
-        Watch watch = null;
+        double nextPublish = 0, nextLive = 0;
+        using var spectator = new LatestSnapshotPublisher<object>(count * 5, Atomic);
         bool initialReset = true;
         var clock = Stopwatch.StartNew();
         string journalPath = Path.Combine(run, "match-events.jsonl");
@@ -97,22 +96,21 @@ internal static class Program
                     if (arena.CompletedTrace != null)
                     {
                         arena.CompletedTrace.session = session;
-                        Atomic(Path.Combine(run, "workers", arena.Worker.ToString(), "replays", $"recent-{arena.Games % 4}.json"), arena.CompletedTrace);
+                        spectator.Publish(Path.Combine(run, "workers", arena.Worker.ToString(), "replays", $"recent-{arena.Games % 4}.json"), arena.CompletedTrace);
                     }
                 }
             }
             else throw new InvalidOperationException("Unsupported environment command.");
             double now = clock.Elapsed.TotalSeconds;
-            if (now >= nextWatch)
+            if (now >= nextLive)
             {
-                nextWatch = now + .25; string path = Path.Combine(run, "viewer-watch.json");
-                watch = File.Exists(path) && DateTime.UtcNow - File.GetLastWriteTimeUtc(path) < TimeSpan.FromSeconds(10)
-                    ? JsonSerializer.Deserialize<Watch>(File.ReadAllText(path), Json) : null;
-                if (watch != null && watch.live && watch.worker >= 0 && watch.worker < count)
+                // Fixed-rate copies for every worker, with or without a viewer.
+                // Display selection, rendering and playback never enter this loop.
+                nextLive = now + .5;
+                foreach (var arena in arenas)
                 {
-                    var arena = arenas[watch.worker];
-                    Atomic(Path.Combine(run, "workers", watch.worker.ToString(), "live.json"), new TrainingTrace {
-                        session = session, worker = watch.worker, match = arena.Trace.match, boardSize = size,
+                    spectator.Publish(Path.Combine(run, "workers", arena.Worker.ToString(), "live.json"), new TrainingTrace {
+                        session = session, worker = arena.Worker, match = arena.Trace.match, boardSize = size,
                         firstSeat = arena.State.FirstSeat, rulesVersion = SimulationRules.Version, policy = arena.Trace.policy,
                         policyChanged = arena.Trace.policyChanged, frames = new List<TrainingTraceState> { arena.Trace.frames[0], TrainingTraceState.Capture(arena.State, arena.LastAction) } });
                 }
@@ -124,7 +122,8 @@ internal static class Program
                 roundLimit = a.RoundLimit, elapsedSeconds = now, decisionsPerSecond = now > 0 ? a.Decisions / now : 0,
                 fullOpening = a.FullOpening, gold0 = a.State.GoldForSeat(0), gold1 = a.State.GoldForSeat(1),
                 boardSize = size, schema = LearnedActionSchema.Version, lastAction = a.LastAction, failure = "",
-                simulationVersion = SimulationRules.Version, simulationBackend = "standalone-dotnet", policyVersion = ""
+                simulationVersion = SimulationRules.Version, simulationBackend = "standalone-dotnet", policyVersion = "",
+                spectatorFailure = spectator.Error
             }).ToArray();
             if (now >= nextPublish || request.op == "reset")
             {

@@ -12,16 +12,16 @@ public sealed class TrainingTraceReader
 {
     private readonly SimulationReplayProjector projector;
     private readonly UnitDefinition[] roster;
-    private readonly Dictionary<string, (long stamp, TrainingReplayHistory.Game game)> cache = new Dictionary<string, (long, TrainingReplayHistory.Game)>();
+    private readonly Dictionary<string, (long stamp, bool markers, TrainingReplayHistory.Game game)> cache = new Dictionary<string, (long, bool, TrainingReplayHistory.Game)>();
     public TrainingTraceReader(SimulationReplayProjector projector, IEnumerable<UnitDefinition> roster)
     { this.projector = projector; this.roster = roster.ToArray(); }
 
-    public TrainingReplayHistory.Game Read(string path)
+    public TrainingReplayHistory.Game Read(string path, bool showActionMarkers = true)
     {
         var file = new FileInfo(path);
         if (!file.Exists || file.Length > 2_000_000 || (file.Attributes & FileAttributes.ReparsePoint) != 0) return null;
         long stamp = file.LastWriteTimeUtc.Ticks;
-        if (cache.TryGetValue(path, out var saved) && saved.stamp == stamp) return saved.game;
+        if (cache.TryGetValue(path, out var saved) && saved.stamp == stamp && saved.markers == showActionMarkers) return saved.game;
         var trace = JsonUtility.FromJson<TrainingTrace>(File.ReadAllText(path));
         // A resumed run may retain recent matches from its previous rules version.
         // Preserve those files; do not reinterpret their action budgets as new rules.
@@ -40,9 +40,9 @@ public sealed class TrainingTraceReader
         foreach (TrainingTraceState frame in trace.frames)
         {
             if (frame.width != trace.boardSize || frame.firstSeat != trace.firstSeat) throw new ArgumentException("Replay configuration changed during match.");
-            game.frames.Add(projector.Capture(frame.Restore(roster), frame.description));
+            game.frames.Add(projector.Capture(frame.Restore(roster), frame.description, showActionMarkers));
         }
-        cache[path] = (stamp, game);
+        cache[path] = (stamp, showActionMarkers, game);
         return game;
     }
     public IEnumerable<TrainingReplayHistory.Game> Recent(string run, int count)

@@ -52,7 +52,7 @@ public sealed class SimulationReplayProjector
         }
     }
 
-    public TrainingReplayHistory.Frame Capture(MatchState state, string description)
+    public TrainingReplayHistory.Frame Capture(MatchState state, string description, bool showActionMarkers = true)
     {
         var pieces = new List<TrainingReplayHistory.Piece>();
         foreach (SimulationCity city in state.Cities)
@@ -76,7 +76,7 @@ public sealed class SimulationReplayProjector
             piece.hasSurprisePresentation = unit.IsSurprised(state.Round);
             piece.surprisePresentation = template.Surprise;
             piece.surprisePresentation.bounds.position += center;
-            if (!state.GameOver && unit.Seat == state.CurrentTurnSeat)
+            if (showActionMarkers && !state.GameOver && unit.Seat == state.CurrentTurnSeat)
             {
                 Unit.ActionOutlinePresentation outline = default;
                 if (unit.RemainingMoves > 0) outline = template.Move;

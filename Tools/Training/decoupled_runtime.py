@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import plistlib
 import subprocess
+import sys
 import threading
 import time
 from bounded_log import BoundedLog
@@ -69,6 +70,8 @@ class ViewerSession:
             command = [str(executable), '--training-viewer', 'true', '--viewer-run', str(self.run),
                        '-screen-width', '1400', '-screen-height', '900', '-screen-fullscreen', '0',
                        '-logFile', '-']
+            if sys.platform == 'darwin':
+                command = ['/usr/bin/nice', '-n', '10'] + command
             environment = {key: value for key, value in os.environ.items() if not key.startswith('BLOCKNATIONS_')}
             try:
                 self.process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,

@@ -47,6 +47,8 @@ public interface ITrainingSpectator : ITrainingView
     int WorkerCount { get; }
     int SelectedWorker { get; set; }
     bool ShowingLive { get; }
+    bool ShowingAllLive { get; set; }
+    System.Collections.Generic.IReadOnlyList<TrainingLiveBoard> LiveBoards { get; }
     void WatchLive();
     void WatchRecent();
     void StopAndSave();
