@@ -11,7 +11,8 @@ from run_limits import RunLimits, continuous_config, is_continuous
 from playtest import PlaytestSession
 from decoupled_runtime import configure as configure_decoupled, ViewerSession
 from bounded_log import BoundedLog
-from training_contract import OPENING_ECONOMY_VERSION, LEGACY_OPENING_ECONOMY_VERSION, validate_opening_economy
+from training_contract import (OPENING_ECONOMY_VERSION, LEGACY_OPENING_ECONOMY_VERSION,
+                               RULES_VERSION, SUPPORTED_RULES, validate_opening_economy, run_rules_version)
 import json
 import os
 from pathlib import Path
@@ -236,6 +237,15 @@ def board_options(run: Path, board_size: int, resume: bool) -> int:
     return size
 
 
+def rules_options(run: Path, requested: str | None, resume: bool) -> str:
+    from training_contract import validate_rules_version
+    saved = run_rules_version(run) if resume else RULES_VERSION
+    selected = validate_rules_version(requested if requested is not None else saved)
+    if resume and selected != saved:
+        raise ValueError('Resume preserves the saved rules; transfer weights to a separate run to change rules.')
+    return selected
+
+
 def opening_options(run: Path, resume: bool, upgrade: bool = False) -> int:
     # Missing metadata identifies the preserved 3/3 first-turn opening.
     version = read_json(run / RUN_MARKER).get('openingEconomyVersion', LEGACY_OPENING_ECONOMY_VERSION) if resume else OPENING_ECONOMY_VERSION
@@ -282,6 +292,7 @@ def main() -> int:
     parser.add_argument("--checkpoint-interval", type=int, default=5000)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--board-size", type=int, choices=(5, 6, 7, 9, 11), default=11)
+    parser.add_argument("--rules-version", choices=SUPPORTED_RULES, help="New-run rules profile; Resume keeps the recorded profile.")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--upgrade-opening-economy", action="store_true", help="Explicitly move a resumed run to the current opening recipe, preserving its old manifest.")
     parser.add_argument("--full-openings", action="store_true", help="Disable the tactical opening curriculum for a new run.")
@@ -332,6 +343,11 @@ def main() -> int:
     config = run / "trainer.yaml"
     args.seed, curriculum, curriculum_distance = arena_options(run, args.seed, not args.full_openings, args.resume)
     args.board_size = board_options(run, args.board_size, args.resume)
+    try:
+        args.rules_version = rules_options(run, args.rules_version, args.resume)
+    except ValueError:
+        lock.unlink()
+        raise
     args.opening_economy_version = opening_options(run, args.resume, args.upgrade_opening_economy)
     if args.board_size != 11:
         curriculum = False
@@ -343,6 +359,7 @@ def main() -> int:
                                       "schema": 2, "boardSize": args.board_size, "behavior": "BlockNationsSeatV2",
                                       "opening": "tactical-curriculum" if curriculum else "standard",
                                       "openingEconomyVersion": args.opening_economy_version,
+                                      "rulesVersion": args.rules_version,
                                       "initialWeights": "random", "observationSize": 3120, "actionCount": 259})
     plan = read_json(config)
     if args.hours == 0 and not is_continuous(plan):
@@ -367,7 +384,7 @@ def main() -> int:
     rating_session = uuid.uuid4().hex
     atomic_json(run / "rating-session.json", {"session": rating_session})
     environment.update({"BLOCKNATIONS_RATING_RUN": str(run), "BLOCKNATIONS_RATING_BOARD": str(args.board_size),
-                        "BLOCKNATIONS_RATING_SESSION": rating_session})
+                        "BLOCKNATIONS_RATING_SESSION": rating_session, "BLOCKNATIONS_RULES_VERSION": args.rules_version})
     args.curriculum, args.curriculum_distance = curriculum, curriculum_distance
     configure_decoupled(args, run, environment)
     command = [sys.executable, str(Path(__file__).with_name("rated_training.py")), str(config), "--run-id", args.run_id,
@@ -385,6 +402,7 @@ def main() -> int:
                         "--training-curriculum-distance", str(curriculum_distance),
                         "--training-board-size", str(args.board_size),
                         "--training-opening-economy-version", str(args.opening_economy_version)])
+        command.extend(["--training-rules-version", args.rules_version])
     process = None
     assertion = None
     output_thread = None
@@ -400,7 +418,7 @@ def main() -> int:
              "trainingStepLimit": 0 if is_continuous(plan) else plan.get("behaviors", {}).get("BlockNationsSeatV2", {}).get("max_steps", args.max_steps),
              "removedArtifacts": removed[-20:], "playtestAvailable": args.env is not None}
     state.update(backend="standalone-dotnet" if args.backend == "dotnet" else "unity",
-                 workerCount=args.parallel_games if args.backend == "dotnet" else 1)
+                 workerCount=args.parallel_games if args.backend == "dotnet" else 1, rulesVersion=args.rules_version)
     try:
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                    stdin=subprocess.DEVNULL, env=environment, cwd=run)

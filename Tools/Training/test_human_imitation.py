@@ -41,6 +41,17 @@ class HumanImitationTests(unittest.TestCase):
         self.assertEqual(list(learning.cache), [accepted])
         self.assertEqual(learning.updates, 0)
 
+    def test_new_profile_ingests_only_its_own_recordings_and_preserves_baseline_games(self):
+        from training_contract import CORE_THREE_RULES
+        baseline = self.write_game()
+        before = baseline.read_bytes()
+        new_profile = self.write_game(rulesVersion=CORE_THREE_RULES)
+        learning = HumanImitation(self.run, 7, 42, CORE_THREE_RULES)
+        self.assertEqual(list(learning.cache), [new_profile])
+        self.assertEqual(baseline.read_bytes(), before)
+        state = json.loads((self.run/'human-learning-status.json').read_text())
+        self.assertEqual(state['rulesVersion'], CORE_THREE_RULES)
+
     def test_invalid_masks_and_nonfinite_tensors_never_reach_optimizer(self):
         path = self.write_game()
         original = json.loads(path.read_text())

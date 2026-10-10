@@ -17,7 +17,7 @@ import socket
 import subprocess
 import sys
 import time
-from training_contract import OPENING_ECONOMY_VERSION
+from training_contract import OPENING_ECONOMY_VERSION, RULES_VERSION, run_rules_version
 
 BEHAVIOR = "BlockNationsSeatV2"
 OWNER = "BlockNations.HumanPlaytest.v1"
@@ -112,8 +112,9 @@ class PlaytestSession:
             shutil.copyfile(source, snapshot)
             digest = hashlib.sha256(snapshot.read_bytes()).hexdigest()
             manifest = read_json(self.run / "run.json")
+            rules = run_rules_version(self.run)
             self.state.update({"checkpoint": source.stem, "sha256": digest, "boardSize": manifest["boardSize"],
-                               "difficulty": difficulty, "firstSeat": first_seat})
+                               "difficulty": difficulty, "firstSeat": first_seat, "rulesVersion": rules})
             atomic_json(scratch / "session.json", dict(self.state, owner=OWNER, source=str(source)))
             config = scratch / "inference.yaml"
             atomic_json(config, frozen_config(read_json(self.run / "trainer.yaml"), snapshot))
@@ -127,6 +128,7 @@ class PlaytestSession:
                        "--env-args", "--training-status", str(scratch / "arena-status.json"),
                        "--training-board-size", str(manifest["boardSize"]), "--training-curriculum", "false",
                        "--training-opening-economy-version", str(OPENING_ECONOMY_VERSION),
+                       "--training-rules-version", rules,
                        "--training-seed", str(manifest["seed"]), "--training-human-seat", "0",
                        "--training-first-seat", str(first_seat),
                        "--training-policy-version", source.stem + ' / ' + difficulty, "--training-playtest-return", "true"]
@@ -155,7 +157,11 @@ class PlaytestSession:
         if self.process is None:
             return
         status = read_json(self.run / "playtest" / "arena-status.json")
-        if status.get("failure"):
+        expected = self.state.get('rulesVersion', RULES_VERSION)
+        if status.get('trainerConnected') and status.get('simulationVersion', RULES_VERSION) != expected:
+            self.state.update(state='error', message='Playtest player uses different rules; rebuild the matching native player.')
+            self.close()
+        elif status.get("failure"):
             self.state.update(state="error", message=status["failure"])
             self.close()
         elif self.process.poll() is not None:

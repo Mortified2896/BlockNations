@@ -13,20 +13,21 @@ import uuid
 
 import numpy as np
 
-from training_contract import RULES_VERSION, OBSERVATIONS, ACTIONS
+from training_contract import RULES_VERSION, OBSERVATIONS, ACTIONS, validate_rules_version
 MAXIMUM_SAMPLES = 1024
 MAXIMUM_FILE_BYTES = 20 * 1024 * 1024
 MAXIMUM_GAMES = 32
 PASSES_PER_GAME, BATCH_SIZE, BATCHES_PER_UPDATE = 16, 64, 4
 
 
-def decode_game(path, board):
+def decode_game(path, board, rules_version=RULES_VERSION):
+    rules_version = validate_rules_version(rules_version)
     if path.is_symlink() or path.stat().st_size > MAXIMUM_FILE_BYTES:
         raise ValueError('Human recording is linked or oversized.')
     contents = path.read_bytes()
     game = json.loads(contents)
     if (game.get('version') != 1 or game.get('schema') != 2 or
-            game.get('rulesVersion') != RULES_VERSION or game.get('boardSize') != board):
+            game.get('rulesVersion') != rules_version or game.get('boardSize') != board):
         return None  # Preserve recordings from other rule/board configurations.
     if (game.get('humanSeat') not in (0, 1) or game.get('winnerSeat') not in (-1, 0, 1) or
             uuid.UUID(hex=game['id']).hex != game['id'] or path.stem != game['id']):
@@ -56,8 +57,9 @@ def decode_game(path, board):
 
 
 class HumanImitation:
-    def __init__(self, run, board, seed):
+    def __init__(self, run, board, seed, rules_version=RULES_VERSION):
         self.run, self.board = Path(run), board
+        self.rules_version = validate_rules_version(rules_version)
         self.random = np.random.default_rng(seed)
         self.cache, self.stamps = {}, {}
         self.consumed = {}
@@ -70,7 +72,7 @@ class HumanImitation:
         if path.exists():
             state = json.loads(path.read_text())
             if (state.get('version') != 1 or state.get('runId') != self.run.name or
-                    state.get('boardSize') != board or state.get('rulesVersion') != RULES_VERSION):
+                    state.get('boardSize') != board or state.get('rulesVersion') != self.rules_version):
                 raise ValueError('Human learning ledger belongs to different rules/run/board.')
             self.consumed = state.get('consumed', {})
             if len(self.consumed) > 512 or any(type(v) is not int or v < 0 for v in self.consumed.values()):
@@ -100,7 +102,7 @@ class HumanImitation:
             self.stamps[path] = stamp
             self.cache.pop(path, None)
             try:
-                value = decode_game(path, self.board)
+                value = decode_game(path, self.board, self.rules_version)
                 if value is not None:
                     self.cache[path] = value
             except (OSError, ValueError, KeyError, TypeError) as error:
@@ -159,7 +161,7 @@ class HumanImitation:
         # Retain a bounded replay-protection ledger even after old games are pruned.
         if len(self.consumed) > 512:
             self.consumed = dict(list(self.consumed.items())[-512:])
-        state = dict(version=1, runId=self.run.name, boardSize=self.board, rulesVersion=RULES_VERSION,
+        state = dict(version=1, runId=self.run.name, boardSize=self.board, rulesVersion=self.rules_version,
                      savedGames=self.saved_games, winningGames=len(self.cache), samples=sum(len(v[3]) for v in self.cache.values()),
                      usedExamples=self.used_examples, updates=self.updates, lastStep=self.last_step,
                      lastLoss=self.last_loss, consumed=self.consumed, error=self.error)
@@ -175,9 +177,10 @@ def install(factory):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             from exploration_pressure import ExplorationPressure
-            self.exploration = ExplorationPressure(os.environ['BLOCKNATIONS_RATING_RUN'])
+            rules = validate_rules_version(os.environ.get('BLOCKNATIONS_RULES_VERSION', RULES_VERSION))
+            self.exploration = ExplorationPressure(os.environ['BLOCKNATIONS_RATING_RUN'], rules)
             self.human = HumanImitation(os.environ['BLOCKNATIONS_RATING_RUN'],
-                                       int(os.environ['BLOCKNATIONS_RATING_BOARD']), self.seed)
+                                       int(os.environ['BLOCKNATIONS_RATING_BOARD']), self.seed, rules)
 
         def _update_policy(self):
             exploration_batch = self.exploration.prepare(self.policy, self.update_buffer, self.get_step)

@@ -9,7 +9,8 @@ import math
 import re
 from pathlib import Path
 
-from training_contract import RULES_VERSION, OPENING_ECONOMY_VERSION, checkpoint_step
+from training_contract import (RULES_VERSION, OPENING_ECONOMY_VERSION, checkpoint_step,
+                               CORE_THREE_RULES, validate_rules_version, validate_transfer, run_rules_version)
 from playtest_sampling import PRESETS
 
 
@@ -37,25 +38,26 @@ def checked_contents(path, expected, maximum):
     return contents
 
 
-def load_recipe(run):
+def load_recipe(run, rules_version=RULES_VERSION):
     path = Path(run)/'training-opponents.json'
     if not path.exists():
         return None
-    return validate_recipe(run,json.loads(path.read_text()))
+    return validate_recipe(run,json.loads(path.read_text()), rules_version)
 
 
-def validate_recipe(run, recipe):
+def validate_recipe(run, recipe, rules_version=RULES_VERSION):
+    rules_version = validate_rules_version(rules_version)
     if not isinstance(recipe,dict):
         raise ValueError('Opponent recipe needs a versioned definition.')
     if (type(recipe.get('version')) is not int or recipe['version'] not in (1,2) or
-            recipe.get('rulesVersion') != RULES_VERSION or
+            recipe.get('rulesVersion') != rules_version or
             type(recipe.get('probability')) not in (int, float) or
             not 0 <= recipe['probability'] <= .5):
         raise ValueError('Incompatible training opponent recipe; keep at least half the games as learned self-play.')
     if recipe['version'] == 2:
         manifest = json.loads((Path(run)/'run.json').read_text())
         if (manifest.get('owner') != 'BlockNations.LocalTraining.v1' or manifest.get('schema') != 2 or
-                recipe.get('boardSize') != manifest.get('boardSize') or
+                recipe.get('boardSize') != manifest.get('boardSize') or run_rules_version(run) != rules_version or
                 recipe.get('openingEconomyVersion') != OPENING_ECONOMY_VERSION or
                 manifest.get('openingEconomyVersion') != OPENING_ECONOMY_VERSION or
                 not isinstance(recipe.get('opponents'),list) or not 1 <= len(recipe['opponents']) <= 8):
@@ -72,6 +74,8 @@ def validate_recipe(run, recipe):
             recruit = entry.get('recruitType', '')
             if not isinstance(recruit, str) or (recruit and not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', recruit)):
                 raise ValueError('Use an optional roster type identifier for a tactical reference.')
+            if rules_version == CORE_THREE_RULES and recruit == 'scout':
+                raise ValueError('A Scout-only reference cannot recruit under the three-unit rules.')
         elif recipe['version'] == 2 and entry.get('kind') == 'frozen-policy':
             checkpoint = owned_frozen_path(run,entry.get('checkpoint'))
             checkpoint_step(checkpoint)
@@ -79,8 +83,8 @@ def validate_recipe(run, recipe):
             config = owned_frozen_path(run,entry.get('trainerConfig'))
             plan = json.loads(checked_contents(config,entry.get('configSha256'),256_000))
             frozen = json.loads((checkpoint.parent/'manifest.json').read_text())
+            validate_transfer(frozen.get('rulesVersion'), rules_version, entry.get('transferRules'))
             if (frozen.get('sha256') != entry['checkpointSha256'] or
-                    frozen.get('rulesVersion') != RULES_VERSION or
                     frozen.get('boardSize') != recipe['boardSize'] or
                     frozen.get('openingEconomyVersion') != OPENING_ECONOMY_VERSION or
                     entry.get('sampling') not in ('Policy','Easy','Medium','Hard') or
@@ -91,7 +95,7 @@ def validate_recipe(run, recipe):
                 raise ValueError('Retained model provenance or sampling is incompatible.')
         else:
             raise ValueError('Only fair tactical and retained learned opponents are supported.')
-    if len(set(entry_id(entry) for entry in entries(recipe))) != len(entries(recipe)):
+    if len(set(entry_id(entry, rules_version) for entry in entries(recipe))) != len(entries(recipe)):
         raise ValueError('Duplicate league policies should use one weighted entry.')
     return recipe
 
@@ -99,21 +103,22 @@ def validate_recipe(run, recipe):
 def recipe_id(recipe):
     if recipe['version'] == 2:
         return 'league-' + hashlib.sha256(json.dumps(recipe,sort_keys=True).encode()).hexdigest()[:24]
-    return entry_id(recipe)
+    return entry_id(recipe, recipe['rulesVersion'])
 
 
-def entry_id(entry):
+def entry_id(entry, rules_version=RULES_VERSION):
+    rules_version = validate_rules_version(rules_version)
     # Include the actual policy implementation revision and rules. This is a
     # distinct rated entity, not a hash pretending to be neural weights.
     if entry['kind'] == 'frozen-policy':
         # Unmodified identical actors are the same rated entity, regardless of
         # checkpoint packaging or trainer settings. Sampling presets are distinct.
-        if entry['sampling'] == 'Policy':return entry['actorId']
+        if entry['sampling'] == 'Policy' and rules_version == RULES_VERSION:return entry['actorId']
         return 'sampled-' + hashlib.sha256(json.dumps(dict(actor=entry['actorId'],
-            sampling=entry['sampling'], settings=entry['samplingSettings'], rules=RULES_VERSION),
+            sampling=entry['sampling'], settings=entry['samplingSettings'], rules=rules_version),
             sort_keys=True).encode()).hexdigest()[:24]
     identity = dict(kind=entry['kind'], implementation='hard-tactician-v3',
-                    rules=RULES_VERSION, work=entry['workBudget'])
+                    rules=rules_version, work=entry['workBudget'])
     # Preserve existing unrestricted identities; a restricted reference is a
     # distinct opponent, never a restriction on the learning seat's roster.
     if entry.get('recruitType'):
@@ -122,13 +127,14 @@ def entry_id(entry):
 
 
 def challenger_ids(recipe):
-    return [entry_id(entry) for entry in entries(recipe)] if recipe else []
+    return [entry_id(entry, recipe['rulesVersion']) for entry in entries(recipe)] if recipe else []
 
 
 class TrainingOpponents:
-    def __init__(self, run, seed):
+    def __init__(self, run, seed, rules_version=RULES_VERSION):
         self.run = Path(run)
-        self.recipe = load_recipe(run)
+        self.rules_version = validate_rules_version(rules_version)
+        self.recipe = load_recipe(run, self.rules_version)
         self.entries = entries(self.recipe) if self.recipe else []
         self.seed = seed
         self.assignments = {}
@@ -180,7 +186,7 @@ class TrainingOpponents:
             if entry['kind'] == 'fair-tactician':
                 options = dict(work_budget=entry['workBudget'], agents=group)
                 if entry.get('recruitType'):
-                    if entry['recruitType'] not in env.roster:
+                    if entry['recruitType'] not in getattr(env, 'enabled_roster', env.roster):
                         raise ValueError('Tactical reference recruit type is absent from the current roster.')
                     options['recruit_type'] = entry['recruitType']
                 advice = env.reference_actions(opponent_seat, **options)
@@ -204,8 +210,8 @@ class TrainingOpponents:
                 raise ValueError('Training challenger advice did not cover the selected opponent agents.')
             replaced.update(advice)
             self.decisions += len(advice)
-            identifier = entry_id(entry)
+            identifier = entry_id(entry, self.rules_version)
             self.decisions_by_policy[identifier] = self.decisions_by_policy.get(identifier,0)+len(advice)
-        assignments = [dict(policy, opponent=entry_id(self.entries[self.assignments[worker][1]]))
+        assignments = [dict(policy, opponent=entry_id(self.entries[self.assignments[worker][1]], self.rules_version))
                        if worker in selected else policy for worker in range(env.workers)]
         return replaced, assignments

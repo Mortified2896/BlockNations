@@ -8,6 +8,10 @@ On 2026-10-09 the owner approved and implemented a [shared C# simulation](Shared
 
 ## Implementation plan
 
+Development rule profiles now support the unchanged four-unit v4 baseline, `blocknations-simulation-v5-vision2` (four units, Archer vision 2), and `blocknations-simulation-v5-core3` (Warrior/Rider/Archer recruitment, Archer vision 2). The Python supervisor's `--rules-version` selects a new run's profile; Resume retains that run's recorded profile. Native workers and viewers receive the profile explicitly. Transfers preserve original trained-rules provenance and stable neural slots, and must advance training past the parent checkpoint before claiming a new-rules model. `Tools/Training/rule_profile_study.py` provides bounded matched continuations with fixed before/after evaluation and the same shared storage root. Human recordings are ingested only under matching rules. These experiments do not alter ordinary gameplay/PBp or authorize browser export; see the [balance experiment](AI_Balance_Experiment.md#completed-exploration-comparison-and-matched-rule-trials-2026-10-11) for current measurements and limits.
+
+The installed `LocalTrainingBalanceV4.app` remains the baseline playtest/inspection build. New-profile human play requires a separately rebuilt native player; a mismatched player is rejected instead of silently running the wrong rules. The new profile worker lives in `Build/TrainingWorkerRuleProfiles`, preserving the running v4 binary.
+
 Use Unity ML-Agents 4.0.x with the matching Python trainer 1.1.0. Keep Python dependencies in a project-specific environment outside Assets and generated results outside Git. The initial target is one visible two-seat 11×11 arena and a small numeric-observation policy.
 
 Fair observations are projected from the shared match state for Hard and training. TurnManager's explicitly configured external path is bounded to development scenes and bypasses user save/resume, autosave and ordinary AI scheduling. Gameplay, saves and PBp retain their existing Unity/transport interfaces while their action transitions use the shared rules kernel.

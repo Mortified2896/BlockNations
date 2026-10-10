@@ -12,7 +12,7 @@ from pathlib import Path
 from evaluate_policy import FrozenActor, TacticalActor, evaluate
 from frozen_policy import SAMPLING_MODES
 from mlagents.torch_utils import torch
-from training_contract import RULES_VERSION, OPENING_ECONOMY_VERSION
+from training_contract import RULES_VERSION, OPENING_ECONOMY_VERSION, validate_rules_version, validate_transfer
 
 
 def digest(path):
@@ -32,12 +32,13 @@ def worker_digest(worker):
     return hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
 
 
-def frozen_actor(manifest_path):
+def frozen_actor(manifest_path, rules_version=RULES_VERSION, transfer=None):
     manifest_path = Path(manifest_path)
     manifest = json.loads(manifest_path.read_text())
-    if (manifest.get('rulesVersion') != RULES_VERSION or manifest.get('boardSize') != 7 or
+    if (manifest.get('boardSize') != 7 or
             manifest.get('openingEconomyVersion') != OPENING_ECONOMY_VERSION):
         raise ValueError('Benchmark requires a compatible frozen 7x7 provenance manifest.')
+    validate_transfer(manifest.get('rulesVersion'), rules_version, transfer)
     checkpoint = Path(manifest['checkpoint'])
     config = Path(manifest['trainerConfig'])
     if checkpoint.parent.resolve() != manifest_path.parent.resolve() or config.parent.resolve() != checkpoint.parent.resolve():
@@ -48,18 +49,22 @@ def frozen_actor(manifest_path):
     if actor.sha256 != manifest['sha256']:
         raise ValueError('Frozen benchmark weights changed after selection.')
     # The immutable benchmark receipt includes configuration as well as weights.
-    return actor, dict(sha256=actor.sha256, configSha256=hashlib.sha256(config_contents).hexdigest(), actorId=actor.actor_id)
+    identity = dict(sha256=actor.sha256, configSha256=hashlib.sha256(config_contents).hexdigest(), actorId=actor.actor_id)
+    if transfer is not None:
+        identity.update(trainedRulesVersion=manifest['rulesVersion'], transferRules=transfer)
+    return actor, identity
 
 
-def prepare(candidate_manifest, suite_path):
+def prepare(candidate_manifest, suite_path, *, candidate_transfer=None):
     suite = json.loads(Path(suite_path).read_text())
-    if (suite.get('version') != 1 or suite.get('rulesVersion') != RULES_VERSION or
+    rules_version = validate_rules_version(suite.get('rulesVersion'))
+    if (suite.get('version') != 1 or
             suite.get('boardSize') != 7 or suite.get('openingEconomyVersion') != OPENING_ECONOMY_VERSION or
             not isinstance(suite.get('workerSha256'), str) or len(suite['workerSha256']) != 64 or
             any(c not in '0123456789abcdef' for c in suite['workerSha256']) or
             not isinstance(suite.get('cases'), list) or not 1 <= len(suite['cases']) <= 32):
         raise ValueError('Choose a bounded, versioned benchmark suite for the current contract.')
-    candidate, identity = frozen_actor(candidate_manifest)
+    candidate, identity = frozen_actor(candidate_manifest, rules_version, candidate_transfer)
     prepared, definitions, names = [], [], set()
     for case in suite['cases']:
         name = case.get('name')
@@ -76,7 +81,7 @@ def prepare(candidate_manifest, suite_path):
         if kind == 'self':
             actor, ref_identity = candidate, dict(kind='self')
         elif kind == 'frozen':
-            actor, ref_identity = frozen_actor(reference['manifest'])
+            actor, ref_identity = frozen_actor(reference['manifest'], rules_version, reference.get('transferRules'))
             if (reference.get('checkpointSha256') != ref_identity['sha256'] or
                     reference.get('configSha256') != ref_identity['configSha256']):
                 raise ValueError('Fixed reference differs from the benchmark definition.')
@@ -94,18 +99,19 @@ def prepare(candidate_manifest, suite_path):
                           referenceDifficulty=reference_mode, reference=ref_identity)
         definitions.append(definition)
         prepared.append((definition, actor))
-    canonical = dict(version=1, rulesVersion=RULES_VERSION, boardSize=7,
+    canonical = dict(version=1, rulesVersion=rules_version, boardSize=7,
                      openingEconomyVersion=OPENING_ECONOMY_VERSION, cases=definitions,
                      workerSha256=suite['workerSha256'],
                      packages={name: version(name) for name in ('mlagents', 'torch', 'numpy')},
                      evaluatorSources={name: digest(Path(__file__).with_name(name))
-                                       for name in ('evaluate_suite.py', 'evaluate_policy.py', 'frozen_policy.py', 'playtest_sampling.py')})
+                                       for name in ('evaluate_suite.py', 'evaluate_policy.py', 'frozen_policy.py', 'playtest_sampling.py',
+                                                    'training_contract.py', 'dotnet_environment.py', 'training_opponents.py')})
     suite_id = hashlib.sha256(json.dumps(canonical, sort_keys=True).encode()).hexdigest()
     return candidate, identity, prepared, dict(canonical, suiteId=suite_id)
 
 
-def run(candidate_manifest, suite_path, worker, destination):
-    candidate, identity, cases, definition = prepare(candidate_manifest, suite_path)
+def run(candidate_manifest, suite_path, worker, destination, *, candidate_transfer=None):
+    candidate, identity, cases, definition = prepare(candidate_manifest, suite_path, candidate_transfer=candidate_transfer)
     destination = Path(destination)
     worker_identity = worker_digest(worker)
     if worker_identity != definition['workerSha256']:
@@ -122,7 +128,8 @@ def run(candidate_manifest, suite_path, worker, destination):
         for case, reference in cases:
             result = evaluate(worker, destination/case['name'], candidate, reference,
                               games_per_cell=case['gamesPerCell'], seed=case['seed'],
-                              difficulty=case['difficulty'], reference_difficulty=case['referenceDifficulty'])
+                              difficulty=case['difficulty'], reference_difficulty=case['referenceDifficulty'],
+                              rules_version=definition['rulesVersion'])
             result.pop('records')  # Complete match records remain in each case's evaluation.json.
             receipt['results'].append(dict(case=case['name'], **result))
             save()
@@ -141,7 +148,9 @@ if __name__ == '__main__':
     parser.add_argument('--suite', type=Path, required=True)
     parser.add_argument('--worker', type=Path, required=True)
     parser.add_argument('--destination', type=Path, required=True)
+    parser.add_argument('--candidate-transfer', type=Path, help='Explicit source/target profile contract for transferred candidate weights.')
     args = parser.parse_args()
     torch.set_num_threads(2)
-    result = run(args.candidate_manifest, args.suite, args.worker, args.destination)
+    result = run(args.candidate_manifest, args.suite, args.worker, args.destination,
+                 candidate_transfer=json.loads(args.candidate_transfer.read_text()) if args.candidate_transfer else None)
     print(json.dumps(dict(suiteId=result['suiteId'], state=result['state'], cases=len(result['results']))))

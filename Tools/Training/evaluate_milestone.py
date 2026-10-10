@@ -14,7 +14,7 @@ import time
 
 from evaluate_suite import frozen_actor, worker_digest, run as evaluate
 from playtest import latest_checkpoint, atomic_json
-from training_contract import RULES_VERSION, OPENING_ECONOMY_VERSION
+from training_contract import RULES_VERSION, OPENING_ECONOMY_VERSION, run_rules_version
 
 
 def digest(data):
@@ -26,6 +26,7 @@ def checked_run(run):
     if run.is_symlink() or run.resolve() != run.absolute():
         raise ValueError('Use the real owned run directory, without symbolic links.')
     manifest = json.loads((run/'run.json').read_text())
+    run_rules_version(run)
     if (manifest.get('owner') != 'BlockNations.LocalTraining.v1' or
             manifest.get('schema') != 2 or manifest.get('boardSize') != 7 or
             manifest.get('observationSize') != 3120 or manifest.get('actionCount') != 259 or
@@ -35,6 +36,12 @@ def checked_run(run):
 
 
 def freeze(run, source, after_step, config, recipe_sha):
+    rules_version = run_rules_version(run)
+    boundary = json.loads((run/'checkpoint-contract.json').read_text()) if (run/'checkpoint-contract.json').exists() else {}
+    step = int(source.stem.rsplit('-',1)[1])
+    if rules_version != RULES_VERSION and (boundary.get('rulesVersion') != rules_version or
+            step <= boundary.get('minimumCheckpointStep', step)):
+        raise ValueError('Transferred weights must train under the new rules before being labeled as a new-rules checkpoint.')
     base = run/'frozen-evaluations'
     if base.is_symlink():
         raise ValueError('Frozen evaluation storage must remain inside its owned run.')
@@ -56,11 +63,14 @@ def freeze(run, source, after_step, config, recipe_sha):
             (temporary/path.name).write_bytes(data)
         (temporary/'trainer.yaml').write_bytes(config)
         manifest = dict(checkpoint=str(temporary/source.name),trainerConfig=str(temporary/'trainer.yaml'),
-            sha256=digest(contents[0]),step=int(source.stem.rsplit('-',1)[1]),afterStep=after_step,
-            boardSize=7,rulesVersion=RULES_VERSION,openingEconomyVersion=OPENING_ECONOMY_VERSION,
+            sha256=digest(contents[0]),step=step,afterStep=after_step,
+            boardSize=7,rulesVersion=rules_version,openingEconomyVersion=OPENING_ECONOMY_VERSION,
             trainingRecipeSha256=recipe_sha,trainerConfigSha256=digest(config),frozenUnix=time.time())
+        run_manifest = json.loads((run/'run.json').read_text())
+        if 'weightTransfer' in run_manifest:
+            manifest['weightTransfer'] = run_manifest['weightTransfer']
         atomic_json(temporary/'manifest.json',manifest)
-        actor, _ = frozen_actor(temporary/'manifest.json')  # Strict shapes and finite weights.
+        actor, _ = frozen_actor(temporary/'manifest.json', rules_version)  # Strict shapes and finite weights.
         manifest.update(actorId=actor.actor_id,checkpoint=str(final/source.name),trainerConfig=str(final/'trainer.yaml'))
         atomic_json(temporary/'manifest.json',manifest)
         temporary.rename(final)
@@ -80,11 +90,13 @@ def milestone(run, after_step, suite, worker, destination, *, wait_seconds=14400
         raise ValueError('Evaluation destination already exists.')
     suite = Path(suite)
     suite_contents = suite.read_bytes()
+    if json.loads(suite_contents).get('rulesVersion', RULES_VERSION) != run_rules_version(run):
+        raise ValueError('Milestone evaluation must use the recorded run rules.')
     if worker_digest(worker) != json.loads(suite_contents).get('workerSha256'):
         raise ValueError('Worker differs from the fixed benchmark definition.')
     source_files = [Path(__file__).with_name(name) for name in (
         'evaluate_milestone.py','evaluate_suite.py','evaluate_policy.py','frozen_policy.py',
-        'playtest_sampling.py','playtest.py','dotnet_environment.py','training_opponents.py')]
+        'playtest_sampling.py','playtest.py','dotnet_environment.py','training_opponents.py','training_contract.py')]
     source_hashes = {path:digest(path.read_bytes()) for path in source_files}
     config = (run/'trainer.yaml').read_bytes()
     if len(config) > 256_000:

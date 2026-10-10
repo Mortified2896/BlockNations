@@ -17,7 +17,8 @@ import numpy as np
 from mlagents_envs.base_env import (BaseEnv, BehaviorSpec, ObservationSpec, DimensionProperty,
                                   ObservationType, ActionSpec, ActionTuple, DecisionSteps, TerminalSteps)
 from mlagents.trainers.env_manager import EnvManager, EnvironmentStep
-from training_contract import RULES_VERSION, OBSERVATIONS, ACTIONS, OPENING_ECONOMY_VERSION, validate_opening_economy
+from training_contract import (RULES_VERSION, OBSERVATIONS, ACTIONS, OPENING_ECONOMY_VERSION,
+                               POLICY_CATALOG, CORE_THREE_RULES, validate_opening_economy, validate_rules_version)
 from training_opponents import TrainingOpponents
 
 BEHAVIOR = 'BlockNationsSeatV2'
@@ -34,7 +35,8 @@ def atomic_json(path, data):
 
 class DotNetEnvironment(BaseEnv):
     def __init__(self, executable, run, workers, seed, size, curriculum, distance, session, policy_provider=lambda: None,
-                 opening_economy_version=OPENING_ECONOMY_VERSION, first_seat=-1):
+                 opening_economy_version=OPENING_ECONOMY_VERSION, first_seat=-1, rules_version=RULES_VERSION):
+        self.rules_version = validate_rules_version(rules_version)
         opening_economy_version = validate_opening_economy(opening_economy_version)
         if type(first_seat) is not int or first_seat not in (-1, 0, 1):
             raise ValueError('Choose a random starter or explicit seat 0/1 for evaluation.')
@@ -42,7 +44,7 @@ class DotNetEnvironment(BaseEnv):
         # would put its journals/replays in a nested copy of the directory.
         self.run, self.workers = Path(run).absolute(), workers
         self.policy_provider = policy_provider
-        self.opponents = TrainingOpponents(self.run, seed)
+        self.opponents = TrainingOpponents(self.run, seed, self.rules_version)
         self.actions, self.results, self.stats = {}, {}, []
         self.closed = False
         self.failure = ''
@@ -61,7 +63,8 @@ class DotNetEnvironment(BaseEnv):
             prefix = [dotnet, str(executable)]
         command = prefix + ['--run', str(self.run), '--workers', str(workers), '--seed', str(seed),
                             '--size', str(size), '--curriculum', str(bool(curriculum)).lower(), '--distance', str(distance), '--session', session,
-                            '--opening-economy-version', str(opening_economy_version), '--first-seat', str(first_seat)]
+                            '--opening-economy-version', str(opening_economy_version), '--first-seat', str(first_seat),
+                            '--rules-version', self.rules_version]
         self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                         text=True, bufsize=1, cwd=self.run)
         self.reader = threading.Thread(target=self._read, daemon=True)
@@ -107,10 +110,14 @@ class DotNetEnvironment(BaseEnv):
             raise RuntimeError(str(response) + ' ' + self.stderr_tail) from response
         if (response.get('protocol') != 1 or response.get('behavior') != BEHAVIOR or
                 response.get('observationSize') != OBSERVATIONS or response.get('actionCount') != ACTIONS or
-                response.get('rulesVersion') != RULES_VERSION):
+                response.get('rulesVersion') != self.rules_version):
             raise ValueError('C# rules/model protocol mismatch; do not train on an incompatible worker.')
         self.stats = response['stats']
         self.roster = tuple(response.get('recruitTypes', ()))
+        self.enabled_roster = tuple(response.get('enabledRecruitTypes', self.roster))
+        expected_enabled = tuple(kind for kind in POLICY_CATALOG if kind != 'scout') if self.rules_version == CORE_THREE_RULES else POLICY_CATALOG
+        if self.roster != POLICY_CATALOG or self.enabled_roster != expected_enabled:
+            raise ValueError('C# policy catalog or recruit availability differs from the recorded rules; preserve model slot meanings.')
         if len(self.stats) != self.workers:
             raise ValueError('Worker count changed unexpectedly.')
         if request['op'] == 'status':
@@ -301,7 +308,8 @@ def install(learn, policy_provider):
                                      int(os.environ['BLOCKNATIONS_PARALLEL_GAMES']), int(os.environ['BLOCKNATIONS_SIMULATION_SEED']),
                                      int(os.environ['BLOCKNATIONS_RATING_BOARD']), os.environ['BLOCKNATIONS_SIMULATION_CURRICULUM'] == 'true',
                                      int(os.environ['BLOCKNATIONS_SIMULATION_DISTANCE']), os.environ['BLOCKNATIONS_RATING_SESSION'], policy_provider,
-                                     opening_economy_version=int(os.environ.get('BLOCKNATIONS_OPENING_ECONOMY_VERSION', OPENING_ECONOMY_VERSION)))
+                                     opening_economy_version=int(os.environ.get('BLOCKNATIONS_OPENING_ECONOMY_VERSION', OPENING_ECONOMY_VERSION)),
+                                     rules_version=os.environ.get('BLOCKNATIONS_RULES_VERSION', RULES_VERSION))
         return create
     learn.create_environment_factory = factory
     learn.SubprocessEnvManager = BatchedSimulationManager

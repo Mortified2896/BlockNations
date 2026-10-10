@@ -15,7 +15,7 @@ from mlagents.trainers.behavior_id_utils import create_name_behavior_id
 from match_rating import MatchRating, MatchJournalReader, policy_id
 from interactive_environment import install as install_interactive_environment
 from dotnet_environment import install as install_dotnet_environment
-from training_contract import RULES_VERSION
+from training_contract import RULES_VERSION, validate_rules_version
 from training_opponents import load_recipe, challenger_ids
 
 ACTIVE_TRAINER = None
@@ -28,7 +28,8 @@ class WholeMatchGhostTrainer(GhostTrainer):
         self.rating_path = self.run / 'match-elo.json'
         self.rating = MatchRating(self.run.name, int(os.environ['BLOCKNATIONS_RATING_BOARD']))
         self.rating.restore(self.rating_path)
-        self.rating.data['rulesVersion'] = RULES_VERSION
+        self.rules_version = validate_rules_version(os.environ.get('BLOCKNATIONS_RULES_VERSION', RULES_VERSION))
+        self.rating.data['rulesVersion'] = self.rules_version
         for worker in range(16):
             pending = self.rating.pending_for(worker)
             if pending and pending['session'] != self.session:
@@ -38,7 +39,7 @@ class WholeMatchGhostTrainer(GhostTrainer):
         self.last_rating_save = 0
         self.policy_ids = {}
         self.snapshot_ids = {}
-        recipe = load_recipe(self.run)
+        recipe = load_recipe(self.run, self.rules_version)
         self.challenger_ids = challenger_ids(recipe)
         super().__init__(*args, **kwargs)
         # Never inherit the inflated legacy trajectory Elo.

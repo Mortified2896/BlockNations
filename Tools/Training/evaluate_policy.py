@@ -18,7 +18,7 @@ from mlagents_envs.base_env import ActionTuple
 
 from dotnet_environment import DotNetEnvironment, NAMES, SPEC
 from frozen_policy import FrozenPolicy, SAMPLING_MODES, evaluation_weights
-from training_contract import RULES_VERSION, OPENING_ECONOMY_VERSION
+from training_contract import RULES_VERSION, OPENING_ECONOMY_VERSION, validate_rules_version
 
 
 def wilson(wins, games):
@@ -50,7 +50,8 @@ class TacticalActor:
 
 
 def evaluate(worker, directory, candidate, reference=None, *, games_per_cell=16, seed=10001,
-             reference_type='', reference_work=64, difficulty='Hard', reference_difficulty=None):
+             reference_type='', reference_work=64, difficulty='Hard', reference_difficulty=None, rules_version=RULES_VERSION):
+    rules_version = validate_rules_version(rules_version)
     if games_per_cell < 4 or games_per_cell % 4:
         raise ValueError('Games per cell must be a positive multiple of four.')
     reference_difficulty = reference_difficulty or difficulty
@@ -66,7 +67,7 @@ def evaluate(worker, directory, candidate, reference=None, *, games_per_cell=16,
             cell = directory / f'first-{first}-candidate-{candidate_seat}'
             cell.mkdir()
             env = DotNetEnvironment(worker, cell, 4, seed, 7, False, 2, uuid.uuid4().hex,
-                                   opening_economy_version=OPENING_ECONOMY_VERSION, first_seat=first)
+                                   opening_economy_version=OPENING_ECONOMY_VERSION, first_seat=first, rules_version=rules_version)
             # Independent seeded streams for each colour, unaffected by Torch RNG.
             randoms = [np.random.default_rng(seed + seat*7919) for seat in (0, 1)]
             finished = [0]*4
@@ -120,7 +121,7 @@ def evaluate(worker, directory, candidate, reference=None, *, games_per_cell=16,
         recruit_counts.update(game['candidateRecruits'])
         if not game['interrupted'] and game['winner'] == game['candidateSeat']:
             winning_recruits.update(game['candidateRecruits'])
-    result = dict(version=1, rulesVersion=RULES_VERSION, boardSize=7, openingEconomyVersion=OPENING_ECONOMY_VERSION,
+    result = dict(version=1, rulesVersion=rules_version, boardSize=7, openingEconomyVersion=OPENING_ECONOMY_VERSION,
         candidate=candidate.name, candidateSha256=candidate.sha256,
         reference=reference.name, referenceSha256=reference.sha256,
         referenceRecruitType=getattr(reference,'recruit_type',None), referenceWork=getattr(reference,'work',None),

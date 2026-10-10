@@ -10,7 +10,7 @@ import time
 from bounded_log import BoundedLog
 from training_opponents import load_recipe, recipe_id
 from training_contract import (RULES_VERSION, OPENING_ECONOMY_VERSION, LEGACY_OPENING_ECONOMY_VERSION,
-                               validate_opening_economy, latest_saved_step)
+                               validate_opening_economy, latest_saved_step, validate_rules_version, run_rules_version)
 
 
 def read_json(path):
@@ -26,15 +26,18 @@ def configure(args, run, environment):
     if not args.worker.is_file():
         raise ValueError('Build the C# simulation worker before starting decoupled training.')
     economy = validate_opening_economy(getattr(args, 'opening_economy_version', OPENING_ECONOMY_VERSION))
+    rules = validate_rules_version(getattr(args, 'rules_version', RULES_VERSION))
+    if (run/'run.json').exists() and run_rules_version(run) != rules:
+        raise ValueError('Execution rules differ from the owned run; create a separate versioned run.')
     environment.update(BLOCKNATIONS_SIMULATION_WORKER=str(args.worker.absolute()),
                        BLOCKNATIONS_PARALLEL_GAMES=str(args.parallel_games),
                        BLOCKNATIONS_SIMULATION_SEED=str(args.seed),
                        BLOCKNATIONS_SIMULATION_CURRICULUM=str(args.curriculum).lower(),
                        BLOCKNATIONS_SIMULATION_DISTANCE=str(args.curriculum_distance),
-                       BLOCKNATIONS_OPENING_ECONOMY_VERSION=str(economy))
+                       BLOCKNATIONS_OPENING_ECONOMY_VERSION=str(economy), BLOCKNATIONS_RULES_VERSION=rules)
     (run / 'training-control.json').unlink(missing_ok=True)
     previous = read_json(run / 'execution-settings.json')
-    changed = previous and (previous.get('rulesVersion') != RULES_VERSION or
+    changed = previous and (previous.get('rulesVersion') != rules or
                             previous.get('openingEconomyVersion', LEGACY_OPENING_ECONOMY_VERSION) != economy)
     if changed:
         revision = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())
@@ -53,15 +56,16 @@ def configure(args, run, environment):
         # that an old saved actor has been trained under them.
         if contract_path.exists():
             contract_path.rename(run / ('checkpoint-contract-before-' + revision + '.json'))
-        contract = dict(version=1, rulesVersion=RULES_VERSION, boardSize=args.board_size,
-                        openingEconomyVersion=economy, minimumCheckpointStep=latest_saved_step(run))
+        parent_step = read_json(run/'run.json').get('weightTransfer', {}).get('parentStep', 0)
+        contract = dict(version=1, rulesVersion=rules, boardSize=args.board_size,
+                        openingEconomyVersion=economy, minimumCheckpointStep=max(latest_saved_step(run), parent_step))
         (run / 'checkpoint-contract.json.tmp').write_text(json.dumps(contract) + '\n')
         (run / 'checkpoint-contract.json.tmp').replace(contract_path)
     record = dict(version=1, backend='standalone-dotnet', workerCount=args.parallel_games,
-                  rulesVersion=RULES_VERSION, modelSchema=2, openingEconomyVersion=economy,
+                  rulesVersion=rules, modelSchema=2, openingEconomyVersion=economy,
                   seedConvention='seed + arena * 7919', seed=args.seed,
                   updatedUtc=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()))
-    recipe = load_recipe(run)
+    recipe = load_recipe(run, rules)
     if recipe:
         record['trainingOpponentRecipe'] = recipe
         record['trainingChallengerId'] = recipe_id(recipe)
@@ -96,6 +100,7 @@ class ViewerSession:
                 self.output_thread.join(timeout=2)
             log = BoundedLog(self.run / 'viewer.log', limit=2 * 1024 * 1024)
             command = [str(executable), '--training-viewer', 'true', '--viewer-run', str(self.run),
+                       '--training-rules-version', run_rules_version(self.run),
                        '-screen-width', '1400', '-screen-height', '900', '-screen-fullscreen', '0',
                        '-logFile', '-']
             if sys.platform == 'darwin':

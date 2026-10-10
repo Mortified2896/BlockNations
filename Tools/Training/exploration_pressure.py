@@ -13,7 +13,7 @@ from mlagents.trainers.buffer import BufferKey
 from mlagents.trainers.torch_entities.utils import ModelUtils
 from mlagents.trainers.trajectory import ObsUtil
 
-from training_contract import RULES_VERSION, OBSERVATIONS, ACTIONS
+from training_contract import RULES_VERSION, OBSERVATIONS, ACTIONS, validate_rules_version
 
 
 def masked_uniform_kl(logits, allowed, entropy_floor):
@@ -39,14 +39,15 @@ def masked_uniform_kl(logits, allowed, entropy_floor):
 
 
 class ExplorationPressure:
-    def __init__(self, run):
+    def __init__(self, run, rules_version=RULES_VERSION):
+        rules_version = validate_rules_version(rules_version)
         self.recipe = None
         path = Path(run)/'exploration-pressure.json'
         if not path.exists():
             return
         recipe = json.loads(path.read_text())
         manifest = json.loads((Path(run)/'run.json').read_text())
-        if (type(recipe.get('version')) is not int or recipe['version'] != 1 or recipe.get('rulesVersion') != RULES_VERSION or
+        if (type(recipe.get('version')) is not int or recipe['version'] != 1 or recipe.get('rulesVersion') != rules_version or
                 manifest.get('owner') != 'BlockNations.LocalTraining.v1' or manifest.get('schema') != 2 or
                 recipe.get('boardSize') != manifest.get('boardSize') or
                 type(recipe.get('coefficient')) not in (float, int) or not 0 < recipe['coefficient'] <= .02 or
