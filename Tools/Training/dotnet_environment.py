@@ -162,6 +162,7 @@ class DotNetEnvironment(BaseEnv):
         status.update(paused=paused, trainerConnected=not self.closed, failure=failure, humanPlaytest=False,
                       workerCount=self.workers, elapsedSeconds=now-self.started,
                       challengerDecisions=self.opponents.decisions, challengerPolicy=self.opponents.identifier,
+                      challengerDecisionsByPolicy=dict(self.opponents.decisions_by_policy),
                       decisionsPerSecond=status['decisions']/max(.001, now-self.started), updatedUnix=time.time())
         atomic_json(self.run / 'arena-status.json', status)
 

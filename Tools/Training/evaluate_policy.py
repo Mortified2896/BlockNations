@@ -6,8 +6,6 @@ Reference roster restrictions are probes, never rules imposed on a learner.
 """
 import argparse
 from collections import Counter
-import hashlib
-import io
 import json
 import math
 from pathlib import Path
@@ -16,28 +14,11 @@ import uuid
 
 import numpy as np
 from mlagents.torch_utils import torch
-from mlagents.trainers.settings import NetworkSettings
-from mlagents.trainers.torch_entities.networks import SimpleActor
 from mlagents_envs.base_env import ActionTuple
 
 from dotnet_environment import DotNetEnvironment, NAMES, SPEC
-from playtest_sampling import sampling_weights
+from frozen_policy import FrozenPolicy, SAMPLING_MODES, evaluation_weights
 from training_contract import RULES_VERSION, OPENING_ECONOMY_VERSION
-
-
-SAMPLING_MODES = ('Policy', 'Easy', 'Medium', 'Hard')
-
-
-def evaluation_weights(probabilities, difficulty):
-    # Policy measures the learned distribution without a playtest temperature
-    # or cutoff. It is an evaluation mode, not an additional game difficulty.
-    if difficulty == 'Policy':
-        values = np.asarray(probabilities, dtype=np.float64)
-        if (values.ndim != 2 or values.shape[1] != 259 or not np.isfinite(values).all() or
-                (values < 0).any() or (values.sum(axis=1) <= 0).any()):
-            raise ValueError('The frozen policy returned invalid action probabilities.')
-        return values / values.sum(axis=1, keepdims=True)
-    return sampling_weights(probabilities, difficulty)
 
 
 def wilson(wins, games):
@@ -50,27 +31,9 @@ def wilson(wins, games):
     return [max(0, centre-margin), min(1, centre+margin)]
 
 
-class FrozenActor:
+class FrozenActor(FrozenPolicy):
     def __init__(self, checkpoint, network):
-        if network.get('memory'):
-            raise ValueError('Recurrent evaluation requires an explicit memory adapter.')
-        contents = Path(checkpoint).read_bytes()
-        self.sha256 = hashlib.sha256(contents).hexdigest()
-        self.name = Path(checkpoint).stem
-        self.actor = SimpleActor(SPEC.observation_specs, NetworkSettings(**network), SPEC.action_spec)
-        self.actor.load_state_dict(torch.load(io.BytesIO(contents), map_location='cpu')['Policy'], strict=True)
-        self.actor.eval()
-
-    def choose(self, decisions, random, difficulty, *, environment=None, seat=None):
-        with torch.no_grad():
-            observation = torch.as_tensor(decisions.obs[0])
-            allowed = torch.as_tensor(~decisions.action_mask[0], dtype=torch.float32)
-            encoded, _ = self.actor.network_body([observation])
-            probabilities = self.actor.action_model._get_dists(encoded, allowed).discrete[0].probs.cpu().numpy()
-        # Reapply the authoritative mask, including to negligible SDK mask floors.
-        probabilities = np.where(decisions.action_mask[0], 0, probabilities)
-        weights = evaluation_weights(probabilities, difficulty)
-        return np.array([[random.choice(weights.shape[1], p=row)] for row in weights], dtype=np.int32)
+        super().__init__(checkpoint, network, SPEC)
 
 
 class TacticalActor:

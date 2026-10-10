@@ -5,39 +5,129 @@ The challenger uses the same seat projection and action schema as the learner.
 """
 import hashlib
 import json
+import math
 from pathlib import Path
 
-from training_contract import RULES_VERSION
+from training_contract import RULES_VERSION, OPENING_ECONOMY_VERSION, checkpoint_step
+from playtest_sampling import PRESETS
+
+
+def entries(recipe):
+    return recipe['opponents'] if recipe['version'] == 2 else [recipe]
+
+
+def owned_frozen_path(run, relative):
+    if not isinstance(relative, str) or Path(relative).is_absolute():
+        raise ValueError('Use a retained opponent file relative to its owned run.')
+    path = (Path(run)/relative).resolve()
+    base = Path(run).resolve()/'frozen-evaluations'
+    if base.is_symlink() or not path.is_relative_to(base) or not path.is_file():
+        raise ValueError('Retained opponents must remain inside the owned frozen-evaluations directory.')
+    return path
+
+
+def checked_contents(path, expected, maximum):
+    if (not isinstance(expected,str) or len(expected) != 64 or
+            any(c not in '0123456789abcdef' for c in expected) or path.stat().st_size > maximum):
+        raise ValueError('Invalid retained opponent digest or file size.')
+    contents = path.read_bytes()
+    if hashlib.sha256(contents).hexdigest() != expected:
+        raise ValueError('Retained opponent content changed; preserve its original files.')
+    return contents
 
 
 def load_recipe(run):
     path = Path(run)/'training-opponents.json'
     if not path.exists():
         return None
-    recipe = json.loads(path.read_text())
-    if (recipe.get('version') != 1 or recipe.get('rulesVersion') != RULES_VERSION or
-            recipe.get('kind') != 'fair-tactician' or
+    return validate_recipe(run,json.loads(path.read_text()))
+
+
+def validate_recipe(run, recipe):
+    if not isinstance(recipe,dict):
+        raise ValueError('Opponent recipe needs a versioned definition.')
+    if (type(recipe.get('version')) is not int or recipe['version'] not in (1,2) or
+            recipe.get('rulesVersion') != RULES_VERSION or
             type(recipe.get('probability')) not in (int, float) or
-            not 0 <= recipe['probability'] <= .5 or
-            type(recipe.get('workBudget')) is not int or not 1 <= recipe['workBudget'] <= 2048):
+            not 0 <= recipe['probability'] <= .5):
         raise ValueError('Incompatible training opponent recipe; keep at least half the games as learned self-play.')
+    if recipe['version'] == 2:
+        manifest = json.loads((Path(run)/'run.json').read_text())
+        if (manifest.get('owner') != 'BlockNations.LocalTraining.v1' or manifest.get('schema') != 2 or
+                recipe.get('boardSize') != manifest.get('boardSize') or
+                recipe.get('openingEconomyVersion') != OPENING_ECONOMY_VERSION or
+                manifest.get('openingEconomyVersion') != OPENING_ECONOMY_VERSION or
+                not isinstance(recipe.get('opponents'),list) or not 1 <= len(recipe['opponents']) <= 8):
+            raise ValueError('Retained opponent league belongs to another board, opening or run contract.')
+    for entry in entries(recipe):
+        if not isinstance(entry,dict):
+            raise ValueError('Each league opponent needs a versioned definition.')
+        weight = entry.get('weight',1)
+        if type(weight) not in (int,float) or not math.isfinite(weight) or not 0 < weight <= 100:
+            raise ValueError('Opponent weights must be positive and bounded.')
+        if entry.get('kind') == 'fair-tactician':
+            if type(entry.get('workBudget')) is not int or not 1 <= entry['workBudget'] <= 2048:
+                raise ValueError('Invalid fair tactical work budget.')
+        elif recipe['version'] == 2 and entry.get('kind') == 'frozen-policy':
+            checkpoint = owned_frozen_path(run,entry.get('checkpoint'))
+            checkpoint_step(checkpoint)
+            checked_contents(checkpoint,entry.get('checkpointSha256'),100_000_000)
+            config = owned_frozen_path(run,entry.get('trainerConfig'))
+            plan = json.loads(checked_contents(config,entry.get('configSha256'),256_000))
+            frozen = json.loads((checkpoint.parent/'manifest.json').read_text())
+            if (frozen.get('sha256') != entry['checkpointSha256'] or
+                    frozen.get('rulesVersion') != RULES_VERSION or
+                    frozen.get('boardSize') != recipe['boardSize'] or
+                    frozen.get('openingEconomyVersion') != OPENING_ECONOMY_VERSION or
+                    entry.get('sampling') not in ('Policy','Easy','Medium','Hard') or
+                    entry.get('samplingSettings') != (list(PRESETS[entry['sampling']]) if entry['sampling'] in PRESETS else None) or
+                    not isinstance(entry.get('actorId'),str) or len(entry['actorId']) != 24 or
+                    any(c not in '0123456789abcdef' for c in entry['actorId']) or
+                    plan['behaviors']['BlockNationsSeatV2']['network_settings'].get('memory')):
+                raise ValueError('Retained model provenance or sampling is incompatible.')
+        else:
+            raise ValueError('Only fair tactical and retained learned opponents are supported.')
+    if len(set(entry_id(entry) for entry in entries(recipe))) != len(entries(recipe)):
+        raise ValueError('Duplicate league policies should use one weighted entry.')
     return recipe
 
 
 def recipe_id(recipe):
+    if recipe['version'] == 2:
+        return 'league-' + hashlib.sha256(json.dumps(recipe,sort_keys=True).encode()).hexdigest()[:24]
+    return entry_id(recipe)
+
+
+def entry_id(entry):
     # Include the actual policy implementation revision and rules. This is a
     # distinct rated entity, not a hash pretending to be neural weights.
-    return 'tactician-' + hashlib.sha256(json.dumps(dict(kind=recipe['kind'],
-        implementation='hard-tactician-v3', rules=RULES_VERSION, work=recipe['workBudget']),
+    if entry['kind'] == 'frozen-policy':
+        # Unmodified identical actors are the same rated entity, regardless of
+        # checkpoint packaging or trainer settings. Sampling presets are distinct.
+        if entry['sampling'] == 'Policy':return entry['actorId']
+        return 'sampled-' + hashlib.sha256(json.dumps(dict(actor=entry['actorId'],
+            sampling=entry['sampling'], settings=entry['samplingSettings'], rules=RULES_VERSION),
+            sort_keys=True).encode()).hexdigest()[:24]
+    return 'tactician-' + hashlib.sha256(json.dumps(dict(kind=entry['kind'],
+        implementation='hard-tactician-v3', rules=RULES_VERSION, work=entry['workBudget']),
         sort_keys=True).encode()).hexdigest()[:24]
+
+
+def challenger_ids(recipe):
+    return [entry_id(entry) for entry in entries(recipe)] if recipe else []
 
 
 class TrainingOpponents:
     def __init__(self, run, seed):
+        self.run = Path(run)
         self.recipe = load_recipe(run)
+        self.entries = entries(self.recipe) if self.recipe else []
         self.seed = seed
         self.assignments = {}
+        self.randoms = {}
+        self.actors = {}
         self.decisions = 0
+        self.decisions_by_policy = {}
 
     @property
     def identifier(self):
@@ -52,9 +142,20 @@ class TrainingOpponents:
             previous = self.assignments.get(stat['worker'])
             if previous is None or previous[0] != key:
                 sample = int.from_bytes(hashlib.sha256((str(self.seed) + ':' + repr(key)).encode()).digest()[:8], 'big')/2**64
-                previous = (key, sample < self.recipe['probability'])
+                index = -1
+                if sample < self.recipe['probability']:
+                    total = sum(entry.get('weight',1) for entry in self.entries)
+                    draw = int.from_bytes(hashlib.sha256(('entry:'+str(self.seed)+':'+repr(key)).encode()).digest()[:8],'big')/2**64*total
+                    for index,entry in enumerate(self.entries):
+                        draw -= entry.get('weight',1)
+                        if draw < 0:break
+                previous = (key, index)
                 self.assignments[stat['worker']] = previous
-            if previous[1]:
+                if index >= 0 and self.entries[index]['kind'] == 'frozen-policy':
+                    import numpy as np
+                    rng_seed = int.from_bytes(hashlib.sha256(('actions:'+str(self.seed)+':'+repr(key)).encode()).digest()[:8],'big')
+                    self.randoms[stat['worker']] = np.random.default_rng(rng_seed)
+            if previous[1] >= 0:
                 selected.append(stat['worker'])
         return selected
 
@@ -65,11 +166,33 @@ class TrainingOpponents:
         opponent_seat = 1-policy['learningSeat']
         agents = [agent for agent in actions if agent//2 in selected and agent%2 == opponent_seat]
         replaced = dict(actions)
-        if agents:
-            advice = env.reference_actions(opponent_seat, work_budget=self.recipe['workBudget'], agents=agents)
-            if set(advice) != set(agents):
+        for index, entry in enumerate(self.entries):
+            group = [agent for agent in agents if self.assignments[agent//2][1] == index]
+            if not group:continue
+            if entry['kind'] == 'fair-tactician':
+                advice = env.reference_actions(opponent_seat, work_budget=entry['workBudget'], agents=group)
+            else:
+                from frozen_policy import FrozenPolicy, evaluation_weights
+                name = 'BlockNationsSeatV2?team='+str(opponent_seat)
+                if index not in self.actors:
+                    config_path = owned_frozen_path(self.run,entry['trainerConfig'])
+                    plan = json.loads(checked_contents(config_path,entry['configSha256'],256_000))
+                    self.actors[index] = FrozenPolicy(owned_frozen_path(self.run,entry['checkpoint']),
+                        plan['behaviors']['BlockNationsSeatV2']['network_settings'], env.behavior_specs[name],
+                        entry['checkpointSha256'],entry['actorId'])
+                decisions,_ = env.get_steps(name)
+                rows = [decisions.agent_id_to_index[agent] for agent in group]
+                mask = decisions.action_mask[0][rows]
+                weights = evaluation_weights(self.actors[index].probabilities(decisions.obs[0][rows],mask),entry['sampling'])
+                advice = {agent:int(self.randoms[agent//2].choice(weights.shape[1],p=weights[row])) for row,agent in enumerate(group)}
+                if any(mask[row,advice[agent]] for row,agent in enumerate(group)):
+                    raise ValueError('Retained opponent produced an illegal choice.')
+            if set(advice) != set(group):
                 raise ValueError('Training challenger advice did not cover the selected opponent agents.')
             replaced.update(advice)
             self.decisions += len(advice)
-        assignments = [dict(policy, opponent=self.identifier) if worker in selected else policy for worker in range(env.workers)]
+            identifier = entry_id(entry)
+            self.decisions_by_policy[identifier] = self.decisions_by_policy.get(identifier,0)+len(advice)
+        assignments = [dict(policy, opponent=entry_id(self.entries[self.assignments[worker][1]]))
+                       if worker in selected else policy for worker in range(env.workers)]
         return replaced, assignments

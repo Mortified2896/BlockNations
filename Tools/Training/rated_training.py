@@ -16,7 +16,7 @@ from match_rating import MatchRating, MatchJournalReader, policy_id
 from interactive_environment import install as install_interactive_environment
 from dotnet_environment import install as install_dotnet_environment
 from training_contract import RULES_VERSION
-from training_opponents import load_recipe, recipe_id
+from training_opponents import load_recipe, challenger_ids
 
 ACTIVE_TRAINER = None
 
@@ -39,7 +39,7 @@ class WholeMatchGhostTrainer(GhostTrainer):
         self.policy_ids = {}
         self.snapshot_ids = {}
         recipe = load_recipe(self.run)
-        self.challenger_ids = [recipe_id(recipe)] if recipe else []
+        self.challenger_ids = challenger_ids(recipe)
         super().__init__(*args, **kwargs)
         # Never inherit the inflated legacy trajectory Elo.
         self.policy_elos = [self.rating.data['elo']] * len(self.policy_elos)
