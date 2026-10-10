@@ -4,7 +4,7 @@ Approved by the owner and implemented on 2026-10-10. This experiment changes the
 
 ## Rules and opening
 
-The authoritative definitions remain in `UnitRegistry`; Unity gameplay, the C# training arenas and tactical references use those definitions.
+The baseline definitions remain in `UnitRegistry`; Unity gameplay, the C# training arenas and tactical references use those definitions. Explicit experimental match profiles derive their overrides from that same catalog, without mutating the baseline registry.
 
 | Unit | Cost | HP | Attack | Movement | Attack range | Vision |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -375,3 +375,32 @@ The augmented arm produced more mixed armies and better results against one held
 Private receipts are in `Logs/Validation/BalanceV4/retained-history-three-million-step`, `roster-entropy-study` and `roster-entropy-review`, including `capability-sensitivity.json`. Longer matched control, entropy and pressure arms each target one million additional steps from the same parent; their results must be reviewed before promoting a training adjustment. Fixed board geometry, one training seed and repeated deterministic lines remain limits on generalization and sample independence.
 
 At the user's request, a separate local 7×7 human match opened on the redesigned v4 units using frozen step 34,744,985 with Hard sampling. The human is Blue and starts with 2 gold; the second player's first turn receives 3. The frozen checkpoint remains stable during play, fair player visibility is retained, and completed compatible human wins are recorded in the owning run for bounded imitation. The main four-arena learner continues independently, with no training inspector, no duration limit, zero rejections or failure, and approximately 1.88/20 GB shared storage at this inspection. Human playtesting does not authorize public learned-AI deployment.
+
+## Checkpoint and roster review, 2026-10-11
+
+The rules-v4 main learner remains the reproducible four-unit baseline while the matched exploration trials finish. A new frozen checkpoint at step **43,454,988** was evaluated on the unchanged 1,280-game reference suite, with both starting roles in every case. Its SHA-256 is `cbad12dce7e451d9b6856259a59e24cbd741c7248f692bc4d79cee312d627aa7`; receipts are in `Logs/Validation/BalanceV4/latest-43300000/`. All 1,280 games ended by capture, with no interruptions.
+
+| Reference case | Latest candidate wins | Earlier step 34,744,985 |
+| --- | ---: | ---: |
+| Unrestricted fair tactician | 64/64 | 64/64 |
+| Warrior-only fair tactician | 53/64 | 37/64 |
+| Rider-only fair tactician | 48/64 | 64/64 |
+| Archer-only fair tactician | 64/64 | 64/64 |
+| Frozen step 18,834,965, Hard sampling | 64/64 | 64/64 |
+| Held-out step 25,899,973, raw policy | 62/128 | 66/128 |
+
+The latest raw-policy self-matches on seeds 30001/40001 produced **248 first-player wins out of 256**. Candidate recruitment in those same cases was 667 Riders, 189 Scouts, 31 Warriors and **zero Archers**. The earlier checkpoint's first-player share was 28/256. This is evidence of a changed, highly role-biased learned strategy; it does not establish an intrinsic universal first-player advantage or improved balanced strength. Candidate-versus-itself overall win totals are 50% by construction because roles are swapped. Do not use that aggregate as evidence that first/second-player balance is solved. Do not promote the latest checkpoint solely because it is newer or beats one reference more often.
+
+The original higher-entropy matched trial hit its **80-minute time guard** before completing the one-million-step target. Its final partial checkpoint at step 32,572,892 and the original failure receipts are preserved. There was no checkpoint export failure or storage exhaustion. Recovery restarts the incomplete entropy and exploration-pressure arms from the identical frozen parent at 31,730,113, seed 42, one arena and unchanged settings; it raises only the owned job's time guard to three hours per arm. The completed control is retained. Separate recovery/review receipts are in `Logs/Validation/BalanceV4/exploration-million-recovery/` and `exploration-million-recovery-review/`. Review uses the same pinned rules-v4 worker and fixed references. A longer guard does not change the one-million-step comparison budget.
+
+The approved roster alternatives now have explicit C#/Unity rule profiles:
+
+- `blocknations-simulation-v4`: unchanged four-unit baseline and Archer vision 1.
+- `blocknations-simulation-v5-vision2`: four units and Archer vision 2, isolating the vision change.
+- `blocknations-simulation-v5-core3`: Warrior/Rider/Archer recruitment and Archer vision 2.
+
+The schema-v2 catalog keeps `[archer, rider, scout, warrior]`, including Scout's disabled slot. Purchase masks, authoritative command validation and tactical lookahead respect public availability; Warrior keeps slot 3. The existing 3,120-float/259-action layout remains compatible with transferring weights. The recruit-presence channel and active-count global describe availability under the new profiles. Record parent training rules separately from the rules under which transferred weights are subsequently trained/evaluated. Saved Scout definitions and existing units remain supported; ordinary gameplay/PBp stays on the baseline profile. Native training/playtests select profiles explicitly before match setup. No public release changes are part of this experiment.
+
+The new profiles are prepared separately; the live learner and already running exploration comparisons still use the pinned v4 worker. Finish those comparisons and their reviews before selecting the next training recipe. Then create a distinct run/recipe and worker identity for a matched vision-only/core-three comparison, preserving baseline weights and model-slot provenance. The Python supervisor, frozen-reference transfer manifests and evaluator gates must receive explicit profile support before activating that training branch. Do not bypass their current v4 compatibility checks or overwrite the running worker.
+
+Validation: 93 focused Unity checks passed, followed by the final rule-profile/scene-parity suite after the last lifecycle adjustment. The separate native worker completed 64 random-action games per profile with zero rejections; these are legality checks, not strength measurements. An exact baseline comparison against the unchanged running binary passed 2,048 batches across four arenas, including 11 completed matches and terminal rewards. Python's existing transport accepted the new worker's default v4 profile. Receipts remain in `Logs/Validation/RuleProfiles-20261011/`. The shared training directory used approximately 2.26/20 GB at this check, and the main learner remained unpaused with four arenas, no failures and zero rejections. The new worker is built in a separate output directory; it has not replaced the running worker or the native human playtest app.

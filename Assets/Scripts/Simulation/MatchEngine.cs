@@ -62,7 +62,7 @@ namespace BlockNations.Simulation
             foreach (SimulationCity city in state.Cities)
                 if (city.Seat == seat && !city.Recruited && state.UnitAt(city.Position) == null)
                     foreach (UnitDefinition definition in state.Roster)
-                        if (definition.RecruitCost <= state.GoldForSeat(seat))
+                        if (state.IsRecruitEnabled(definition.TypeId) && definition.RecruitCost <= state.GoldForSeat(seat))
                             actions.Add(new MatchLegalAction(new MatchCommand(MatchActionKind.Recruit, seat, city.Id, city.Position,
                                 recruitType: definition.TypeId)));
             actions.Add(new MatchLegalAction(new MatchCommand(MatchActionKind.EndTurn, seat)));
@@ -132,7 +132,7 @@ namespace BlockNations.Simulation
             SimulationCity city = state.GetCity(command.ActorId);
             UnitDefinition definition = state.RecruitType(command.RecruitType);
             if (city == null || city.Seat != command.Seat || city.Recruited || city.Position != command.Destination ||
-                command.TargetId != 0 || definition == null || state.UnitAt(city.Position) != null ||
+                command.TargetId != 0 || definition == null || !state.IsRecruitEnabled(command.RecruitType) || state.UnitAt(city.Position) != null ||
                 definition.RecruitCost > state.GoldForSeat(command.Seat)) return default;
             state.SetGold(command.Seat, state.GoldForSeat(command.Seat) - definition.RecruitCost);
             SimulationUnit unit = state.Recruit(command.Seat, city.Position, definition);

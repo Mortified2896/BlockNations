@@ -12,9 +12,10 @@ public sealed class TrainingTraceReader
 {
     private readonly SimulationReplayProjector projector;
     private readonly UnitDefinition[] roster;
+    private readonly string rulesVersion;
     private readonly Dictionary<string, (long stamp, bool markers, TrainingReplayHistory.Game game)> cache = new Dictionary<string, (long, bool, TrainingReplayHistory.Game)>();
-    public TrainingTraceReader(SimulationReplayProjector projector, IEnumerable<UnitDefinition> roster)
-    { this.projector = projector; this.roster = roster.ToArray(); }
+    public TrainingTraceReader(SimulationReplayProjector projector, IEnumerable<UnitDefinition> roster, string rulesVersion = SimulationRules.Version)
+    { this.projector = projector; this.roster = roster.ToArray(); this.rulesVersion = MatchRuleProfile.Resolve(rulesVersion).Version; }
 
     public TrainingReplayHistory.Game Read(string path, bool showActionMarkers = true)
     {
@@ -25,8 +26,8 @@ public sealed class TrainingTraceReader
         var trace = JsonUtility.FromJson<TrainingTrace>(File.ReadAllText(path));
         // A resumed run may retain recent matches from its previous rules version.
         // Preserve those files; do not reinterpret their action budgets as new rules.
-        if (trace != null && trace.rulesVersion != SimulationRules.Version) return null;
-        if (trace == null || trace.version != TrainingTrace.Version || trace.rulesVersion != SimulationRules.Version ||
+        if (trace != null && trace.rulesVersion != rulesVersion) return null;
+        if (trace == null || trace.version != TrainingTrace.Version || trace.rulesVersion != rulesVersion ||
             !LearnedActionSchema.SupportsBoard(trace.boardSize) || trace.worker < 0 || trace.worker >= 16 || trace.match < 1 ||
             !Guid.TryParseExact(trace.session, "N", out _) || trace.frames == null || trace.frames.Count == 0 ||
             trace.frames.Count > TrainingTrace.MaximumFrames || trace.frames.Any(f => f == null || f.units == null || f.cities == null) ||

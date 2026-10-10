@@ -45,6 +45,10 @@ namespace BlockNations.AI
         public int Width, Height, Seat, Gold, CityVision, Round, IncomePerCity;
         public bool[] Tiles, Seen, Visible;
         public AIUnitState[] Units, RecruitTypes;
+        // Optional public roster availability. Null preserves existing observations.
+        // Catalog indices remain stable even when a type cannot be purchased.
+        public bool[] RecruitEnabled;
+        public bool CanRecruitType(int slot) => RecruitEnabled == null || RecruitEnabled[slot];
         public AICityState[] Cities;
         public int[] HostileSeats;
         public bool IsHostileSeat(int seat) => HostileSeats != null && Array.IndexOf(HostileSeats, seat) >= 0;

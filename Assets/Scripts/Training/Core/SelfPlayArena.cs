@@ -33,6 +33,7 @@ namespace BlockNations.Training
         private readonly int openingEconomyVersion;
         private readonly int fixedFirstSeat;
         private readonly UnitDefinition[] roster;
+        private readonly MatchRuleProfile ruleProfile;
         private readonly SimulationObservationSource observer = new SimulationObservationSource();
         private readonly int[] source = { -1, -1 }, seatDecisions = new int[2];
         private readonly Queue<bool> recent = new Queue<bool>();
@@ -56,7 +57,7 @@ namespace BlockNations.Training
         public string LastAction { get; private set; }
 
         public SelfPlayArena(int worker, int size, int seed, bool curriculum, int distance, IEnumerable<UnitDefinition> roster,
-            int openingEconomyVersion = MatchOpening.CurrentEconomyVersion, int fixedFirstSeat = -1)
+            int openingEconomyVersion = MatchOpening.CurrentEconomyVersion, int fixedFirstSeat = -1, MatchRuleProfile ruleProfile = null)
         {
             if (worker < 0 || !LearnedActionSchema.SupportsBoard(size) || (curriculum && size != 11)) throw new ArgumentException("Invalid training arena configuration.");
             Worker = worker; BoardSize = size; Seed = seed; random = new Random(seed);
@@ -64,6 +65,7 @@ namespace BlockNations.Training
             this.openingEconomyVersion = openingEconomyVersion;
             if (fixedFirstSeat < -1 || fixedFirstSeat > 1) throw new ArgumentOutOfRangeException(nameof(fixedFirstSeat));
             this.fixedFirstSeat = fixedFirstSeat;
+            this.ruleProfile = ruleProfile;
             this.curriculum = curriculum; CurriculumDistance = distance;
             this.roster = roster.OrderBy(t => t.TypeId, StringComparer.Ordinal).ToArray();
             if (this.roster.Length == 0 || this.roster.Length > LearnedActionSchema.RecruitCapacity) throw new ArgumentException("Unsupported roster.");
@@ -85,18 +87,23 @@ namespace BlockNations.Training
                 int distance = random.Next(4) == 0 ? Math.Max(2, CurriculumDistance - 2) : CurriculumDistance;
                 low = (BoardSize - 1 - distance) / 2; high = low + distance; mirror = random.Next(2) == 0;
             }
-            State = new MatchState(BoardSize, BoardSize, 2, roster, first, firstSeat: first);
+            State = new MatchState(BoardSize, BoardSize, 2, roster, first, firstSeat: first, ruleProfile: ruleProfile);
             for (int seat = 0; seat < 2; seat++)
             {
                 int coordinate = (seat == 0) != mirror ? low : high, position = State.Position(coordinate, coordinate);
                 State.AddCity(new SimulationCity(seat + 1, seat, position));
                 State.SetGold(seat, FullOpening ? MatchOpening.GoldBeforeIncome(seat, first, openingEconomyVersion) : 4);
-                if (!FullOpening) State.AddUnit(new SimulationUnit(seat + 1, seat, position, roster[random.Next(roster.Length)]));
+                if (!FullOpening)
+                {
+                    var active = roster.Where(t => State.IsRecruitEnabled(t.TypeId)).ToArray();
+                    if (active.Length == 0) throw new InvalidOperationException("Curriculum needs an enabled recruit.");
+                    State.AddUnit(new SimulationUnit(seat + 1, seat, position, active[random.Next(active.Length)]));
+                }
             }
             MatchEngine.BeginTurn(State, first);
             observer.SetPublicStartingCities(State.Cities.Select(c => new AICityState { Seat = c.Seat, X = c.Position % BoardSize, Y = c.Position / BoardSize }).ToArray());
             LastAction = (first == 0 ? "Blue" : "Red") + " moves first";
-            Trace = new TrainingTrace { worker = Worker, match = Games + 1, boardSize = BoardSize, firstSeat = first, rulesVersion = SimulationRules.Version };
+            Trace = new TrainingTrace { worker = Worker, match = Games + 1, boardSize = BoardSize, firstSeat = first, rulesVersion = State.RulesVersion };
             Trace.Record(TrainingTraceState.Capture(State, LastAction));
         }
 

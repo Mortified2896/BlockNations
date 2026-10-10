@@ -761,6 +761,14 @@ public partial class TurnManager : MonoBehaviour
     }
 
     public List<UnitDefinition> GetRecruitableOfficialUnitDefinitions()
+        => GetOfficialUnitDefinitions(includeDisabled: false);
+
+    // The policy catalog retains disabled slots. UI recruitment uses only the
+    // active roster; both still resolve capabilities from the same rules profile.
+    public List<UnitDefinition> GetOfficialUnitPolicyCatalog()
+        => GetOfficialUnitDefinitions(includeDisabled: true);
+
+    private List<UnitDefinition> GetOfficialUnitDefinitions(bool includeDisabled)
     {
         List<UnitDefinition> recruitableDefinitions = new List<UnitDefinition>();
         if (officialUnitRegistrations == null)
@@ -777,7 +785,8 @@ public partial class TurnManager : MonoBehaviour
             }
 
             string normalizedTypeId = UnitRegistry.NormalizeTypeId(registration.unitTypeId);
-            if (!UnitRegistry.TryGetDefinition(normalizedTypeId, out UnitDefinition definition))
+            if (!RuleProfile.TryGetDefinition(normalizedTypeId, out UnitDefinition definition) ||
+                (!includeDisabled && !RuleProfile.CanRecruit(normalizedTypeId)))
             {
                 continue;
             }
@@ -804,7 +813,7 @@ public partial class TurnManager : MonoBehaviour
 
     public GameObject GetUnitPrefabForType(string unitTypeId)
     {
-        if (!UnitRegistry.TryGetDefinition(unitTypeId, out UnitDefinition definition))
+        if (!RuleProfile.TryGetDefinition(unitTypeId, out UnitDefinition definition))
         {
             return null;
         }
@@ -888,7 +897,7 @@ public partial class TurnManager : MonoBehaviour
             return null;
         }
 
-        if (!UnitRegistry.TryGetDefinition(unitTypeId, out UnitDefinition definition))
+        if (!RuleProfile.TryGetDefinition(unitTypeId, out UnitDefinition definition))
         {
             return null;
         }
@@ -897,7 +906,7 @@ public partial class TurnManager : MonoBehaviour
         Unit unit = spawnedObject.GetComponent<Unit>();
         if (unit != null)
         {
-            if (!unit.ApplyDefinition(definition.TypeId, preserveCurrentHealth: false))
+            if (!unit.ApplyResolvedDefinition(definition, preserveCurrentHealth: false))
             {
                 Destroy(spawnedObject);
                 return null;

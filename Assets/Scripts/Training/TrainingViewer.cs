@@ -73,6 +73,7 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
     public int CurriculumDistance => worker?.curriculumDistance ?? 2;
     public int StartingDistance => BoardSize - 3;
     public string LastAction => worker?.lastAction ?? "Waiting for simulation telemetry";
+    public string SimulationVersion => turnManager != null ? turnManager.RuleProfile.Version : SimulationRules.Version;
     public string Failure => !string.IsNullOrEmpty(totals?.failure) ? totals.failure :
         !string.IsNullOrEmpty(totals?.spectatorFailure) ? totals.spectatorFailure : readError;
     public Color SpectatorBackgroundColor => boardCamera.backgroundColor;
@@ -105,14 +106,17 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
     private void Awake()
     {
         string[] args = Environment.GetCommandLineArgs();
+        string rulesVersion = SimulationRules.Version;
         for (int i = 0; i + 1 < args.Length; i++)
         {
             if (args[i] == "--training-viewer") viewerMode = bool.Parse(args[++i]);
             else if (args[i] == "--viewer-run") runDirectory = args[++i];
+            else if (args[i] == "--training-rules-version") rulesVersion = args[++i];
         }
         if (!viewerMode) { enabled = false; return; }
         if (turnManager == null || trainingArena == null || seats == null || boardCamera == null || humanPresentation == null)
             throw new InvalidOperationException("Viewer needs its authored scene references.");
+        turnManager.ConfigureExperimentalRules(MatchRuleProfile.Resolve(rulesVersion));
         Manifest manifest = Read<Manifest>(Path.Combine(runDirectory, "run.json"));
         if (manifest == null || manifest.owner != "BlockNations.LocalTraining.v1" || manifest.schema != 2 ||
             !BlockNations.AI.LearnedActionSchema.SupportsBoard(manifest.boardSize)) throw new ArgumentException("Choose an owned compatible training run.");
@@ -134,7 +138,7 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
         float grey = originalBackground.grayscale;
         boardCamera.backgroundColor = Color.Lerp(originalBackground, new Color(grey, grey, grey, originalBackground.a), .15f);
         var opening = new SceneSimulationAdapter(turnManager).State;
-        traces = new TrainingTraceReader(new SimulationReplayProjector(turnManager, opening), opening.Roster);
+        traces = new TrainingTraceReader(new SimulationReplayProjector(turnManager, opening), opening.Roster, opening.RulesVersion);
         boardCamera.cullingMask = 0;
         ready = true;
         Poll();
@@ -168,7 +172,7 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
             }
             totals = Read<TrainingArena.ArenaStatus>(Path.Combine(runDirectory, "arena-status.json")) ?? totals;
             if (totals != null && (totals.schema != 2 || totals.boardSize != BoardSize || totals.workerCount < 1 || totals.workerCount > 16 ||
-                totals.simulationBackend != "standalone-dotnet" || totals.simulationVersion != SimulationRules.Version))
+                totals.simulationBackend != "standalone-dotnet" || totals.simulationVersion != SimulationVersion))
                 throw new ArgumentException("Viewer and training backend are incompatible.");
             if (totals != null && DateTime.UtcNow - File.GetLastWriteTimeUtc(Path.Combine(runDirectory, "arena-status.json")) > TimeSpan.FromSeconds(10))
                 totals.trainerConnected = false;

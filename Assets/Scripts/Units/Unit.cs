@@ -177,7 +177,8 @@ public class Unit : MonoBehaviour
         {
             healthLabel = gameObject.AddComponent<UnitHealthLabel>();
         }
-        ApplyDefinition(UnitTypeId, preserveCurrentHealth: currentHealthUnits > 0);
+        if (resolvedDefinition == null) ApplyDefinition(UnitTypeId, preserveCurrentHealth: currentHealthUnits > 0);
+        else ApplyResolvedDefinition(resolvedDefinition, preserveCurrentHealth: currentHealthUnits > 0);
         RefreshHealthPresentation();
     }
 
@@ -215,6 +216,13 @@ public class Unit : MonoBehaviour
         {
             return false;
         }
+
+        return ApplyResolvedDefinition(definition, preserveCurrentHealth);
+    }
+
+    public bool ApplyResolvedDefinition(UnitDefinition definition, bool preserveCurrentHealth)
+    {
+        if (definition == null) return false;
 
         resolvedDefinition = definition;
         unitTypeId = definition.TypeId;

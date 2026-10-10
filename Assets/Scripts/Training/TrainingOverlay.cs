@@ -176,7 +176,7 @@ public sealed class TrainingOverlay
                         var status = JsonUtility.FromJson<HumanLearningStatus>(System.IO.File.ReadAllText(path));
                         if (status != null && status.version == 1 && status.boardSize == arena.BoardSize &&
                             status.runId == new System.IO.DirectoryInfo(humanLearningDirectory).Name &&
-                            status.rulesVersion == BlockNations.Simulation.SimulationRules.Version) humanLearning = status;
+                            status.rulesVersion == arena.SimulationVersion) humanLearning = status;
                     }
                 }
                 catch (System.IO.IOException) { }

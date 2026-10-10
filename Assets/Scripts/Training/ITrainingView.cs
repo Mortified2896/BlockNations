@@ -28,6 +28,7 @@ public interface ITrainingView
     bool FullOpening { get; }
     string LastAction { get; }
     string Failure { get; }
+    string SimulationVersion { get; }
     string HumanPolicyVersion { get; }
     string TrainingRunDirectory { get; }
     Color SpectatorBackgroundColor { get; }

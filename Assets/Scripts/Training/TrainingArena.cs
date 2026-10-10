@@ -75,7 +75,7 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
     public int Round => simulation != null ? simulation.Round : turnManager != null ? turnManager.turnNumber : 0;
     public int ActingSeat => simulation != null ? simulation.CurrentTurnSeat : turnManager != null ? turnManager.currentTurnSeatIndex : -1;
     public bool UsesDirectSimulation => requireTrainer && directSimulation && !IsHumanPlaytest;
-    public string SimulationVersion => SimulationRules.Version;
+    public string SimulationVersion => turnManager != null ? turnManager.RuleProfile.Version : SimulationRules.Version;
     public int CurriculumDistance => curriculumDistance;
     public int BoardSize => boardSize;
     public Color SpectatorBackgroundColor => boardCamera.backgroundColor;
@@ -211,6 +211,7 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
             else if (arguments[i] == "--training-playtest-return" && bool.TryParse(arguments[++i], out bool canReturn)) CanReturnToTraining = canReturn;
             else if (arguments[i] == "--training-board-size" && int.TryParse(arguments[++i], out int configuredSize)) boardSize = configuredSize;
             else if (arguments[i] == "--training-opening-economy-version" && int.TryParse(arguments[++i], out int configuredEconomy)) openingEconomyVersion = configuredEconomy;
+            else if (arguments[i] == "--training-rules-version") turnManager.ConfigureExperimentalRules(MatchRuleProfile.Resolve(arguments[++i]));
             else if (arguments[i] == "--training-status") statusPath = arguments[++i];
             else if (arguments[i] == "--training-seed" && int.TryParse(arguments[++i], out int configuredSeed)) seed = configuredSeed;
             else if (arguments[i] == "--training-curriculum" && bool.TryParse(arguments[++i], out bool configuredCurriculum)) useCurriculum = configuredCurriculum;
@@ -268,7 +269,7 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
         while (!turnManager.ExternalMatchReady) yield return null;
         if (UsesDirectSimulation)
         {
-            simulationRoster = turnManager.GetRecruitableOfficialUnitDefinitions();
+            simulationRoster = turnManager.GetOfficialUnitPolicyCatalog();
             simulationRoster.RemoveAll(definition => turnManager.GetUnitPrefabForType(definition.TypeId) == null);
             var opening = new SceneSimulationAdapter(turnManager).State;
             simulationReplay = new SimulationReplayProjector(turnManager, opening);
@@ -466,7 +467,7 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
     private void ResetSimulation(int startingSeat)
     {
         simulation = new MatchState(boardSize, boardSize, 2, simulationRoster, startingSeat, 1,
-            turnManager.visibilityRadius, turnManager.goldPerCity, firstSeat: startingSeat);
+            turnManager.visibilityRadius, turnManager.goldPerCity, firstSeat: startingSeat, ruleProfile: turnManager.RuleProfile);
         int low = 1, high = boardSize - 2;
         bool mirror = false;
         if (!fullOpening)
@@ -483,7 +484,9 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
             simulation.SetGold(seat, fullOpening ? MatchOpening.GoldBeforeIncome(seat, startingSeat, openingEconomyVersion) : 4);
             if (!fullOpening)
             {
-                UnitDefinition type = simulation.Roster[random.Next(simulation.Roster.Count)];
+                var active = new List<UnitDefinition>();
+                foreach (UnitDefinition definition in simulation.Roster) if (simulation.IsRecruitEnabled(definition.TypeId)) active.Add(definition);
+                UnitDefinition type = active[random.Next(active.Count)];
                 simulation.AddUnit(new SimulationUnit(seat + 1, seat, position, type));
             }
         }

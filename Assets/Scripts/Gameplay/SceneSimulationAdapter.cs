@@ -19,11 +19,11 @@ public sealed class SceneSimulationAdapter
         GridManager grid = manager.gridManager;
         var tiles = new bool[grid.width * grid.height];
         foreach (TileVisibility tile in grid.GetAllTiles()) tiles[grid.width * tile.gridY + tile.gridX] = true;
-        var roster = manager.GetRecruitableOfficialUnitDefinitions();
+        var roster = manager.GetOfficialUnitPolicyCatalog();
         roster.RemoveAll(definition => manager.GetUnitPrefabForType(definition.TypeId) == null);
         State = new MatchState(grid.width, grid.height, manager.RuntimeSeatCount, roster,
             manager.currentTurnSeatIndex, manager.turnNumber, manager.visibilityRadius, manager.goldPerCity, tiles,
-            firstSeat: manager.IsExternallyDrivenMatch ? manager.ExternalFirstSeatIndex : 0);
+            firstSeat: manager.IsExternallyDrivenMatch ? manager.ExternalFirstSeatIndex : 0, ruleProfile: manager.RuleProfile);
         State.RestoreOutcome(manager.gameOver, manager.ExternalWinnerSeatIndex);
         for (int seat = 0; seat < State.SeatCount; seat++) State.SetGold(seat, manager.GetGoldForSeat(seat));
         foreach (City city in Object.FindObjectsByType<City>(FindObjectsSortMode.None))

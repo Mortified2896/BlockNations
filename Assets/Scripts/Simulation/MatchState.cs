@@ -70,10 +70,13 @@ namespace BlockNations.Simulation
         public IEnumerable<SimulationUnit> Units => units.Values;
         public IEnumerable<SimulationCity> Cities => cities.Values;
         public IReadOnlyList<UnitDefinition> Roster => orderedRoster;
+        public MatchRuleProfile RuleProfile { get; }
+        public string RulesVersion => RuleProfile?.Version ?? SimulationRules.Version;
+        public bool IsRecruitEnabled(string typeId) => typeId != null && roster.ContainsKey(typeId) && (RuleProfile == null || RuleProfile.CanRecruit(typeId));
 
         public MatchState(int width, int height, int seatCount, IEnumerable<UnitDefinition> recruitableUnits,
             int currentTurnSeat = 0, int round = 1, int cityVision = 1, int incomePerCity = 1,
-            bool[] tiles = null, ISeatRelationships relationships = null, int firstSeat = 0)
+            bool[] tiles = null, ISeatRelationships relationships = null, int firstSeat = 0, MatchRuleProfile ruleProfile = null)
         {
             if (width < 1 || height < 1 || seatCount < 1) throw new ArgumentOutOfRangeException(nameof(width));
             if (currentTurnSeat < 0 || currentTurnSeat >= seatCount || firstSeat < 0 || firstSeat >= seatCount)
@@ -86,8 +89,14 @@ namespace BlockNations.Simulation
             CurrentTurnSeat = currentTurnSeat; Round = Math.Max(1, round); FirstSeat = firstSeat;
             CityVision = Math.Max(0, cityVision); IncomePerCity = Math.Max(0, incomePerCity);
             Relationships = relationships ?? FreeForAllRelationships.Instance;
-            foreach (UnitDefinition definition in recruitableUnits ?? throw new ArgumentNullException(nameof(recruitableUnits)))
-            { roster.Add(definition.TypeId, definition); orderedRoster.Add(definition); }
+            RuleProfile = ruleProfile;
+            foreach (UnitDefinition supplied in recruitableUnits ?? throw new ArgumentNullException(nameof(recruitableUnits)))
+            {
+                UnitDefinition definition = supplied;
+                if (RuleProfile != null && !RuleProfile.TryGetDefinition(supplied.TypeId, out definition))
+                    throw new ArgumentException("Unit catalog is outside the explicit rules profile.", nameof(recruitableUnits));
+                roster.Add(definition.TypeId, definition); orderedRoster.Add(definition);
+            }
             orderedRoster.Sort((a, b) => string.CompareOrdinal(a.TypeId, b.TypeId));
         }
 
@@ -131,7 +140,7 @@ namespace BlockNations.Simulation
 
         public MatchState Copy()
         {
-            var copy = new MatchState(Width, Height, SeatCount, Roster, CurrentTurnSeat, Round, CityVision, IncomePerCity, Tiles, Relationships, FirstSeat)
+            var copy = new MatchState(Width, Height, SeatCount, Roster, CurrentTurnSeat, Round, CityVision, IncomePerCity, Tiles, Relationships, FirstSeat, RuleProfile)
             { GameOver = GameOver, WinnerSeat = WinnerSeat, CapturedCityId = CapturedCityId };
             for (int seat = 0; seat < SeatCount; seat++) copy.SetGold(seat, gold[seat]);
             foreach (SimulationCity city in Cities) copy.AddCity(city.Copy());

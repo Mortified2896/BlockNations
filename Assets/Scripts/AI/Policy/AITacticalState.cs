@@ -65,6 +65,7 @@ namespace BlockNations.AI
             AITacticalState next = new AITacticalState(this);
             if (action.Kind == AIActionKind.Recruit)
             {
+                if (!Observation.CanRecruitType(action.RecruitType)) throw new ArgumentException("Recruit type is disabled by the public rules.");
                 AICityState city = next.Cities[action.Actor];
                 AIUnitState unit = Observation.RecruitTypes[action.RecruitType];
                 unit.Seat = Observation.Seat;
@@ -161,7 +162,7 @@ namespace BlockNations.AI
                 AICityState city = Cities[cityIndex];
                 if (seat != Observation.Seat || city.Seat != seat || city.Recruited || occupants[city.Position(Observation.Width)] >= 0) continue;
                 for (int type = 0; type < Observation.RecruitTypes.Length; type++)
-                    if (Observation.RecruitTypes[type].Cost <= Gold)
+                    if (Observation.CanRecruitType(type) && Observation.RecruitTypes[type].Cost <= Gold)
                         result.Add(new AIAction { Kind = AIActionKind.Recruit, Actor = cityIndex, RecruitType = type,
                             Destination = city.Position(Observation.Width), Target = -1 });
             }

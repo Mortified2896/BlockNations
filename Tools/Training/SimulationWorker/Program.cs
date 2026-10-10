@@ -42,11 +42,12 @@ internal static class Program
         bool curriculum = bool.Parse(Argument(args, "--curriculum", "false"));
         int openingEconomyVersion = int.Parse(Argument(args, "--opening-economy-version", MatchOpening.CurrentEconomyVersion.ToString()));
         int fixedFirstSeat = int.Parse(Argument(args, "--first-seat", "-1"));
+        MatchRuleProfile rules = MatchRuleProfile.Resolve(Argument(args, "--rules-version", SimulationRules.Version));
         if (count < 1 || count > 16 || !Guid.TryParseExact(session, "N", out _) || distance < 2 || distance > 8 || distance % 2 != 0)
             throw new ArgumentException("Invalid worker/session configuration.");
         OwnedDirectory(run);
         var arenas = Enumerable.Range(0, count).Select(i => new SelfPlayArena(i, size, unchecked(seed + i * 7919), curriculum, distance,
-            UnitRegistry.AllDefinitions, openingEconomyVersion, fixedFirstSeat)).ToArray();
+            rules.PolicyCatalog, openingEconomyVersion, fixedFirstSeat, rules)).ToArray();
         string progressPath = Path.Combine(run, $"board-{size}-progress.json");
         var progress = File.Exists(progressPath) ? JsonSerializer.Deserialize<TrainingProgressHistory>(File.ReadAllText(progressPath), Json) : new TrainingProgressHistory { boardSize = size };
         if (progress == null || !progress.IsValid() || progress.boardSize != size) throw new InvalidOperationException("Invalid saved training progress.");
@@ -119,7 +120,7 @@ internal static class Program
                 {
                     spectator.Publish(Path.Combine(run, "workers", arena.Worker.ToString(), "live.json"), new TrainingTrace {
                         session = session, worker = arena.Worker, match = arena.Trace.match, boardSize = size,
-                        firstSeat = arena.State.FirstSeat, rulesVersion = SimulationRules.Version, policy = arena.Trace.policy,
+                        firstSeat = arena.State.FirstSeat, rulesVersion = rules.Version, policy = arena.Trace.policy,
                         policyChanged = arena.Trace.policyChanged, frames = new List<TrainingTraceState> { arena.Trace.frames[0], TrainingTraceState.Capture(arena.State, arena.LastAction) } });
                 }
             }
@@ -130,7 +131,7 @@ internal static class Program
                 roundLimit = a.RoundLimit, elapsedSeconds = now, decisionsPerSecond = now > 0 ? a.Decisions / now : 0,
                 fullOpening = a.FullOpening, gold0 = a.State.GoldForSeat(0), gold1 = a.State.GoldForSeat(1),
                 boardSize = size, schema = LearnedActionSchema.Version, lastAction = a.LastAction, failure = "",
-                simulationVersion = SimulationRules.Version, simulationBackend = "standalone-dotnet", policyVersion = "",
+                simulationVersion = rules.Version, simulationBackend = "standalone-dotnet", policyVersion = "",
                 spectatorFailure = spectator.Error
             }).ToArray();
             if (now >= nextPublish || request.op == "reset")
@@ -151,9 +152,10 @@ internal static class Program
                 .Where(a => request.referenceAgents == null || request.referenceAgents.Contains(a.Worker * 2 + request.referenceSeat))
                 .Select(a => new ActionRequest { agent = a.Worker * 2 + request.referenceSeat,
                     action = a.ReferenceChoice(request.recruitType, request.workBudget) }).ToArray() : Array.Empty<ActionRequest>();
-            Console.WriteLine(JsonSerializer.Serialize(new { protocol = 1, rulesVersion = SimulationRules.Version, behavior = LearnedActionSchema.BehaviorName,
+            Console.WriteLine(JsonSerializer.Serialize(new { protocol = 1, rulesVersion = rules.Version, behavior = LearnedActionSchema.BehaviorName,
                 observationSize = LearnedActionSchema.ObservationSize, actionCount = LearnedActionSchema.ActionCount, steps, stats, referenceActions,
-                recruitTypes = UnitRegistry.AllDefinitions.OrderBy(t => t.TypeId, StringComparer.Ordinal).Select(t => t.TypeId).ToArray() }, Json));
+                recruitTypes = rules.PolicyCatalog.Select(t => t.TypeId).ToArray(),
+                enabledRecruitTypes = rules.RecruitableUnits.Select(t => t.TypeId).ToArray() }, Json));
         }
         Atomic(progressPath, progress);
     }

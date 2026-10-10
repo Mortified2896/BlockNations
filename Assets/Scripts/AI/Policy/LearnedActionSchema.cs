@@ -30,6 +30,8 @@ namespace BlockNations.AI
                 throw new ArgumentException("Learned schema v2 requires a complete two-seat square board of size 5, 6, 7, 9 or 11.");
             if (observation.RecruitTypes.Length > RecruitCapacity)
                 throw new ArgumentException("Recruit roster exceeds learned schema v2; train a new schema instead of dropping actions.");
+            if (observation.RecruitEnabled != null && observation.RecruitEnabled.Length != observation.RecruitTypes.Length)
+                throw new ArgumentException("Public recruit availability must match the stable catalog.");
         }
 
         public static bool SupportsBoard(int size) => size == 5 || size == 6 || size == 7 || size == 9 || size == 11;
@@ -126,7 +128,7 @@ namespace BlockNations.AI
             {
                 AIUnitState type = observation.RecruitTypes[slot];
                 int index = Positions * TileChannels + slot * RecruitChannels;
-                values[index] = 1;
+                values[index] = observation.CanRecruitType(slot) ? 1 : 0;
                 values[index + 1] = type.Health / 10f;
                 values[index + 2] = type.MaxHealth / 10f;
                 values[index + 3] = type.Attack / 10f;
@@ -147,7 +149,9 @@ namespace BlockNations.AI
             values[globals + 3] = observation.CityVision / (float)BoardSize;
             values[globals + 4] = observation.IncomePerCity / 10f;
             values[globals + 5] = observation.LegalActions.Length / 1000f;
-            values[globals + 6] = observation.RecruitTypes.Length / (float)RecruitCapacity;
+            int activeRecruits = 0;
+            for (int slot = 0; slot < observation.RecruitTypes.Length; slot++) if (observation.CanRecruitType(slot)) activeRecruits++;
+            values[globals + 6] = activeRecruits / (float)RecruitCapacity;
             values[globals + 7] = Version;
             return values;
         }

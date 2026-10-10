@@ -40,7 +40,7 @@ public sealed class TrainingHumanGameRecorder : IDisposable
         // The viewer's identity is independent of who starts. Subscribe before
         // the AI's opening so visible changes remain available to the recorder.
         game = new Game { id = Guid.NewGuid().ToString("N"), boardSize = opening.Width, humanSeat = humanSeat, firstSeat = opening.FirstSeat,
-            policyVersion = policyVersion, startedUtc = DateTime.UtcNow.ToString("O") };
+            policyVersion = policyVersion, rulesVersion = opening.RulesVersion, startedUtc = DateTime.UtcNow.ToString("O") };
         observations.SetPublicStartingCities(opening.Cities.Select(city => new AICityState {
             Seat = city.Seat, X = city.Position % opening.Width, Y = city.Position / opening.Width }).ToArray());
         observations.Observe(opening, humanSeat);

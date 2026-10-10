@@ -89,7 +89,12 @@ namespace BlockNations.AI
             for (int other = 0; other < state.SeatCount; other++) if (state.Relationships.IsHostile(seat, other)) hostileSeats.Add(other);
             observation.HostileSeats = hostileSeats.ToArray();
             observation.RecruitTypes = new AIUnitState[state.Roster.Count];
-            for (int i = 0; i < state.Roster.Count; i++) observation.RecruitTypes[i] = UnitCapabilities(state.Roster[i], seat);
+            observation.RecruitEnabled = new bool[state.Roster.Count];
+            for (int i = 0; i < state.Roster.Count; i++)
+            {
+                observation.RecruitTypes[i] = UnitCapabilities(state.Roster[i], seat);
+                observation.RecruitEnabled[i] = state.IsRecruitEnabled(state.Roster[i].TypeId);
+            }
             var roots = new List<AIAction>();
             foreach (MatchLegalAction legal in MatchEngine.LegalActions(state, seat, visible))
             {
