@@ -280,3 +280,24 @@ The waiting job verifies a live trainer PID rather than trusting its status file
 Validation: the full Python suite passed 116 of 120 tests with four opt-in skips, followed by 11 focused milestone checks including evaluator-source drift. A separately invoked end-to-end job froze an actual live-run checkpoint and completed 16 real C# games. This small smoke result verifies the tool, not a new strength claim.
 
 The next roster-extension review is queued at learner step 29,592,305, one million learner steps after the preserved main transfer. Its saved 13-case pack retains the previous 12 benchmark cases and adds the 128-game seed-50001 unmodified comparison against frozen step 25,899,973, for 1,280 scheduled games. The added case changes the overall suite identity; compare common cases explicitly with earlier receipts rather than claiming the whole pack is unchanged. This reference is excluded from the current retained league, but shares the policy's training ancestry and is not an independent human-strategy test. Results still require inspection before any recipe promotion or release selection.
+
+
+### Roster extension: first million-step review
+
+The queued evaluation completed on 2026-10-10 at approximately 11:06 UTC: 1,280 scheduled games, all completed by capture, no interruptions. Its frozen main checkpoint is step 29,599,951, SHA-256 `520b8b53129c6f415e01a6c69ba2f66834e6fea4831308bf345ca2e57cc9afb7`, preserved under `frozen-evaluations/milestone-29592305`. Suite identity is `7134388d4009991cdf616d8c9d1556f4302e483b3ae93eecaa3979b4259b9533`; the local receipt is `Logs/Validation/BalanceV4/roster-million-step/suite.json`.
+
+| Fixed comparison | Candidate wins / scheduled games |
+| --- | --- |
+| Unrestricted tactical reference | 64/64 |
+| Warrior-only tactical reference | 48/64 |
+| Rider-only tactical reference | 16/64 |
+| Archer-only tactical reference | 64/64 |
+| Frozen 18,834,965, Hard against Hard | 64/64 |
+| Frozen 18,834,965, raw policy against Hard, two extra seeds | 255/256 |
+| Held-out frozen 25,899,973, raw against raw | 44/128 |
+
+The held-out comparison deteriorated from the earlier 27,389,984 checkpoint's 120/128 and the short roster pilot's 118/128. At this milestone the candidate won 14/64 when starting and 30/64 when second. All five same-model cases, including raw policy at two extra seeds, gave the second player every capture win. This reverses the previous first-player sweep; it does not establish balance. The same-model aggregate candidate 50% remains a consequence of paired seats.
+
+The learned policy now recruits substantial Warriors alongside Riders (for example 96 of each against the unrestricted reference), with occasional Scouts and no Archer recruitment in this pack. This is evidence of changed behavior, not proof that all unit strategies are viable or that strength improved generally. Preserve both old and new frozen versions; do not promote this milestone as a stronger Hard opponent or tune opening gold to its role reversal.
+
+Keep the approved training recipe unchanged for another measured interval, rather than reacting to one oscillating snapshot. Queue the same 13-case benchmark at step 31,592,305, three million steps after the main transfer, to test whether the regression and role reversal persist. Training continues without a viewer, under the shared 20 GB cap; public learned-AI selection remains pending human review.
