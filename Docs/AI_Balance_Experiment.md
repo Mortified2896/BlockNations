@@ -253,3 +253,20 @@ Against held-out unmodified step 25,899,973 on seed 50001, control won 115/128 (
 Retain both pilot checkpoints and ignored receipts under `Logs/Validation/BalanceV4/roster-league-study/`. Extend the roster-reference recipe as a recoverable main-run experiment while retaining the previous recipe and transfer checkpoint. Resume the main run's own latest weights and optimizer, not the short pilot's weights. Keep auxiliary exploration disabled, use four C# arenas, unlimited time and the shared 20 GB cap. Later fixed and held-out comparisons must still establish durable strength and role balance before release selection. No game rules, policy input schema, public deployment or private human recordings change in this extension.
 
 The main extension was activated at approximately 2026-10-10 10:32 UTC after a clean supervisor stop (exit 0). Main-run step 28,592,305, its matching export/configuration and previous recipe are preserved under `frozen-evaluations/rules-v4-roster-transfer-28592305`, checkpoint SHA-256 `9582eef435cf8af5eed9cf3568a2f2e1dcaade48cb1672b898a76e7e9526b790`. The saved checkpoint matched the SDK resume checkpoint's policy and global step, with all 12 optimizer states finite. The resumed learner uses that main checkpoint, not either pilot checkpoint. Initial runtime checks confirm four arenas, all six challenger identities, zero rejected actions, no viewer, unlimited time and the shared 20 GB budget. Treat this activation as the start of a new measured training-recipe period; the stock transient Ghost opponent pool is rebuilt on resume rather than falsely described as fully restored. Recheck fixed/held-out strength and first/second results after a meaningful continuation interval.
+
+### 2026-10-10 fixed tactical strategy matrix
+
+While the roster extension learns, a separate 256-game probe compared four fair tactical controllers against one another, with work budget 512, seed 60001 and 16 games per cell balanced over both colours and starting roles. The controllers use the same legal rules and fair seat projections; row/column roster restrictions apply only to their own recruitment. This is a probe of those particular controllers, not optimized play or evidence of human-level balance. With fixed starting geometry and deterministic tactical choices, repeated games are not independent strategy samples.
+
+Entries below are row-controller capture wins out of 16 scheduled games; `I` marks interrupted games within that total.
+
+| Row / reference | All units | Warrior | Rider | Archer |
+| --- | ---: | ---: | ---: | ---: |
+| All units | 8/16 | 4/16 | 0/16 | 4/16, 8 I |
+| Warrior | 12/16 | 8/16 | 8/16 | 16/16 |
+| Rider | 16/16 | 8/16 | 8/16 | 0/16, 8 I |
+| Archer | 4/16, 8 I | 0/16 | 8/16, 8 I | 8/16 |
+
+Every same-controller diagonal gave the second player all capture wins, including unrestricted, Warrior, Rider and Archer. This contrasts with the recent frozen learned policy's first-player sweep. Different controller habits can therefore reverse the observed role bias; do not tune opening gold to one current policy's result or call its self-match score an equilibrium measurement. Keep the approved 2/3 opening and test stronger evolving play from both roles.
+
+The matrix shows distinct tactical counters and 32 total interruptions, without establishing balanced optimal strategies. Scout support and mixed-army synergy are not isolated by these single-type probes. Interruption-heavy pairings are not counted as completed draws or successful defensive balance. The bounded matrix changes no model, training recipe, rules or public build. Retained receipts and recent traces are in ignored `Logs/Validation/BalanceV4/tactical-strategy-matrix/`.
