@@ -6,6 +6,7 @@ The challenger uses the same seat projection and action schema as the learner.
 import hashlib
 import json
 import math
+import re
 from pathlib import Path
 
 from training_contract import RULES_VERSION, OPENING_ECONOMY_VERSION, checkpoint_step
@@ -68,6 +69,9 @@ def validate_recipe(run, recipe):
         if entry.get('kind') == 'fair-tactician':
             if type(entry.get('workBudget')) is not int or not 1 <= entry['workBudget'] <= 2048:
                 raise ValueError('Invalid fair tactical work budget.')
+            recruit = entry.get('recruitType', '')
+            if not isinstance(recruit, str) or (recruit and not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', recruit)):
+                raise ValueError('Use an optional roster type identifier for a tactical reference.')
         elif recipe['version'] == 2 and entry.get('kind') == 'frozen-policy':
             checkpoint = owned_frozen_path(run,entry.get('checkpoint'))
             checkpoint_step(checkpoint)
@@ -108,9 +112,13 @@ def entry_id(entry):
         return 'sampled-' + hashlib.sha256(json.dumps(dict(actor=entry['actorId'],
             sampling=entry['sampling'], settings=entry['samplingSettings'], rules=RULES_VERSION),
             sort_keys=True).encode()).hexdigest()[:24]
-    return 'tactician-' + hashlib.sha256(json.dumps(dict(kind=entry['kind'],
-        implementation='hard-tactician-v3', rules=RULES_VERSION, work=entry['workBudget']),
-        sort_keys=True).encode()).hexdigest()[:24]
+    identity = dict(kind=entry['kind'], implementation='hard-tactician-v3',
+                    rules=RULES_VERSION, work=entry['workBudget'])
+    # Preserve existing unrestricted identities; a restricted reference is a
+    # distinct opponent, never a restriction on the learning seat's roster.
+    if entry.get('recruitType'):
+        identity['recruitType'] = entry['recruitType']
+    return 'tactician-' + hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:24]
 
 
 def challenger_ids(recipe):
@@ -170,7 +178,12 @@ class TrainingOpponents:
             group = [agent for agent in agents if self.assignments[agent//2][1] == index]
             if not group:continue
             if entry['kind'] == 'fair-tactician':
-                advice = env.reference_actions(opponent_seat, work_budget=entry['workBudget'], agents=group)
+                options = dict(work_budget=entry['workBudget'], agents=group)
+                if entry.get('recruitType'):
+                    if entry['recruitType'] not in env.roster:
+                        raise ValueError('Tactical reference recruit type is absent from the current roster.')
+                    options['recruit_type'] = entry['recruitType']
+                advice = env.reference_actions(opponent_seat, **options)
             else:
                 from frozen_policy import FrozenPolicy, evaluation_weights
                 name = 'BlockNationsSeatV2?team='+str(opponent_seat)

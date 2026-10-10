@@ -4,10 +4,48 @@ import tempfile
 import unittest
 
 from training_contract import RULES_VERSION
-from training_opponents import TrainingOpponents, load_recipe
+from training_opponents import TrainingOpponents, load_recipe, entry_id
 
 
 class TrainingOpponentTests(unittest.TestCase):
+    def test_roster_references_have_distinct_stable_identities(self):
+        base = dict(kind='fair-tactician', workBudget=128)
+        self.assertEqual(entry_id(dict(base, workBudget=512)),
+                         'tactician-74d246ff24983fb04b1cf7b4')
+        self.assertEqual(entry_id(base), entry_id(dict(base, recruitType='')))
+        self.assertNotEqual(entry_id(base), entry_id(dict(base, recruitType='warrior')))
+        self.assertNotEqual(entry_id(dict(base, recruitType='warrior')),
+                            entry_id(dict(base, recruitType='rider')))
+
+    def test_restricted_reference_does_not_restrict_learner(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            recipe = dict(version=1, rulesVersion=RULES_VERSION, kind='fair-tactician',
+                          probability=.5, workBudget=128, recruitType='custom_unit')
+            for invalid in (None, True, '../warrior', 'x'*65, 'warrior rider'):
+                (root/'training-opponents.json').write_text(json.dumps(dict(recipe, recruitType=invalid)))
+                with self.assertRaises(ValueError): load_recipe(root)
+            (root/'training-opponents.json').write_text(json.dumps(recipe))
+            policy = dict(learningSeat=1, learner='learner', opponent='neural')
+            stats = [dict(worker=0, match=1, trainerResets=0)]
+            seed = next(s for s in range(100) if TrainingOpponents(root,s).selected(stats,policy))
+            pool = TrainingOpponents(root,seed)
+            class Advice:
+                workers = 1
+                roster = ('custom_unit', 'other')
+                def reference_actions(self, seat, *, work_budget, agents, recruit_type):
+                    assert seat == 0 and recruit_type == 'custom_unit'
+                    assert work_budget == 128 and agents == [0]
+                    return {0:242}
+            env = Advice(); env.stats = stats
+            original = {0:258, 1:243}
+            replaced, assignments = pool.prepare(env, original, policy)
+            self.assertEqual(original, {0:258, 1:243})
+            self.assertEqual(replaced, {0:242, 1:243})
+            self.assertEqual(assignments[0]['opponent'],entry_id(recipe))
+            env.roster = ('other',)
+            with self.assertRaises(ValueError): pool.prepare(env,original,policy)
+
     def test_recipes_are_optional_bounded_and_rules_versioned(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
