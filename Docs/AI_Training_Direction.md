@@ -87,6 +87,8 @@ Next steps after the matched exploration results:
 
 These alternatives are the next experimental plan; the current main run still uses all four units and unchanged rules-v4 definitions. Keep the learned browser release pending the owner's playtest review.
 
+The owner subsequently approved the three-unit core and Archer vision 2 variant. Retain Archer's existing action order: one shot followed by an optional one-tile move; moving first makes shooting unavailable for that turn. A kill spends the shot but does not spend this optional movement. `Unit.RegisterAttack` and `MatchEngine` already share that behavior through `MovementUsedAfterAttack` with Archer's `AttackEndsMovement` disabled. This is a retained rule, not an additional movement buff. Test whether shooting and retreating leaves useful counterplay on 7×7; confirm strength and starting-role balance rather than assuming the vision change is balanced. The reduced enabled roster and vision change remain pending the separately versioned experiment after the current matched trials finish.
+
 ## References
 
 - [Current ML training MVP](ML_Training_MVP.md): implemented controls, schemas, storage, replay, and validation limits.
