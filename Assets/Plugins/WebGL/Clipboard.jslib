@@ -1,4 +1,37 @@
 mergeInto(LibraryManager.library, {
+  CopyToClipboardWithResult: function (strPtr, receiverPtr, methodPtr) {
+    var text = UTF8ToString(strPtr);
+    var receiver = UTF8ToString(receiverPtr);
+    var method = UTF8ToString(methodPtr);
+    var finish = function (ok) { window.blockNations.SendMessage(receiver, method, ok ? "1" : "0"); };
+    var fallback = function () {
+      var textarea = document.createElement("textarea");
+      var previousFocus = document.activeElement;
+      try {
+        textarea.value = text;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        finish(document.execCommand("copy"));
+      } catch (e) {
+        finish(false);
+      } finally {
+        textarea.remove();
+        if (previousFocus && previousFocus.focus) previousFocus.focus();
+      }
+    };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { finish(true); }, fallback);
+      } else {
+        fallback();
+      }
+    } catch (e) {
+      fallback();
+    }
+  },
   CopyToClipboard: function (strPtr) {
     try {
       var text = UTF8ToString(strPtr);

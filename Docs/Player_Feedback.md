@@ -2,6 +2,8 @@
 
 The main-menu panes display the build version at the top left. Both menu and normal gameplay have a Feedback button at the top right, inside the safe area. Gameplay does not display a version label; reports attach the version automatically.
 
+Tap the menu version to copy the full displayed identifier, including the PBp protocol (for example, `v1.0.3 · PbP 5`). The label shows `Copied!` for two seconds, then returns to the version. Browser builds wait for clipboard confirmation; a rejected copy shows a retry message. When checking a candidate, verify the pasted text, repeat taps, label restoration, and leaving/reopening the menu. Check physical mobile browsers separately.
+
 ## Player flow
 
 Tapping Feedback captures the rendered game view before opening the form. The browser reads the game canvas immediately after a Unity render, preserving the displayed colors; Editor/native builds use Unity screenshot capture. The screenshot contains only the reporting player's visible screen and UI. It does not serialize the board, save, hidden information, PBp credentials, or logs.
@@ -39,3 +41,5 @@ All 22 access/feedback tests passed with the latest account-switching changes in
 Chromium desktop and a 390 x 844 phone-sized viewport were inspected. The complete Unity button-to-browser-form flow saved distinct menu, text-only and gameplay reports in the actual local Worker/SQLite store using synthetic approved identities. Received screenshots retained the rendered colors and HUD, omitted the dialog, and stayed within 1280 pixels. The private inbox loaded both images. Draft cancellation/reopening and page reload preserved written text; successful sends cleared it. A simulated failed acknowledgement retried the identical payload and produced one stored report. The open form blocked an attempted tap on the underlying gameplay controls; ordinary board selection worked after closing it.
 
 Physical iPhone Safari, Android Chrome, native submission and live Cloudflare acceptance remain separate release checks.
+
+Menu version copying was validated in an isolated WebGL candidate on 2026-10-10. Chrome displayed `Copied!`, pasted the exact `v1.0.4 · PbP 5` identifier, restored the version label, and accepted a repeat click. Six clipboard-bridge checks covered asynchronous confirmation, rejected writes, successful/failed legacy fallback, and synchronous exceptions. All 14 responsive/menu EditMode cases passed in the isolated project without Unity AI Assistant; runs in the main checkout were interrupted by that package's unrelated connection error. The candidate build succeeded and its credential audit found zero matches. This validation did not deploy the candidate or establish physical mobile acceptance.

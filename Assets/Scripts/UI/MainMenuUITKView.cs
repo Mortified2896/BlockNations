@@ -93,6 +93,7 @@ public class MainMenuUITKView : MonoBehaviour
     private FeedbackUITKController feedback;
     private Label versionLabel;
     private Label multiplayerVersionLabel;
+    private MenuVersionCopyController versionCopy;
     private Label titleLabel;
     private Label profileUsernameValueLabel;
     private Label profileTitleValueLabel;
@@ -1007,6 +1008,7 @@ public class MainMenuUITKView : MonoBehaviour
     private void BindButtons()
     {
         UnbindButtons();
+        versionCopy = new MenuVersionCopyController(gameObject.name, versionLabel, multiplayerVersionLabel);
 
         if (continueButton != null)
         {
@@ -1382,6 +1384,8 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void UnbindButtons()
     {
+        versionCopy?.Dispose();
+        versionCopy = null;
         if (continueButton != null)
         {
             continueButton.clicked -= HandleContinueClicked;
@@ -4342,6 +4346,12 @@ public class MainMenuUITKView : MonoBehaviour
         {
             multiplayerVersionLabel.text = versionText;
         }
+    }
+
+    // Called by the WebGL clipboard bridge after the browser confirms the write.
+    public void OnMenuVersionCopyResult(string result)
+    {
+        versionCopy?.Complete(result == "1");
     }
 
     private void RefreshContinueButtonVisibility()
