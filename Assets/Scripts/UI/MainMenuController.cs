@@ -13,7 +13,7 @@ using UnityEngine.UI;
 /// Hook this to your MainMenu scene Canvas/buttons to load the gameplay scene
 /// with the selected mode.
 /// </summary>
-public class MainMenuController : MonoBehaviour
+public partial class MainMenuController : MonoBehaviour
 {
     public struct PendingAIVsAISettingsReturn
     {
@@ -191,6 +191,10 @@ public class MainMenuController : MonoBehaviour
 
     IEnumerator Start()
     {
+        if (PublicWebBuild.UsesGoogleAccounts) {
+            yield return StartWebAccountMenu();
+            yield break;
+        }
         if (PublicWebBuild.IsSinglePlayer)
         {
             // This release never initializes multiplayer polling or notifications.
@@ -643,6 +647,7 @@ public class MainMenuController : MonoBehaviour
 
     public void OpenMultiplayerScreen()
     {
+        if (PublicWebBuild.UsesGoogleAccounts) { WebAccountClient.OpenLobby(); return; }
         if (PublicWebBuild.IsSinglePlayer) return;
         ApplyVisibleMenuPaneState(multiplayerVisible: true, resetRefreshWindow: true);
         MultiplayerScreenRequested?.Invoke();
@@ -700,7 +705,7 @@ public class MainMenuController : MonoBehaviour
 
     private void RefreshMultiplayerListInternal(bool bypassRemoteCooldown)
     {
-        if (PublicWebBuild.IsSinglePlayer) return;
+        if (PublicWebBuild.IsPublicWeb) return;
         ResolveServerCheckSources();
         activePbpGames = SaveManifestService.GetActivePlayByPostGames();
         archivedPbpGames = SaveManifestService.GetArchivedPlayByPostGames();

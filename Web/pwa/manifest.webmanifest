@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "Block Nations",
+  "short_name": "Block Nations",
+  "description": "A private turn-based strategy playtest with friends.",
+  "start_url": "/multiplayer",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#314d79",
+  "theme_color": "#314d79",
+  "icons": [
+    { "src": "/icons/app-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/app-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

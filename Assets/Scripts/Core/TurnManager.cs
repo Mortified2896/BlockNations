@@ -292,6 +292,7 @@ public partial class TurnManager : MonoBehaviour
 
     public bool ShouldShowPlayByPostSharePromptForUi(string gameId)
     {
+        if (PublicWebBuild.UsesGoogleAccounts) return false;
         if (currentMode != GameMode.PlayByPost ||
             gameOver ||
             string.IsNullOrWhiteSpace(gameId) ||
@@ -2723,6 +2724,17 @@ public partial class TurnManager : MonoBehaviour
         pbpEndgameCachedExportTurnNumber = 0;
         pbpEndgameCachedExportIsPlayerTurn = false;
 
+        if (PublicWebBuild.UsesGoogleAccounts &&
+            WebAccountClient.AcceptedMatch?.match?.id == currentGameId &&
+            WebAccountClient.AcceptedMatch.match.status == "finished")
+        {
+            // A finished cloud snapshot already includes the final handoff.
+            // Reopening it must not submit the terminal turn again.
+            pbpEndgameSubmitSucceeded = true;
+            SetGameOverPrimaryButtonState("Back to lobby", true, PbpEndgamePrimaryAction.BackToMultiplayer);
+            return true;
+        }
+
         if (didLocalWin)
         {
             if (isArchivedLocally)
@@ -2884,6 +2896,7 @@ public partial class TurnManager : MonoBehaviour
 
     private void ReturnToMultiplayer()
     {
+        if (PublicWebBuild.UsesGoogleAccounts) { WebAccountClient.OpenLobby(); return; }
         PlayerPrefs.SetInt(ReturnToMultiplayerPaneKey, 1);
         PlayerPrefs.Save();
 
@@ -3010,7 +3023,13 @@ public partial class TurnManager : MonoBehaviour
         bool resolvedWasNull = false;
         string telemetryTransportName = null;
 
-        if (turnTransportComponent != null && turnTransportComponent is ITurnTransport componentTransport)
+        if (PublicWebBuild.UsesGoogleAccounts)
+        {
+            resolved = new WebAccountTurnTransport();
+            telemetryTransportName = resolved.TransportName;
+            resolved.Initialize();
+        }
+        else if (turnTransportComponent != null && turnTransportComponent is ITurnTransport componentTransport)
         {
             resolved = componentTransport;
             telemetryTransportName = resolved.TransportName;
@@ -3253,6 +3272,22 @@ public partial class TurnManager : MonoBehaviour
         }
 
         TryNotifyPlayByPostSubmitResult(submitOk, submitError);
+        if (PublicWebBuild.UsesGoogleAccounts)
+        {
+            if (submitOk)
+            {
+                exportJson = WebAccountClient.AcceptedMatch.json;
+                ApplyAcceptedWebTurn();
+            }
+            else if (submitError == TurnTelemetryConstants.Conflict || submitError == "NOT_YOUR_TURN" || submitError == "INVALID_SEQUENCE")
+            {
+                // Another tab/device already committed this turn. Recover the
+                // accepted snapshot instead of polling past it indefinitely.
+                isPlayByPostWaitingForExport = true;
+                StartPlayByPostPolling(-1);
+                yield break;
+            }
+        }
         bool isWinningPbpEndgameSubmit =
             currentMode == GameMode.PlayByPost &&
             gameOver &&
@@ -3656,6 +3691,15 @@ public partial class TurnManager : MonoBehaviour
 
     System.Collections.IEnumerator StartupSequence()
     {
+        if (PublicWebBuild.UsesGoogleAccounts)
+        {
+            var webMatch = WebAccountClient.ConsumePendingMatch();
+            if (webMatch != null)
+            {
+                yield return StartWebAccountMatch(webMatch);
+                yield break;
+            }
+        }
         if (externallyDrivenMatch)
         {
             yield return WaitForGridReady();

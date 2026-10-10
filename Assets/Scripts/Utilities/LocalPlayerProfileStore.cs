@@ -37,6 +37,8 @@ public static class LocalPlayerProfileStore
 
     public static ProfileData GetOrCreateProfile()
     {
+        if (PublicWebBuild.UsesGoogleAccounts)
+            return new ProfileData(WebAccountClient.PlayerId, string.Empty, string.Empty, WebAccountClient.DisplayName);
         bool didChange = false;
 
         string playerIdKey = GetScopedKey(PlayerIdKeyRaw);
@@ -145,7 +147,7 @@ public static class LocalPlayerProfileStore
         }
 
         string trimmed = typedDisplayName.Trim();
-        int maxLength = ProfileUsernameGenerator.MaxUsernameLength;
+        int maxLength = PublicWebBuild.UsesGoogleAccounts ? 32 : ProfileUsernameGenerator.MaxUsernameLength;
         return trimmed.Length <= maxLength ? trimmed : trimmed.Substring(0, maxLength);
     }
 
@@ -221,6 +223,7 @@ public static class LocalPlayerProfileStore
     public static bool HasRecognizableTypedDisplayName(string typedDisplayName)
     {
         string normalized = NormalizeTypedDisplayName(typedDisplayName);
+        if (PublicWebBuild.UsesGoogleAccounts) return !string.IsNullOrWhiteSpace(normalized);
         return (IsValidTypedDisplayName(normalized) && !ProfileUsernameGenerator.IsGeneratedUsername(normalized)) ||
                DevClientInstanceScope.IsCurrentDevDefaultTypedProfileName(normalized);
     }

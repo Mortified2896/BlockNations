@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <meta name="theme-color" content="#314d79">
   <title>Block Nations</title>
+  <link rel="icon" href="/icons/app-192.png">
+  <link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icons/app-192.png"><meta name="apple-mobile-web-app-capable" content="yes">
   <style>
     * { box-sizing: border-box; }
     html, body { width:100%; height:100%; margin:0; overflow:hidden; background:#314d79; font-family:system-ui,sans-serif; color:white; }
@@ -18,15 +20,21 @@
     .account-bar { position:relative; z-index:1; flex:none; display:flex; justify-content:flex-end; padding:0 16px env(safe-area-inset-bottom); background:#314d79; }
     .account-bar a { display:flex; align-items:center; min-height:48px; padding:0 12px; font-size:14px; color:white; text-underline-offset:4px; }
     .account-bar a:focus-visible { outline:2px solid white; outline-offset:-4px; }
+    #multiplayer-state { position:absolute; z-index:5; inset:0; background:#314d79; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:24px; text-align:center; }
+    #multiplayer-state[hidden] { display:none; }
+    #multiplayer-state p { max-width:440px; line-height:1.6; }
+    #multiplayer-state a { color:white; min-height:48px; display:flex; align-items:center; }
   </style>
 </head>
 <body>
   <main id="game">
     <canvas id="unity-canvas" tabindex="0" aria-label="Block Nations game"></canvas>
     <div id="loading" role="status"><h1>Block Nations</h1><div id="status">Loading the game…</div><progress id="progress" max="1" value="0"></progress></div>
+    <div id="multiplayer-state" hidden role="status"><p id="multiplayer-message"></p><a href="/multiplayer">Return to multiplayer lobby</a></div>
   </main>
-  <nav class="account-bar" aria-label="Player account"><a href="/access" target="_blank" rel="noopener" aria-label="Account (opens in a new tab)">Account</a></nav>
+  <nav class="account-bar" aria-label="Player account"><a href="/multiplayer">Multiplayer</a><a href="/access" target="_blank" rel="noopener" aria-label="Account (opens in a new tab)">Account</a></nav>
   <script src="Feedback.js"></script>
+  <script type="module" src="PWA.js"></script>
   <script src="Build/{{{ LOADER_FILENAME }}}"></script>
   <script>
     const canvas = document.getElementById('unity-canvas');
@@ -38,7 +46,9 @@
       companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
       productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
       productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
-      devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+      // The existing Unity controls need enough render pixels on a narrow
+      // viewport. Keep the canvas fitted to the phone while scaling its HUD.
+      devicePixelRatio: Math.max(Math.min(window.devicePixelRatio || 1, 2), Math.min(3, 960 / canvas.clientWidth)),
       matchWebGLToCanvasSize: true,
       autoSyncPersistentDataPath: true,
       showBanner: (message, type) => {

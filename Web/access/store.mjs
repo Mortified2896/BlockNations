@@ -141,6 +141,26 @@ export class AccessStore {
       return Response.json({ ok: true });
     }
     if (operation === "/tester") return Response.json(this.tester(input.uid));
+    if (operation === "/player-search") {
+      const query = typeof input.query === "string" ? input.query.trim().toLowerCase() : "";
+      if (query.length < 3 || query.length > 254) return Response.json([]);
+      // Email lookup is exact. Never return an address to another player; these
+      // rows are consumed only over a private Worker binding.
+      const approved = "status NOT IN ('rejected','disabled') AND (status='approved' OR review_status='approved')";
+      if (query.includes("@")) {
+        return Response.json(this.sql.exec(`SELECT auth_user_id,display_name,email FROM game_testers
+          WHERE ${approved} AND lower(email)=? ORDER BY auth_user_id LIMIT 8`, query).toArray());
+      }
+      // SQLite lower() folds ASCII only. The small internal tester directory
+      // needs Unicode folding for Google names such as Özlem and Zoë.
+      const names = this.sql.exec(`SELECT auth_user_id,display_name FROM game_testers
+        WHERE ${approved} ORDER BY display_name,auth_user_id`).toArray();
+      const matches = names.filter(player => player.display_name.toLowerCase().includes(query)).slice(0, 8);
+      return Response.json(matches.map(player => {
+        const { auth_user_id, display_name, email } = this.tester(player.auth_user_id);
+        return { auth_user_id, display_name, email };
+      }));
+    }
     if (operation === "/list") {
       const offset = input.offset ?? 0;
       if (!Number.isSafeInteger(offset) || offset < 0) return new Response(null, { status: 400 });

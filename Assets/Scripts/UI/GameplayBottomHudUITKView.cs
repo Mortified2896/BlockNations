@@ -624,6 +624,7 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
 
     private void HandlePlayByPostSubmitResult(bool ok, string err)
     {
+        if (PublicWebBuild.UsesGoogleAccounts) return;
         if (!ok || turnManager == null || turnManager.currentMode != TurnManager.GameMode.PlayByPost)
         {
             return;
@@ -1364,12 +1365,14 @@ public sealed class GameplayBottomHudUITKView : MonoBehaviour
         if (pbpMessageAfterTurnEndLabel != null)
         {
             pbpMessageAfterTurnEndLabel.text = MessageAfterTurnEndToggleLabel;
+            pbpMessageAfterTurnEndLabel.style.display = PublicWebBuild.UsesGoogleAccounts ? DisplayStyle.None : DisplayStyle.Flex;
         }
 
         if (pbpMessageAfterTurnEndToggleButton == null)
         {
             return;
         }
+        pbpMessageAfterTurnEndToggleButton.style.display = PublicWebBuild.UsesGoogleAccounts ? DisplayStyle.None : DisplayStyle.Flex;
 
         bool enabled = PlayByPostUserSettings.IsMessageAfterTurnEndEnabled();
         pbpMessageAfterTurnEndToggleButton.text = enabled ? ToggleOnText : ToggleOffText;

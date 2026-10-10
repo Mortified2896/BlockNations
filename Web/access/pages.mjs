@@ -4,13 +4,14 @@ export function escape(value) {
   })[c]);
 }
 
-export function page(title, content, { status = 200, script = "", formOrigins = "'self'" } = {}) {
+export function page(title, content, { status = 200, script = "", style = "", moduleScript = "", formOrigins = "'self'" } = {}) {
   const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(24))));
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="data:,"><title>${escape(title)} · Block Nations</title>
+<link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icons/app-192.png"><meta name="theme-color" content="#314d79"><meta name="apple-mobile-web-app-capable" content="yes">
 <style nonce="${nonce}">
 :root{color-scheme:light;--ink:#202020;--muted:#696969;--line:#e9e9e9;--paper:#fff;--sans:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;--serif:Georgia,"Times New Roman",serif;font-synthesis:none;text-rendering:optimizeLegibility}
-*{box-sizing:border-box}body{margin:0;min-height:100svh;display:flex;flex-direction:column;background:var(--paper);color:var(--ink);font-family:var(--sans)}
+*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;min-height:100svh;display:flex;flex-direction:column;background:var(--paper);color:var(--ink);font-family:var(--sans)}
 .site-header,.site-footer{width:min(calc(100% - 80px),1120px);margin-inline:auto;display:flex;justify-content:space-between;align-items:center;gap:20px}
 .site-header{padding:24px 0;border-bottom:1px solid var(--line)}.wordmark{font-family:var(--serif);font-size:32px;font-weight:700;letter-spacing:-.09em;text-decoration:none;line-height:1}.site-name{font-size:13px;color:var(--muted)}
 main{flex:1;width:min(calc(100% - 80px),480px);margin-inline:auto;padding:80px 0}.eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:550}
@@ -19,15 +20,15 @@ h1{font-family:var(--serif);font-size:42px;font-weight:500;letter-spacing:-.045e
 .button:hover,button:hover{background:#3a3a3a;border-color:#3a3a3a}button:disabled{opacity:.65;cursor:wait}.secondary{background:var(--paper);color:var(--ink);border-color:var(--line);margin-top:12px}.secondary:hover{background:#f6f6f6;border-color:#bdbdbd}
 a:focus-visible,button:focus-visible{outline:2px solid var(--ink);outline-offset:5px}.note{font-size:13px;color:var(--muted);margin-top:24px}.tester{border-top:1px solid var(--line);padding-top:16px;margin-top:28px}.tester strong{color:var(--ink)}.feedback-image{display:block;max-width:100%;height:auto;margin-top:16px;border:1px solid var(--line)}#error{color:var(--ink);font-weight:600}#error:empty{display:none}form{margin:0}
 .site-footer{border-top:1px solid var(--line);padding:24px 0;font-size:12px;color:var(--muted)}@media(max-width:600px){.site-header,.site-footer{width:calc(100% - 44px)}.site-header{padding:20px 0}.wordmark{font-size:27px}.site-name{font-size:12px}main{width:calc(100% - 44px);padding:56px 0 64px}h1{font-size:36px}.site-footer{font-size:11px;flex-wrap:wrap;gap:10px}}
-</style></head><body><header class="site-header"><a class="wordmark" href="https://moneymattersmedia.com/" aria-label="Money Matters Media home">MMM.</a><span class="site-name">Block Nations</span></header><main>
+${style}</style></head><body><header class="site-header"><a class="wordmark" href="https://moneymattersmedia.com/" aria-label="Money Matters Media home">MMM.</a><span class="site-name">Block Nations</span></header><main>
 <div class="eyebrow">Block Nations · Private playtest</div><h1>${escape(title)}</h1>${content}</main>
 <footer class="site-footer"><span>Money Matters Media</span><span>Friends &amp; invited testers</span></footer>
-${script ? `<script nonce="${nonce}">${script}</script>` : ""}</body></html>`;
+${script ? `<script nonce="${nonce}">${script}</script>` : ""}${moduleScript ? `<script nonce="${nonce}" type="module" src="${escape(moduleScript)}"></script>` : ""}</body></html>`;
   return new Response(html, {
     status,
     headers: {
       "Content-Type": "text/html; charset=utf-8",
-      "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; img-src 'self' data:; connect-src 'self'; form-action ${formOrigins}; base-uri 'none'; frame-ancestors 'none'`,
+      "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; form-action ${formOrigins}; base-uri 'none'; frame-ancestors 'none'`,
     },
   });
 }
