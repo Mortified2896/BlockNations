@@ -36,7 +36,7 @@ def atomic_json(path: Path, value: dict) -> None:
     temporary.replace(path)
 
 
-def latest_checkpoint(run: Path) -> Path:
+def latest_checkpoint(run: Path, *, allow_pending=False) -> Path | None:
     manifest = read_json(run / "run.json")
     if (manifest.get("owner") != "BlockNations.LocalTraining.v1" or manifest.get("schema") != 2 or
             manifest.get("observationSize") != 3120 or manifest.get("actionCount") != 259 or
@@ -56,6 +56,8 @@ def latest_checkpoint(run: Path) -> Path:
                 export.stat().st_size > 0 and time.time() - export.stat().st_mtime >= 2):
             completed.append((int(match[1]), path))
     if not completed:
+        if allow_pending:
+            return None
         raise ValueError("No completed checkpoint yet. Wait for the first model save and try again.")
     return max(completed, key=lambda item: item[0])[1]
 
