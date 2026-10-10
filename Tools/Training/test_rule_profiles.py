@@ -133,6 +133,23 @@ class RuleTransferTests(unittest.TestCase):
                 self.assertEqual(identity['transferRules'], transfer)
         self.assertEqual(len(set(identities)), 3)
 
+    def test_frozen_reference_paths_and_transfers_are_prepared_for_every_profile(self):
+        suite = json.loads(self.suite.read_text())
+        suite['cases'].append(dict(name='old-policy', seed=10001, gamesPerCell=4, difficulty='Policy',
+            referenceDifficulty='Policy', reference=dict(kind='frozen', manifest=str(self.manifest),
+                checkpointSha256=digest(self.checkpoint), configSha256=digest(self.config))))
+        self.suite.write_text(json.dumps(suite))
+        for rules in SUPPORTED_RULES:
+            target = profile_suite(self.suite, rules, self.worker, self.root/(rules+'-frozen.json'))
+            transfer = transfer_contract(RULES_VERSION, rules) if rules != RULES_VERSION else None
+            _, _, cases, definition = prepare(self.manifest, target, candidate_transfer=transfer)
+            self.assertEqual(len(cases), 2)
+            reference = definition['cases'][1]['reference']
+            self.assertEqual(reference['sha256'], digest(self.checkpoint))
+            self.assertEqual(reference.get('transferRules'), transfer)
+            if transfer:
+                self.assertEqual(reference['trainedRulesVersion'], RULES_VERSION)
+
     def test_native_execution_cannot_silently_change_an_owned_run_profile(self):
         run, _, _ = self.target()
         args = SimpleNamespace(backend='dotnet', worker=self.worker, parallel_games=1, seed=42,

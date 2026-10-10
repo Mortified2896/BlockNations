@@ -108,7 +108,7 @@ def profile_suite(source, rules, worker, destination):
     for case in suite['cases']:
         reference = case['reference']
         if reference['kind'] == 'frozen':
-            original_rules = read_json(reference['manifest'])['rulesVersion']
+            original_rules = read_json(Path(reference['manifest']))['rulesVersion']
             if original_rules != rules:
                 reference['transferRules'] = transfer_contract(original_rules, rules)
     atomic_json(destination, suite)
