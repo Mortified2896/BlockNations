@@ -321,3 +321,24 @@ A separate probe at approximately 12:28 UTC increased only the fair reference co
 Against a Rider-only tactical controller at the same work budget, the Archer-only controller won all 32 matches when second. Its 32 first-player matches reached the 100-round limit, with no captures or losses. Those interruptions remain interruptions, not draws; the 32/32 capture win rate must not be presented as 100% over 64 completed games. This limited test shows one ranged controller can defend and win in a specific matchup/role, not general Archer viability or a solved learning strategy. The fixed geometry and deterministic controller limit independence of repeated samples.
 
 Local evidence is `Logs/Validation/BalanceV4/archer-more-compute/request.json`, `results.json` and each comparison's full `evaluation.json`. The request pins the frozen model and worker identity. No learner restrictions, rewards, game rules, weights, training recipe or benchmark definition changed. Continue the retained-history interval; if Archer non-use persists, distinguish poor action exploration/positioning from unit balance before changing stats.
+
+### Controlled exploration comparison, 2026-10-10 12:51 UTC
+
+Three private continuations started from the same immutable step-31,730,113 checkpoint, SHA-256 `8baf28dbb187300d1dd7cccd74a4fb111fbe5ce80b68e56751ee2135ddd301a7`, preserving the policy and all 12 Adam states. Each targeted 131,072 additional learner steps with seed 42, one arena, the same eight retained challengers, and the unchanged rules, rewards and legal-action contract. The arms used ordinary entropy coefficient 0.03 (control), coefficient 0.1, or coefficient 0.03 with the existing optional bounded exploration pressure (coefficient 0.02, normalized entropy floor 0.25, batch 128). The pressure arm adds a uniform-legal-action actor loss on saturated distributions; it does not replace actions or assign unit rewards.
+
+All three trainers exited cleanly with finite policy/optimizer states and zero rejected actions. Control and higher entropy advanced every Adam state by 3,024 updates; pressure advanced actor states by 3,087 and critic states by 3,024, confirming 63 auxiliary actor updates. Their final steps were 31,861,201, 31,861,210 and 31,861,212, respectively. Each completed the identical 1,280-game benchmark, suite `7134388d4009991cdf616d8c9d1556f4302e483b3ae93eecaa3979b4259b9533`, without interruptions.
+
+| Measure | Control | Higher entropy | Exploration pressure |
+| --- | ---: | ---: | ---: |
+| Wins against Warrior reference /64 | 44 | 32 | 49 |
+| Wins against Rider reference /64 | 48 | 64 | 32 |
+| Wins against held-out step 25,899,973 /128 | 68 | 71 | 29 |
+| First-player wins in raw same-policy tests /256 | 0 | 30 | 10 |
+| Archer recruits in those raw same-policy tests | 0 | 31 | 2 |
+| Archer recruits by winning sides in those tests | 0 | 15 | 1 |
+
+All arms beat the unrestricted, Archer-only and old step-18,834,965 Hard references in 64/64 each. Higher entropy also retained 256/256 wins in the two raw-policy comparisons with that old Hard reference; pressure fell to 229/256. The higher-entropy arm showed mixed armies containing Archers, but recruitment is not evidence that an Archer caused a win. A separate inspection of its bounded retained replays found 59 distinct raw-self-play traces, 13 Archer attacks dealing 13 displayed health points, eight kills and seven attacks by eventual winning sides. These are actual actions from spectator replay state, not extra information supplied to the policy, and the retained traces are not the complete evaluation sample.
+
+Fair city-selected opening probes confirmed all four recruits were legal. The parent, control and higher-entropy policies still chose Rider with practically unit probability; Archer probabilities were approximately `1.8e-15`, `6.9e-14` and `2.1e-13`. Pressure raised that probability to `1.2e-6`, still negligible. The second-player probe followed a hypothetical first-player pass and must not be presented as a played opening result. This distinguishes later mixed-unit exploration from recovery of alternative opening choices.
+
+Private receipts and immutable branch weights are in `Logs/Validation/BalanceV4/entropy-study`, `pressure-study` and `exploration-continuation-review`; the latter includes benchmark results, opening probabilities and `recent-unit-use.json`. Reject the pressure arm as a strength improvement at this budget. Higher entropy merits a longer matched trial because it recovered some ranged play, but the Warrior regression and remaining starting-role bias prevent promotion or a claim of balanced unit viability. The main retained-history interval and public release remain unchanged while its queued benchmark completes. Fixed geometry, repeated deterministic lines and a single training seed limit the statistical independence of these comparisons.
