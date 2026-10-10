@@ -17,7 +17,8 @@ import numpy as np
 from mlagents_envs.base_env import (BaseEnv, BehaviorSpec, ObservationSpec, DimensionProperty,
                                   ObservationType, ActionSpec, ActionTuple, DecisionSteps, TerminalSteps)
 from mlagents.trainers.env_manager import EnvManager, EnvironmentStep
-from training_contract import RULES_VERSION, OBSERVATIONS, ACTIONS
+from training_contract import RULES_VERSION, OBSERVATIONS, ACTIONS, OPENING_ECONOMY_VERSION, validate_opening_economy
+from training_opponents import TrainingOpponents
 
 BEHAVIOR = 'BlockNationsSeatV2'
 NAMES = [BEHAVIOR + '?team=' + str(seat) for seat in (0, 1)]
@@ -32,9 +33,16 @@ def atomic_json(path, data):
 
 
 class DotNetEnvironment(BaseEnv):
-    def __init__(self, executable, run, workers, seed, size, curriculum, distance, session, policy_provider=lambda: None):
-        self.run, self.workers = Path(run), workers
+    def __init__(self, executable, run, workers, seed, size, curriculum, distance, session, policy_provider=lambda: None,
+                 opening_economy_version=OPENING_ECONOMY_VERSION, first_seat=-1):
+        opening_economy_version = validate_opening_economy(opening_economy_version)
+        if type(first_seat) is not int or first_seat not in (-1, 0, 1):
+            raise ValueError('Choose a random starter or explicit seat 0/1 for evaluation.')
+        # The worker uses this directory as cwd; passing a relative --run again
+        # would put its journals/replays in a nested copy of the directory.
+        self.run, self.workers = Path(run).absolute(), workers
         self.policy_provider = policy_provider
+        self.opponents = TrainingOpponents(self.run, seed)
         self.actions, self.results, self.stats = {}, {}, []
         self.closed = False
         self.failure = ''
@@ -52,7 +60,8 @@ class DotNetEnvironment(BaseEnv):
                 raise ValueError('The dotnet runtime is missing; configure its executable or build a self-contained worker.')
             prefix = [dotnet, str(executable)]
         command = prefix + ['--run', str(self.run), '--workers', str(workers), '--seed', str(seed),
-                            '--size', str(size), '--curriculum', str(bool(curriculum)).lower(), '--distance', str(distance), '--session', session]
+                            '--size', str(size), '--curriculum', str(bool(curriculum)).lower(), '--distance', str(distance), '--session', session,
+                            '--opening-economy-version', str(opening_economy_version), '--first-seat', str(first_seat)]
         self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                         text=True, bufsize=1, cwd=self.run)
         self.reader = threading.Thread(target=self._read, daemon=True)
@@ -101,11 +110,19 @@ class DotNetEnvironment(BaseEnv):
                 response.get('rulesVersion') != RULES_VERSION):
             raise ValueError('C# rules/model protocol mismatch; do not train on an incompatible worker.')
         self.stats = response['stats']
+        self.roster = tuple(response.get('recruitTypes', ()))
         if len(self.stats) != self.workers:
             raise ValueError('Worker count changed unexpectedly.')
         if request['op'] == 'status':
             self._publish_status(paused=True)
             return  # Telemetry only: retain the previous decision agents/tensors.
+        if request['op'] == 'reference':
+            actions = {item['agent']: item['action'] for item in response['referenceActions']}
+            decisions, _ = self.get_steps(NAMES[request['referenceSeat']])
+            for agent, choice in actions.items():
+                if agent not in decisions.agent_id_to_index or not 0 <= choice < ACTIONS or decisions.action_mask[0][decisions.agent_id_to_index[agent], choice]:
+                    raise ValueError('Reference produced a stale or masked choice.')
+            return actions  # Read-only evaluation advice never advances a game.
         self.results = {}
         for seat, name in enumerate(NAMES):
             decisions = [item for item in response['steps'] if item['seat'] == seat and not item['terminal']]
@@ -144,12 +161,19 @@ class DotNetEnvironment(BaseEnv):
             status[key] = sum(worker[key] for worker in self.stats)
         status.update(paused=paused, trainerConnected=not self.closed, failure=failure, humanPlaytest=False,
                       workerCount=self.workers, elapsedSeconds=now-self.started,
+                      challengerDecisions=self.opponents.decisions, challengerPolicy=self.opponents.identifier,
                       decisionsPerSecond=status['decisions']/max(.001, now-self.started), updatedUnix=time.time())
         atomic_json(self.run / 'arena-status.json', status)
 
     def reset(self):
         self.actions.clear()
         self._exchange({'op': 'reset'})
+
+    def reference_actions(self, seat, recruit_type='', work_budget=64, agents=None):
+        request = dict(op='reference', referenceSeat=seat, recruitType=recruit_type, workBudget=work_budget)
+        if agents is not None:
+            request['referenceAgents'] = list(agents)
+        return self._exchange(request)
 
     def step(self):
         next_snapshot = 0
@@ -170,7 +194,11 @@ class DotNetEnvironment(BaseEnv):
             self._publish_status(paused=True)
             time.sleep(.1)
         policy = self.policy_provider()
-        self._exchange({'op': 'step', 'actions': [{'agent': agent, 'action': action} for agent, action in self.actions.items()], 'policy': policy})
+        actions, assignments = self.opponents.prepare(self, self.actions, policy)
+        request = {'op': 'step', 'actions': [{'agent': agent, 'action': action} for agent, action in actions.items()], 'policy': policy}
+        if assignments is not None:
+            request['policies'] = assignments
+        self._exchange(request)
         self.actions.clear()
 
     def set_actions(self, behavior_name, action):
@@ -271,7 +299,8 @@ def install(learn, policy_provider):
             return DotNetEnvironment(os.environ['BLOCKNATIONS_SIMULATION_WORKER'], os.environ['BLOCKNATIONS_RATING_RUN'],
                                      int(os.environ['BLOCKNATIONS_PARALLEL_GAMES']), int(os.environ['BLOCKNATIONS_SIMULATION_SEED']),
                                      int(os.environ['BLOCKNATIONS_RATING_BOARD']), os.environ['BLOCKNATIONS_SIMULATION_CURRICULUM'] == 'true',
-                                     int(os.environ['BLOCKNATIONS_SIMULATION_DISTANCE']), os.environ['BLOCKNATIONS_RATING_SESSION'], policy_provider)
+                                     int(os.environ['BLOCKNATIONS_SIMULATION_DISTANCE']), os.environ['BLOCKNATIONS_RATING_SESSION'], policy_provider,
+                                     opening_economy_version=int(os.environ.get('BLOCKNATIONS_OPENING_ECONOMY_VERSION', OPENING_ECONOMY_VERSION)))
         return create
     learn.create_environment_factory = factory
     learn.SubprocessEnvManager = BatchedSimulationManager

@@ -18,6 +18,7 @@ from onnx import helper, TensorProto
 from onnx.reference import ReferenceEvaluator
 
 from playtest import latest_checkpoint, read_json
+from training_contract import RULES_VERSION, OPENING_ECONOMY_VERSION, checkpoint_step
 
 PROBABILITIES = "policy_probabilities"
 
@@ -67,15 +68,36 @@ def verify(source: onnx.ModelProto, converted: onnx.ModelProto, seed: int = 42) 
     return {"samples": 24, "maximumProbabilityError": largest_error, "maskedActionsVerified": True}
 
 
-def export(run: Path, destination: Path) -> dict:
+def export(run: Path, destination: Path, checkpoint: Path | None = None) -> dict:
     manifest = read_json(run / "run.json")
     arena = read_json(run / "arena-status.json")
-    if manifest.get("boardSize") != 7 or arena.get("simulationVersion") != "blocknations-simulation-v3":
-        raise ValueError("This first browser release requires a 7x7 checkpoint under rules v3.")
-    checkpoint = latest_checkpoint(run)
-    # Read immutable numbered files before training retention can remove them.
-    weights = checkpoint.read_bytes()
-    original_bytes = checkpoint.with_suffix(".onnx").read_bytes()
+    if manifest.get("boardSize") != 7 or arena.get("simulationVersion") != RULES_VERSION:
+        raise ValueError("The browser playtest requires a 7x7 checkpoint under the current rules.")
+    contract = read_json(run / 'checkpoint-contract.json')
+    if (contract.get('rulesVersion') != RULES_VERSION or contract.get('boardSize') != 7 or
+            contract.get('openingEconomyVersion') != OPENING_ECONOMY_VERSION or
+            type(contract.get('minimumCheckpointStep')) is not int):
+        raise ValueError('The checkpoint has no compatible recorded training contract.')
+    # Read the pair as one snapshot. Retention may retire a selected pair before
+    # either read; retry selection, never fall back to the overwritten checkpoint.pt.
+    requested = checkpoint
+    for attempt in range(3):
+        checkpoint = requested or latest_checkpoint(run)
+        if checkpoint_step(checkpoint) <= contract['minimumCheckpointStep']:
+            raise ValueError('Train a new checkpoint after the recorded rules/opening transition before exporting.')
+        try:
+            weights = checkpoint.read_bytes()
+            original_bytes = checkpoint.with_suffix('.onnx').read_bytes()
+            break
+        except FileNotFoundError:
+            if requested or attempt == 2:
+                raise
+    if requested:
+        frozen = read_json(checkpoint.parent/'manifest.json')
+        if (frozen.get('rulesVersion') != RULES_VERSION or frozen.get('boardSize') != 7 or
+                frozen.get('openingEconomyVersion') != OPENING_ECONOMY_VERSION or
+                frozen.get('sha256') != hashlib.sha256(weights).hexdigest()):
+            raise ValueError('The selected frozen checkpoint does not match its provenance manifest.')
     source = onnx.load_model_from_string(original_bytes)
     converted = convert(source)
     verification = verify(source, converted)
@@ -85,7 +107,8 @@ def export(run: Path, destination: Path) -> dict:
     model.write_bytes(contents)
     result = {
         "schema": 2, "boardSize": 7, "observationSize": 3120, "actionCount": 259,
-        "rulesVersion": "blocknations-simulation-v3", "modelVersion": checkpoint.stem,
+        "rulesVersion": RULES_VERSION, "openingEconomyVersion": OPENING_ECONOMY_VERSION,
+        "modelVersion": checkpoint.stem,
         "modelSha256": hashlib.sha256(contents).hexdigest(),
         "checkpointSha256": hashlib.sha256(weights).hexdigest(),
         "sourceOnnxSha256": hashlib.sha256(original_bytes).hexdigest(),
@@ -101,5 +124,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--run", type=Path, required=True)
     parser.add_argument("--destination", type=Path, required=True)
+    parser.add_argument("--checkpoint", type=Path, help="Explicit frozen evaluation checkpoint with a matching provenance manifest.")
     args = parser.parse_args()
-    print(json.dumps(export(args.run.resolve(), args.destination.resolve()), indent=2))
+    print(json.dumps(export(args.run.resolve(), args.destination.resolve(), args.checkpoint.resolve() if args.checkpoint else None), indent=2))

@@ -23,9 +23,11 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
     [SerializeField] private bool useCurriculum = true;
     [SerializeField] private int initialCurriculumDistance = 2;
     [SerializeField] private int humanSeatIndex = -1;
+    [SerializeField] private int humanStartingSeat = -1;
     [SerializeField] private string statusPath;
     [SerializeField] private TrainingHumanPresentation humanPresentation;
     [SerializeField] private bool viewerOnly;
+    [SerializeField] private int openingEconomyVersion = MatchOpening.CurrentEconomyVersion;
     private readonly TrainingOverlay overlay = new TrainingOverlay();
     public TrainingPlaytestBridge Playtest { get; } = new TrainingPlaytestBridge();
     public string HumanPolicyVersion { get; private set; }
@@ -63,6 +65,7 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
     public long Decisions { get; private set; }
     public long Actions { get; private set; }
     public int Games { get; private set; }
+    public int FirstSeat => firstSeat;
     public int Captures { get; private set; }
     public int Interruptions { get; private set; }
     public int Rejections { get; private set; }
@@ -139,6 +142,8 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
         }
         if (!LearnedActionSchema.SupportsBoard(boardSize) || (boardSize != 11 && useCurriculum))
             throw new InvalidOperationException("Choose a supported board; smaller boards use standard openings without tactical curriculum.");
+        if (!MatchOpening.SupportsEconomy(openingEconomyVersion))
+            throw new InvalidOperationException("Unsupported opening economy version.");
         if (turnManager != null && turnManager.gridManager != null)
             turnManager.gridManager.width = turnManager.gridManager.height = boardSize;
         if (seats != null)
@@ -181,9 +186,11 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
             else if (arguments[i] == "--rating-check" && bool.TryParse(arguments[++i], out bool check)) ratingCheck = check;
             else if (arguments[i] == "--training-simulation") directSimulation = arguments[++i] != "scene";
             else if (arguments[i] == "--training-human-seat" && int.TryParse(arguments[++i], out int humanSeat)) humanSeatIndex = humanSeat;
+            else if (arguments[i] == "--training-first-seat" && int.TryParse(arguments[++i], out int starter)) humanStartingSeat = starter;
             else if (arguments[i] == "--training-policy-version") HumanPolicyVersion = arguments[++i];
             else if (arguments[i] == "--training-playtest-return" && bool.TryParse(arguments[++i], out bool canReturn)) CanReturnToTraining = canReturn;
             else if (arguments[i] == "--training-board-size" && int.TryParse(arguments[++i], out int configuredSize)) boardSize = configuredSize;
+            else if (arguments[i] == "--training-opening-economy-version" && int.TryParse(arguments[++i], out int configuredEconomy)) openingEconomyVersion = configuredEconomy;
             else if (arguments[i] == "--training-status") statusPath = arguments[++i];
             else if (arguments[i] == "--training-seed" && int.TryParse(arguments[++i], out int configuredSeed)) seed = configuredSeed;
             else if (arguments[i] == "--training-curriculum" && bool.TryParse(arguments[++i], out bool configuredCurriculum)) useCurriculum = configuredCurriculum;
@@ -396,9 +403,11 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
         foreach (TrainingSeatAgent agent in seats) agent.OnEpisodeBegin();
         fullOpening = humanSeatIndex >= 0 || !useCurriculum || random.Next(5) == 0;
         matchRoundLimit = fullOpening ? maxRounds : Math.Min(maxRounds, 30);
-        int startingSeat = humanSeatIndex >= 0 ? humanSeatIndex : ratingCheck ? Games % 2 : random.Next(2);
+        int startingSeat = humanSeatIndex >= 0 ? (humanStartingSeat >= 0 && humanStartingSeat < 2 ? humanStartingSeat : humanSeatIndex)
+            : ratingCheck ? Games % 2 : random.Next(2);
         if (UsesDirectSimulation) ResetSimulation(startingSeat);
-        else turnManager.ResetExternalMatch(fullOpening ? 2 : 4, startingSeat);
+        else turnManager.ResetExternalMatchWithOpening(fullOpening ? MatchOpening.GoldBeforeIncome(startingSeat, startingSeat, openingEconomyVersion) : 4,
+            startingSeat, fullOpening && openingEconomyVersion == MatchOpening.CurrentEconomyVersion ? MatchOpening.SecondPlayerGoldBonus : 0);
         firstSeat = ActingSeat;
         if (!fullOpening && simulation == null) ConfigureCurriculumOpening();
         if (matchJournal != null)
@@ -451,7 +460,7 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
             int coordinate = (seat == 0) != mirror ? low : high;
             int position = simulation.Position(coordinate, coordinate);
             simulation.AddCity(new SimulationCity(seat + 1, seat, position));
-            simulation.SetGold(seat, fullOpening ? 2 : 4);
+            simulation.SetGold(seat, fullOpening ? MatchOpening.GoldBeforeIncome(seat, startingSeat, openingEconomyVersion) : 4);
             if (!fullOpening)
             {
                 UnitDefinition type = simulation.Roster[random.Next(simulation.Roster.Count)];
@@ -496,7 +505,8 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
         public int games, captures, interruptions, rejections, trainerResets, round, seat, curriculumDistance, seed, roundLimit, workerCount;
         public double elapsedSeconds, decisionsPerSecond;
         public bool paused, trainerConnected, fullOpening, humanPlaytest, returnRequested;
-        public int gold0, gold1, startingDistance, boardSize, schema;
+        public int gold0, gold1, firstSeat, startingDistance, boardSize, schema;
+        public bool humanRecording;
         public string lastAction, failure, simulationVersion, simulationBackend, policyVersion, spectatorFailure;
     }
 
@@ -542,6 +552,7 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
             trainerResets = TrainerResets,
             simulationVersion = SimulationVersion, simulationBackend = simulation != null ? "direct-csharp" : "scene-adapter",
             humanPlaytest = IsHumanPlaytest, policyVersion = HumanPolicyVersion, returnRequested = humanReturnRequested,
+            firstSeat = firstSeat, humanRecording = humanRecorder != null && humanRecorder.SavedPath == null && humanRecorder.Failure == null,
             curriculumDistance = curriculumDistance, seed = seed, elapsedSeconds = elapsed,
             roundLimit = matchRoundLimit, fullOpening = fullOpening, startingDistance = startingDistance,
             gold0 = GoldForSeat(0), gold1 = GoldForSeat(1), boardSize = boardSize, schema = LearnedActionSchema.Version,

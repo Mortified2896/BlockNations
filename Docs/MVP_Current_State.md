@@ -55,7 +55,7 @@ The configured default URL is `https://blocknations.moneymattersmedia.com`. On 2
 
 Tactical visibility is live and recomputed after movement and other relevant actions. It can shrink during the acting player's turn when a spotting unit moves away. Explored state is visual memory, not tactical visibility; there is no sticky "seen this turn" layer. Movement order therefore affects later targeting and expected Rider surprises.
 
-Combat uses deterministic scaled integer storage with `CombatScale = 10`. Displayed `1.0`, `0.5`, and `0.1` correspond to stored `10`, `5`, and `1`. Protocol 4+ persists `currentHealthUnits`. Keep the displayed decimal rules distinct from their storage representation.
+Combat uses deterministic scaled integer storage with `CombatScale = 10`; protocol 4+ persists `currentHealthUnits`. The 2026-10-10 [7×7 balance experiment](AI_Balance_Experiment.md) gives new Warriors 3 HP, Riders/Archers 2 HP, combat units 1 attack, and Scouts 1 HP/0 attack at cost 1. New single-player/training first turns provide 2 gold to the first player and 3 to the second, including income. Player identity and starting order are labelled explicitly. Supported older saves may retain fractional health; the storage scale and PBp economy remain compatible.
 
 ## Profile and display metadata
 

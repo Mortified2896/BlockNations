@@ -27,12 +27,103 @@ class DotNetEnvironmentTests(unittest.TestCase):
         self.env.close()
         self.temporary.cleanup()
 
+    def test_worker_obeys_the_recorded_opening_economy_for_both_starting_seats(self):
+        for legacy in (False, True):
+            with tempfile.TemporaryDirectory() as directory:
+                env = DotNetEnvironment(WORKER, directory, 4, 42, 7, False, 2, uuid.uuid4().hex,
+                                        opening_economy_version=1 if legacy else 2)
+                try:
+                    starts = set()
+                    for _ in range(4):
+                        env.reset()
+                        for stat in env.stats:
+                            first=stat['seat']; starts.add(first)
+                            self.assertEqual(stat['gold'+str(first)], 3 if legacy else 2)
+                            self.assertEqual(stat['gold'+str(1-first)], 2)
+                    self.assertEqual(starts, {0, 1})
+                    for name in NAMES:
+                        decisions, _ = env.get_steps(name)
+                        env.set_actions(name, ActionTuple(discrete=np.full((len(decisions), 1), ACTIONS-1, dtype=np.int32)))
+                    env.step()
+                    for stat in env.stats:
+                        self.assertEqual(stat['gold'+str(stat['seat'])], 3)
+                finally:
+                    env.close()
+
     def act(self, choices):
         for name in NAMES:
             decisions, _ = self.env.get_steps(name)
             values = np.array([[choices.get(int(agent), ACTIONS - 1)] for agent in decisions.agent_id], dtype=np.int32).reshape((-1, 1))
             self.env.set_actions(name, ActionTuple(discrete=values))
         self.env.step()
+
+    def test_reference_advice_is_read_only_legal_and_evaluation_starters_are_balanced(self):
+        for first in (0, 1):
+            with tempfile.TemporaryDirectory() as directory:
+                env = DotNetEnvironment(WORKER, directory, 4, 42, 7, False, 2, uuid.uuid4().hex, first_seat=first)
+                try:
+                    env.reset()
+                    before = env.get_steps(NAMES[first])[0].obs[0].copy()
+                    advice = env.reference_actions(first, 'warrior', 32)
+                    self.assertEqual(len(advice), 4)
+                    self.assertTrue(all(s['seat'] == first for s in env.stats))
+                    np.testing.assert_array_equal(env.get_steps(NAMES[first])[0].obs[0], before)
+                    self.assertTrue(all(s['decisions'] == 0 for s in env.stats))
+                    for agent, choice in advice.items():
+                        env.set_action_for_agent(NAMES[first], agent, ActionTuple(discrete=np.array([[choice]],dtype=np.int32)))
+                    env.step()
+                    self.assertTrue(all(s['decisions'] == 1 for s in env.stats))
+                finally:
+                    env.close()
+
+    def test_relative_run_path_keeps_worker_artifacts_in_the_requested_directory(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as directory:
+            relative = Path(directory).relative_to(Path.cwd())
+            env = DotNetEnvironment(WORKER, relative, 1, 42, 7, False, 2, uuid.uuid4().hex)
+            try:
+                env.reset()
+                for name in NAMES:
+                    decisions, _ = env.get_steps(name)
+                    env.set_actions(name, ActionTuple(discrete=np.full((len(decisions), 1), ACTIONS-1, dtype=np.int32)))
+                env.step()
+                self.assertTrue((relative/'match-events.jsonl').is_file())
+                self.assertFalse((relative/relative).exists())
+            finally:
+                env.close()
+
+    def test_fixed_training_challenger_only_drives_the_nonlearning_seat(self):
+        from training_contract import RULES_VERSION
+        with tempfile.TemporaryDirectory() as directory:
+            run=Path(directory)
+            (run/'training-opponents.json').write_text(json.dumps(dict(version=1,rulesVersion=RULES_VERSION,
+                kind='fair-tactician',probability=.5,workBudget=32)))
+            policy=dict(learningSeat=1,learner='learner',opponent='neural-opponent')
+            env=DotNetEnvironment(WORKER,run,4,42,7,False,2,uuid.uuid4().hex,lambda:policy,first_seat=0)
+            try:
+                env.reset()
+                selected=env.opponents.selected(env.stats,policy)
+                self.assertTrue(selected)
+                env.set_actions(NAMES[0],ActionTuple(discrete=np.full((4,1),258,dtype=np.int32)))
+                env.step()
+                self.assertEqual(env.opponents.decisions,len(selected))
+                for stat in env.stats:
+                    self.assertEqual(stat['seat'],0 if stat['worker'] in selected else 1)
+                # Blue now becomes the learner. Its supplied EndTurn must be
+                # applied unchanged, regardless of the previous assignment.
+                policy['learningSeat']=0
+                before=env.opponents.decisions
+                decisions,_=env.get_steps(NAMES[0])
+                env.set_actions(NAMES[0],ActionTuple(discrete=np.full((len(decisions),1),258,dtype=np.int32)))
+                red,_=env.get_steps(NAMES[1])
+                env.set_actions(NAMES[1],ActionTuple(discrete=np.full((len(red),1),258,dtype=np.int32)))
+                env.step()
+                self.assertTrue(all(env.stats[worker]['seat']==1 for worker in selected))
+                self.assertEqual(env.opponents.decisions-before,sum(int(agent)//2 not in selected and
+                    int(agent)//2 in env.opponents.selected(env.stats,policy) for agent in red.agent_id))
+                events=[json.loads(line) for line in (run/'match-events.jsonl').read_text().splitlines()]
+                self.assertTrue(any(e['context']['opponent'].startswith('tactician-') for e in events))
+            finally:
+                env.close()
 
     def await_json(self, path):
         deadline=time.monotonic()+3

@@ -39,6 +39,13 @@
     width: 190px;
 }
 
+.gameplay-top-hud-opening {
+    width: 92%;
+    max-width: 860px;
+    font-size: 24px;
+    white-space: normal;
+}
+
 .gameplay-top-hud-status {
     width: 460px;
     font-size: 28px;

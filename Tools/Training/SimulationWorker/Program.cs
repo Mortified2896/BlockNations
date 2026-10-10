@@ -10,7 +10,9 @@ internal static class Program
 {
     private static readonly JsonSerializerOptions Json = new() { IncludeFields = true };
     private sealed class ActionRequest { public int agent { get; set; } public int action { get; set; } }
-    private sealed class Request { public string op { get; set; } public ActionRequest[] actions { get; set; } public PolicyAssignment policy { get; set; } }
+    private sealed class Request { public string op { get; set; } public ActionRequest[] actions { get; set; } public PolicyAssignment policy { get; set; }
+        public PolicyAssignment[] policies { get; set; } public int[] referenceAgents { get; set; }
+        public int referenceSeat { get; set; } public int workBudget { get; set; } = 64; public string recruitType { get; set; } }
     private static void OwnedDirectory(string path)
     {
         if (Directory.Exists(path) && (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
@@ -38,10 +40,13 @@ internal static class Program
         int count = int.Parse(Argument(args, "--workers", "1")), size = int.Parse(Argument(args, "--size", "7")), seed = int.Parse(Argument(args, "--seed", "42"));
         int distance = int.Parse(Argument(args, "--distance", "2"));
         bool curriculum = bool.Parse(Argument(args, "--curriculum", "false"));
+        int openingEconomyVersion = int.Parse(Argument(args, "--opening-economy-version", MatchOpening.CurrentEconomyVersion.ToString()));
+        int fixedFirstSeat = int.Parse(Argument(args, "--first-seat", "-1"));
         if (count < 1 || count > 16 || !Guid.TryParseExact(session, "N", out _) || distance < 2 || distance > 8 || distance % 2 != 0)
             throw new ArgumentException("Invalid worker/session configuration.");
         OwnedDirectory(run);
-        var arenas = Enumerable.Range(0, count).Select(i => new SelfPlayArena(i, size, unchecked(seed + i * 7919), curriculum, distance, UnitRegistry.AllDefinitions)).ToArray();
+        var arenas = Enumerable.Range(0, count).Select(i => new SelfPlayArena(i, size, unchecked(seed + i * 7919), curriculum, distance,
+            UnitRegistry.AllDefinitions, openingEconomyVersion, fixedFirstSeat)).ToArray();
         string progressPath = Path.Combine(run, $"board-{size}-progress.json");
         var progress = File.Exists(progressPath) ? JsonSerializer.Deserialize<TrainingProgressHistory>(File.ReadAllText(progressPath), Json) : new TrainingProgressHistory { boardSize = size };
         if (progress == null || !progress.IsValid() || progress.boardSize != size) throw new InvalidOperationException("Invalid saved training progress.");
@@ -69,10 +74,12 @@ internal static class Program
                 initialReset = false;
                 for (int i = 0; i < count; i++) packets[i] = new[] { arenas[i].Decision() };
             }
-            else if (request.op == "status")
+            else if (request.op == "status" || request.op == "reference")
                 for (int i = 0; i < count; i++) packets[i] = Array.Empty<ArenaAgentStep>();
             else if (request.op == "step")
             {
+                if (request.policies != null && (request.policies.Length != count || request.policies.Any(p => p == null)))
+                    throw new InvalidOperationException("Invalid per-arena policy assignment.");
                 var commands = new Dictionary<int, int>();
                 foreach (ActionRequest action in request.actions ?? Array.Empty<ActionRequest>())
                     if (action.agent < 0 || action.agent >= count * 2 || !commands.TryAdd(action.agent, action.action)) throw new InvalidOperationException("Invalid or duplicate agent action.");
@@ -81,7 +88,8 @@ internal static class Program
                 Parallel.For(0, count, i => {
                     var arena = arenas[i]; int agent = i * 2 + arena.State.CurrentTurnSeat;
                     if (commands.ContainsKey(i * 2 + 1 - arena.State.CurrentTurnSeat)) throw new InvalidOperationException("Action belongs to a non-owning seat.");
-                    packets[i] = arena.Advance(commands.TryGetValue(agent, out int action) ? action : null, request.policy);
+                    packets[i] = arena.Advance(commands.TryGetValue(agent, out int action) ? action : null,
+                        request.policies == null ? request.policy : request.policies[i]);
                 });
                 progress.decisions += arenas.Sum(a => a.Decisions) - before;
                 foreach (var arena in arenas)
@@ -135,8 +143,17 @@ internal static class Program
                 byte[] bytes = new byte[step.observation.Length * sizeof(float)]; Buffer.BlockCopy(step.observation, 0, bytes, 0, bytes.Length);
                 return new { step.agent, step.seat, observation = Convert.ToBase64String(bytes), step.available, step.terminal, step.interrupted, step.reward };
             }).ToArray();
+            if (request.op == "reference" && (request.referenceSeat < 0 || request.referenceSeat > 1))
+                throw new ArgumentException("Invalid reference seat.");
+            if (request.referenceAgents != null && request.referenceAgents.Any(agent => agent < 0 || agent >= count * 2 || agent % 2 != request.referenceSeat))
+                throw new ArgumentException("Invalid reference agents.");
+            var referenceActions = request.op == "reference" ? arenas.Where(a => a.CanDecide && a.State.CurrentTurnSeat == request.referenceSeat)
+                .Where(a => request.referenceAgents == null || request.referenceAgents.Contains(a.Worker * 2 + request.referenceSeat))
+                .Select(a => new ActionRequest { agent = a.Worker * 2 + request.referenceSeat,
+                    action = a.ReferenceChoice(request.recruitType, request.workBudget) }).ToArray() : Array.Empty<ActionRequest>();
             Console.WriteLine(JsonSerializer.Serialize(new { protocol = 1, rulesVersion = SimulationRules.Version, behavior = LearnedActionSchema.BehaviorName,
-                observationSize = LearnedActionSchema.ObservationSize, actionCount = LearnedActionSchema.ActionCount, steps, stats }, Json));
+                observationSize = LearnedActionSchema.ObservationSize, actionCount = LearnedActionSchema.ActionCount, steps, stats, referenceActions,
+                recruitTypes = UnitRegistry.AllDefinitions.OrderBy(t => t.TypeId, StringComparer.Ordinal).Select(t => t.TypeId).ToArray() }, Json));
         }
         Atomic(progressPath, progress);
     }

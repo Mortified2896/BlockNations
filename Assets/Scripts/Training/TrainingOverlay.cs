@@ -65,7 +65,9 @@ public sealed class TrainingOverlay
             if (arena.IsTraining) { DrawTrainingTime(arena); DrawStorage(arena); }
             if (arena.IsHumanPlaytest)
             {
-                GUILayout.Label("You are Blue and move first. Select your city to recruit, then select units to move or attack.", small);
+                if (arena is TrainingArena humanOpening)
+                    GUILayout.Label(MatchOpeningLabels.ForSeat(arena.HumanSeat, humanOpening.FirstSeat, 2, showColour: true), label);
+                GUILayout.Label("Select your city to recruit, then select units to move or attack.", small);
                 if (!string.IsNullOrEmpty(arena.HumanPolicyVersion)) GUILayout.Label("Frozen version: " + arena.HumanPolicyVersion, small);
                 if (arena is TrainingArena human && !string.IsNullOrEmpty(human.HumanRecordingMessage))
                     GUILayout.Label(human.HumanRecordingMessage, small);
@@ -296,6 +298,8 @@ public sealed class TrainingOverlay
         GUI.enabled = !arena.Playtest.Busy;
         arena.Playtest.Difficulty = (BlockNations.AI.LearnedDifficulty)GUILayout.Toolbar(
             (int)arena.Playtest.Difficulty, new[] { "Easy", "Medium", "Hard" }, button);
+        arena.Playtest.HumanStarts = GUILayout.Toolbar(arena.Playtest.HumanStarts ? 0 : 1,
+            new[] { "You move first", "AI moves first" }, button) == 0;
         GUI.enabled = arena.Playtest.Available && !arena.Playtest.Busy;
         if (GUILayout.Button("Play against " + arena.Playtest.Difficulty + " AI", button)) arena.Playtest.Start(arena);
         GUI.enabled = true;

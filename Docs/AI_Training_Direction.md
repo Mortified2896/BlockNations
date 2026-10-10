@@ -4,6 +4,8 @@ Recorded on 2026-10-09 from the owner's discussion of the long-term game directi
 
 The owner subsequently approved phases 1–2 as an overnight goal. Their implementation, rule corrections, validation and remaining boundaries are recorded in [Shared C# Simulation](Shared_Simulation_Implementation.md). The later policy, reproducibility and evaluation phases below remain follow-ups.
 
+On 2026-10-10 the owner approved the [7×7 balance and training experiment](AI_Balance_Experiment.md): whole-number unit stats, a 2/3 first-turn opening, continued weights, configurable fair training challengers and frozen balanced evaluations. This implements bounded parts of experiment/opponent management; memory, an adaptable new network/action representation and faithful RNG continuation remain follow-ups.
+
 ## Intended outcome
 
 Build a reusable simulation and training framework that can grow with larger boards, new units and mechanics, and eventually additional seats/relationships. Ship a strong opponent that runs locally on target iPhone/Android devices, including the browser build hosted by Cloudflare. Training runs on development machines; the shipped game needs only the compatible model and local inference path.

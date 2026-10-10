@@ -32,6 +32,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
     private Label tournamentStandingsScoreHeaderLabel;
     private FeedbackUITKController feedback;
     private Label turnLabel;
+    private Label openingSeatLabel;
     private Label goldLabel;
     private Label statusLabel;
     private bool uiReady;
@@ -192,6 +193,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         tournamentStandingsRankHeaderLabel = root.Q<Label>("TournamentStandingsRankHeader");
         tournamentStandingsScoreHeaderLabel = root.Q<Label>("TournamentStandingsScoreHeader");
         turnLabel = root.Q<Label>("TurnLabel");
+        openingSeatLabel = root.Q<Label>("OpeningSeatLabel");
         goldLabel = root.Q<Label>("GoldLabel");
         statusLabel = root.Q<Label>("PbpStatusLabel");
 
@@ -252,11 +254,13 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
         if (ShouldShowAIVsAiBatchHud(out AIVsAIBatchRunController.ActiveRunSnapshot batchSnapshot))
         {
+            if (openingSeatLabel != null) openingSeatLabel.style.display = DisplayStyle.None;
             ApplyAIVsAiBatchHud(batchSnapshot);
             return;
         }
 
         ApplyStandardHudLayout();
+        RefreshOpeningSeatLabel();
         if (turnManager.currentMode == TurnManager.GameMode.PlayByPost)
         {
             bool hasLocalPlayByPostSeat = TryGetLocalPlayByPostSeatIndexForUi(out int localPlayByPostSeatIndex);
@@ -407,6 +411,15 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         }
 
         SetTournamentStandingsPanelVisible(false);
+    }
+
+    private void RefreshOpeningSeatLabel()
+    {
+        if (openingSeatLabel == null) return;
+        bool visible = turnManager.TryGetLocalOpeningSeatForUi(out int seat, out int firstSeat, out int seatCount);
+        openingSeatLabel.text = visible ? MatchOpeningLabels.ForSeat(seat, firstSeat, seatCount,
+            showColour: turnManager.currentMode == TurnManager.GameMode.VsAI) : string.Empty;
+        openingSeatLabel.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
     }
 
     private string BuildTurnLabel()
@@ -721,6 +734,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         tournamentStandingsRankHeaderLabel = null;
         tournamentStandingsScoreHeaderLabel = null;
         turnLabel = null;
+        openingSeatLabel = null;
         goldLabel = null;
         statusLabel = null;
         defaultTurnLabelWidth = default;

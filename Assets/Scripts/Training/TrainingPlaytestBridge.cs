@@ -14,14 +14,15 @@ public sealed class TrainingPlaytestBridge
         public int checkpointCount;
         public string state, frozenPlaytestCheckpoint;
     }
-    [Serializable] private sealed class Request { public string requestId, difficulty; }
-    [Serializable] private sealed class Status { public string requestId, state, message, checkpoint, difficulty; }
+    [Serializable] private sealed class Request { public string requestId, difficulty; public int firstSeat; }
+    [Serializable] private sealed class Status { public string requestId, state, message, checkpoint, difficulty; public int firstSeat; }
     private string requestId;
     private double requestedAt, nextPoll;
     public bool Available { get; private set; }
     public bool Busy => requestId != null;
     public string Message { get; private set; }
     public LearnedDifficulty Difficulty { get; set; } = LearnedDifficulty.Medium;
+    public bool HumanStarts { get; set; } = true;
     public bool TrainingActive { get; private set; }
     public string FrozenCheckpoint { get; private set; }
 
@@ -53,6 +54,7 @@ public sealed class TrainingPlaytestBridge
             {
                 if (Enum.TryParse(status.difficulty, out LearnedDifficulty restored) && Enum.IsDefined(typeof(LearnedDifficulty), restored))
                     Difficulty = restored;
+                HumanStarts = status.firstSeat == 0;
                 Message = status.message;
                 if (status.state == "finished" || status.state == "error") Finish();
             }
@@ -75,7 +77,8 @@ public sealed class TrainingPlaytestBridge
         Message = "Opening a frozen " + Difficulty + " playtest…";
         try
         {
-            File.WriteAllText(path + ".tmp", JsonUtility.ToJson(new Request { requestId = requestId, difficulty = Difficulty.ToString() }));
+            File.WriteAllText(path + ".tmp", JsonUtility.ToJson(new Request { requestId = requestId,
+                difficulty = Difficulty.ToString(), firstSeat = HumanStarts ? 0 : 1 }));
             if (File.Exists(path)) File.Replace(path + ".tmp", path, null);
             else File.Move(path + ".tmp", path);
         }

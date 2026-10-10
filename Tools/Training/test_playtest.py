@@ -89,6 +89,7 @@ class PlaytestTests(unittest.TestCase):
         self.assertNotIn("--resume", command)
         self.assertEqual(command[command.index("--training-board-size") + 1], "7")
         self.assertEqual(command[command.index("--training-human-seat") + 1], "0")
+        self.assertEqual(command[command.index("--training-first-seat") + 1], "0")
         self.assertFalse(any("BLOCKNATIONS_RATING_" in key for key in launch.call_args.kwargs["env"]))
         (scratch / "arena-status.json").write_text(json.dumps({"trainerConnected": True, "round": 1}))
         session.poll({"paused": False})
@@ -118,6 +119,27 @@ class PlaytestTests(unittest.TestCase):
         session.start({"requestId": "b" * 32}, {"paused": True})
         self.assertEqual(session.state["state"], "error")
         self.assertEqual(keep.read_text(), "keep")
+
+    @patch("playtest.subprocess.Popen")
+    def test_human_can_play_second_with_the_same_frozen_opponent(self, launch):
+        source = self.checkpoint(10)
+        process = Mock(); process.poll.return_value = None; launch.return_value = process
+        session = PlaytestSession(self.run, Path('/Training.app'))
+        session.start(dict(requestId='e'*32, difficulty='Hard', firstSeat=1), {})
+        command = launch.call_args.args[0]
+        self.assertEqual(command[command.index('--training-first-seat')+1],'1')
+        self.assertEqual(command[command.index('--training-human-seat')+1],'0')
+        self.assertEqual(session.state['firstSeat'],1)
+        self.assertEqual(session.state['checkpoint'],source.stem)
+        session.close()
+
+    @patch("playtest.subprocess.Popen")
+    def test_invalid_starting_order_fails_before_launch_or_model_loading(self, launch):
+        session = PlaytestSession(self.run, Path('/Training.app'))
+        session.start(dict(requestId='f'*32, firstSeat=2), {})
+        self.assertEqual(session.state['state'],'error')
+        launch.assert_not_called()
+        self.assertFalse((self.run/'playtest').exists())
 
     @patch("playtest.subprocess.Popen")
     def test_offline_difficulty_uses_one_fixed_model_and_does_not_resume_learning(self, launch):

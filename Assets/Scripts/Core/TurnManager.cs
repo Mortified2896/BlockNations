@@ -266,8 +266,7 @@ public partial class TurnManager : MonoBehaviour
 
     public static bool IsSupportedPbpAppVersion(string appVersion)
     {
-        return !string.IsNullOrWhiteSpace(appVersion) &&
-               string.Equals(appVersion.Trim(), CurrentAppVersion, System.StringComparison.Ordinal);
+        return PbpAppVersionPolicy.Supports(CurrentAppVersion, appVersion);
     }
 
     public static MapSizePreset GetDefaultMapSizePreset()
@@ -1412,17 +1411,6 @@ public partial class TurnManager : MonoBehaviour
         {
             seatGold.RemoveRange(normalizedSeatCount, seatGold.Count - normalizedSeatCount);
         }
-    }
-
-    private void InitializeSeatGoldForNewGame(int seatCount)
-    {
-        EnsureSeatGoldCapacity(seatCount);
-        for (int seatIndex = 0; seatIndex < seatGold.Count; seatIndex++)
-        {
-            seatGold[seatIndex] = startingGold;
-        }
-
-        SyncLegacyGoldBridge();
     }
 
     private void SetSeatGoldFromLegacyBridges(int seatCount, int legacyPlayerGold, int legacyAiGold)

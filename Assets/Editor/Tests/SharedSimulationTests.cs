@@ -128,7 +128,7 @@ public sealed class SharedSimulationTests
     {
         MatchState state = Board(seat);
         SimulationUnit rider = Add(state, 1, seat, 2, 2, UnitRegistry.Rider);
-        var defender = new UnitDefinition("target", "Target", 1, 1, "target", kill ? 5 : 10, 1, 1, true, 0, 1, 1);
+        var defender = new UnitDefinition("target", "Target", 1, 1, "target", kill ? 5 : 20, 1, 1, true, 0, 1, 1);
         SimulationUnit target = Add(state, 2, 1 - seat, movedFirst ? 4 : 3, 2, defender);
         if (movedFirst)
         {
@@ -229,7 +229,7 @@ public sealed class SharedSimulationTests
     public void ArmorAndZeroDamageAttacksDoNotRemoveHealth()
     {
         MatchState state = Board(); SimulationUnit rider = Add(state, 1, 0, 2, 2, UnitRegistry.Rider);
-        var armored = new UnitDefinition("armored", "Armor", 3, 1, "armor", 10, 10, 1, true, 6, 1, 1);
+        var armored = new UnitDefinition("armored", "Armor", 3, 1, "armor", 10, 10, 1, true, 10, 1, 1);
         SimulationUnit target = Add(state, 2, 1, 3, 2, armored);
         MatchEngine.Apply(state, Attack(rider, target));
         Assert.That(target.Health, Is.EqualTo(10)); Assert.That(rider.RemainingMoves, Is.Zero);
@@ -311,7 +311,7 @@ public sealed class SharedSimulationTests
         Assert.That(MatchEngine.Apply(state, Move(state, own, -1, 1)).Applied, Is.False);
         Assert.That(MatchEngine.Apply(state, Attack(own, other)).Applied, Is.False);
         Assert.That(own.MovesUsed + own.AttacksUsed, Is.Zero); Assert.That(state.Round, Is.EqualTo(1));
-        Assert.That(state.CurrentTurnSeat, Is.Zero); Assert.That(other.Health, Is.EqualTo(10));
+        Assert.That(state.CurrentTurnSeat, Is.Zero); Assert.That(other.Health, Is.EqualTo(other.Definition.MaxHealthUnits));
     }
 
     [Test]

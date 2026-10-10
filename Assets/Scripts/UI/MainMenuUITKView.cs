@@ -102,6 +102,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Label createSuccessGameCodeLabel;
     private Label generalSettingsTitleLabel;
     private Label generalSettingsSubtitleLabel;
+    private Label generalSettingsOpeningLabel;
     private Label generalSettingsPbpPlayerCountHelperLabel;
     private Label generalSettingsStoreSnapshotHistoryHelperLabel;
     private Label generalSettingsAIVsAiTournamentEstimateLabel;
@@ -527,6 +528,7 @@ public class MainMenuUITKView : MonoBehaviour
         createSuccessGameCodeLabel = root.Q<Label>("CreateSuccessGameCodeLabel");
         generalSettingsTitleLabel = root.Q<Label>("GeneralSettingsTitleLabel");
         generalSettingsSubtitleLabel = root.Q<Label>("GeneralSettingsSubtitleLabel");
+        generalSettingsOpeningLabel = root.Q<Label>("GeneralSettingsOpeningLabel");
         generalSettingsPbpPlayerCountHelperLabel = root.Q<Label>("GeneralSettingsPbpPlayerCountHelperLabel");
         generalSettingsStoreSnapshotHistoryHelperLabel = root.Q<Label>("GeneralSettingsStoreSnapshotHistoryHelperLabel");
         generalSettingsAIVsAiTournamentEstimateLabel = root.Q<Label>("GeneralSettingsAIVsAiTournamentEstimateLabel");
@@ -3528,6 +3530,12 @@ public class MainMenuUITKView : MonoBehaviour
         bool isTournamentMode =
             selectedAIVsAISimulationSettings.mode == AIVsAIBatchRunController.SimulationMode.Tournament;
         bool isSimulation = isVsAi && selectedEnableAIVsAIDebugMode;
+        if (generalSettingsOpeningLabel != null)
+        {
+            generalSettingsOpeningLabel.style.display = isVsAi && !isSimulation ? DisplayStyle.Flex : DisplayStyle.None;
+            generalSettingsOpeningLabel.text = MatchOpeningLabels.ForSeat(0, 0, 2, showColour: true) +
+                ".\nYour first turn: 2 gold. AI's first turn: 3 gold.";
+        }
         if (generalSettingsSubtitleLabel != null)
             generalSettingsSubtitleLabel.text = isSimulation
                 ? "Choose the map and opponents for this simulation."
@@ -4778,6 +4786,7 @@ public class MainMenuUITKView : MonoBehaviour
         createSuccessGameCodeLabel = null;
         generalSettingsTitleLabel = null;
         generalSettingsSubtitleLabel = null;
+        generalSettingsOpeningLabel = null;
         generalSettingsPbpPlayerCountHelperLabel = null;
         generalSettingsStoreSnapshotHistoryHelperLabel = null;
         generalSettingsAIVsAiTournamentEstimateLabel = null;

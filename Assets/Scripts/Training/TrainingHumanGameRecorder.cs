@@ -16,7 +16,7 @@ public sealed class TrainingHumanGameRecorder : IDisposable
     { public int action; public int[] legal; public string observation; }
     [Serializable] public sealed class Game
     {
-        public int version = Version, schema = LearnedActionSchema.Version, boardSize, humanSeat, winnerSeat = -1;
+        public int version = Version, schema = LearnedActionSchema.Version, boardSize, humanSeat, firstSeat, winnerSeat = -1;
         public string id, rulesVersion = SimulationRules.Version, policyVersion, startedUtc, finishedUtc;
         public bool completed, truncated;
         public List<Sample> samples = new List<Sample>();
@@ -35,8 +35,11 @@ public sealed class TrainingHumanGameRecorder : IDisposable
         this.manager = manager ?? throw new ArgumentNullException(nameof(manager));
         this.directory = directory ?? throw new ArgumentNullException(nameof(directory));
         MatchState opening = new SceneSimulationAdapter(manager).State;
-        if (!opening.IsTurnOwnedBySeat(humanSeat)) throw new InvalidOperationException("Human recording must start at the opening.");
-        game = new Game { id = Guid.NewGuid().ToString("N"), boardSize = opening.Width, humanSeat = humanSeat,
+        if (humanSeat < 0 || humanSeat >= opening.SeatCount || opening.Round != 1 || opening.GameOver)
+            throw new InvalidOperationException("Human recording requires a valid human seat at the opening.");
+        // The viewer's identity is independent of who starts. Subscribe before
+        // the AI's opening so visible changes remain available to the recorder.
+        game = new Game { id = Guid.NewGuid().ToString("N"), boardSize = opening.Width, humanSeat = humanSeat, firstSeat = opening.FirstSeat,
             policyVersion = policyVersion, startedUtc = DateTime.UtcNow.ToString("O") };
         observations.SetPublicStartingCities(opening.Cities.Select(city => new AICityState {
             Seat = city.Seat, X = city.Position % opening.Width, Y = city.Position / opening.Width }).ToArray());

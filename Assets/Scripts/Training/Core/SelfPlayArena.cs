@@ -30,6 +30,8 @@ namespace BlockNations.Training
         public readonly int Worker, BoardSize, Seed;
         private readonly Random random;
         private readonly bool curriculum;
+        private readonly int openingEconomyVersion;
+        private readonly int fixedFirstSeat;
         private readonly UnitDefinition[] roster;
         private readonly SimulationObservationSource observer = new SimulationObservationSource();
         private readonly int[] source = { -1, -1 }, seatDecisions = new int[2];
@@ -49,13 +51,19 @@ namespace BlockNations.Training
         public int Resets { get; private set; }
         public int CurriculumDistance { get; private set; }
         public bool FullOpening { get; private set; }
+        public bool CanDecide => !terminalReported;
         public int RoundLimit => FullOpening ? 100 : 30;
         public string LastAction { get; private set; }
 
-        public SelfPlayArena(int worker, int size, int seed, bool curriculum, int distance, IEnumerable<UnitDefinition> roster)
+        public SelfPlayArena(int worker, int size, int seed, bool curriculum, int distance, IEnumerable<UnitDefinition> roster,
+            int openingEconomyVersion = MatchOpening.CurrentEconomyVersion, int fixedFirstSeat = -1)
         {
             if (worker < 0 || !LearnedActionSchema.SupportsBoard(size) || (curriculum && size != 11)) throw new ArgumentException("Invalid training arena configuration.");
             Worker = worker; BoardSize = size; Seed = seed; random = new Random(seed);
+            if (!MatchOpening.SupportsEconomy(openingEconomyVersion)) throw new ArgumentOutOfRangeException(nameof(openingEconomyVersion));
+            this.openingEconomyVersion = openingEconomyVersion;
+            if (fixedFirstSeat < -1 || fixedFirstSeat > 1) throw new ArgumentOutOfRangeException(nameof(fixedFirstSeat));
+            this.fixedFirstSeat = fixedFirstSeat;
             this.curriculum = curriculum; CurriculumDistance = distance;
             this.roster = roster.OrderBy(t => t.TypeId, StringComparer.Ordinal).ToArray();
             if (this.roster.Length == 0 || this.roster.Length > LearnedActionSchema.RecruitCapacity) throw new ArgumentException("Unsupported roster.");
@@ -70,6 +78,7 @@ namespace BlockNations.Training
             observer.ResetKnowledge();
             FullOpening = !curriculum || random.Next(5) == 0;
             int first = random.Next(2), low = 1, high = BoardSize - 2;
+            if (fixedFirstSeat >= 0) first = fixedFirstSeat;
             bool mirror = false;
             if (!FullOpening)
             {
@@ -80,7 +89,8 @@ namespace BlockNations.Training
             for (int seat = 0; seat < 2; seat++)
             {
                 int coordinate = (seat == 0) != mirror ? low : high, position = State.Position(coordinate, coordinate);
-                State.AddCity(new SimulationCity(seat + 1, seat, position)); State.SetGold(seat, FullOpening ? 2 : 4);
+                State.AddCity(new SimulationCity(seat + 1, seat, position));
+                State.SetGold(seat, FullOpening ? MatchOpening.GoldBeforeIncome(seat, first, openingEconomyVersion) : 4);
                 if (!FullOpening) State.AddUnit(new SimulationUnit(seat + 1, seat, position, roster[random.Next(roster.Length)]));
             }
             MatchEngine.BeginTurn(State, first);
@@ -96,6 +106,32 @@ namespace BlockNations.Training
             AIObservation observation = observer.Observe(State, seat).Observation;
             return new ArenaAgentStep { agent = Worker * 2 + seat, seat = seat,
                 observation = LearnedActionSchema.Encode(observation, source[seat]), available = LearnedActionSchema.Choices(observation, source[seat]).Keys.ToArray() };
+        }
+
+        // Evaluation-only reference, using exactly the seat's fair observation.
+        // Optional roster restrictions test strategies; they never constrain the learner.
+        public int ReferenceChoice(string recruitType, int workBudget)
+        {
+            if (terminalReported || workBudget < 1 || workBudget > 2048)
+                throw new InvalidOperationException("A reference decision requires an active match and bounded work.");
+            int seat = State.CurrentTurnSeat;
+            AIObservation observation = observer.Observe(State, seat).Observation;
+            var choices = LearnedActionSchema.Choices(observation, source[seat]);
+            if (source[seat] >= 0) observation.LegalActions = choices.Values.ToArray();
+            if (!string.IsNullOrEmpty(recruitType))
+            {
+                if (!roster.Any(t => t.TypeId == recruitType)) throw new ArgumentException("Unknown reference recruit type.");
+                observation.LegalActions = observation.LegalActions.Where(a => a.Kind != AIActionKind.Recruit ||
+                    observation.RecruitTypes[a.RecruitType].Type == recruitType).ToArray();
+            }
+            var decision = new HardTacticianPolicy().BeginDecision(observation, workBudget);
+            while (!decision.Complete) decision.AdvanceOnce();
+            AIAction selected = decision.Best.Actions[0];
+            if (selected.Kind == AIActionKind.EndTurn) return LearnedActionSchema.EndTurn;
+            if (source[seat] >= 0) return choices.Single(pair => pair.Value.Equals(selected)).Key;
+            int position = selected.Kind == AIActionKind.Recruit ? observation.Cities[selected.Actor].Position(BoardSize) :
+                observation.Units[selected.Actor].Position(BoardSize);
+            return LearnedActionSchema.CanonicalPosition(LearnedActionSchema.CanvasPosition(observation, position), seat);
         }
 
         public ArenaAgentStep[] Advance(int? encoded, PolicyAssignment policy)

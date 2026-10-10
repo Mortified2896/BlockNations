@@ -20,11 +20,15 @@ public partial class TurnManager
         externalHumanSeatIndex = seat;
     }
 
-    public void ResetExternalMatch(int initialGold, int firstSeat)
+    public void ResetExternalMatch(int initialGold, int firstSeat) =>
+        ResetExternalMatchWithOpening(initialGold, firstSeat, secondPlayerGoldBonus: 0);
+
+    public void ResetExternalMatchWithOpening(int initialGold, int firstSeat, int secondPlayerGoldBonus)
     {
         if (!externallyDrivenMatch || !ExternalMatchReady || gridManager == null)
             throw new InvalidOperationException("An explicitly configured external arena must be ready before reset.");
         if (firstSeat < 0 || firstSeat > 1) throw new ArgumentOutOfRangeException(nameof(firstSeat));
+        if (initialGold < 0 || secondPlayerGoldBonus < 0) throw new ArgumentOutOfRangeException(nameof(initialGold));
         StopAllCoroutines();
         hardAIRuntime.ResetKnowledge();
         foreach (Unit unit in Object.FindObjectsByType<Unit>())
@@ -39,7 +43,9 @@ public partial class TurnManager
         ExternalWinnerSeatIndex = -1;
         ExternalFirstSeatIndex = firstSeat;
         turnNumber = 1;
-        SetSeatGoldFromLegacyBridges(2, initialGold, initialGold);
+        SetSeatGoldFromLegacyBridges(2,
+            initialGold + (firstSeat == 1 ? secondPlayerGoldBonus : 0),
+            initialGold + (firstSeat == 0 ? secondPlayerGoldBonus : 0));
         SetCurrentTurnSeatIndexForRuntime(firstSeat, 2);
         BeginSeatTurn(firstSeat, playTurnStartSound: false);
     }

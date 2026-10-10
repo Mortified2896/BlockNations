@@ -150,13 +150,18 @@ public sealed class GameplayGoldVisibilityTests
         var manager = TurnManager.Instance;
         for (int frame = 0; frame < 20 && !arena.CanEndHumanTurn; frame++) yield return null;
         Assert.That(arena.CanEndHumanTurn, Is.True);
+        Assert.That(manager.GetGoldForSeat(0), Is.EqualTo(2));
         manager.AddGoldForSeat(0, 10);
         manager.AddGoldForSeat(1, 100);
         var hud = UnityEngine.Object.FindFirstObjectByType<GameplayTopHudUITKView>();
         var label = hud.GetComponent<UIDocument>().rootVisualElement.Q<Label>("GoldLabel");
+        var opening = hud.GetComponent<UIDocument>().rootVisualElement.Q<Label>("OpeningSeatLabel");
         string ownBalance = "Gold " + manager.GetGoldForSeat(0);
         yield return null;
         Assert.That(label.text, Is.EqualTo(ownBalance));
+        Assert.That(opening.text, Is.EqualTo("You are Player 1 (Blue) · You move first"));
+        Assert.That(opening.resolvedStyle.display, Is.EqualTo(DisplayStyle.Flex));
+        Assert.That(opening.worldBound.yMax, Is.LessThanOrEqualTo(label.worldBound.yMin));
         manager.OnEndTurnButtonPressed();
         arena.Paused = true; // Hold the opponent's turn so every rendered frame can be inspected.
         Assert.That(manager.currentTurnSeatIndex, Is.EqualTo(1));

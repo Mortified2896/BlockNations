@@ -2,6 +2,8 @@
 
 This prepares a 7×7 single-player game with Easy, Medium and Hard learned-AI presets. It is a technical playtest candidate. The public Cloudflare release remains the previously reviewed local-AI build until the owner returns to review the trained opponent.
 
+The 2026-10-10 [balance experiment](AI_Balance_Experiment.md) changes the local rules to v4 and refreshes the embedded experimental actor to a compatible, frozen step-16,089,952 export. Its 24 conversion fixtures have zero probability difference. This refresh prevents loading an incompatible v3 manifest; it does not establish strong play or distinct difficulty bands. The v3 build/receipts below remain historical and are not new-rule browser acceptance. Public deployment stays on hold.
+
 ## Training and release are separate
 
 The Mac continues its existing four-arena C# simulation and Python PPO learner. The optional Unity inspector only reads spectator data; closing it does not pause training. Keep it closed when nobody is watching to avoid rendering overhead. The shared 20 GB storage budget includes all saved runs, with a final checkpoint reserve; bounded retention can keep usage below the cap indefinitely.
@@ -43,6 +45,8 @@ Use the configured trainer environment, whose Python has PyTorch, ONNX and NumPy
 ```
 
 The export reads an immutable numbered checkpoint/ONNX pair. It exposes the actor probabilities, removes the training-time random action sampling/output metadata and verifies parity against the original actor. It does not modify or resume training.
+
+Exports require a recorded compatible `checkpoint-contract.json` and a step newer than its rules/opening boundary. To export a deliberately selected evaluated candidate, add `--checkpoint '<frozen checkpoint.pt>'`; its adjacent provenance manifest and content hash must agree. Old transferred weights cannot be relabelled merely because a live arena now runs new rules.
 
 Run `LearnedPolicyReleaseBuilder.Build` in an isolated Unity validation project to explicitly import/update model references. With `BLOCKNATIONS_POLICY_VALIDATION_DATA` pointing at reference fixtures, it also checks the actual Unity CPU backend. The browser builder rejects missing references or model/manifest hash mismatches.
 

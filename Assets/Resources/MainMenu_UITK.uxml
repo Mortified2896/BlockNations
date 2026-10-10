@@ -155,6 +155,7 @@
                 <ui:VisualElement name="GeneralSettingsCard" class="general-settings-card">
                     <ui:Label name="GeneralSettingsTitleLabel" text="General Settings" class="general-settings-title" />
                     <ui:Label name="GeneralSettingsSubtitleLabel" text="" class="general-settings-subtitle" />
+                    <ui:Label name="GeneralSettingsOpeningLabel" text="" class="general-settings-subtitle" style="display: none;" />
 
                     <ui:VisualElement class="general-settings-section">
                         <ui:Label text="Map Size" class="general-settings-section-label" />

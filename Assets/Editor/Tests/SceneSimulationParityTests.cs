@@ -212,12 +212,12 @@ public sealed class SceneSimulationParityTests
                 origin.transform.position, 0, null, true).GetComponent<Unit>();
             Unit target = manager.InstantiateConfiguredUnit(UnitRegistry.WarriorTypeId, manager.GetUnitPrefabForType(UnitRegistry.WarriorTypeId),
                 defender.transform.position, 1, null, true).GetComponent<Unit>();
-            target.SetCurrentHealthUnits(kill ? 5 : 10);
+            target.SetCurrentHealthUnits(kill ? 5 : 20);
             manager.RecalculatePlayerVisibility(); input.SelectUnit(own);
             if (movedFirst) input.TryMoveOrAttackAtPosition(moved.transform.position);
             Assert.That(own.CanAttackThisTurn(), Is.True);
             input.TryMoveOrAttackAtPosition(defender.transform.position);
-            Assert.That(target.currentHealthUnits, Is.EqualTo(kill ? 0 : 5));
+            Assert.That(target.currentHealthUnits, Is.EqualTo(kill ? 0 : 10));
             Vector3 stopped = own.transform.position;
             Assert.That(own.CanMoveThisTurn(), Is.False);
             input.TryMoveOrAttackAtPosition(extra.transform.position);
@@ -228,14 +228,20 @@ public sealed class SceneSimulationParityTests
     }
 
     [UnityTest]
-    public IEnumerator CompletedHumanWinIsRecordedThroughActualInputAndTurnHooks()
+    public IEnumerator CompletedHumanWinIsRecordedThroughActualInputAndTurnHooks() => RecordedHumanWin(firstSeat: 0);
+
+    [UnityTest]
+    public IEnumerator HumanPlayingSecondRecordsOnlyTheirActionsAndKeepsTheActualStartingSeat() => RecordedHumanWin(firstSeat: 1);
+
+    private IEnumerator RecordedHumanWin(int firstSeat)
     {
         EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
         yield return new EnterPlayMode();
-        CreateArena(5); manager.ResetExternalMatch(2, 0);
+        CreateArena(5); manager.ResetExternalMatchWithOpening(1, firstSeat, 1);
         TrainingSceneBuilder.Set(manager, "externalHumanSeatIndex", 0);
         string folder = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "bn-human-record-" + Guid.NewGuid().ToString("N"));
         var recorder = new TrainingHumanGameRecorder(manager, folder, 0, "frozen-test");
+        if (firstSeat == 1) Assert.That(manager.TryAdvanceExternalMatchTurn(1), Is.True);
         City ownCity = Object.FindObjectsByType<City>().Single(city => city.ownerSeatIndex == 0);
         City targetCity = Object.FindObjectsByType<City>().Single(city => city.ownerSeatIndex == 1);
         var adapter = new SceneSimulationAdapter(manager);
@@ -251,6 +257,7 @@ public sealed class SceneSimulationParityTests
         Assert.That(recorder.SavedPath, Is.Not.Null);
         var game = JsonUtility.FromJson<TrainingHumanGameRecorder.Game>(System.IO.File.ReadAllText(recorder.SavedPath));
         Assert.That(game.completed, Is.True); Assert.That(game.winnerSeat, Is.EqualTo(0));
+        Assert.That(game.firstSeat, Is.EqualTo(firstSeat));
         Assert.That(game.samples.Count, Is.EqualTo(4), "Recruit and movement each have source and target choices.");
         foreach (var example in game.samples)
         {

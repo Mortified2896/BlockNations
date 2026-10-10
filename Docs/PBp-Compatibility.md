@@ -2,14 +2,14 @@
 
 Current PBp snapshots use protocol **5**. The current client also accepts protocol **4** as its single migration source. Preserve these supported paths until a release decision explicitly retires them.
 
-Last reviewed: 2026-10-07. Source authority: the protocol/app-version gates and snapshot build/load paths in `Assets/Scripts/Core/TurnManager.cs`.
+Last reviewed: 2026-10-10. Source authority: `PbpAppVersionPolicy` and the protocol/snapshot build/load paths in `Assets/Scripts/Core/TurnManager.cs`.
 
 ## Version fields
 
 | Field | Current meaning |
 | --- | --- |
 | `protocolVersion` | Snapshot meaning/load compatibility: writes 5, accepts 5 or 4 for PBp loads. |
-| `appVersion` | Application build version (`1.0.3` in current project settings). If present, it must match `TurnManager.CurrentAppVersion`. |
+| `appVersion` | Application build version (`1.0.4` in current project settings). The v1.0.4 client also imports v1.0.3 snapshots through the explicit previous-build path. New exports write the current version. |
 | `version` | Legacy save-schema string (`"3"` in `GameSave`), separate from PBp protocol. |
 
 The [HTTP contract](HTTP_PBp_Transport_Contract.md) describes request/response shapes. Transport success is not proof that a snapshot will pass client compatibility gates.
@@ -19,7 +19,8 @@ The [HTTP contract](HTTP_PBp_Transport_Contract.md) describes request/response s
 - Missing/invalid PBp protocol and protocols outside 4/5 are rejected.
 - Protocol 4 is normalized through the current load path and rebuilt as protocol 5 on subsequent save/export. Existing legacy two-side ownership/turn/name/visibility fields provide fallback data.
 - Protocol 5 carries explicit seats, current turn seat, owner seats, per-seat metadata/gold, explored-seat data, and transport sequence.
-- A present nonblank `appVersion` must match the current app, including on protocol 4. Protocol acceptance does not bypass app-version gating.
+- A present nonblank `appVersion` must pass the build policy, including on protocol 4. Version 1.0.4 additionally accepts 1.0.3 as its explicit import source, preserving the previously supported snapshots; earlier/newer unrelated builds are rejected. Protocol acceptance does not bypass app-version gating.
+- The v4 combat balance requires build 1.0.4. New exports identify that build; the older 1.0.3 client's existing strict gate rejects them, requiring the other player to update before continuing. Import does not overwrite a preserved source snapshot. The previous-build exception is specific to 1.0.4, not permanent permission for future builds to accept 1.0.3.
 - A missing/blank `appVersion` is still accepted by a temporary bridge for an otherwise supported PBp load. The code comment referring to dropping protocol 3 is stale; it does not describe a restriction enforced by this bridge.
 - Forward migration does not promise that an older client can read the newly saved game.
 

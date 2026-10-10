@@ -8,7 +8,9 @@ import sys
 import threading
 import time
 from bounded_log import BoundedLog
-from training_contract import RULES_VERSION
+from training_opponents import load_recipe, recipe_id
+from training_contract import (RULES_VERSION, OPENING_ECONOMY_VERSION, LEGACY_OPENING_ECONOMY_VERSION,
+                               validate_opening_economy, latest_saved_step)
 
 
 def read_json(path):
@@ -23,25 +25,46 @@ def configure(args, run, environment):
         return
     if not args.worker.is_file():
         raise ValueError('Build the C# simulation worker before starting decoupled training.')
+    economy = validate_opening_economy(getattr(args, 'opening_economy_version', OPENING_ECONOMY_VERSION))
     environment.update(BLOCKNATIONS_SIMULATION_WORKER=str(args.worker.absolute()),
                        BLOCKNATIONS_PARALLEL_GAMES=str(args.parallel_games),
                        BLOCKNATIONS_SIMULATION_SEED=str(args.seed),
                        BLOCKNATIONS_SIMULATION_CURRICULUM=str(args.curriculum).lower(),
-                       BLOCKNATIONS_SIMULATION_DISTANCE=str(args.curriculum_distance))
+                       BLOCKNATIONS_SIMULATION_DISTANCE=str(args.curriculum_distance),
+                       BLOCKNATIONS_OPENING_ECONOMY_VERSION=str(economy))
     (run / 'training-control.json').unlink(missing_ok=True)
     previous = read_json(run / 'execution-settings.json')
-    if previous and previous.get('rulesVersion') != RULES_VERSION:
+    changed = previous and (previous.get('rulesVersion') != RULES_VERSION or
+                            previous.get('openingEconomyVersion', LEGACY_OPENING_ECONOMY_VERSION) != economy)
+    if changed:
         revision = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())
         # Ratings measure a particular ruleset. Keep the old curve for reference;
         # continuing its weights doesn't make old/new results comparable.
-        rating = run / 'match-elo.json'
-        if rating.exists():
-            rating.rename(run / ('match-elo-before-' + revision + '.json'))
+        for name in ('match-elo.json', 'human-learning-status.json',
+                     'board-' + str(args.board_size) + '-progress.json'):
+            path = run / name
+            if path.exists():
+                path.rename(run / (path.stem + '-before-' + revision + '.json'))
         (run / ('execution-settings-before-' + revision + '.json')).write_text(json.dumps(previous) + '\n')
+    contract_path = run / 'checkpoint-contract.json'
+    if changed or not contract_path.exists():
+        # A rules transition must train a new checkpoint before an export can
+        # claim compatibility. A live arena running new rules is not evidence
+        # that an old saved actor has been trained under them.
+        if contract_path.exists():
+            contract_path.rename(run / ('checkpoint-contract-before-' + revision + '.json'))
+        contract = dict(version=1, rulesVersion=RULES_VERSION, boardSize=args.board_size,
+                        openingEconomyVersion=economy, minimumCheckpointStep=latest_saved_step(run))
+        (run / 'checkpoint-contract.json.tmp').write_text(json.dumps(contract) + '\n')
+        (run / 'checkpoint-contract.json.tmp').replace(contract_path)
     record = dict(version=1, backend='standalone-dotnet', workerCount=args.parallel_games,
-                  rulesVersion=RULES_VERSION, modelSchema=2,
+                  rulesVersion=RULES_VERSION, modelSchema=2, openingEconomyVersion=economy,
                   seedConvention='seed + arena * 7919', seed=args.seed,
                   updatedUtc=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()))
+    recipe = load_recipe(run)
+    if recipe:
+        record['trainingOpponentRecipe'] = recipe
+        record['trainingChallengerId'] = recipe_id(recipe)
     (run / 'execution-settings.json.tmp').write_text(json.dumps(record) + '\n')
     (run / 'execution-settings.json.tmp').replace(run / 'execution-settings.json')
 

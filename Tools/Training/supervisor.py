@@ -11,6 +11,7 @@ from run_limits import RunLimits, continuous_config, is_continuous
 from playtest import PlaytestSession
 from decoupled_runtime import configure as configure_decoupled, ViewerSession
 from bounded_log import BoundedLog
+from training_contract import OPENING_ECONOMY_VERSION, LEGACY_OPENING_ECONOMY_VERSION, validate_opening_economy
 import json
 import os
 from pathlib import Path
@@ -235,6 +236,24 @@ def board_options(run: Path, board_size: int, resume: bool) -> int:
     return size
 
 
+def opening_options(run: Path, resume: bool, upgrade: bool = False) -> int:
+    # Missing metadata identifies the preserved 3/3 first-turn opening.
+    version = read_json(run / RUN_MARKER).get('openingEconomyVersion', LEGACY_OPENING_ECONOMY_VERSION) if resume else OPENING_ECONOMY_VERSION
+    version = validate_opening_economy(version)
+    if resume and upgrade and version != OPENING_ECONOMY_VERSION:
+        manifest = read_json(run / RUN_MARKER)
+        backup = run / ('run-before-opening-v' + str(version) + '.json')
+        if not backup.exists():
+            with backup.open('x') as stream:
+                stream.write((run / RUN_MARKER).read_text())
+        manifest.setdefault('openingTransitions', []).append(dict(previousVersion=version, version=OPENING_ECONOMY_VERSION,
+            updatedUtc=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())))
+        manifest['openingEconomyVersion'] = OPENING_ECONOMY_VERSION
+        atomic_json(run / RUN_MARKER, manifest)
+        return OPENING_ECONOMY_VERSION
+    return version
+
+
 def interrupt_trainer(process: subprocess.Popen, timeout: float = 90) -> None:
     if process.poll() is not None:
         return
@@ -264,6 +283,7 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--board-size", type=int, choices=(5, 6, 7, 9, 11), default=11)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--upgrade-opening-economy", action="store_true", help="Explicitly move a resumed run to the current opening recipe, preserving its old manifest.")
     parser.add_argument("--full-openings", action="store_true", help="Disable the tactical opening curriculum for a new run.")
     parser.add_argument("--env", type=Path)
     parser.add_argument("--backend", choices=("unity", "dotnet"), default="unity")
@@ -312,6 +332,7 @@ def main() -> int:
     config = run / "trainer.yaml"
     args.seed, curriculum, curriculum_distance = arena_options(run, args.seed, not args.full_openings, args.resume)
     args.board_size = board_options(run, args.board_size, args.resume)
+    args.opening_economy_version = opening_options(run, args.resume, args.upgrade_opening_economy)
     if args.board_size != 11:
         curriculum = False
     if not args.resume:
@@ -321,6 +342,7 @@ def main() -> int:
                                       "seed": args.seed, "curriculum": curriculum,
                                       "schema": 2, "boardSize": args.board_size, "behavior": "BlockNationsSeatV2",
                                       "opening": "tactical-curriculum" if curriculum else "standard",
+                                      "openingEconomyVersion": args.opening_economy_version,
                                       "initialWeights": "random", "observationSize": 3120, "actionCount": 259})
     plan = read_json(config)
     if args.hours == 0 and not is_continuous(plan):
@@ -361,7 +383,8 @@ def main() -> int:
                         "--env-args", "--training-status", str(run / "arena-status.json"),
                         "--training-seed", str(args.seed), "--training-curriculum", str(curriculum).lower(),
                         "--training-curriculum-distance", str(curriculum_distance),
-                        "--training-board-size", str(args.board_size)])
+                        "--training-board-size", str(args.board_size),
+                        "--training-opening-economy-version", str(args.opening_economy_version)])
     process = None
     assertion = None
     output_thread = None

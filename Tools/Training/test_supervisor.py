@@ -20,6 +20,29 @@ class RetentionTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
+    def test_new_openings_are_recorded_and_legacy_resumes_keep_their_economy(self):
+        run = self.run_directory('opening')
+        self.assertEqual(supervisor.opening_options(run, resume=False), 2)
+        self.assertEqual(supervisor.opening_options(run, resume=True), 1)
+        supervisor.atomic_json(run/'run.json', {'openingEconomyVersion': 2})
+        self.assertEqual(supervisor.opening_options(run, resume=True), 2)
+        for version in (0, 3, '2', True):
+            supervisor.atomic_json(run/'run.json', {'openingEconomyVersion': version})
+            with self.assertRaises(ValueError):
+                supervisor.opening_options(run, resume=True)
+
+    def test_opening_upgrade_is_explicit_preserves_manifest_and_is_idempotent(self):
+        run = self.run_directory('upgrade')
+        original = (run/'run.json').read_bytes()
+        checkpoint = run/'Policy-1.pt'; checkpoint.write_bytes(b'weights and optimizer')
+        self.assertEqual(supervisor.opening_options(run, True), 1)
+        self.assertEqual((run/'run.json').read_bytes(), original)
+        self.assertEqual(supervisor.opening_options(run, True, upgrade=True), 2)
+        self.assertEqual((run/'run-before-opening-v1.json').read_bytes(), original)
+        self.assertEqual(checkpoint.read_bytes(), b'weights and optimizer')
+        self.assertEqual(supervisor.opening_options(run, True, upgrade=True), 2)
+        self.assertEqual(len(supervisor.read_json(run/'run.json')['openingTransitions']), 1)
+
     def run_directory(self, name):
         run = self.root / "runs" / name
         run.mkdir()

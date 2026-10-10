@@ -46,7 +46,7 @@ public sealed class TrainingHumanPlaytestTests
         }
         finally { UnityEngine.Object.DestroyImmediate(root); Directory.Delete(directory, true); }
     }
-    [Serializable] private sealed class Request { public string requestId, difficulty; }
+    [Serializable] private sealed class Request { public string requestId, difficulty; public int firstSeat; }
 
     [TestCase(BlockNations.AI.LearnedDifficulty.Easy)]
     [TestCase(BlockNations.AI.LearnedDifficulty.Medium)]
@@ -64,6 +64,7 @@ public sealed class TrainingHumanPlaytestTests
                 "{\"state\":\"playtesting\",\"playtestAvailable\":true,\"checkpointCount\":1,\"frozenPlaytestCheckpoint\":\"Policy-123\"}");
             Assert.That(viewer.CanContinue, Is.False);
             viewer.Playtest.Difficulty = difficulty;
+            viewer.Playtest.HumanStarts = false;
             viewer.Playtest.Poll(viewer);
             Assert.That(viewer.Playtest.TrainingActive, Is.False);
             Assert.That(viewer.Playtest.Available, Is.True);
@@ -71,6 +72,7 @@ public sealed class TrainingHumanPlaytestTests
             viewer.Playtest.Start(viewer);
             var request = JsonUtility.FromJson<Request>(File.ReadAllText(Path.Combine(directory, "playtest.request.json")));
             Assert.That(request.difficulty, Is.EqualTo(difficulty.ToString()));
+            Assert.That(request.firstSeat, Is.EqualTo(1));
             Assert.That(viewer.Playtest.Busy, Is.True);
             Assert.That(File.Exists(Path.Combine(directory, "training-control.json")), Is.False);
             Assert.That(Directory.GetFiles(directory, "match-events*"), Is.Empty);
