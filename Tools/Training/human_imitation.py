@@ -174,12 +174,18 @@ def install(factory):
     class HumanImitationPPOTrainer(PPOTrainer):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
+            from exploration_pressure import ExplorationPressure
+            self.exploration = ExplorationPressure(os.environ['BLOCKNATIONS_RATING_RUN'])
             self.human = HumanImitation(os.environ['BLOCKNATIONS_RATING_RUN'],
                                        int(os.environ['BLOCKNATIONS_RATING_BOARD']), self.seed)
 
         def _update_policy(self):
+            exploration_batch = self.exploration.prepare(self.policy, self.update_buffer, self.get_step)
             updated = super()._update_policy()
             if updated:
+                statistics = self.exploration.update(self.policy, self.optimizer.optimizer, exploration_batch)
+                for name, value in (statistics or {}).items():
+                    self._stats_reporter.add_stat(name, value)
                 loss = self.human.update(self.policy, self.optimizer.optimizer, self.get_step)
                 if loss is not None:
                     self._stats_reporter.add_stat('Losses/Human Imitation', loss)
