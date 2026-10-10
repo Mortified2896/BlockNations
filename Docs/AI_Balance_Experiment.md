@@ -63,7 +63,7 @@ python Tools/Training/evaluate_policy.py \
   --games-per-cell 32 --seed 10001
 ```
 
-Add `--reference-checkpoint` for a fixed learned opponent. Omit it for the fair tactical reference; its work is bounded by `--reference-work`. `--reference-recruit-type` is an evaluation-only restricted-roster probe, not a constraint on the candidate. `--tactical-candidate` compares tactical references without loading neural weights. Never feed evaluation results to PPO or present changing training Elo as fixed-reference strength.
+Add `--reference-checkpoint` for a fixed learned opponent. Omit it for the fair tactical reference; its work is bounded by `--reference-work`. `--reference-recruit-type` is an evaluation-only restricted-roster probe, not a constraint on the candidate. `--tactical-candidate` compares tactical references without loading neural weights. `--difficulty Policy` samples the original learned action distribution after applying the authoritative legal-action mask; it is an evaluation mode, not another game difficulty. `--reference-difficulty` can differ from the candidate mode, so an identical frozen model can test difficulty presets against one another with both starting roles. Both modes are recorded in the receipt. Never feed evaluation results to PPO or present changing training Elo as fixed-reference strength.
 
 Initial receipts under rules v4:
 
@@ -78,6 +78,28 @@ Initial receipts under rules v4:
 | Step 16,089,952 against the fair Archer-only reference | 40/64 candidate wins | 8/64 | Better performance, with a significant remaining role-dependent weakness. |
 
 Held-out seed 20001 checks found step 16,089,952 winning 47/64 against the all-roster work-512 reference (15/32 when starting, 32/32 when second) and 37/64 against the Archer-only work-512 probe. Step 16,939,979 subsequently won 48/64 against the all-roster reference and 55/64 against the Archer probe (32/32 when starting, 23/32 when second). It still lost every first-player self-match. The work-512 all-roster controller therefore supplies more competitive training challenges without constraining the learner or prescribing unit-specific strategies. These paired fixed-map samples remain limited evidence, not an independent sample of human strategy.
+
+### 2026-10-10 06:48 UTC progress check
+
+The step-18,834,965 checkpoint/ONNX pair is preserved under `frozen-evaluations/rules-v4-progress-18834965`, with checkpoint SHA-256 `e950974ea47385534623d624d2cc8a9facb824d28e0d42e76220c044ad258820` and a matching trainer recipe/provenance manifest. Its actor and all 12 Adam states contain finite values; Adam's step has advanced to 437,958. The running learner reached step 19,059,941 during inspection, with four arenas, zero rejected actions, no recent trainer errors, and healthy numbered checkpoint/export pairs. The shared root used approximately 0.69/20 GB, with about 335 GB free; there is no duration limit and no active Unity viewer.
+
+The following fixed tests used the same candidate and work-512 reference implementation, balanced over both colours and starting roles, on held-out seed 20001:
+
+| Reference | Candidate capture wins | Candidate wins when first | Candidate wins when second |
+| --- | ---: | ---: | ---: |
+| All-unit tactical controller | 64/64 | 32/32 | 32/32 |
+| Warrior-only tactical probe | 32/64 | 0/32 | 32/32 |
+| Rider-only tactical probe | 27/64 | 0/32 | 27/32 |
+| Archer-only tactical probe | 48/64 | 16/32 | 32/32 |
+| Identical checkpoint, Hard sampling | 32/64 by paired construction | 0/32 | 32/32 |
+
+Improvement from 48/64 to 64/64 against the all-unit reference does **not** establish general strength. Restricted tactical references expose counter-strategies that this controller's unrestricted recruitment does not select consistently. The learned candidate's winning armies against the all-unit reference included both Rider-only and Rider/Warrior mixes. Warrior-, Rider- and Archer-based reference strategies all still won against it. These are strategy probes against this candidate, not proof of equal unit balance or a solved game.
+
+Additional self-tests separate the model's learned distribution from playtest sampling. The first player won 20/128 with Medium and 42/128 with Easy on seed 30001, versus 0/64 with Hard on seed 20001. On seed 40001 the unmodified learned distribution gave the first player 14/128 wins. In balanced direct comparisons on that seed, the unmodified distribution scored 58/128 against Hard and Medium scored 62/128 against Hard. Thus Hard's more restrictive sampling is not the sole cause of the poor first-player opening, and replacing it with the raw distribution is not a demonstrated strength improvement. Stochastic winning armies did sometimes recruit all three combat types; recruitment does not prove their causal contribution.
+
+Recent changing-opponent training telemetry was much closer to even: the first player won 778/1,567 qualifying self-play captures. However, the learner also beat that rotating opponent pool in about three quarters of its matches from either role. This differs materially from the frozen same-model tests and must not be presented as equilibrium balance. Keep the current 2/3 opening, weights and training recipe running for a longer measured interval; repeat the preserved reference pack and both-role self-tests before accepting balance or changing the rules. If the fixed first-player weakness persists despite continued training, increase competitive opponent diversity and investigate the learner's opening/action representation rather than tuning gold to this policy's current habit.
+
+The evaluator's new sampling checks passed 11 focused Python tests, including actual C# worker interruptions, balanced quotas, independent candidate/reference modes, and preservation of legal lower-probability choices. The candidate remains unaccepted; neither the embedded local release model nor the public Cloudflare game was replaced during this progress check.
 
 The Easy/Medium self-match probes also favoured the second player. A fair tactical self-match at work 512 likewise did not resolve the bias. Do not change the approved 2/3 gold opening merely to force a weak policy's score to 50%. Train and test better opening choices first, then change unit/rule balance only with evidence across competent opponents and both starting positions.
 

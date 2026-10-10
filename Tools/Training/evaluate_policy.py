@@ -25,6 +25,21 @@ from playtest_sampling import sampling_weights
 from training_contract import RULES_VERSION, OPENING_ECONOMY_VERSION
 
 
+SAMPLING_MODES = ('Policy', 'Easy', 'Medium', 'Hard')
+
+
+def evaluation_weights(probabilities, difficulty):
+    # Policy measures the learned distribution without a playtest temperature
+    # or cutoff. It is an evaluation mode, not an additional game difficulty.
+    if difficulty == 'Policy':
+        values = np.asarray(probabilities, dtype=np.float64)
+        if (values.ndim != 2 or values.shape[1] != 259 or not np.isfinite(values).all() or
+                (values < 0).any() or (values.sum(axis=1) <= 0).any()):
+            raise ValueError('The frozen policy returned invalid action probabilities.')
+        return values / values.sum(axis=1, keepdims=True)
+    return sampling_weights(probabilities, difficulty)
+
+
 def wilson(wins, games):
     if not games:
         return None
@@ -54,7 +69,7 @@ class FrozenActor:
             probabilities = self.actor.action_model._get_dists(encoded, allowed).discrete[0].probs.cpu().numpy()
         # Reapply the authoritative mask, including to negligible SDK mask floors.
         probabilities = np.where(decisions.action_mask[0], 0, probabilities)
-        weights = sampling_weights(probabilities, difficulty)
+        weights = evaluation_weights(probabilities, difficulty)
         return np.array([[random.choice(weights.shape[1], p=row)] for row in weights], dtype=np.int32)
 
 
@@ -72,9 +87,12 @@ class TacticalActor:
 
 
 def evaluate(worker, directory, candidate, reference=None, *, games_per_cell=16, seed=10001,
-             reference_type='', reference_work=64, difficulty='Hard'):
+             reference_type='', reference_work=64, difficulty='Hard', reference_difficulty=None):
     if games_per_cell < 4 or games_per_cell % 4:
         raise ValueError('Games per cell must be a positive multiple of four.')
+    reference_difficulty = reference_difficulty or difficulty
+    if difficulty not in SAMPLING_MODES or reference_difficulty not in SAMPLING_MODES:
+        raise ValueError('Choose a supported policy sampling mode.')
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
@@ -115,7 +133,8 @@ def evaluate(worker, directory, candidate, reference=None, *, games_per_cell=16,
                         if not len(decisions):
                             continue
                         actor = candidate if seat == candidate_seat else reference
-                        actions = actor.choose(decisions, randoms[seat], difficulty, environment=env, seat=seat)
+                        mode = difficulty if seat == candidate_seat else reference_difficulty
+                        actions = actor.choose(decisions, randoms[seat], mode, environment=env, seat=seat)
                         for agent, action in zip(decisions.agent_id, actions[:, 0]):
                             if 242 <= action < 258:
                                 recruits[int(agent)//2][seat][env.roster[int(action)-242]] += 1
@@ -143,7 +162,8 @@ def evaluate(worker, directory, candidate, reference=None, *, games_per_cell=16,
         reference=reference.name, referenceSha256=reference.sha256,
         referenceRecruitType=getattr(reference,'recruit_type',None), referenceWork=getattr(reference,'work',None),
         candidateRecruitType=getattr(candidate,'recruit_type',None), candidateWork=getattr(candidate,'work',None),
-        seed=seed, difficulty=difficulty, games=len(records), captures=len(captures), wins=wins,
+        seed=seed, difficulty=difficulty, referenceDifficulty=reference_difficulty,
+        games=len(records), captures=len(captures), wins=wins,
         losses=len(captures)-wins, interruptions=len(records)-len(captures),
         candidateCaptureWinRate=wins/len(captures) if captures else None,
         candidateWinRate95=wilson(wins, len(captures)),
@@ -168,7 +188,10 @@ if __name__ == '__main__':
     parser.add_argument('--reference-work', type=int, default=64)
     parser.add_argument('--games-per-cell', type=int, default=16)
     parser.add_argument('--seed', type=int, default=10001)
-    parser.add_argument('--difficulty', choices=('Easy', 'Medium', 'Hard'), default='Hard')
+    parser.add_argument('--difficulty', choices=SAMPLING_MODES, default='Hard',
+                        help='Policy samples the learned distribution without difficulty adjustments.')
+    parser.add_argument('--reference-difficulty', choices=SAMPLING_MODES,
+                        help='Defaults to the candidate sampling mode; set explicitly to compare presets.')
     args = parser.parse_args()
     torch.set_num_threads(2)
     if (args.checkpoint or args.reference_checkpoint) and not args.trainer_config:
@@ -177,5 +200,6 @@ if __name__ == '__main__':
     candidate = FrozenActor(args.checkpoint, network) if args.checkpoint else TacticalActor(args.reference_work)
     reference = FrozenActor(args.reference_checkpoint, network) if args.reference_checkpoint else None
     result = evaluate(args.worker, args.destination, candidate, reference, games_per_cell=args.games_per_cell,
-        seed=args.seed, reference_type=args.reference_recruit_type, reference_work=args.reference_work, difficulty=args.difficulty)
+        seed=args.seed, reference_type=args.reference_recruit_type, reference_work=args.reference_work,
+        difficulty=args.difficulty, reference_difficulty=args.reference_difficulty)
     print(json.dumps({key:value for key,value in result.items() if key != 'records'}, indent=2))
