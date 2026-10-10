@@ -52,6 +52,8 @@ Measure model size, RAM, move latency, responsiveness, and browser/native compat
 
 Compare checkpoints against a stable frozen reference set with controlled seeds, balanced colours/positions and first-player assignments. Report sample sizes/uncertainty and distinguish turn-limit interruptions from genuine results. Changing the reference set, board, or rules creates a separately identified benchmark series. Self-play Elo against a changing opponent pool is training telemetry, not absolute strength or human Elo.
 
+The development trainer now supports a provenance-checked retained opponent league, and `Tools/Training/evaluate_suite.py` repeats a pinned reference pack against successive frozen candidates. See [the balance experiment](AI_Balance_Experiment.md) for the active recipe, measured results and remaining acceptance gates.
+
 Keep useful older opponents in a bounded pool to test whether new learning forgets previous challenges. Select a best tested checkpoint rather than assuming the newest is strongest. Behavioral summaries/replays help diagnose failures but are not mandatory explanations in the player's UI. Preserve the existing requirement to ask before a watched comparison tournament; automatic training matches need no per-match approval.
 
 ## Proposed implementation sequence

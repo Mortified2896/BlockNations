@@ -162,6 +162,24 @@ Additional seeds 30001 and 40001 each used 128 games per comparison. Hard same-m
 
 The candidate's evaluated recruitment remains predominantly Riders, with occasional Warriors and Scouts. No Archers were recruited in this sample. That is not yet the requested robust set of viable learned strategies; reference strategies using other units remain competitive. Continue the current league for a longer measured interval before stacking another training change. Keep these 1,152 evaluation matches as a fixed comparison receipt, repeat with a later frozen candidate, and reject promotion until both-role and human tests improve. The changing-pool training Elo remains telemetry, without an absolute strength interpretation or a reliable plateau guarantee.
 
+### Repeating the fixed benchmark
+
+`Tools/Training/evaluate_suite.py` runs a saved benchmark definition against one frozen candidate manifest. Each case specifies a unique name, seed, balanced games per cell, candidate/reference sampling modes, and either a tactical reference, a frozen learned reference, or the candidate itself. Recruitment restrictions apply only to tactical references. Learned references must include their pinned checkpoint/configuration digests. The definition also pins the C# worker bundle, including its managed rules assembly and runtime/dependency configuration, not merely its native apphost.
+
+The generated suite identity includes reference definitions, evaluator source hashes and ML-Agents/Torch/NumPy versions. The candidate identity is recorded separately, so the same benchmark can compare successive candidates. Complete per-match records remain in each case's `evaluation.json`; `suite.json` records running/completed/failed status and per-case results. Existing destinations are rejected, and partial failures cannot masquerade as completed packs. Colour and first/second roles remain balanced within every case. Seeds change stochastic choices rather than map geometry; results must not imply independent human opponents.
+
+Example invocation, with private paths resolved to the selected frozen run:
+
+```sh
+python Tools/Training/evaluate_suite.py \
+  --candidate-manifest /path/to/frozen-candidate/manifest.json \
+  --suite Logs/Validation/BalanceV4/rules-v4-fixed-suite.json \
+  --worker Build/TrainingWorker/BlockNations.TrainingWorker \
+  --destination Logs/Validation/BalanceV4/fixed-suite-CANDIDATE_STEP
+```
+
+The saved v4 suite reconstructs the 12 comparisons above (1,152 games) and provides one repeatable command for later progress reviews. It is local validation data with machine-specific private file paths, not a public game asset or committed training record. This tool does not stop/restart the learner, launch a viewer, select a release or deploy anything. It validates the benchmark before starting matches and rejects changed reference content or a changed worker. Nine focused suite/evaluator tests passed, including an actual C# worker run. The complete 12-case pack is also checked against the previously recorded candidate results. Focused validation includes actual C# matches, balanced records, changed managed rules with an unchanged apphost, reference/configuration changes, invalid quotas, and explicit partial failures.
+
 ## Export and local testing
 
 `checkpoint-contract.json` records the rules/opening and the last checkpoint step before a transition. A numbered checkpoint must be newer than that boundary before its export claims current compatibility. An explicitly selected frozen candidate must also match its provenance manifest and content hash. Reading a latest pair retries selection if training retention retires it during the read. A running arena under new rules cannot relabel old weights as a new-rule release.
