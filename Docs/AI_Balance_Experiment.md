@@ -101,6 +101,24 @@ Recent changing-opponent training telemetry was much closer to even: the first p
 
 The evaluator's new sampling checks passed 11 focused Python tests, including actual C# worker interruptions, balanced quotas, independent candidate/reference modes, and preservation of legal lower-probability choices. The candidate remains unaccepted; neither the embedded local release model nor the public Cloudflare game was replaced during this progress check.
 
+### 2026-10-10 08:03 UTC regression check
+
+The running learner reached step 22,449,991, with healthy checkpoint pairs, no rejected actions or failure, four C# arenas and no inspector. The shared root used approximately 0.72/20 GB. Its frozen checkpoint and matching export/configuration are preserved under `frozen-evaluations/rules-v4-progress-22449991`, with checkpoint SHA-256 `5a92ae42ded2a795bbdb0c2521be91d3ef7744abdb4f8ac8886e97b932b830ed`.
+
+The identical seed-20001/work-512 reference pack shows a regression rather than monotonically improving strength:
+
+| Reference | Candidate capture wins | Candidate wins when first | Candidate wins when second |
+| --- | ---: | ---: | ---: |
+| All-unit tactical controller | 32/64 | 32/32 | 0/32 |
+| Warrior-only tactical probe | 32/64 | 0/32 | 32/32 |
+| Rider-only tactical probe | 0/64 | 0/32 | 0/32 |
+| Archer-only tactical probe | 64/64 | 32/32 | 32/32 |
+| Preserved step-18,834,965 learned opponent | 0/64 | 0/32 | 0/32 |
+
+The first player again lost all 64 same-model Hard self-matches. Repeating the all-unit, Rider-only and same-model comparisons with the unmodified learned distribution gave the same respective outcomes. Consequently, this regression is not explained by the Hard probability cutoff alone. The candidate mostly recruited Riders, sometimes Scouts or Archers, and no Warriors in these suites; its earlier Warrior-containing defence has disappeared from this sample. This is consistent with loss of previously useful behaviours, without yet identifying the exact optimization cause.
+
+The earlier stronger checkpoint remains preserved and the local selected release remains unchanged. Neither training Elo nor recency should promote this regressed checkpoint. The next generic training adjustment should retain useful older learned opponents beyond the rolling self-play window, preserving their hashes, configurations and fair sampling modes across restarts. Test that league separately and keep it confined to the non-learning seat; do not add a Rider-specific rule, reward or forced defence to the learner. Re-evaluate against this unchanged reference pack before claiming improvement. The present rolling window covers about one million learning steps, so the strong step-18,834,965 opponent has aged out by this check.
+
 The Easy/Medium self-match probes also favoured the second player. A fair tactical self-match at work 512 likewise did not resolve the bias. Do not change the approved 2/3 gold opening merely to force a weak policy's score to 50%. Train and test better opening choices first, then change unit/rule balance only with evidence across competent opponents and both starting positions.
 
 Acceptance needs stronger performance against a preserved reference set and human playtests, successful strategies using different combat units and mixed armies, and no material first/second bias across competent, held-out opponents. Near 50/50 is a target with sample uncertainty, not an exact percentage to tune against one checkpoint. Scouts are a vision/utility unit; Scout-only winning armies are not a requirement. A viable specialist strategy need not recruit every type, and equal recruitment percentages are not the objective.
