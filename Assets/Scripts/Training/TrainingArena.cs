@@ -109,11 +109,31 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
     public double Elapsed => Math.Max(0, Time.realtimeSinceStartupAsDouble - startedAt);
     public int GoldForSeat(int seat) => simulation != null ? simulation.GoldForSeat(seat) : turnManager != null ? turnManager.GetGoldForSeat(seat) : 0;
     public void EndHumanTurn() { if (CanEndHumanTurn) turnManager.TryAdvanceExternalMatchTurn(humanSeatIndex); }
-    public void NewHumanMatch() { if (CanStartNewMatch) { Paused = false; ResetMatch(); } }
+    public void NewHumanMatch()
+    {
+        if (!CanStartNewMatch) return;
+        // Keep the same frozen opponent and RNG stream; a scene reload would
+        // reapply the original first-seat argument and seed on every rematch.
+        humanStartingSeat = random.Next(2);
+        Paused = false;
+        ResetMatch();
+    }
     public void PublishStatus() => WriteStatusIfDue(force: true);
-    public void ReturnToTraining()
+    public void ReturnToTraining() => CloseHumanMatch(showViewer: true);
+    public void CloseHumanPlaytest() => CloseHumanMatch(showViewer: false);
+    private void CloseHumanMatch(bool showViewer)
     {
         if (!CanReturnToTraining && !IsHumanPlaytest) return;
+        if (showViewer && CanReturnToTraining)
+        {
+            try
+            {
+                if (!TrainingViewerReturn.Request(TrainingRunDirectory, boardSize))
+                { Fail("The owning training run is unavailable; the playtest window remains open."); return; }
+            }
+            catch (IOException error) { Fail("Cannot open the training viewer: " + error.Message); return; }
+            catch (UnauthorizedAccessException error) { Fail("Cannot open the training viewer: " + error.Message); return; }
+        }
         humanReturnRequested = true;
         humanRecorder?.Dispose();
         PublishStatus();
@@ -137,7 +157,7 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
         }
         if (IsHumanPlaytest)
         {
-            turnManager.ConfigureExternalHumanSeat(humanSeatIndex);
+            turnManager.ConfigureExternalHumanSeat(humanSeatIndex, NewHumanMatch);
             if (humanPresentation != null) humanPresentation.SetHumanMode(true);
         }
         if (!LearnedActionSchema.SupportsBoard(boardSize) || (boardSize != 11 && useCurriculum))

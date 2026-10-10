@@ -14,6 +14,10 @@ The optional viewer opens into a recent completed game at 1.2 seconds per action
 
 **Play against Easy / Medium / Hard AI** opens a separate human match against a frozen completed checkpoint. Learning continues independently; opening/closing that match does not change the training pause choice. Stopping the supervisor closes its owned viewer and human player.
 
+In local human playtests, **Play Again** keeps that frozen opponent and draws a fresh starting seat with a 50% chance for either side. Consecutive games may have the same starter. The opening HUD reports whether the human moves first or second, and the normal first/second-player economy applies. A city capture shows **Victory** or **Defeat**, explains which unit captured the city, and leaves that unit visible on the captured tile. This terminal display override does not expose additional information to policy observations.
+
+**Back to training** asks the owning controller to open its optional viewer and selects live training snapshots, then closes the human window. It never writes pause or stop controls. A controller shutdown closes the human player without requesting another viewer. The launcher accepts either the Mac `.app` folder or its executable path. Opening the viewer normally retains the recent-game replay default.
+
 ## Local difficulty playtest with training stopped
 
 In **Open Controls**, select the saved run and press **Open Easy / Medium / Hard Playtest**. This opens the standalone viewer without starting a learner or C# simulation worker. The overlay puts **Easy / Medium / Hard** at the top; choose a preset and press **Play against … AI**. A separate human match opens. **Back to training** returns to the selector; closing the viewer ends the local session. Training time and rated self-play results do not advance during these playtests. The public browser build is unaffected.

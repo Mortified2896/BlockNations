@@ -35,7 +35,8 @@ public sealed class TrainingPlaytestBridge
             string directory = arena.TrainingRunDirectory;
             if (arena.IsHumanPlaytest)
             {
-                if (arena.CanReturnToTraining && File.Exists(Path.Combine(directory, "close.request"))) arena.ReturnToTraining();
+                if (arena.CanReturnToTraining && File.Exists(Path.Combine(directory, "close.request")) && arena is TrainingArena human)
+                    human.CloseHumanPlaytest();
                 return;
             }
             string supervisorPath = Path.Combine(directory, "supervisor-status.json");

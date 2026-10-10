@@ -11,13 +11,15 @@ public partial class TurnManager
     public bool ExternalMatchReady { get; private set; }
     public int ExternalWinnerSeatIndex { get; private set; } = -1;
     internal int ExternalFirstSeatIndex { get; private set; }
+    private Action externalHumanPlayAgain;
 
-    public void ConfigureExternalHumanSeat(int seat)
+    public void ConfigureExternalHumanSeat(int seat, Action playAgain = null)
     {
         if (!externallyDrivenMatch || ExternalMatchReady)
             throw new InvalidOperationException("Configure the external human seat before the arena starts.");
         if (seat < -1 || seat > 1) throw new ArgumentOutOfRangeException(nameof(seat));
         externalHumanSeatIndex = seat;
+        externalHumanPlayAgain = playAgain;
     }
 
     public void ResetExternalMatch(int initialGold, int firstSeat) =>
@@ -40,6 +42,7 @@ public partial class TurnManager
         gridManager.RebuildGrid(gridManager.width, gridManager.height);
         currentMode = GameMode.VsAI;
         gameOver = false;
+        ResetGameOverUiState();
         ExternalWinnerSeatIndex = -1;
         ExternalFirstSeatIndex = firstSeat;
         turnNumber = 1;

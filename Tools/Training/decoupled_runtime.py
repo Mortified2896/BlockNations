@@ -71,6 +71,11 @@ def configure(args, run, environment):
 
 class ViewerSession:
     def __init__(self, run, app, enabled):
+        # The trainer accepts a native executable as well as an .app path.
+        # The viewer needs the enclosing bundle to read CFBundleExecutable.
+        if app is not None:
+            app = Path(app)
+            app = next((path for path in (app, *app.parents) if path.suffix == '.app'), app)
         self.run, self.app, self.enabled = run, app, enabled
         self.process, self.output_thread = None, None
         self.initial_launch = enabled

@@ -63,6 +63,13 @@ public sealed class TrainingViewerTests
         for (int frame = 0; frame < 20; frame++) yield return null;
         var viewer = UnityEngine.Object.FindAnyObjectByType<TrainingViewer>();
         run = viewer.TrainingRunDirectory;
+        Assert.That(viewer.ShowingLive, Is.False, "Opening the viewer normally keeps its recent-game default.");
+        Directory.CreateDirectory(Path.Combine(run, "playtest"));
+        Assert.That(TrainingViewerReturn.Request(Path.Combine(run, "playtest"), 7), Is.True);
+        double returnDeadline = Time.realtimeSinceStartupAsDouble + 3;
+        while (!viewer.ShowingLive && Time.realtimeSinceStartupAsDouble < returnDeadline) yield return null;
+        Assert.That(viewer.ShowingLive, Is.True, "Returning from a human game selects the current training matches.");
+        Assert.That(File.Exists(Path.Combine(run, "viewer-live.request")), Is.False, "Consume the request once so later manual view choices persist.");
         string authoritative = File.ReadAllText(Path.Combine(run, "arena-status.json"));
         File.SetLastWriteTimeUtc(Path.Combine(run, "arena-status.json"), DateTime.UtcNow);
         for (int i = 0; i < 4; i++) File.SetLastWriteTimeUtc(Path.Combine(run, "workers", i.ToString(), "live.json"), DateTime.UtcNow);

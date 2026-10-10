@@ -429,7 +429,8 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
             return string.Empty;
         }
 
-        return $"Turn {turnManager.turnNumber} - {turnManager.GetCurrentSideName()}";
+        return turnManager.gameOver ? turnManager.GameOverUiTitle :
+            $"Turn {turnManager.turnNumber} - {turnManager.GetCurrentSideName()}";
     }
 
     private string BuildPlayByPostTurnLabel(bool hasLocalPlayByPostSeat, int localPlayByPostSeatIndex)

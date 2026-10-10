@@ -159,6 +159,13 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
         nextPoll = Time.realtimeSinceStartupAsDouble + .5;
         try
         {
+            string liveRequest = Path.Combine(runDirectory, "viewer-live.request");
+            if (File.Exists(liveRequest))
+            {
+                File.Delete(liveRequest);
+                showingLive = true;
+                Replay.BackToLive();
+            }
             totals = Read<TrainingArena.ArenaStatus>(Path.Combine(runDirectory, "arena-status.json")) ?? totals;
             if (totals != null && (totals.schema != 2 || totals.boardSize != BoardSize || totals.workerCount < 1 || totals.workerCount > 16 ||
                 totals.simulationBackend != "standalone-dotnet" || totals.simulationVersion != SimulationRules.Version))

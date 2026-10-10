@@ -102,6 +102,25 @@ class DecoupledRuntimeTests(unittest.TestCase):
             session.close()
             self.assertIsNotNone(session.process.poll())
 
+    def test_viewer_accepts_the_training_players_executable_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            run = Path(directory); app = run / 'Viewer.app'; binary = app / 'Contents/MacOS/viewer'
+            binary.parent.mkdir(parents=True)
+            with (app / 'Contents/Info.plist').open('wb') as stream:
+                plistlib.dump({'CFBundleExecutable': 'viewer'}, stream)
+            binary.write_text('#!/bin/sh\nexec /bin/sleep 60\n'); binary.chmod(0o755)
+            session = ViewerSession(run, binary, True)
+            state = {'state': 'running', 'trainerPid': 123}
+            try:
+                session.poll({'trainerConnected': True}, state)
+                self.assertEqual(session.app, app)
+                self.assertEqual(state['viewerError'], '')
+                self.assertGreater(state['viewerPid'], 0)
+                self.assertEqual(state['state'], 'running')
+                self.assertEqual(state['trainerPid'], 123)
+            finally:
+                session.close()
+
     def test_viewer_diagnostics_are_bounded(self):
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/'viewer.log';log=BoundedLog(path,limit=100)

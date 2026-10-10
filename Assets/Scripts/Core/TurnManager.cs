@@ -1500,6 +1500,7 @@ public partial class TurnManager : MonoBehaviour
 
     public int GetViewerSeatIndexForRuntime()
     {
+        if (externallyDrivenMatch && externalHumanSeatIndex >= 0) return externalHumanSeatIndex;
         if (currentMode == GameMode.PlayByPost)
         {
             if (string.IsNullOrWhiteSpace(currentGameId))
@@ -2212,6 +2213,7 @@ public partial class TurnManager : MonoBehaviour
 
     private void ResetGameOverUiState()
     {
+        terminalCapturedCity = null;
         gameOverUiTitle = string.Empty;
         gameOverUiMessage = string.Empty;
         gameOverUiPrimaryButtonLabel = DefaultGameOverPrimaryButtonLabel;
@@ -2360,6 +2362,11 @@ public partial class TurnManager : MonoBehaviour
 
     public void OnPlayAgainButtonPressed()
     {
+        if (externallyDrivenMatch)
+        {
+            if (gameOver && externalHumanSeatIndex >= 0) externalHumanPlayAgain?.Invoke();
+            return;
+        }
         if (gameOverUiPrimaryAction == GameOverPrimaryUiAction.CopyGameOverMessage)
         {
             string textToCopy = GameOverUiMessage;
@@ -6123,10 +6130,11 @@ public partial class TurnManager : MonoBehaviour
 #endif
 
         gameOver = true;
+        bool localCapturePresentation = TryConfigureLocalCapturePresentation(capturedBySeatIndex, capturedCity);
         if (externallyDrivenMatch)
         {
             ExternalWinnerSeatIndex = capturedBySeatIndex;
-            return;
+            if (!localCapturePresentation) return;
         }
 
         if (UnitSelectionManager.Instance != null)
@@ -6145,12 +6153,18 @@ public partial class TurnManager : MonoBehaviour
             CityUIManager.Instance.ClosePanel();
         }
 
+        if (externallyDrivenMatch)
+        {
+            RecalculatePlayerVisibility();
+            return;
+        }
+
         int winnerSeatIndex = capturedBySeatIndex;
         bool handledPbpGameOver = currentMode == GameMode.PlayByPost &&
                                   TryConfigurePbpEndgameForWinnerSeat(winnerSeatIndex, "capture");
         string message = currentMode == GameMode.PlayByPost
             ? null
-            : capturedBySeatIndex == 0 ? "You Win!" : "You Lose!";
+            : localCapturePresentation ? GameOverUiMessage : capturedBySeatIndex == 0 ? "You Win!" : "You Lose!";
         if (handledPbpGameOver)
         {
             SavePlayByPostPerGameSnapshot(historySource: "capture_gameover");
@@ -6842,6 +6856,7 @@ public partial class TurnManager : MonoBehaviour
             }
             unit.SetFogVisibility(isVisible, isCurrentSideUnit);
         }
+        ApplyTerminalCapturePresentation();
     }
 
     string GetDefaultSavePath()

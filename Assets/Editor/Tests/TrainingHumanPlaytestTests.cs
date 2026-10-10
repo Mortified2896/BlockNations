@@ -48,6 +48,30 @@ public sealed class TrainingHumanPlaytestTests
     }
     [Serializable] private sealed class Request { public string requestId, difficulty; public int firstSeat; }
 
+    [TestCase("BlockNations.LocalTraining.v1", 2, 7, true)]
+    [TestCase("Unrelated", 2, 7, false)]
+    [TestCase("BlockNations.LocalTraining.v1", 1, 7, false)]
+    [TestCase("BlockNations.LocalTraining.v1", 2, 5, false)]
+    public void HumanReturnRequestsTheOwningLiveViewerWithoutControllingTraining(string owner, int schema, int boardSize, bool expected)
+    {
+        string run = Path.Combine(Path.GetTempPath(), "bn-return-" + Guid.NewGuid().ToString("N"));
+        string human = Path.Combine(run, "playtest");
+        Directory.CreateDirectory(human);
+        try
+        {
+            File.WriteAllText(Path.Combine(run, "run.json"), $"{{\"owner\":\"{owner}\",\"schema\":{schema},\"boardSize\":{boardSize}}}");
+            string telemetry = "{\"state\":\"running\",\"trainerPid\":123}";
+            File.WriteAllText(Path.Combine(run, "supervisor-status.json"), telemetry);
+            Assert.That(TrainingViewerReturn.Request(human, 7), Is.EqualTo(expected));
+            Assert.That(File.Exists(Path.Combine(run, "viewer.request")), Is.EqualTo(expected));
+            Assert.That(File.Exists(Path.Combine(run, "viewer-live.request")), Is.EqualTo(expected));
+            Assert.That(File.Exists(Path.Combine(run, "training-control.json")), Is.False);
+            Assert.That(File.Exists(Path.Combine(run, "stop.request")), Is.False);
+            Assert.That(File.ReadAllText(Path.Combine(run, "supervisor-status.json")), Is.EqualTo(telemetry));
+        }
+        finally { Directory.Delete(run, true); }
+    }
+
     [TestCase(BlockNations.AI.LearnedDifficulty.Easy)]
     [TestCase(BlockNations.AI.LearnedDifficulty.Medium)]
     [TestCase(BlockNations.AI.LearnedDifficulty.Hard)]
