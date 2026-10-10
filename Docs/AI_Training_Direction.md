@@ -70,6 +70,23 @@ Keep useful older opponents in a bounded pool to test whether new learning forge
 
 Choose exact files and acceptance checks when each phase is requested. A full rules rewrite, new network, and new curriculum are not one combined first patch.
 
+## Four-hour continuation and roster review, 2026-10-10
+
+The owner requested four-hour progress checks and authorized sensible rules/roster adjustments. The existing progress automation now uses that interval; the main 7×7 learner continues between checks under the shared 20 GB budget. Finish the already running matched exploration experiments before changing their conditions. Keep the four-unit rules-v4 run and compatible weights as the comparison baseline.
+
+Low recruitment does not establish that a unit is useless. The frozen main checkpoint at step 34,744,985 recruited 724 Riders, 539 Warriors, 211 Scouts and 4 Archers across the 256 raw-policy self-matches on seeds 30001/40001. These are candidate recruitment counts from one evaluated version, not current live frequencies, causal utility measurements or 256 independent strategies. Scout is used in that sample; Archer is particularly rare. Receipts remain in `Logs/Validation/BalanceV4/retained-history-three-million-step/suite.json`.
+
+There are concrete role questions to test. Archer costs 2 gold, has range 2 but vision 1, requires a currently visible target and cannot attack after moving. Its long-range role therefore often depends on another friendly spotter. Scout costs 1, moves 1 and has vision 2 without an attack. On this small board with public city locations, the value of buying vision instead of combat is uncertain. The current feed-forward policy retains explored-tile flags but has no enemy-unit observation memory; this is a separate learning limitation, not proof of poor roster design.
+
+Next steps after the matched exploration results:
+
+1. Review strength, role bias and counter-strategy performance before promoting a training recipe. More elapsed time and more varied purchases are insufficient acceptance criteria.
+2. Compare an explicit three-unit core (Warrior, Rider, Archer) with the preserved four-unit setup. Treat Scout as an experimental reconnaissance option, retaining its definition and supported saved units. Do not silently reindex an existing model's recruit meanings or remove registry/save support.
+3. Test Archer vision 2 as a separate, minimal shared-rule change before combining multiple stat buffs. It would let an Archer see the distance at which it can shoot while retaining its movement/attack restriction. Version changed rules and benchmark series, preserve the parent weights, and keep Unity play and C# training on the same definitions.
+4. Evaluate whether each role enables useful winning or defensive responses, using both starting positions, several fixed opponents and human playtests. Do not reward or mandate purchasing particular unit names. A smaller roster is a game-design experiment, not a substitute for an adaptable action representation, useful memory or sound exploration.
+
+These alternatives are the next experimental plan; the current main run still uses all four units and unchanged rules-v4 definitions. Keep the learned browser release pending the owner's playtest review.
+
 ## References
 
 - [Current ML training MVP](ML_Training_MVP.md): implemented controls, schemas, storage, replay, and validation limits.
