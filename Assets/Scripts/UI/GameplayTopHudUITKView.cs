@@ -196,6 +196,13 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         openingSeatLabel = root.Q<Label>("OpeningSeatLabel");
         goldLabel = root.Q<Label>("GoldLabel");
         statusLabel = root.Q<Label>("PbpStatusLabel");
+        if (PublicWebBuild.UsesGoogleAccounts)
+        {
+            // Google names are plain text, including spaces and Unicode.
+            if (turnLabel != null) turnLabel.enableRichText = false;
+            if (openingSeatLabel != null) openingSeatLabel.enableRichText = false;
+            if (statusLabel != null) statusLabel.enableRichText = false;
+        }
 
         if (turnLabel == null || goldLabel == null)
         {
@@ -443,6 +450,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         string localSeatLabel = hasLocalPlayByPostSeat
             ? PlayByPostSeatUtility.BuildPlayerLabel(localPlayByPostSeatIndex)
             : "Player ?";
+        if (PublicWebBuild.UsesGoogleAccounts) localSeatLabel = WebAccountClient.DisplayName;
         return $"Turn {turnManager.turnNumber} - {localSeatLabel}";
     }
 
@@ -650,6 +658,13 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         PbpConnectivityStateModel.ObserveSubmitResult(ok, err);
         if (ok)
         {
+            if (PublicWebBuild.UsesGoogleAccounts)
+            {
+                // The accepted cloud snapshot carries the actual next owner,
+                // including someone who joined while the host was playing.
+                ClearPbpSubmitStatusOverride();
+                return;
+            }
             string currentPbpGameId = turnManager.GetCurrentPlayByPostGameIdForUi();
             string nextPlayerDisplayName = turnManager.GetPredictedPostSubmitPlayByPostTurnOwnerLabelForUi();
             if (string.IsNullOrWhiteSpace(currentPbpGameId) || string.IsNullOrWhiteSpace(nextPlayerDisplayName))

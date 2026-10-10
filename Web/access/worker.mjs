@@ -3,6 +3,8 @@ import { page, loginPage, accountPage, googlePage } from "./pages.mjs";
 import { adminPage, decide } from "./admission.mjs";
 import { storeCall } from "./store.mjs";
 import { submitFeedback, feedbackInbox, feedbackScreenshot } from "./feedback.mjs";
+import { multiplayerAPI, revokePushSession } from "../multiplayer/api.mjs";
+import { lobbyPage } from "../multiplayer/page.mjs";
 
 const REVIEW_ORIGIN = "https://feedback.moneymattersmedia.com";
 const BROKER_PATH = "/blocknations-auth/authorize";
@@ -56,7 +58,9 @@ async function profile(env, uid, sid) {
 
 async function gameProfile(request, env) {
   const session = await open(env.SESSION_SECRET, cookie(request, SESSION_COOKIE), "session", env.GAME_ORIGIN);
-  return session ? profile(env, session.uid, session.sid) : null;
+  if (!session) return null;
+  const user = await profile(env, session.uid, session.sid);
+  return user ? { ...user, web_session_id: await fingerprint(session.sid) } : null;
 }
 
 function withReviewCookies(response, sources) {
@@ -161,11 +165,24 @@ async function handle(request, env) {
   const url = new URL(request.url);
   if (url.origin === REVIEW_ORIGIN) return authorize(request, env);
   if (url.origin !== env.GAME_ORIGIN || !gameOrigins(env).includes(url.origin)) return json({ error: "Not found." }, 404);
+  if (["/sw.js", "/PWA.js", "/manifest.webmanifest", "/icons/app-192.png", "/icons/app-512.png"].includes(url.pathname) && ["GET", "HEAD"].includes(request.method)) {
+    const response = await env.ASSETS.fetch(request);
+    if (url.pathname === "/sw.js") {
+      const script = new Response(response.body, response);
+      script.headers.set("Service-Worker-Allowed", "/");
+      script.headers.set("Content-Security-Policy", "default-src 'none'; script-src 'self'; connect-src 'self'; img-src 'self'");
+      return script;
+    }
+    return response;
+  }
   if (url.pathname === "/auth/callback") return callback(request, env);
   if (url.pathname === "/auth/switch-account") {
     if (request.method !== "POST" || request.headers.get("Origin") !== env.GAME_ORIGIN) return json({ error: "Request origin rejected." }, 403);
     const session = await open(env.SESSION_SECRET, cookie(request, SESSION_COOKIE), "session", env.GAME_ORIGIN);
-    if (session) await storeCall(env, "logout", { id: session.sid });
+    if (session) {
+      await revokePushSession(env, session.sid);
+      await storeCall(env, "logout", { id: session.sid });
+    }
     const response = await beginLogin(env, true);
     response.headers.append("Set-Cookie", setCookie(SESSION_COOKIE, "", 0));
     return response;
@@ -173,7 +190,10 @@ async function handle(request, env) {
   if (url.pathname === "/auth/logout") {
     if (request.method !== "POST" || request.headers.get("Origin") !== env.GAME_ORIGIN) return json({ error: "Request origin rejected." }, 403);
     const session = await open(env.SESSION_SECRET, cookie(request, SESSION_COOKIE), "session", env.GAME_ORIGIN);
-    if (session) await storeCall(env, "logout", { id: session.sid });
+    if (session) {
+      await revokePushSession(env, session.sid);
+      await storeCall(env, "logout", { id: session.sid });
+    }
     const response = redirect("/access");
     response.headers.append("Set-Cookie", setCookie(SESSION_COOKIE, "", 0));
     response.headers.append("Set-Cookie", setCookie(ATTEMPT_COOKIE, "", 0));
@@ -194,6 +214,11 @@ async function handle(request, env) {
     if (actor?.status !== "approved") return json({ error: "Please sign in again as an approved tester before sending feedback." }, 403);
     return submitFeedback(request, env, actor);
   }
+  if (url.pathname.startsWith("/api/multiplayer/")) {
+    const actor = await gameProfile(request, env);
+    if (actor?.status !== "approved") return json({ ok: false, error: "APPROVED_ACCOUNT_REQUIRED" }, 403);
+    return multiplayerAPI(request, env, actor);
+  }
   if (!["GET", "HEAD"].includes(request.method)) return json({ error: "Method not allowed." }, 405);
   if (url.pathname === "/auth/login") {
     return beginLogin(env);
@@ -203,6 +228,7 @@ async function handle(request, env) {
     return user ? accountPage(user) : loginPage();
   }
   if (!user || user.status !== "approved") return json({ error: "Approved tester access required." }, 403);
+  if (url.pathname === "/multiplayer") return lobbyPage(user);
   // No game HTML, loader, data, Wasm, metadata or alternate asset route is public.
   return env.ASSETS.fetch(request);
 }

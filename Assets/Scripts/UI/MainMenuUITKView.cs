@@ -219,7 +219,8 @@ public class MainMenuUITKView : MonoBehaviour
     private bool clearLocalPbpConfirmVisible;
     private TurnManager.MapSizePreset selectedMapSizePreset = TurnManager.GetDefaultMapSizePreset();
     private int selectedPlayByPostPlayerCount = PlayByPostSeatUtility.MinSeatCount;
-    private TurnManager.AIRecruitVariant selectedAIRecruitVariant = TurnManager.AIRecruitVariant.LearnedMedium;
+    private TurnManager.AIRecruitVariant selectedAIRecruitVariant = PublicWebBuild.UsesGoogleAccounts
+        ? TurnManager.AIRecruitVariant.Default : TurnManager.AIRecruitVariant.LearnedMedium;
     private bool selectedStoreSnapshotHistory;
     private bool selectedEnableAIVsAIDebugMode;
     private TurnManager.AIRecruitVariant selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
@@ -439,6 +440,9 @@ public class MainMenuUITKView : MonoBehaviour
         if (PublicWebBuild.IsSinglePlayer)
         {
             SetVisible(multiplayerButton, false);
+        }
+        if (PublicWebBuild.IsPublicWeb)
+        {
             SetVisible(profileButton, false);
             SetVisible(puzzleModeButton, false);
             SetVisible(quitButton, false);
@@ -496,6 +500,11 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAiSection = root.Q<VisualElement>("GeneralSettingsAiSection");
         generalSettingsAiStyleSection = root.Q<VisualElement>("GeneralSettingsAiStyleSection");
         generalSettingsLegacyAISection = root.Q<VisualElement>("GeneralSettingsLegacyAISection");
+        if (PublicWebBuild.UsesGoogleAccounts && generalSettingsLegacyAISection != null)
+        {
+            var heading = generalSettingsLegacyAISection.Q<Label>(className: "general-settings-section-label");
+            if (heading != null) heading.text = "Opponent";
+        }
         generalSettingsPbpSection = root.Q<VisualElement>("GeneralSettingsPbpSection");
         generalSettingsDevSection = root.Q<VisualElement>("GeneralSettingsDevSection");
         generalSettingsAIVsAIOptionsSection = root.Q<VisualElement>("GeneralSettingsAIVsAIOptionsSection");
@@ -560,6 +569,11 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAiStyleDefaultButton = root.Q<Button>("GeneralSettingsAiStyleDefaultButton");
         generalSettingsAiStyleRiderFocusButton = root.Q<Button>("GeneralSettingsAiStyleRiderFocusButton");
         generalSettingsAiStyleHardButton = root.Q<Button>("GeneralSettingsAiStyleHardButton");
+        if (PublicWebBuild.UsesGoogleAccounts)
+        {
+            if (generalSettingsAiStyleDefaultButton != null) generalSettingsAiStyleDefaultButton.text = "Normal";
+            if (generalSettingsAiStyleHardButton != null) generalSettingsAiStyleHardButton.text = "Hard";
+        }
         generalSettingsAiEasyButton = root.Q<Button>("GeneralSettingsAiEasyButton");
         generalSettingsAiMediumButton = root.Q<Button>("GeneralSettingsAiMediumButton");
         generalSettingsAiHardButton = root.Q<Button>("GeneralSettingsAiHardButton");
@@ -1879,6 +1893,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HandleMultiplayerClicked()
     {
+        if (PublicWebBuild.UsesGoogleAccounts) { WebAccountClient.OpenLobby(); return; }
         OpenMultiplayerPanelOrRedirect(requestControllerOpen: true);
     }
 
@@ -1951,7 +1966,8 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HandleGeneralSettingsAiMediumClicked()
     {
-        selectedAIRecruitVariant = TurnManager.AIRecruitVariant.LearnedMedium;
+        selectedAIRecruitVariant = PublicWebBuild.UsesGoogleAccounts
+            ? TurnManager.AIRecruitVariant.Default : TurnManager.AIRecruitVariant.LearnedMedium;
         RefreshGeneralSettingsSelectionState();
     }
 
@@ -3317,7 +3333,8 @@ public class MainMenuUITKView : MonoBehaviour
         selectedMapSizePreset = mode == PendingGeneralSettingsMode.PlayByPost
             ? TurnManager.MapSizePreset.Small : TurnManager.GetDefaultMapSizePreset();
         selectedPlayByPostPlayerCount = PlayByPostSeatUtility.MinSeatCount;
-        selectedAIRecruitVariant = TurnManager.AIRecruitVariant.LearnedMedium;
+        selectedAIRecruitVariant = PublicWebBuild.UsesGoogleAccounts
+            ? TurnManager.AIRecruitVariant.Default : TurnManager.AIRecruitVariant.LearnedMedium;
         selectedStoreSnapshotHistory = false;
         selectedEnableAIVsAIDebugMode = false;
         selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
@@ -3455,7 +3472,7 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         if (generalSettingsLegacyAISection != null)
-            generalSettingsLegacyAISection.style.display = IsDevBuild() ? DisplayStyle.Flex : DisplayStyle.None;
+            generalSettingsLegacyAISection.style.display = IsDevBuild() || PublicWebBuild.UsesGoogleAccounts ? DisplayStyle.Flex : DisplayStyle.None;
         if (generalSettingsMapSmallButton != null)
             generalSettingsMapSmallButton.text = isVsAi ? "Standard 7×7" : "Small 11×11";
         if (generalSettingsMapLargeButton != null)
@@ -3463,7 +3480,7 @@ public class MainMenuUITKView : MonoBehaviour
 
         if (generalSettingsAiStyleSection != null)
         {
-            generalSettingsAiStyleSection.style.display = hideGlobalAiStyle
+            generalSettingsAiStyleSection.style.display = hideGlobalAiStyle || PublicWebBuild.UsesGoogleAccounts
                 ? DisplayStyle.None
                 : DisplayStyle.Flex;
         }
@@ -3937,7 +3954,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private static bool IsDevBuild()
     {
-        if (PublicWebBuild.IsSinglePlayer) return false;
+        if (PublicWebBuild.IsPublicWeb) return false;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         return true;
 #else

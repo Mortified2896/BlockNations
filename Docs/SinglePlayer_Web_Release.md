@@ -6,6 +6,7 @@ It requires Google sign-in and tester approval; the hostname is publicly reachab
 These are distinct release targets; publishing the public game must not overwrite the staging service or its saved matches.
 
 The currently published browser release runs the game and Normal, Rider Focus, and Hard locally on the player's device.
+The [Google-account multiplayer release](Web_Multiplayer_Playtest.md) adds asynchronous two-person 7×7 matches, friends, in-game invitations and opt-in Web Push while keeping those local opponents available. Build that release with `python3 Tools/WebRelease/build.py --multiplayer`; the unqualified command below builds the separate learned-AI candidate.
 The next [learned-AI browser candidate](Learned_AI_Browser_Playtest.md) uses 7×7 with Easy, Medium and Hard presets and bundled local Inference Engine models. It is held for review before public publication.
 The local training worker, Python, training spectator, native policy playtest, and external model/API experiments are excluded from both releases.
 
@@ -77,7 +78,7 @@ Only a currently approved Review administrator can manage that queue.
 Game approval changes only `game_testers` in the private `blocknations-access` Durable Object namespace. It never upgrades the Review account's status or role.
 Review-only approval grants automatic game access; removing it removes inherited game access unless the person has a separate game approval.
 
-`Web/access/worker.mjs` runs before **every** static asset in production and preview, including HTML, the loader, framework, data, Wasm, release metadata and alternate paths.
+`Web/access/worker.mjs` runs before **every** game asset in production and preview, including HTML, the loader, framework, data, Wasm, release metadata and alternate paths. The install manifest, two icons and push-only service-worker/client scripts are public shell assets; they contain no game data or credentials.
 Anonymous visitors see the sign-in page; other unauthorised game-file requests receive 403.
 Protected responses use `private, no-store`. Auth/storage failures return 503 and never fall back to public assets.
 Revocation blocks subsequent requests. A client that already downloaded the game can continue running its local code until reload; website authentication cannot recall downloaded bytes.

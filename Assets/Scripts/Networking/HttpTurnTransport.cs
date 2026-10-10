@@ -703,7 +703,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
     private static string GetConfiguredPbpApiKey()
     {
-#if BLOCKNATIONS_SINGLE_PLAYER_WEB
+#if BLOCKNATIONS_SINGLE_PLAYER_WEB || BLOCKNATIONS_ACCOUNT_WEB
         return string.Empty;
 #else
         string provisionedMacStandalonePath = string.Empty;
@@ -965,7 +965,7 @@ public sealed class HttpTurnTransport : MonoBehaviour, ITurnTransport
 
     private static string GetConfiguredBaseUrl()
     {
-#if BLOCKNATIONS_SINGLE_PLAYER_WEB
+#if BLOCKNATIONS_SINGLE_PLAYER_WEB || BLOCKNATIONS_ACCOUNT_WEB
         return null;
 #else
         PbpTransportSettings sharedSettings = LoadTransportSettings();

@@ -7,7 +7,10 @@
   "preview_urls": false,
   "assets": { "directory": "../Build/WebRelease", "binding": "ASSETS", "run_worker_first": true, "not_found_handling": "404-page" },
   "services": [{ "binding": "REVIEW", "service": "article-lab-review" }],
-  "durable_objects": { "bindings": [{ "name": "ACCESS_STORE", "class_name": "AccessStore", "script_name": "blocknations-access" }] },
+  "durable_objects": { "bindings": [
+    { "name": "ACCESS_STORE", "class_name": "AccessStore", "script_name": "blocknations-access" },
+    { "name": "MULTIPLAYER_STORE", "class_name": "MultiplayerStore", "script_name": "blocknations-multiplayer" }
+  ] },
   "routes": [{ "pattern": "feedback.moneymattersmedia.com/blocknations-auth-preview/*", "zone_name": "moneymattersmedia.com" }],
   "vars": {
     "AUTH_PATH": "/blocknations-auth-preview/authorize",

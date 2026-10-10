@@ -1,0 +1,10 @@
+{
+  "name": "blocknations-multiplayer",
+  "main": "multiplayer/service.mjs",
+  "account_id": "6635ddbbb1755e951c11e0898f447f75",
+  "compatibility_date": "2026-10-08",
+  "workers_dev": false,
+  "preview_urls": false,
+  "durable_objects": { "bindings": [{ "name": "MULTIPLAYER_STORE", "class_name": "MultiplayerStore" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MultiplayerStore"] }]
+}

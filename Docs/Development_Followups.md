@@ -6,6 +6,8 @@ Reviewed: 2026-10-07, against source revision `0d510b3`.
 
 ## Relay correctness before online playtesting
 
+The separately authorized [Google-account web playtest](Web_Multiplayer_Playtest.md) uses a new private Cloudflare SQLite relay with atomic seat/turn commits. It does not use this legacy filesystem relay. The native relay issue below remains separate work.
+
 **Confirmed issue:** in an isolated temporary copy of `server.js`, concurrent different payloads submitted to the same game/sequence both returned HTTP 200 success. The current check/write/rename path can replace a destination created by another request. Sequential duplicates and conflicts work.
 
 - Likely change boundary: `server.js` and a focused Node regression test; `package.json` only if needed to expose the test.

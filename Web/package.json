@@ -3,13 +3,15 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "test": "node --test access/*.test.mjs",
+    "test": "node --test access/*.test.mjs multiplayer/*.test.mjs",
     "preview": "wrangler dev --config wrangler.jsonc --local",
     "deploy:access": "wrangler deploy --config wrangler.access.jsonc",
+    "deploy:multiplayer": "wrangler deploy --config wrangler.multiplayer.jsonc",
     "deploy:preview": "npm test && python3 ../Tools/WebRelease/audit.py ../Build/WebRelease && wrangler deploy --config wrangler.jsonc",
     "deploy:production": "npm test && python3 ../Tools/WebRelease/audit.py ../Build/WebRelease && wrangler deploy --config wrangler.production.jsonc"
   },
   "devDependencies": {
+    "http_ece": "^1.2.1",
     "miniflare": "5.20261006.1-alpha",
     "wrangler": "4.149.0"
   }

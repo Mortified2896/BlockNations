@@ -55,6 +55,12 @@ public class GameMenuActions : MonoBehaviour
     {
         if (useAlternateExit) { alternateExit.Invoke(); return; }
         TurnManager tm = TurnManager.Instance;
+        if (PublicWebBuild.UsesGoogleAccounts && tm != null && tm.currentMode == TurnManager.GameMode.PlayByPost)
+        {
+            tm.SaveToFile();
+            WebAccountClient.OpenLobby();
+            return;
+        }
         bool shouldReturnToMultiplayerPane = tm != null
             ? tm.currentMode == TurnManager.GameMode.PlayByPost
             : !string.IsNullOrWhiteSpace(PlayerPrefs.GetString(PlayByPostGameIdKey, string.Empty));

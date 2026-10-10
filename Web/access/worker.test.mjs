@@ -439,3 +439,17 @@ test("feedback validates size and attachments, accepts text-only reports, and bo
   assert.equal((await send({ ...base, id: "0".repeat(32) })).status, 201);
   assert.equal((await request("/admin/feedback")).status, 403);
 });
+
+test("the private approved directory folds Unicode Google names and keeps email lookup exact", async () => {
+  const person = await identity("UnicodeDirectory", "approved");
+  await env.REVIEW_DB.prepare("UPDATE users SET display_name=? WHERE auth_user_id=?").bind("Özlem 王", person.uid).run();
+  await signIn(person);
+  const found = await storeCall(env, "player-search", { query: "özLEM" });
+  assert.equal(found.length, 1);
+  assert.equal(found[0].display_name, "Özlem 王");
+  assert.deepEqual(Object.keys(found[0]).sort(), ["auth_user_id", "display_name", "email"]);
+  assert.equal((await storeCall(env, "player-search", { query: "UNICODEDIRECTORY@EXAMPLE.TEST" })).length, 1);
+  assert.equal((await storeCall(env, "player-search", { query: "@example.test" })).length, 0);
+  await storeCall(env, "decide", { uid: person.uid, status: "disabled", actor: "synthetic-admin" });
+  assert.equal((await storeCall(env, "player-search", { query: "özlem" })).length, 0);
+});
