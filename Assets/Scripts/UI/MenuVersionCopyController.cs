@@ -8,7 +8,9 @@ public sealed class MenuVersionCopyController : IDisposable
 {
 #if UNITY_WEBGL && !UNITY_EDITOR
     [DllImport("__Internal")]
-    private static extern void CopyToClipboardWithResult(string text, string receiver, string method);
+    private static extern void ShowMenuVersionCopy(string text);
+    [DllImport("__Internal")]
+    private static extern void HideMenuVersionCopy();
 #endif
 
     private readonly string receiver;
@@ -21,12 +23,19 @@ public sealed class MenuVersionCopyController : IDisposable
     {
         this.receiver = receiver;
         this.labels = labels;
+        #if UNITY_WEBGL && !UNITY_EDITOR
+        ShowMenuVersionCopy(MenuVersionLabel.BuildVersionText());
+        #endif
         foreach (Label label in labels)
         {
             if (label == null) continue;
+#if UNITY_WEBGL && !UNITY_EDITOR
+            label.style.visibility = Visibility.Hidden;
+#else
             label.pickingMode = PickingMode.Position;
             label.tooltip = "Tap to copy version";
             label.RegisterCallback<ClickEvent>(OnClicked);
+#endif
         }
     }
 
@@ -40,7 +49,8 @@ public sealed class MenuVersionCopyController : IDisposable
         string text = MenuVersionLabel.BuildVersionText();
 #if UNITY_WEBGL && !UNITY_EDITOR
         SetText("Copying…");
-        CopyToClipboardWithResult(text, receiver, "OnMenuVersionCopyResult");
+        // Browser builds use a native button so Safari retains the tap gesture.
+        copying = false;
 #else
         try { Complete(ClipboardUtility.TryCopy(text)); }
         catch (Exception) { Complete(false); }
@@ -73,6 +83,9 @@ public sealed class MenuVersionCopyController : IDisposable
     public void Dispose()
     {
         disposed = true;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        HideMenuVersionCopy();
+#endif
         resetItem?.Pause();
         resetItem = null;
         foreach (Label label in labels)

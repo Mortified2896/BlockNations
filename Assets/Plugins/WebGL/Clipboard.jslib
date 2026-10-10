@@ -1,36 +1,53 @@
 mergeInto(LibraryManager.library, {
-  CopyToClipboardWithResult: function (strPtr, receiverPtr, methodPtr) {
-    var text = UTF8ToString(strPtr);
-    var receiver = UTF8ToString(receiverPtr);
-    var method = UTF8ToString(methodPtr);
-    var finish = function (ok) { window.blockNations.SendMessage(receiver, method, ok ? "1" : "0"); };
-    var fallback = function () {
-      var textarea = document.createElement("textarea");
-      var previousFocus = document.activeElement;
-      try {
-        textarea.value = text;
-        textarea.setAttribute("readonly", "");
-        textarea.style.position = "fixed";
-        textarea.style.left = "-9999px";
-        document.body.appendChild(textarea);
-        textarea.select();
-        finish(document.execCommand("copy"));
-      } catch (e) {
-        finish(false);
-      } finally {
-        textarea.remove();
-        if (previousFocus && previousFocus.focus) previousFocus.focus();
-      }
+  ShowMenuVersionCopy: function (textPtr) {
+    var text = UTF8ToString(textPtr);
+    if (window.bnMenuVersionCleanup) window.bnMenuVersionCleanup();
+    var button = document.createElement("button");
+    button.id = "bn-menu-version";
+    button.type = "button";
+    button.textContent = text;
+    button.setAttribute("aria-label", "Copy build version " + text);
+    button.style.cssText = "position:absolute;top:max(8px,env(safe-area-inset-top));left:max(8px,env(safe-area-inset-left));z-index:2;min-height:44px;padding:8px;border:0;background:transparent;color:#ffffffb3;font:16px system-ui,sans-serif;cursor:pointer;touch-action:manipulation";
+    var timer, copying = false, removed = false;
+    var finish = function (ok) {
+      if (removed) return;
+      copying = false;
+      button.textContent = ok ? "Copied!" : "Couldn't copy — tap to retry";
+      button.setAttribute("aria-label", button.textContent);
+      timer = setTimeout(function () {
+        button.textContent = text;
+        button.setAttribute("aria-label", "Copy build version " + text);
+      }, 2000);
     };
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(function () { finish(true); }, fallback);
-      } else {
-        fallback();
-      }
-    } catch (e) {
-      fallback();
-    }
+    button.addEventListener("click", function (event) {
+      event.stopPropagation();
+      if (copying) return;
+      clearTimeout(timer);
+      copying = true;
+      // Start inside the native click event, before Unity or any asynchronous work.
+      // WebKit rejects clipboard writes dispatched later by Unity's frame loop.
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () { finish(true); }, function () { finish(false); });
+        } else {
+          var textarea = document.createElement("textarea");
+          textarea.value = text;
+          textarea.style.cssText = "position:fixed;top:0;left:0;opacity:0;font-size:16px";
+          textarea.setAttribute("readonly", "");
+          document.body.appendChild(textarea);
+          textarea.select();
+          textarea.setSelectionRange(0, text.length);
+          try { finish(document.execCommand("copy")); } finally { textarea.remove(); button.focus(); }
+        }
+      } catch (e) { finish(false); }
+    });
+    button.setAttribute("aria-live", "polite");
+    document.getElementById("game").appendChild(button);
+    window.bnMenuVersionCleanup = function () { removed = true; clearTimeout(timer); button.remove(); };
+  },
+  HideMenuVersionCopy: function () {
+    if (window.bnMenuVersionCleanup) window.bnMenuVersionCleanup();
+    window.bnMenuVersionCleanup = null;
   },
   CopyToClipboard: function (strPtr) {
     try {

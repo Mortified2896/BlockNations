@@ -2,7 +2,7 @@
 
 The main-menu panes display the build version at the top left. Both menu and normal gameplay have a Feedback button at the top right, inside the safe area. Gameplay does not display a version label; reports attach the version automatically.
 
-Tap the menu version to copy the full displayed identifier, including the PBp protocol (for example, `v1.0.3 · PbP 5`). The label shows `Copied!` for two seconds, then returns to the version. Browser builds wait for clipboard confirmation; a rejected copy shows a retry message. When checking a candidate, verify the pasted text, repeat taps, label restoration, and leaving/reopening the menu. Check physical mobile browsers separately.
+Tap the menu version to copy the full displayed identifier, including the PBp protocol (for example, `v1.0.3 · PbP 5`). The label shows `Copied!` for two seconds, then returns to the version. Browser builds use a native browser button to start the clipboard write directly inside the tap event, as required by iPhone Safari. They wait for clipboard confirmation; a rejected copy shows a retry message. When checking a candidate, verify the pasted text, repeat taps, label restoration, and leaving/reopening the menu. Check physical mobile browsers separately.
 
 ## Player flow
 
