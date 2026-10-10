@@ -141,6 +141,27 @@ Validation completed 96 Python tests with 94 passes and two opt-in skips. The se
 
 Persistent anchors address loss of previously useful opponents, but the stock ML-Agents rolling snapshot pool and global SDK random state are not fully restored across a restart. Do not claim exact continuation reproducibility. No post-adjustment improvement in playing strength has yet been established. At the next progress review, freeze another candidate and repeat the unchanged reference pack and both-role self-tests; broaden held-out seeds before accepting balance. The public build and selected local release model remain unchanged pending human review.
 
+### 2026-10-10 09:26 UTC first retained-league evaluation
+
+After approximately 25 minutes with the final league recipe, preserved checkpoint 25,899,973 has SHA-256 `8670aa3a27f7dcd82299eb16c633d19a2d49cb279eb2c80a60478a127fcdfa11`. Its matching ONNX, configuration, opponent recipe and provenance are retained under `frozen-evaluations/rules-v4-league-progress-25899973`. The goal is active; the obsolete usage cutoff no longer applies. Training continues without a duration limit, using four C# arenas with no viewer, about 1,520 decisions/second, zero rejected actions and approximately 0.80/20 GB shared storage.
+
+The unchanged seed-20001, work-512, Hard reference pack produced:
+
+| Reference | Candidate wins / scheduled games | Candidate wins when first | Candidate wins when second | Interruptions |
+| --- | ---: | ---: | ---: | ---: |
+| All-unit tactical controller | 64/64 | 32/32 | 32/32 | 0 |
+| Warrior-only tactical probe | 32/64 | 0/32 | 32/32 | 0 |
+| Rider-only tactical probe | 32/64 | 0/32 | 32/32 | 0 |
+| Archer-only tactical probe | 48/64 | 16/32 | 32/32 | 16 |
+| Identical checkpoint, Hard sampling | 32/64 by paired construction | 0/32 | 32/32 | 0 |
+| Preserved step-18,834,965 learned opponent | 51/64 | 32/32 | 19/32 | 0 |
+
+The pre-league candidate's corresponding Warrior, Rider and older-learned results were 10/64, 16/64 and 32/64. This new candidate improves those particular comparisons, but one before/after sample does not establish causality or general strength. The Archer comparison has 16 interruptions, not 16 losses or proven draws. The identical-model Hard first-player win rate returned to zero; the role weakness is unresolved.
+
+Additional seeds 30001 and 40001 each used 128 games per comparison. Hard same-model tests again gave the first player 0/128 on each seed. Unmodified-distribution same-model tests gave first-player results 8/128 and 4/128 (combined 12/256); by paired construction these correspond to the designated candidate winning 4/64 and 2/64 when starting. Against the retained Hard step-18,834,965 opponent, the unmodified candidate scored 88/128 and 91/128, with candidate-first results 61/64 on both seeds and candidate-second results 27/64 and 30/64. Policy sampling therefore remains substantially role-dependent. These tests keep the board/opening fixed; changing RNG seeds varies stochastic choices, not independent map layouts or human strategies.
+
+The candidate's evaluated recruitment remains predominantly Riders, with occasional Warriors and Scouts. No Archers were recruited in this sample. That is not yet the requested robust set of viable learned strategies; reference strategies using other units remain competitive. Continue the current league for a longer measured interval before stacking another training change. Keep these 1,152 evaluation matches as a fixed comparison receipt, repeat with a later frozen candidate, and reject promotion until both-role and human tests improve. The changing-pool training Elo remains telemetry, without an absolute strength interpretation or a reliable plateau guarantee.
+
 ## Export and local testing
 
 `checkpoint-contract.json` records the rules/opening and the last checkpoint step before a transition. A numbered checkpoint must be newer than that boundary before its export claims current compatibility. An explicitly selected frozen candidate must also match its provenance manifest and content hash. Reading a latest pair retries selection if training retention retires it during the read. A running arena under new rules cannot relabel old weights as a new-rule release.
