@@ -4,7 +4,8 @@ import { readFile } from "node:fs/promises";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import worker from "../access/worker.mjs";
 import { seal, SESSION_COOKIE } from "../access/tokens.mjs";
-import { WEB_MATCH_VERSION } from "./store.mjs";
+import { WEB_MATCH_VERSION, MultiplayerStore } from "./store.mjs";
+import { DatabaseSync } from "node:sqlite";
 
 const GAME = "https://blocknations.moneymattersmedia.com";
 const PREVIEW = "https://blocknations-web-preview.johannes-gaebler.workers.dev";
@@ -296,22 +297,38 @@ test("mutations require both the origin and explicit browser header and accept o
     assert.equal(response.status, status);
   }
 });
-test("the host can save the first turn before someone joins the waiting match", async () => {
-  const host = await person("Asynchronous Host"), guest = await person("Later Guest");
+test("a one-player lobby cannot initialize or advance until the second player joins", async () => {
+  const host = await person("Waiting Host"), guest = await person("Later Guest");
   const found = await find(host), id = found.match.id;
   const initial = await call(host, "matches/" + id + "/initialize", { json: JSON.stringify(opening(id)) });
-  assert.equal(initial.match.status, "waiting");
-  const saved = await submit(host, id, next(JSON.parse(initial.json)), 2);
-  assert.equal(saved.status, 200);
-  assert.equal(saved.seq, 3);
-  assert.equal(saved.match.status, "waiting");
+  assert.equal(initial.status, 409); assert.equal(initial.error, "LOBBY_NOT_FULL");
+  const saved = await submit(host, id, next(opening(id)), 2);
+  assert.equal(saved.status, 409); assert.equal(saved.error, "LOBBY_NOT_FULL");
+  const waiting = await call(host,"matches/"+id);
+  assert.equal(waiting.json,null); assert.equal(waiting.seq,2); assert.equal(waiting.match.ready,false);
+  assert.equal((await call(host,"lobby")).matches.find(match=>match.id===id).players.length,1);
   const joined = await find(guest);
-  assert.equal(joined.match.id, id);
-  assert.equal(joined.match.currentTurnSeatIndex, 1);
-  const restored = await call(guest, "matches/" + id);
-  assert.equal(restored.seq, 3);
-  assert.equal(JSON.parse(restored.json).seats[1].state, "Active");
-  assert.equal(JSON.parse(restored.json).seats[1].typedDisplayName, "Later Guest");
+  assert.equal(joined.match.id, id); assert.equal(joined.match.status,"active");
+  const initialized = await call(guest,"matches/"+id+"/initialize",{json:JSON.stringify(opening(id))});
+  assert.equal(initialized.status,200);
+  assert.equal(JSON.parse(initialized.json).seats[1].typedDisplayName,"Later Guest");
+  assert.equal((await submit(host,id,next(JSON.parse(initialized.json)),2)).status,200);
+});
+test("game opening links redirect to the lobby until full and enforce membership", async () => {
+  const host = await person("Link Host"), guest = await person("Link Guest"), outsider=await person("Link Outsider");
+  const found=await find(host), id=found.match.id;
+  async function open(actor,path){return worker.fetch(new Request(GAME+path,{headers:{Cookie:actor.cookie}}),env)}
+  for (const path of ["/?match="+id,"/index.html?match="+id]) {
+    const waiting=await open(host,path);
+    assert.equal(waiting.status,303);assert.equal(waiting.headers.get("Location"),"/multiplayer?lobby="+id);
+  }
+  await find(guest);
+  const full=await open(guest,"/?match="+id);
+  assert.equal(full.status,200);assert.equal(await full.text(),"synthetic game bytes");
+  const rejected=await open(outsider,"/?match="+id);
+  assert.equal(rejected.status,303);assert.equal(rejected.headers.get("Location"),"/multiplayer?lobby="+id);
+  const next=await find(host); await call(host,"matches/"+next.match.id+"/cancel",{});
+  assert.equal((await open(host,"/?match="+next.match.id)).status,303);
 });
 
 test("social review uses verified accounts and keeps emails out of game sessions", async () => {
@@ -326,4 +343,26 @@ test("social review uses verified accounts and keeps emails out of game sessions
   assert.equal((await call(null, "social-review", {playerId:target.id})).status,403);
   assert.equal((await call(a,"lobby")).player.email,a.user.email);
   assert.doesNotMatch(JSON.stringify((await call(a,"session")).player), /email|@example/);
+});
+
+test("a previously saved waiting game keeps its progress when the lobby fills", () => {
+  // Seed the pre-lobby release's saved state directly, without exposing a
+  // production endpoint or changing the persistent format to create it.
+  const database=new DatabaseSync(":memory:");
+  const sql={exec(query,...args){if(!args.length&&query.includes("CREATE TABLE")){database.exec(query);return {toArray:()=>[]}}const rows=database.prepare(query).all(...args);return {toArray:()=>rows}}};
+  const store=new MultiplayerStore({storage:{sql}},{});
+  const host={id:"a".repeat(32),name:"Legacy Host",email:"legacy-host@example.test"};
+  const guest={id:"b".repeat(32),name:"Legacy Guest",email:"legacy-guest@example.test"};
+  try {
+    const found=store.operate("find",{actor:host,data:{version:WEB_MATCH_VERSION}}),id=found.match.id;
+    const snapshot=next(opening(id));snapshot.seatGold[0]=7;
+    const raw=JSON.stringify(snapshot);
+    sql.exec("UPDATE matches SET snapshot=?,seq=3,revision=2,last_actor=?,last_base=2,last_payload=? WHERE id=?",raw,host.id,raw,id).toArray();
+    assert.throws(()=>store.operate("turn",{actor:host,data:{matchId:id,json:JSON.stringify(next(snapshot)),baseSeq:3}}),/LOBBY_NOT_FULL/);
+    const before=store.operate("match",{actor:host,data:{matchId:id}});assert.equal(before.seq,3);assert.equal(JSON.parse(before.json).seatGold[0],7);
+    const joined=store.operate("find",{actor:guest,data:{version:WEB_MATCH_VERSION}});assert.equal(joined.match.id,id);assert.equal(joined.match.currentTurnSeatIndex,1);
+    const restored=store.operate("match",{actor:guest,data:{matchId:id}});assert.equal(restored.seq,3);assert.equal(JSON.parse(restored.json).seatGold[0],7);
+    assert.equal(JSON.parse(restored.json).seats[1].typedDisplayName,"Legacy Guest");
+    assert.equal(store.operate("turn",{actor:guest,data:{matchId:id,json:JSON.stringify(next(JSON.parse(restored.json))),baseSeq:3}}).seq,4);
+  } finally {database.close()}
 });

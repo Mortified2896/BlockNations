@@ -230,6 +230,14 @@ async function handle(request, env) {
   if (url.pathname === "/multiplayer" && (!user || user.status !== "approved")) return user ? accountPage(user, true) : loginPage(true);
   if (!user || user.status !== "approved") return json({ error: "Approved tester access required." }, 403);
   if (url.pathname === "/multiplayer") return lobbyPage(user);
+  if (["/", "/index.html"].includes(url.pathname) && /^[a-f0-9]{32}$/.test(url.searchParams.get("match") ?? "")) {
+    const matchId = url.searchParams.get("match");
+    const response = await multiplayerAPI(new Request(env.GAME_ORIGIN + "/api/multiplayer/matches/" + matchId), env, user);
+    const result = await response.json();
+    if (!response.ok || !result.ok || result.match.status === "waiting" || (result.match.status !== "finished" && result.match.players.length < 2)) {
+      return redirect("/multiplayer?lobby=" + matchId);
+    }
+  }
   // No game HTML, loader, data, Wasm, metadata or alternate asset route is public.
   return env.ASSETS.fetch(request);
 }
