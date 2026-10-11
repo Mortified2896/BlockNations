@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 from mlagents_envs.base_env import ActionTuple, BaseEnv, DecisionSteps, TerminalSteps
 
-from training_contract import ACTIONS, OBSERVATIONS, RULES_VERSION
+from training_contract import ACTIONS, OBSERVATIONS, run_rules_version
 
 RECRUIT_OFFSET = 242
 CAPABILITY_OFFSET = 121 * 24
@@ -70,10 +70,11 @@ def load_recipe(run):
     run = Path(run)
     recipe = json.loads((run/'roster-augmentation.json').read_text())
     manifest = json.loads((run/'run.json').read_text())
+    rules = run_rules_version(run)
     if (manifest.get('owner') != 'BlockNations.LocalTraining.v1' or manifest.get('schema') != 2 or
             type(manifest.get('boardSize')) is not int or manifest['boardSize'] not in (5, 6, 7, 9, 11) or
             recipe.get('version') != 1 or type(recipe.get('version')) is not int or
-            recipe.get('rulesVersion') != RULES_VERSION or
+            recipe.get('rulesVersion') != rules or
             recipe.get('boardSize') != manifest.get('boardSize') or
             recipe.get('mode') != 'per-decision' or type(recipe.get('seed')) is not int or
             not 0 <= recipe['seed'] < 2**32):

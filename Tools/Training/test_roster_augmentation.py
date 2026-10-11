@@ -12,9 +12,10 @@ from mlagents_envs.base_env import ActionTuple, DecisionSteps, TerminalSteps
 from dotnet_environment import DotNetEnvironment, NAMES, SPEC
 from roster_augmentation import (CAPABILITY_CHANNELS, CAPABILITY_OFFSET, RECRUIT_OFFSET,
     RosterAugmentedEnvironment, load_recipe, permute_inputs, restore_actions)
-from training_contract import ACTIONS, OBSERVATIONS, RULES_VERSION
+from training_contract import ACTIONS, OBSERVATIONS, RULES_VERSION, SUPPORTED_RULES, CORE_THREE_RULES
 
 WORKER = Path(os.environ.get('BLOCKNATIONS_TEST_WORKER', 'missing-worker'))
+PROFILE_WORKER = Path(os.environ.get('BLOCKNATIONS_TEST_PROFILE_WORKER', 'missing-profile-worker'))
 
 
 class FakeEnvironment:
@@ -155,6 +156,49 @@ class RosterAugmentationTests(unittest.TestCase):
             (run/'roster-augmentation.json').write_text(json.dumps(recipe))
             (run/'trainer.yaml').write_text(json.dumps({'behaviors': {'BlockNationsSeatV2': {'network_settings': {'memory': {'memory_size': 64}}}}}))
             with self.assertRaises(ValueError): load_recipe(run)
+
+    def test_recipe_requires_the_runs_explicit_rules_profile(self):
+        with tempfile.TemporaryDirectory() as directory:
+            run = Path(directory)
+            (run/'trainer.yaml').write_text(json.dumps({'behaviors': {'BlockNationsSeatV2': {'network_settings': {}}}}))
+            for rules in SUPPORTED_RULES:
+                (run/'run.json').write_text(json.dumps(dict(owner='BlockNations.LocalTraining.v1', schema=2,
+                                                          boardSize=7, rulesVersion=rules)))
+                recipe = dict(version=1, rulesVersion=rules, boardSize=7, mode='per-decision', seed=42)
+                (run/'roster-augmentation.json').write_text(json.dumps(recipe))
+                self.assertEqual(load_recipe(run), recipe)
+                other = next(value for value in SUPPORTED_RULES if value != rules)
+                (run/'roster-augmentation.json').write_text(json.dumps(dict(recipe, rulesVersion=other)))
+                with self.assertRaises(ValueError): load_recipe(run)
+
+    @unittest.skipUnless(PROFILE_WORKER.is_file(), 'Set BLOCKNATIONS_TEST_PROFILE_WORKER for the C# core-three test.')
+    def test_core_three_preserves_disabled_scout_mask_and_restores_enabled_recruits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            environment = RosterAugmentedEnvironment(DotNetEnvironment(PROFILE_WORKER, directory, 1, 42, 7, False,
+                2, uuid.uuid4().hex, opening_economy_version=2, first_seat=0, rules_version=CORE_THREE_RULES), 123)
+            try:
+                for original_slot in range(4):
+                    environment.reset()
+                    decisions, _ = environment.get_steps(NAMES[0])
+                    source = next(action for action in np.flatnonzero(~decisions.action_mask[0][0]) if action != 258)
+                    environment.set_actions(NAMES[0], ActionTuple(discrete=np.array([[source]], dtype=np.int32)))
+                    environment.step()
+                    decisions, _ = environment.get_steps(NAMES[0])
+                    actual, _ = environment.inner.get_steps(NAMES[0])
+                    original = actual.obs[0][0, CAPABILITY_OFFSET:CAPABILITY_OFFSET+4*CAPABILITY_CHANNELS].reshape(4, CAPABILITY_CHANNELS)
+                    presented = decisions.obs[0][0, CAPABILITY_OFFSET:CAPABILITY_OFFSET+4*CAPABILITY_CHANNELS].reshape(4, CAPABILITY_CHANNELS)
+                    slot = next(i for i, block in enumerate(presented) if np.array_equal(block, original[original_slot]))
+                    if environment.roster[original_slot] == 'scout':
+                        self.assertTrue(decisions.action_mask[0][0, RECRUIT_OFFSET+slot])
+                        continue
+                    self.assertFalse(decisions.action_mask[0][0, RECRUIT_OFFSET+slot])
+                    environment.set_action_for_agent(NAMES[0], int(decisions.agent_id[0]),
+                        ActionTuple(discrete=np.array([[RECRUIT_OFFSET+slot]], dtype=np.int32)))
+                    environment.step()
+                    self.assertIn('recruits '+environment.roster[original_slot], environment.stats[0]['lastAction'])
+                    self.assertEqual(environment.stats[0]['rejections'], 0)
+            finally:
+                environment.close()
 
     @unittest.skipUnless(WORKER.is_file(), 'Set BLOCKNATIONS_TEST_WORKER for the actual C# boundary test.')
     def test_actual_worker_recruits_the_presented_capability_from_every_original_slot(self):

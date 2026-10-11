@@ -18,7 +18,8 @@ from dotnet_environment import DotNetEnvironment, SPEC, NAMES
 from evaluate_milestone import freeze
 from evaluate_suite import digest, frozen_actor, prepare, run as evaluate, worker_digest
 from match_rating import policy_id
-from rule_profile_study import arm_files, profile_suite
+from rule_profile_study import arm_files, profile_suite, study
+from roster_augmentation import load_recipe as load_augmentation
 from supervisor import rules_options
 from training_contract import (RULES_VERSION, CORE_THREE_RULES, ARCHER_VISION_RULES,
                                SUPPORTED_RULES, transfer_contract, validate_transfer)
@@ -63,6 +64,56 @@ class RuleTransferTests(unittest.TestCase):
 
     def target(self):
         return arm_files(self.root, 'new-core3', self.manifest, self.parent, CORE_THREE_RULES, self.worker, 4096, 42)
+
+    def test_augmented_profile_preserves_parent_and_records_transform_in_frozen_provenance(self):
+        before = self.checkpoint.read_bytes()
+        run, environment, provenance = arm_files(self.root, 'augmented-core3', self.manifest, self.parent,
+            CORE_THREE_RULES, self.worker, 4096, 42, roster_augmentation=True)
+        transform = load_augmentation(run)
+        self.assertEqual(transform['rulesVersion'], CORE_THREE_RULES)
+        self.assertEqual(transform['mode'], 'per-decision')
+        self.assertEqual(provenance['publicRosterTransform'], transform)
+        self.assertEqual(environment['BLOCKNATIONS_RULES_VERSION'], CORE_THREE_RULES)
+        self.assertEqual(self.checkpoint.read_bytes(), before)
+        self.assertEqual((run/'checkpoints'/run.name/'BlockNationsSeatV2/checkpoint.pt').read_bytes(), before)
+        saved = run/'checkpoints'/run.name/'BlockNationsSeatV2'
+        source = saved/'BlockNationsSeatV2-200.pt'
+        source.write_bytes(before); source.with_suffix('.onnx').write_bytes(b'fixture')
+        manifest = freeze(run, source, 200, (run/'trainer.yaml').read_bytes(), 'recipe')
+        frozen = json.loads(manifest.read_text())
+        self.assertEqual(frozen['weightTransfer']['publicRosterTransform'], transform)
+
+    def test_invalid_experiment_choices_fail_before_creating_any_run(self):
+        destination = self.root/'uncreated-study'
+        for profiles in ([], [CORE_THREE_RULES, CORE_THREE_RULES], ['unknown'], CORE_THREE_RULES, [{}]):
+            with self.assertRaises(ValueError):
+                study(self.root, self.manifest, self.parent, self.suite, self.worker,
+                      destination, 'trial', 4096, 42, 1, 20, profiles=profiles)
+        with self.assertRaises(ValueError):
+            arm_files(self.root, 'invalid-flag', self.manifest, self.parent, CORE_THREE_RULES,
+                      self.worker, 4096, 42, roster_augmentation=1)
+        self.assertFalse(destination.exists())
+        self.assertFalse((self.root/'runs/invalid-flag').exists())
+
+    def test_new_profile_parent_and_recipe_can_transfer_back_without_stale_reference_permission(self):
+        folder = self.parent/'frozen-evaluations/core-parent'; folder.mkdir()
+        checkpoint = folder/self.checkpoint.name; checkpoint.write_bytes(self.checkpoint.read_bytes())
+        config = folder/'trainer.yaml'; config.write_bytes(self.config.read_bytes())
+        source = json.loads(self.manifest.read_text())
+        source.update(checkpoint=str(checkpoint), trainerConfig=str(config), rulesVersion=CORE_THREE_RULES)
+        manifest = folder/'manifest.json'; manifest.write_text(json.dumps(source))
+        metadata = json.loads((self.parent/'run.json').read_text()); metadata['rulesVersion'] = CORE_THREE_RULES
+        (self.parent/'run.json').write_text(json.dumps(metadata))
+        recipe = json.loads((self.parent/'training-opponents.json').read_text()); recipe['rulesVersion'] = CORE_THREE_RULES
+        recipe['opponents'][1]['transferRules'] = transfer_contract(RULES_VERSION, CORE_THREE_RULES)
+        (self.parent/'training-opponents.json').write_text(json.dumps(recipe))
+        before = manifest.read_bytes()
+        run, _, provenance = arm_files(self.root, 'from-core3', manifest, self.parent,
+            RULES_VERSION, self.worker, 4096, 42)
+        self.assertEqual(provenance['trainedRulesVersion'], CORE_THREE_RULES)
+        self.assertEqual(provenance['targetRulesVersion'], RULES_VERSION)
+        self.assertEqual(manifest.read_bytes(), before)
+        self.assertNotIn('transferRules', load_recipe(run)['opponents'][1])
 
     def test_shape_or_slot_reassignment_cannot_claim_compatible_transfer(self):
         record = transfer_contract(RULES_VERSION, CORE_THREE_RULES)
