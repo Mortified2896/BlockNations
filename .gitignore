@@ -32,6 +32,7 @@ UserSettings/D
 !Tools/Simulation/Simulation.Benchmark.csproj
 !Tools/PolicyProbes/BlockNations.PolicyProbes.csproj
 !Tools/AdvancedMode/BlockNations.AdvancedMode.Tests.csproj
+!Tools/ObservationContract/BlockNations.ObservationContract.csproj
 /Tools/AdvancedMode/bin/
 /Tools/AdvancedMode/obj/
 *.sln
@@ -83,6 +84,9 @@ Tools/WebRelease/__pycache__/
 Tools/PolicyProbes/__pycache__/
 Tools/PolicyProbes/bin/
 Tools/PolicyProbes/obj/
+Tools/ObservationContract/bin/
+Tools/ObservationContract/obj/
+Tools/ObservationContract/__pycache__/
 Web/.wrangler/
 Web/.dev.vars*
 Web/.env*

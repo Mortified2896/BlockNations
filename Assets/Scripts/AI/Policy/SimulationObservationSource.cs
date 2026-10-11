@@ -11,6 +11,9 @@ namespace BlockNations.AI
         public sealed class Context
         {
             public AIObservation Observation;
+            // Public match metadata for opt-in model contracts. Never infer the
+            // starting role from turn-side, viewer or unit-ownership booleans.
+            public int PublicFirstSeat = -1;
             public readonly Dictionary<string, MatchCommand> Commands = new Dictionary<string, MatchCommand>(StringComparer.Ordinal);
             public int[] UnitIds, CityIds;
         }
@@ -53,7 +56,7 @@ namespace BlockNations.AI
                 return order != 0 ? order : string.CompareOrdinal(a.Definition.TypeId, b.Definition.TypeId);
             });
             var unitIndices = new Dictionary<int, int>();
-            var context = new Context { Observation = observation, UnitIds = new int[units.Count] };
+            var context = new Context { Observation = observation, PublicFirstSeat = state.FirstSeat, UnitIds = new int[units.Count] };
             observation.Units = new AIUnitState[units.Count];
             for (int i = 0; i < units.Count; i++)
             {
