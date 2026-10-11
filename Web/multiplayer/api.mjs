@@ -53,7 +53,7 @@ export async function multiplayerAPI(request, env, user) {
     }
     data = await readJSON(request);
     if (!data) return Response.json({ ok: false, error: "INVALID_REQUEST" }, { status: 400 });
-    if (["find", "friend-request", "friend-answer", "invite", "invite-answer", "push-subscribe", "push-unsubscribe", "push-test"].includes(suffix)) operation = suffix;
+    if (["social-review", "find", "friend-request", "friend-answer", "invite", "invite-answer", "push-subscribe", "push-unsubscribe", "push-test"].includes(suffix)) operation = suffix;
     const match = /^matches\/([a-f0-9]{32})\/(initialize|turn|cancel)$/.exec(suffix);
     if (match) { operation = match[2]; data.matchId = match[1]; }
   }

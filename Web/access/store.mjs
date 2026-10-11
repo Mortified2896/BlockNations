@@ -144,8 +144,7 @@ export class AccessStore {
     if (operation === "/player-search") {
       const query = typeof input.query === "string" ? input.query.trim().toLowerCase() : "";
       if (query.length < 3 || query.length > 254) return Response.json([]);
-      // Email lookup is exact. Never return an address to another player; these
-      // rows are consumed only over a private Worker binding.
+      // Full emails match exactly. Verified addresses identify social recipients.
       const approved = "status NOT IN ('rejected','disabled') AND (status='approved' OR review_status='approved')";
       if (query.includes("@")) {
         return Response.json(this.sql.exec(`SELECT auth_user_id,display_name,email FROM game_testers
@@ -153,9 +152,9 @@ export class AccessStore {
       }
       // SQLite lower() folds ASCII only. The small internal tester directory
       // needs Unicode folding for Google names such as Özlem and Zoë.
-      const names = this.sql.exec(`SELECT auth_user_id,display_name FROM game_testers
+      const names = this.sql.exec(`SELECT auth_user_id,display_name,email FROM game_testers
         WHERE ${approved} ORDER BY display_name,auth_user_id`).toArray();
-      const matches = names.filter(player => player.display_name.toLowerCase().includes(query)).slice(0, 8);
+      const matches = names.filter(player => player.display_name.toLowerCase().includes(query) || player.email.toLowerCase().split("@")[0].includes(query)).slice(0, 8);
       return Response.json(matches.map(player => {
         const { auth_user_id, display_name, email } = this.tester(player.auth_user_id);
         return { auth_user_id, display_name, email };

@@ -77,8 +77,8 @@ function responseCookie(response, name) {
   return response.headers.getSetCookie().find(value => value.startsWith(name + "=")).split(";")[0];
 }
 
-async function beginSignIn(person, environment = env) {
-  const start = await request("/auth/login", { origin: environment.GAME_ORIGIN, environment });
+async function beginSignIn(person, environment = env, next = "") {
+  const start = await request("/auth/login" + (next ? "?next=" + encodeURIComponent(next) : ""), { origin: environment.GAME_ORIGIN, environment });
   assert.equal(start.status, 303);
   const attemptCookie = responseCookie(start, ATTEMPT_COOKIE);
   const authorization = await worker.fetch(new Request(start.headers.get("Location"), { headers: { Cookie: "__Secure-better-auth.session_token=" + person.sid } }), env);
@@ -449,7 +449,28 @@ test("the private approved directory folds Unicode Google names and keeps email 
   assert.equal(found[0].display_name, "Özlem 王");
   assert.deepEqual(Object.keys(found[0]).sort(), ["auth_user_id", "display_name", "email"]);
   assert.equal((await storeCall(env, "player-search", { query: "UNICODEDIRECTORY@EXAMPLE.TEST" })).length, 1);
+  assert.equal((await storeCall(env, "player-search", { query: "unicodedir" })).length, 1);
   assert.equal((await storeCall(env, "player-search", { query: "@example.test" })).length, 0);
   await storeCall(env, "decide", { uid: person.uid, status: "disabled", actor: "synthetic-admin" });
   assert.equal((await storeCall(env, "player-search", { query: "özlem" })).length, 0);
+});
+
+test("shared multiplayer link retains its destination through login without open redirects", async () => {
+  const before = assetsRead;
+  const landing = await request("/multiplayer");
+  assert.equal(landing.status,200);
+  assert.match(await landing.text(), /auth\/login\?next=multiplayer/);
+  assert.equal(assetsRead,before);
+  const person = await identity("shared-link", "approved");
+  for (const [next,destination] of [["multiplayer","/multiplayer"],["https://evil.test/","/"]]) {
+    const login = await beginSignIn(person, env, next);
+    const result = await request("/auth/callback?code=" + login.token, {session:login.attemptCookie});
+    assert.equal(result.status,303);
+    assert.equal(result.headers.get("Location"),destination);
+  }
+  const pending = await identity("shared-link-pending");
+  const login = await beginSignIn(pending,env,"multiplayer");
+  const result = await request("/auth/callback?code=" + login.token,{session:login.attemptCookie});
+  assert.equal(result.headers.get("Location"),"/access?next=multiplayer");
+  assert.match(await (await request("/access?next=multiplayer",{session:responseCookie(result,SESSION_COOKIE)})).text(), /access\?next=multiplayer/);
 });

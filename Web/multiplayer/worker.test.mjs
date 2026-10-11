@@ -31,7 +31,7 @@ before(async () => {
         assert.equal(path, "/player-search");
         const query = data.query.toLowerCase();
         return Response.json([...identities.values()].filter(user => user.status === "approved" &&
-          (query.includes("@") ? user.email.toLowerCase() === query : user.display_name.toLowerCase().includes(query))).slice(0, 8));
+          (query.includes("@") ? user.email.toLowerCase() === query : user.display_name.toLowerCase().includes(query) || user.email.toLowerCase().split("@")[0].includes(query))).slice(0, 8));
       } }),
     },
   };
@@ -205,11 +205,13 @@ test("a waiting match can be cancelled and another find creates a fresh match", 
   const second = await find(actor); assert.notEqual(first.match.id, second.match.id);
   await call(actor, "matches/" + second.match.id + "/cancel", {});
 });
-test("player search matches literal names or exact emails, hides addresses and excludes unapproved users", async () => {
+test("player search identifies approved recipients with verified emails", async () => {
   const actor = await person("Searcher"), target = await person("Directory 王 Alice"), disabled = await person("Directory Hidden", "disabled");
   const names = await call(actor, "search?q=" + encodeURIComponent("Directory"));
   assert.equal(names.players.length, 1); assert.equal(names.players[0].name, target.user.display_name);
-  assert.doesNotMatch(JSON.stringify(names), /@example|auth_user_id/);
+  assert.equal(names.players[0].email, target.user.email);
+  assert.doesNotMatch(JSON.stringify(names), /auth_user_id/);
+  assert.equal((await call(actor, "search?q=" + target.user.email.slice(0,8))).players[0].email, target.user.email);
   assert.equal((await call(actor, "search?q=" + encodeURIComponent(target.user.email))).players.length, 1);
   assert.equal((await call(actor, "search?q=" + encodeURIComponent("@example.test"))).players.length, 0);
   assert.equal((await call(actor, "search?q=Di")).status, 400);
@@ -275,7 +277,7 @@ test("the install and push shell is public but game assets and multiplayer data 
     assert.equal(response.status, 200, path);
     if (path === "/sw.js") assert.equal(response.headers.get("Service-Worker-Allowed"), "/");
   }
-  for (const path of ["/Build/game.wasm.unityweb", "/release.json", "/api/multiplayer/lobby", "/multiplayer"]) {
+  for (const path of ["/Build/game.wasm.unityweb", "/release.json", "/api/multiplayer/lobby"]) {
     const response = await worker.fetch(new Request(GAME + path), env);
     assert.equal(response.status, 403, path);
     assert.equal(response.headers.get("Cache-Control"), "private, no-store");
@@ -310,4 +312,18 @@ test("the host can save the first turn before someone joins the waiting match", 
   assert.equal(restored.seq, 3);
   assert.equal(JSON.parse(restored.json).seats[1].state, "Active");
   assert.equal(JSON.parse(restored.json).seats[1].typedDisplayName, "Later Guest");
+});
+
+test("social review uses verified accounts and keeps emails out of game sessions", async () => {
+  const a = await person("Same Google Name"), b = await person("Same Google Name");
+  const target = (await call(b, "session")).player;
+  const review = await call(a, "social-review", { playerId: target.id, sender: {email:"forged@example.test"} });
+  assert.equal(review.sender.email, a.user.email);
+  assert.equal(review.recipient.email, b.user.email);
+  assert.notEqual(review.sender.id, review.recipient.id);
+  assert.equal((await call(a, "social-review", {playerId: review.sender.id})).status,404);
+  assert.equal((await call(a, "social-review", {playerId: "a".repeat(32)})).status,404);
+  assert.equal((await call(null, "social-review", {playerId:target.id})).status,403);
+  assert.equal((await call(a,"lobby")).player.email,a.user.email);
+  assert.doesNotMatch(JSON.stringify((await call(a,"session")).player), /email|@example/);
 });

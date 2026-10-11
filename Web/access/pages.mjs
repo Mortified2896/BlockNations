@@ -21,21 +21,21 @@ ${style}`;
   });
 }
 
-export function loginPage() {
+export function loginPage(multiplayer = false) {
   return page("Welcome, tester", `<p>This playtest is for friends and invited testers. Sign in with Google to continue.</p>
-<a class="button" href="/auth/login">Continue with Google</a>
+<a class="button" href="/auth/login${multiplayer ? "?next=multiplayer" : ""}">Continue with Google</a>
 <form method="post" action="/auth/switch-account"><button class="secondary">Use a different Google account</button></form>
 <p class="note">Already approved on the Review website? Your approval works here too. New accounts wait for approval before they can play.</p>`);
 }
 
-export function accountPage(user) {
+export function accountPage(user, multiplayer = false) {
   const signedIn = `<p class="note">Signed in as ${escape(user.email)}</p>`;
   const accountActions = `<form method="post" action="/auth/switch-account"><button class="secondary">Switch Google account</button></form><form method="post" action="/auth/logout"><button class="secondary">Sign out of Block Nations</button></form>`;
   if (user.status === "approved") {
-    return page("You're ready to play", `<p>Welcome, ${escape(user.display_name)}. Your tester account is approved.</p><a class="button" href="/">Play Block Nations</a>${user.can_administer ? '<a class="button secondary" href="/admin/testers">Manage playtest access</a><a class="button secondary" href="/admin/feedback">Player feedback</a>' : ""}${signedIn}${accountActions}`);
+    return page("You're ready to play", `<p>Welcome, ${escape(user.display_name)}. Your tester account is approved.</p><a class="button" href="${multiplayer ? "/multiplayer" : "/"}">Play Block Nations</a>${user.can_administer ? '<a class="button secondary" href="/admin/testers">Manage playtest access</a><a class="button secondary" href="/admin/feedback">Player feedback</a>' : ""}${signedIn}${accountActions}`);
   }
   if (user.status === "pending") {
-    return page("Waiting for approval", `<p>Your request has been saved. Jo needs to approve your account before you can play.</p><p>You can come back to this page to check. You won't need to register again.</p><a class="button" href="/access">Check approval</a>${signedIn}${accountActions}`);
+    return page("Waiting for approval", `<p>Your request has been saved. Jo needs to approve your account before you can play.</p><p>You can come back to this page to check. You won't need to register again.</p><a class="button" href="/access${multiplayer ? "?next=multiplayer" : ""}">Check approval</a>${signedIn}${accountActions}`);
   }
   return page("Access unavailable", `<p>This account doesn't currently have access to the playtest. Contact Jo if you think this is a mistake.</p>${signedIn}${accountActions}`, { status: 403 });
 }
