@@ -119,7 +119,7 @@ def run(candidate_manifest, suite_path, worker, destination, root):
         raise ValueError('Candidate changed while preparing the ablation.')
     for case, canonical in zip(suite['cases'], definition['cases']):
         if case.get('reference', {}).get('kind') == 'frozen':
-            reference = read_json(case['reference']['manifest'])
+            reference = read_json(Path(case['reference']['manifest']))
             for path in (reference['checkpoint'], reference['trainerConfig']):
                 pinned[str(Path(path).absolute())] = digest(path)
             if (pinned[str(Path(reference['checkpoint']).absolute())] != canonical['reference']['sha256'] or

@@ -135,6 +135,19 @@ class AblationReceiptTests(unittest.TestCase):
                 prepare.assert_not_called()
             self.assertFalse(self.destination.exists())
 
+    def test_frozen_reference_uses_string_manifest_path_and_pins_its_files(self):
+        manifest = json.loads(self.manifest.read_text())
+        self.definition['cases'][0].update(allowedRecruits=['archer'], reference=dict(kind='frozen',
+            manifest=str(self.manifest), checkpointSha256=manifest['sha256'],
+            configSha256=probing.digest(manifest['trainerConfig'])))
+        self.save()
+        with patch.object(probing, 'evaluate', return_value=dict(games=16, wins=8, losses=8, interruptions=0, records=[])):
+            result = self.run_probe()
+        self.assertEqual(result['state'], 'completed')
+        self.assertEqual(result['cases'][0]['reference']['sha256'], manifest['sha256'])
+        for path in (self.manifest, Path(manifest['checkpoint']), Path(manifest['trainerConfig'])):
+            self.assertEqual(result['pinnedSources'][str(path)], probing.digest(path))
+
     def test_failure_is_recorded_and_previous_receipt_cannot_be_overwritten(self):
         with patch.object(probing, 'evaluate', side_effect=RuntimeError('fixture failure')):
             with self.assertRaisesRegex(RuntimeError, 'fixture failure'): self.run_probe()
