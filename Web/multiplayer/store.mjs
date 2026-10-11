@@ -51,6 +51,7 @@ export class MultiplayerStore {
 
   one(query, ...args) { return this.sql.exec(query, ...args).toArray()[0] ?? null; }
   all(query, ...args) { return this.sql.exec(query, ...args).toArray(); }
+  socialPlayer(id) { return this.one("SELECT id,name,email FROM players WHERE id=?", id); }
   player(id) { return this.one("SELECT id,name FROM players WHERE id=?", id); }
   remember(player) {
     require(ID.test(player?.id ?? "") && typeof player.name === "string" && typeof player.email === "string", "INVALID_IDENTITY");
@@ -194,18 +195,23 @@ export class MultiplayerStore {
       return { saved: true };
     }
     if (operation === "search") {
-      return { players: (input.directory ?? []).filter(player => player.id !== actor).slice(0, 8).map(player => this.player(player.id)) };
+      return { players: (input.directory ?? []).filter(player => player.id !== actor).slice(0, 8).map(player => this.socialPlayer(player.id)) };
+    }
+    if (operation === "social-review") {
+      const recipient = this.socialPlayer(data.playerId);
+      require(ID.test(data.playerId ?? "") && data.playerId !== actor && recipient, "PLAYER_NOT_FOUND", 404);
+      return { sender: this.socialPlayer(actor), recipient };
     }
     if (operation === "lobby") {
       const matches = this.all(`SELECT m.* FROM matches m JOIN seats s ON s.match_id=m.id
         WHERE s.player_id=? AND m.status<>'cancelled' ORDER BY m.updated DESC LIMIT 100`, actor).map(match => this.summary(match, actor));
       const links = this.all("SELECT * FROM friendships WHERE (a=? OR b=?) AND status IN ('pending','accepted') ORDER BY updated DESC LIMIT 100", actor, actor);
       const friendships = links.map(link => ({ id: link.id, status: link.status,
-        incoming: link.requester !== actor, player: this.player(link.a === actor ? link.b : link.a) }));
+        incoming: link.requester !== actor, player: this.socialPlayer(link.a === actor ? link.b : link.a) }));
       const invites = this.all("SELECT * FROM invitations WHERE (sender=? OR recipient=?) AND status IN ('pending','accepted') ORDER BY created DESC LIMIT 100", actor, actor)
         .map(invite => ({ id: invite.id, status: invite.status, incoming: invite.recipient === actor,
-          player: this.player(invite.recipient === actor ? invite.sender : invite.recipient), matchId: invite.match_id }));
-      return { player: this.player(actor), matches, friendships, invites, version: WEB_MATCH_VERSION };
+          player: this.socialPlayer(invite.recipient === actor ? invite.sender : invite.recipient), matchId: invite.match_id }));
+      return { player: this.socialPlayer(actor), matches, friendships, invites, version: WEB_MATCH_VERSION };
     }
     if (operation === "find") {
       require(data.version === WEB_MATCH_VERSION, "UPDATE_REQUIRED", 409);

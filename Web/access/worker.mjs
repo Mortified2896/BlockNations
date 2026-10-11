@@ -70,10 +70,10 @@ function withReviewCookies(response, sources) {
   return response;
 }
 
-async function beginLogin(env, chooseAccount = false) {
+async function beginLogin(env, chooseAccount = false, multiplayer = false) {
   const ticket = await seal(env.SESSION_SECRET, {
     kind: "attempt", aud: REVIEW_ORIGIN, game: env.GAME_ORIGIN,
-    nonce: randomToken(), chooseAccount, exp: Date.now() + ATTEMPT_LIFETIME,
+    nonce: randomToken(), chooseAccount, multiplayer, exp: Date.now() + ATTEMPT_LIFETIME,
   });
   const response = redirect(REVIEW_ORIGIN + authPath(env) + "?ticket=" + encodeURIComponent(ticket));
   response.headers.append("Set-Cookie", setCookie(ATTEMPT_COOKIE, ticket, ATTEMPT_LIFETIME / 1000));
@@ -154,7 +154,7 @@ async function callback(request, env) {
   const session = await seal(env.SESSION_SECRET, {
     kind: "session", aud: env.GAME_ORIGIN, uid: handoff.uid, sid: handoff.sid, exp: handoff.sessionExp,
   });
-  const response = redirect(user.status === "approved" ? "/" : "/access");
+  const response = redirect(user.status === "approved" ? (attempt.multiplayer === true ? "/multiplayer" : "/") : (attempt.multiplayer === true ? "/access?next=multiplayer" : "/access"));
   response.headers.append("Set-Cookie", setCookie(ATTEMPT_COOKIE, "", 0));
   response.headers.append("Set-Cookie", setCookie(SESSION_COOKIE, session, (handoff.sessionExp - Date.now()) / 1000));
   return response;
@@ -221,12 +221,13 @@ async function handle(request, env) {
   }
   if (!["GET", "HEAD"].includes(request.method)) return json({ error: "Method not allowed." }, 405);
   if (url.pathname === "/auth/login") {
-    return beginLogin(env);
+    return beginLogin(env, false, url.searchParams.get("next") === "multiplayer");
   }
   const user = await gameProfile(request, env);
   if (url.pathname === "/access" || ((!user || user.status !== "approved") && ["/", "/index.html"].includes(url.pathname))) {
-    return user ? accountPage(user) : loginPage();
+    return user ? accountPage(user, url.searchParams.get("next") === "multiplayer") : loginPage(url.searchParams.get("next") === "multiplayer");
   }
+  if (url.pathname === "/multiplayer" && (!user || user.status !== "approved")) return user ? accountPage(user, true) : loginPage(true);
   if (!user || user.status !== "approved") return json({ error: "Approved tester access required." }, 403);
   if (url.pathname === "/multiplayer") return lobbyPage(user);
   // No game HTML, loader, data, Wasm, metadata or alternate asset route is public.
