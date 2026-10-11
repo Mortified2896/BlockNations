@@ -5,12 +5,12 @@ The Cloudflare playtest at `https://blocknations.moneymattersmedia.com/multiplay
 ## Player flow
 
 1. Sign in with Google. The existing tester approval gate still applies; friends must sign in and receive approval before they can play or appear in search.
-2. Choose **Multiplayer** in the game menu or below the canvas.
-3. **Find online match** joins the oldest open public match, or creates one for the next person to join. Repeated finds reuse the same waiting match. Waiting matches remain joinable until cancelled.
+2. Choose **Multiplayer** in the game menu.
+3. **Find online match** joins the oldest open public match, or creates one for the next person to join. The lobby shows both player slots and stays on screen while waiting. Once both seats are filled, **Start game** opens the board; either member can start the shared opening. Repeated finds reuse the same waiting lobby, and leaving the page does not cancel it. Waiting lobbies remain joinable until cancelled.
 4. Play and end the turn. The accepted turn snapshot is stored online; either player can reopen the match from **Your matches** on another browser or device signed into the same Google account. Completed turns are the cloud save boundary. Actions within an unfinished turn are not synchronized across devices.
-5. Use **Add friend** beside a match opponent, or search for a registered player's name or exact email. The recipient accepts the friend request. **Invite to match** creates an in-game request; **Accept & play** opens a private two-person match with the sender in seat zero. No email is sent, and searches return names and opaque player IDs without revealing account email addresses.
+5. Use **Add friend** beside a match opponent, or search for a registered player's name or exact email. The recipient accepts the friend request. **Invite to match** creates an in-game request; **Accept invitation** reserves a private two-person match with the sender in seat zero and shows its full lobby before **Start game**. No email is sent; verified email addresses identify the accounts in social search and request review.
 
-The visible lobby refreshes every ten seconds. A waiting game can be cancelled before the second player joins. Requests can be declined or cancelled, and either person can remove a friendship. Resignation uses the existing game rules and is available on the resigning player's turn. Finished matches remain readable and do not resubmit their terminal state when reopened.
+The visible lobby refreshes every ten seconds. A waiting lobby can be cancelled before the second player joins. Unfilled lobbies cannot initialize the board or submit turns; opening links return to the lobby. Existing saved snapshots keep their format and progress when the second player joins. Lobby-full notifications lead to the lobby. Requests can be declined or cancelled, and either person can remove a friendship. Resignation uses the existing game rules and is available on the resigning player's turn. Finished matches remain readable and do not resubmit their terminal state when reopened.
 
 ## Separate identity and transport
 

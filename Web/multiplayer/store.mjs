@@ -226,7 +226,7 @@ export class MultiplayerStore {
         this.sql.exec("INSERT INTO seats VALUES(?,1,?)", waiting.id, actor);
         this.sql.exec("UPDATE matches SET status='active',revision=revision+1,updated=? WHERE id=?", Date.now(), waiting.id);
         const host = this.members(waiting.id).find(player => player.seat === 0);
-        this.notify(host.id, "joined:" + waiting.id, "Another player joined your online match.", "/?match=" + waiting.id, input.origin);
+        this.notify(host.id, "joined:" + waiting.id, "Your online lobby is full. Open the lobby to start playing.", "/multiplayer?lobby=" + waiting.id, input.origin);
         if (waiting.seq % 2 === 1) this.notify(actor, "turn:" + waiting.id + ":" + waiting.seq, "It's your turn in your new match.", "/?match=" + waiting.id, input.origin);
       }
       return { match: this.summary(this.match(match.id, actor), actor) };
@@ -248,7 +248,8 @@ export class MultiplayerStore {
     }
     if (operation === "initialize" || operation === "turn") {
       const match = this.match(data.matchId, actor);
-      require(["waiting", "active"].includes(match.status) || (operation === "turn" && match.status === "finished"), "MATCH_CLOSED", 409);
+      require(match.status !== "waiting" && (this.members(match.id).length === 2 || (operation === "turn" && match.status === "finished")), "LOBBY_NOT_FULL", 409);
+      require(match.status === "active" || (operation === "turn" && match.status === "finished"), "MATCH_CLOSED", 409);
       require(typeof data.json === "string" && new TextEncoder().encode(data.json).length <= 2000000, "INVALID_SNAPSHOT");
       let snapshot;
       try { snapshot = JSON.parse(data.json); } catch { throw new Fault("INVALID_SNAPSHOT"); }
