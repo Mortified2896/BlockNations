@@ -27,6 +27,10 @@ public sealed partial class AdvancedGameplayUITKView
     private void PublishBrowserState()
     {
 #if UNITY_WEBGL && !UNITY_EDITOR
+        Rect bounds = root.worldBound;
+        // The first panel geometry pass can follow LateUpdate. Keep browser
+        // diagnostics out of that frame, especially after a scene/size change.
+        if (refitBoard || !ValidRect(bounds) || Screen.width <= 0 || Screen.height <= 0) return;
         if (Time.unscaledTime - lastBrowserPublish < 0.2f) return;
         lastBrowserPublish = Time.unscaledTime;
         AdvancedMatch match = controller.Match; MatchState board = match.Board;
@@ -46,6 +50,7 @@ public sealed partial class AdvancedGameplayUITKView
         {
             controller.Manager.gridManager.TryGetTile(position % 7, position / 7, out TileVisibility tile);
             Vector3 screen = boardCamera.WorldToScreenPoint(tile.transform.position);
+            if (!Finite(screen.x) || !Finite(screen.y)) return;
             state.tiles.Add(new BrowserPoint { position = position, x = screen.x / Screen.width,
                 y = 1 - screen.y / Screen.height });
         }
@@ -56,7 +61,8 @@ public sealed partial class AdvancedGameplayUITKView
             for (VisualElement parent = button.parent; parent != null; parent = parent.parent)
                 if (parent.resolvedStyle.display == DisplayStyle.None || parent.resolvedStyle.visibility == Visibility.Hidden) shown = false;
             if (!shown) continue;
-            Rect rect = button.worldBound, bounds = root.worldBound;
+            Rect rect = button.worldBound;
+            if (!ValidRect(rect)) continue;
             state.controls.Add(new BrowserControl { name = button.name, enabled = button.enabledInHierarchy,
                 x = (rect.center.x - bounds.xMin) / bounds.width, y = (rect.center.y - bounds.yMin) / bounds.height,
                 width = rect.width / bounds.width, height = rect.height / bounds.height });
