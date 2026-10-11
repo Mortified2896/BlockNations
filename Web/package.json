@@ -7,6 +7,7 @@
     "preview": "wrangler dev --config wrangler.jsonc --local",
     "deploy:access": "wrangler deploy --config wrangler.access.jsonc",
     "deploy:multiplayer": "wrangler deploy --config wrangler.multiplayer.jsonc",
+    "deploy:advanced": "npm test && python3 ../Tools/WebRelease/audit.py ../Build/AdvancedWeb && wrangler deploy --config wrangler.advanced.jsonc",
     "deploy:preview": "npm test && python3 ../Tools/WebRelease/audit.py ../Build/WebRelease && wrangler deploy --config wrangler.jsonc",
     "deploy:production": "npm test && python3 ../Tools/WebRelease/audit.py ../Build/WebRelease && wrangler deploy --config wrangler.production.jsonc"
   },

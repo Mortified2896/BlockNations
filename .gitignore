@@ -31,6 +31,9 @@ UserSettings/D
 *.csproj
 !Tools/Simulation/Simulation.Benchmark.csproj
 !Tools/PolicyProbes/BlockNations.PolicyProbes.csproj
+!Tools/AdvancedMode/BlockNations.AdvancedMode.Tests.csproj
+/Tools/AdvancedMode/bin/
+/Tools/AdvancedMode/obj/
 *.sln
 *.slnx
 *.user
@@ -86,3 +89,7 @@ Web/.env*
 .wrangler/
 output/playwright/
 .playwright-cli/
+
+# Dedicated advanced mode build and validation output
+Tools/AdvancedMode/__pycache__/
+/Web/node_modules

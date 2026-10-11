@@ -1,0 +1,6 @@
+{
+  "name": "BlockNations.AdvancedMode",
+  "rootNamespace": "BlockNations.AdvancedMode",
+  "references": ["BlockNations.Simulation"],
+  "autoReferenced": true
+}

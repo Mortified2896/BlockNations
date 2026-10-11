@@ -1,0 +1,39 @@
+:root { flex-grow: 1; background-color: rgb(23, 37, 48); color: rgb(239, 242, 238); font-size: 15px; }
+#Page { flex-grow: 1; }
+.content { width: 100%; max-width: 700px; align-self: center; padding: 16px; }
+.heading { margin-bottom: 12px; }
+.eyebrow { font-size: 11px; color: rgb(176, 199, 162); -unity-font-style: bold; margin-top: 12px; margin-bottom: 6px; }
+.title { font-size: 29px; -unity-font-style: bold; }
+.subtitle { color: rgb(178, 193, 201); white-space: normal; }
+.settings, .turn-actions, .purchase-row { flex-direction: row; align-items: stretch; margin-top: 8px; margin-bottom: 8px; }
+.settings > DropdownField { flex-grow: 1; min-width: 0; }
+.turn { font-size: 20px; -unity-font-style: bold; margin-top: 10px; margin-bottom: 4px; white-space: normal; }
+.gold { color: rgb(242, 210, 134); margin-bottom: 12px; white-space: normal; }
+.board { width: 100%; height: 500px; border-width: 3px; border-color: rgb(115, 139, 110); background-color: rgb(39, 60, 44); }
+.board-row { flex-direction: row; flex-grow: 1; min-height: 0; }
+.tile { flex-grow: 1; flex-basis: 0; min-width: 0; min-height: 0; padding: 0; margin: 1px; border-radius: 3px; border-width: 1px; border-color: rgb(96, 132, 94); background-color: rgb(111, 146, 92); color: white; font-size: 10px; white-space: normal; -unity-font-style: bold; -unity-text-align: lower-center; -unity-background-scale-mode: scale-to-fit; }
+.tile.fog { background-color: rgb(44, 64, 59); border-color: rgb(59, 77, 70); }
+.tile.city { border-width: 3px; border-color: rgb(235, 205, 109); }
+.tile.friendly { background-color: rgb(48, 104, 156); }
+.tile.enemy { background-color: rgb(157, 67, 60); }
+.tile.selected { border-width: 3px; border-color: rgb(255, 218, 117); }
+.tile.legal { border-width: 3px; border-color: rgb(179, 243, 156); }
+.tile:disabled { opacity: 1; }
+Button { min-height: 44px; padding: 7px 9px; border-radius: 5px; border-width: 1px; border-color: rgb(85, 108, 121); background-color: rgb(47, 68, 82); color: white; margin: 0 3px; white-space: normal; }
+Button:hover { background-color: rgb(68, 91, 105); }
+Button:disabled { opacity: .5; }
+.primary { flex-grow: 1; background-color: rgb(110, 140, 84); -unity-font-style: bold; }
+.detail, .forecast, .status, .footnote { white-space: normal; margin: 5px 0; }
+.detail { color: rgb(207, 220, 225); }
+.forecast { font-size: 12px; color: rgb(218, 202, 159); }
+.status { padding: 10px; background-color: rgb(36, 53, 63); border-radius: 4px; }
+.economy { padding: 12px; border-width: 1px; border-color: rgb(65, 85, 96); border-radius: 6px; margin-top: 10px; }
+.purchase { flex-basis: 0; flex-grow: 1; min-width: 0; min-height: 68px; font-size: 12px; }
+.footnote { font-size: 11px; color: rgb(151, 173, 183); margin-top: 12px; }
+DropdownField { margin: 6px 0; min-height: 32px; }
+
+.settings { flex-direction: column; }
+.settings > DropdownField { width: 100%; }
+.settings > Button { align-self: flex-end; margin-top: 8px; }
+.unity-base-field__label { min-width: 0; width: 135px; flex-shrink: 1; }
+.unity-base-field__input { background-color: rgb(47, 68, 82); color: white; }

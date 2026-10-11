@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#172530"><title>Block Nations · Advanced 7×7</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:#172530;color:#eff2ee;font-family:system-ui,sans-serif}body{display:flex;flex-direction:column;height:100dvh;overflow:hidden}main{position:relative;flex:1;min-height:0}canvas{width:100%;height:100%;display:block;touch-action:none;outline:none}#loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;background:#172530;padding:24px;text-align:center}h1{font-size:32px;margin:0}p{line-height:1.6}progress{width:min(320px,80vw)}footer{display:flex;justify-content:space-between;padding:0 16px env(safe-area-inset-bottom);font-size:13px;background:#172530}footer a{color:#bdcbbf;display:flex;align-items:center;min-height:44px}footer span{align-self:center;color:#a8bcc2}
+</style></head><body>
+<main><canvas id="unity-canvas" tabindex="0" aria-label="Advanced 7 by 7 strategy game"></canvas><div id="loading"><h1>Advanced 7×7</h1><p id="status">Preparing your city and the scripted opponent…</p><progress id="progress" max="1" value="0"></progress></div></main>
+<footer><a href="/">Back to Block Nations</a><span>Experimental single player</span><a href="/access" target="_blank" rel="noopener">Account</a></footer>
+<script src="Build/{{{ LOADER_FILENAME }}}"></script><script>
+const canvas=document.getElementById('unity-canvas');
+createUnityInstance(canvas,{
+dataUrl:'Build/{{{ DATA_FILENAME }}}',frameworkUrl:'Build/{{{ FRAMEWORK_FILENAME }}}',codeUrl:'Build/{{{ CODE_FILENAME }}}',streamingAssetsUrl:'StreamingAssets',
+companyName:{{{ JSON.stringify(COMPANY_NAME) }}},productName:'Block Nations Advanced',productVersion:{{{ JSON.stringify(PRODUCT_VERSION) }}},
+devicePixelRatio:1,matchWebGLToCanvasSize:true,showBanner:(message,type)=>{if(type==='error')document.getElementById('status').textContent=message;else console.warn(message);}
+},progress=>document.getElementById('progress').value=progress).then(instance=>{window.advancedPlaytest=instance;document.getElementById('loading').style.display='none';canvas.focus();}).catch(error=>document.getElementById('status').textContent='Could not load the playtest: '+error);
+</script></body></html>

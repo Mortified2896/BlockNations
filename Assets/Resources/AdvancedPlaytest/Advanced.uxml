@@ -1,0 +1,20 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+  <ui:ScrollView name="Page" mode="Vertical">
+    <ui:VisualElement name="Content" class="content">
+      <ui:VisualElement class="heading"><ui:Label text="BLOCK NATIONS" class="eyebrow"/><ui:Label text="Advanced 7×7" class="title"/><ui:Label text="Population, provisions and the cost of war" class="subtitle"/></ui:VisualElement>
+      <ui:VisualElement class="settings"><ui:DropdownField name="Balance" label="Next match balance"/><ui:Button name="NewMatch" text="New match"/></ui:VisualElement>
+      <ui:Label name="Turn" class="turn"/><ui:Label name="Gold" class="gold"/>
+      <ui:VisualElement name="Board" class="board"/>
+      <ui:Label name="Selection" class="detail"/>
+      <ui:VisualElement class="turn-actions"><ui:Button name="EndTurn" text="End turn" class="primary"/><ui:Button name="Disband" text="Disband at home"/></ui:VisualElement>
+      <ui:Label name="Status" class="status"/>
+      <ui:VisualElement class="economy"><ui:Label text="YOUR CITY" class="eyebrow"/><ui:Label name="Population" class="detail"/><ui:Label name="Food" class="detail"/><ui:Label name="Growth" class="detail"/>
+        <ui:DropdownField name="RecruitSex" label="Recruit from"/><ui:Label name="RecruitForecast" class="forecast"/>
+        <ui:VisualElement name="RecruitActions" class="purchase-row"/>
+        <ui:Label text="CITY UPGRADES · one per turn" class="eyebrow"/><ui:VisualElement name="CityActions" class="purchase-row"/>
+        <ui:Label name="Report" class="detail"/>
+      </ui:VisualElement>
+      <ui:Label text="Experimental single player · Scripted opponent · Refresh starts a new match" class="footnote"/>
+    </ui:VisualElement>
+  </ui:ScrollView>
+</ui:UXML>

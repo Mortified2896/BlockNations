@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import worker from "./worker.mjs";
+import advancedWorker from "../advanced/worker.mjs";
 import { open, seal, fingerprint, SESSION_COOKIE, ATTEMPT_COOKIE } from "./tokens.mjs";
 import { storeCall } from "./store.mjs";
 
@@ -113,6 +114,25 @@ test("anonymous visitors see sign-in and cannot fetch any game payload", async (
   }
   assert.match(await (await request("/index.html")).text(), /Continue with Google/);
   assert.equal(assetsRead, before);
+});
+
+test("advanced route shares approval while its assets remain separately scoped", async () => {
+  const before = assetsRead;
+  const anonymous = await advancedWorker.fetch(new Request(GAME + "/advanced/"), env);
+  assert.equal(anonymous.status, 303); assert.equal(anonymous.headers.get("Location"), "/access");
+  for (const path of ["/advanced/Build/game.wasm.unityweb", "/advanced/release.json"])
+    assert.equal((await advancedWorker.fetch(new Request(GAME + path), env)).status, 403);
+  assert.equal(assetsRead, before);
+  assert.equal((await advancedWorker.fetch(new Request(GAME + "/other"), env)).status, 404);
+  assert.equal((await advancedWorker.fetch(new Request(GAME + "/advanced-extra"), env)).status, 404);
+  assert.equal((await advancedWorker.fetch(new Request(GAME + "/advanced"), env)).headers.get("Location"), "/advanced/");
+  const person = await identity("advanced-reviewer", "approved");
+  const session = await signIn(person);
+  for (const [path, asset] of [["/advanced/", "/index.html"], ["/advanced/release.json", "/release.json"], ["/advanced/Build/game.wasm.unityweb", "/Build/game.wasm.unityweb"]]) {
+    const response = await advancedWorker.fetch(new Request(GAME + path, { headers: { Cookie: session.cookie } }), env);
+    assert.equal(response.status, 200); assert.equal(response.headers.get("Cache-Control"), "private, no-store");
+    assert.equal(await response.text(), "game bytes:" + asset);
+  }
 });
 
 test("cold sign-in uses existing Google auth endpoint and registered Review callback", async () => {
