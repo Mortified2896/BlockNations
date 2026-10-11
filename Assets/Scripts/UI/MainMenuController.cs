@@ -1728,6 +1728,9 @@ public partial class MainMenuController : MonoBehaviour
 
     public string GetPlayByPostServerIndicatorText()
     {
+        // Local single-player menus must not initialize an unused transport
+        // merely to populate hidden multiplayer display metadata.
+        if (PublicWebBuild.IsSinglePlayer) return string.Empty;
         HttpTurnTransport httpTransport = cachedHttpTransport;
         if (httpTransport == null)
         {

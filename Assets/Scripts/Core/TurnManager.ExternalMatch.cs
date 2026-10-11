@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using UnityEngine;
 using Object = UnityEngine.Object;
 
@@ -12,6 +13,14 @@ public partial class TurnManager
     public int ExternalWinnerSeatIndex { get; private set; } = -1;
     internal int ExternalFirstSeatIndex { get; private set; }
     private Action externalHumanPlayAgain;
+
+    internal IEnumerator RunExternalLearnedTurn(int seat, AIRecruitVariant difficulty)
+    {
+        if (!externallyDrivenMatch || !ExternalMatchReady || seat == externalHumanSeatIndex ||
+            !IsTurnOwnedBySeat(seat) || !LearnedAIRuntime.IsLearned(difficulty))
+            throw new InvalidOperationException("Local learned inference requires the active external opponent seat.");
+        return learnedAIRuntime.RunTurn(this, seat, difficulty);
+    }
 
     public void ConfigureExternalHumanSeat(int seat, Action playAgain = null)
     {
@@ -33,6 +42,7 @@ public partial class TurnManager
         if (initialGold < 0 || secondPlayerGoldBonus < 0) throw new ArgumentOutOfRangeException(nameof(initialGold));
         StopAllCoroutines();
         hardAIRuntime.ResetKnowledge();
+        learnedAIRuntime.ResetKnowledge();
         foreach (Unit unit in Object.FindObjectsByType<Unit>())
         {
             if (unit.gameObject.scene != gameObject.scene) continue;

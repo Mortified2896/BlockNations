@@ -130,5 +130,15 @@ class PrivateBuildTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):build.write_receipt(receipt,dict(state='replacement'))
         self.assertEqual(json.loads(receipt.read_text())['sourceHash'],'original')
 
+    def test_flow_receipt_requires_all_four_tests_without_failures_or_skips(self):
+        p=self.base/'flow.xml'
+        for attributes in ['result="Failed" failed="1" passed="3"',
+                           'result="Passed" failed="0" passed="0"',
+                           'result="Passed" failed="0" passed="4" skipped="1"']:
+            p.write_text('<test-run '+attributes+'/>')
+            with self.assertRaises(RuntimeError):build.validate_flow_results(p)
+        p.write_text('<test-run result="Passed" failed="0" passed="4" skipped="0"/>')
+        self.assertEqual(build.validate_flow_results(p)['testsPassed'],4)
+
 
 if __name__=='__main__':unittest.main()

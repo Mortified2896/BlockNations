@@ -9,7 +9,9 @@ import os
 from pathlib import Path
 import plistlib
 import re
+import shutil
 import subprocess
+import xml.etree.ElementTree as ET
 
 SOURCE = Path(__file__).resolve().parents[2]
 MARKER = '.private-policy-playtest-snapshot'
@@ -119,13 +121,26 @@ def write_receipt(path, value):
         stream.write('\n')
 
 
+def validate_flow_results(path):
+    result = ET.parse(path).getroot()
+    if (result.get('result') != 'Passed' or result.get('failed') != '0' or
+            result.get('passed') != '4' or result.get('skipped', '0') != '0'):
+        raise RuntimeError('The four fresh private gameplay flow tests did not all pass.')
+    return dict(testsPassed=4, failed=0, skipped=0,
+                resultsSha256=hashlib.sha256(path.read_bytes()).hexdigest())
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--snapshot', type=Path, default=Path.home() / '.local/share/blocknations-private-policy/project')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--cpu-fixtures', type=Path)
     parser.add_argument('--prepare-only', action='store_true')
+    parser.add_argument('--validate-flow', action='store_true',
+                        help='Test the owned scene, all three local presets, role labels, rematches and menu return before building.')
     args = parser.parse_args()
+    if args.validate_flow and not args.cpu_fixtures:
+        parser.error('--validate-flow requires --cpu-fixtures to validate and compile Editor inference jobs before gameplay.')
     snapshot, output = args.snapshot.absolute(), args.output.absolute()
     validate_paths(snapshot, output)
     web = module(SOURCE / 'Tools/WebRelease/build.py', 'private_snapshot')
@@ -161,8 +176,34 @@ def main():
     environment['BLOCKNATIONS_PRIVATE_PLAYTEST_OUTPUT'] = str(output)
     if args.cpu_fixtures:
         environment['BLOCKNATIONS_POLICY_VALIDATION_DATA'] = str(args.cpu_fixtures.absolute())
-    subprocess.run(['/usr/bin/nice', '-n', '10', str(unity), '-batchmode', '-quit', '-job-worker-count', '2',
-                    '-projectPath', str(snapshot),
+    base_command = ['/usr/bin/nice', '-n', '10', str(unity), '-batchmode', '-job-worker-count', '2',
+                    '-projectPath', str(snapshot)]
+    flow = None
+    if args.validate_flow:
+        fixture = SOURCE / 'Assets/Editor/Tests/PrivatePolicyPlaytestFlowTests.cs'
+        test_directory = snapshot / 'Assets/Editor/Tests'
+        test_directory.mkdir(parents=True, exist_ok=True)
+        for path in (fixture, fixture.with_suffix('.cs.meta')):
+            shutil.copyfile(path, test_directory / path.name)
+        configuration_log = output.parent / (output.stem + '-configure.log')
+        flow_log = output.parent / (output.stem + '-flow.log')
+        flow_xml = output.parent / (output.stem + '-flow.xml')
+        if any(path.exists() for path in (configuration_log, flow_log, flow_xml)):
+            raise ValueError('Preserve earlier validation records; choose a new output name.')
+        subprocess.run(base_command + ['-quit', '-executeMethod', 'PrivatePolicyPlaytestBuild.ConfigureValidation',
+                       '-logFile', str(configuration_log)], env=environment, check=True)
+        # UITK needs graphics. The test runner exits on completion; -quit could
+        # exit too early and must not be used for this phase.
+        subprocess.run(base_command + ['-runTests', '-testPlatform', 'EditMode',
+                       '-testFilter', 'PrivatePolicyPlaytestFlowTests', '-testResults', str(flow_xml),
+                       '-logFile', str(flow_log)], env=environment, check=True)
+        flow = validate_flow_results(flow_xml)
+        flow['fixtureSha256'] = hashlib.sha256(fixture.read_bytes()).hexdigest()
+        # Restore the reviewed snapshot exclusion before producing the app.
+        shutil.rmtree(test_directory)
+        meta = test_directory.with_suffix('.meta')
+        if meta.exists(): meta.unlink()
+    subprocess.run(base_command + ['-quit',
                     '-executeMethod', 'PrivatePolicyPlaytestBuild.BuildMac', '-logFile', str(log)],
                    env=environment, check=True)
     architectures = validate_native_app(output)
@@ -174,6 +215,9 @@ def main():
                    architecture='arm64', nativeComponents=architectures,
                    trainerRequired=False, externalInferenceRequired=False,
                    publicDeployment=False, audit=inspection, log=str(log))
+    if flow:
+        receipt['gameplayFlowValidation'] = flow
+    receipt['playAgain'] = dict(humanSeat=0, randomFirstSeat=True, preservesDifficulty=True)
     receipt_path = output.parent / (output.stem + '-release.json')
     write_receipt(receipt_path, receipt)
     print(json.dumps(receipt, indent=2))
