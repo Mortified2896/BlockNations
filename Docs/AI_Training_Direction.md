@@ -41,6 +41,8 @@ Distinguish a reference policy's training origin from the rules of its evaluatio
 
 Keep substantive progress checks every six hours while work continues, reporting checkpoint health, shared storage, completed experiment results and the next unresolved gate. Routine unchanged status stays quiet. Filling storage or finishing an experimental step budget does not complete this goal.
 
+Private preset calibration now shows an Easy/Medium/Hard strength order against fixed frozen references, but does not establish human difficulty or useful Archer play. The strongest actor still heavily prefers Riders and its identical-Hard role split is unbalanced. A separate [frozen recruitment-ablation tool](../Tools/RosterProbes/README.md) can hold weights, opponent, fair inputs and rules fixed while limiting only evaluation recruitment. Test the unrestricted control, individual units and combinations in both starting roles, then inspect complete games and recorded actions. This measures latent responses under a changed mask, not intrinsic unit balance or trained competence. It must never impose purchases, quotas or named-unit bonuses on the learner. The paired exploration experiment keeps its original conditions while these diagnostics run.
+
 ## 1. One authoritative simulation, independent of rendering
 
 Establish a plain game-state interface for reset/configuration, observation by explicit seat, legal actions, action application, and outcomes. Unity renders and accepts player commands against that state; training drives the same rules without requiring sprites, transforms, or health canvases for every action.
