@@ -4,7 +4,7 @@ Started 2026-10-11. This experimental 7×7 mode has a standalone **single-player
 
 ## Playtest
 
-Open **https://blocknations.moneymattersmedia.com/advanced/** using your approved Google account. You control the blue seat; the red scripted opponent acts after **End turn**. Pick a balance preset before pressing **New match**.
+From the normal main menu, choose **Advanced 7×7 (experimental)** below **Play vs AI**, or use the browser footer's **Advanced 7×7** link beside **Account**. You can also open **https://blocknations.moneymattersmedia.com/advanced/** using your approved Google account. The browser opens the playtest in the same tab and keeps your existing sign-in. You control the blue seat; the red scripted opponent acts after **End turn**. Pick a balance preset before pressing **New match**.
 
 For local hotseat play, use Unity **6000.4.0f1** and open **Tools → Block Nations → Advanced 7x7 Playtest**. Play Mode and a scene are not required.
 
@@ -14,7 +14,7 @@ For local hotseat play, use Unity **6000.4.0f1** and open **Tools → Block Nati
 - In the browser, end the turn and wait for the scripted opponent to finish. In the Editor hotseat window, pass control; the next player's board stays behind a handoff screen until they reveal it.
 - Capture the opponent's city to win. **New match** resets the experiment. Disband an unused soldier at its home city to return its population point; moving or attacking prevents disbanding that turn.
 
-The browser uses its own touch-oriented UITK view and a scene generated only inside a dedicated build snapshot. Existing gameplay/menu layouts, scenes and prefabs are unchanged. Normal menu selection, persistence and browser multiplayer remain separate integration work.
+The browser uses its own touch-oriented UITK view and a scene generated only inside a dedicated build snapshot. The normal main menu links to this separate browser playtest. Persistence and browser multiplayer remain separate integration work.
 
 ## Rules and provisional values
 

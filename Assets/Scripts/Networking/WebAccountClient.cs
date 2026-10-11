@@ -88,6 +88,13 @@ public static class WebAccountClient
         BN_WebNavigate("/multiplayer");
 #endif
     }
+    public static void OpenAdvancedPlaytest() {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        BN_WebNavigate("/advanced/");
+#else
+        Application.OpenURL("https://blocknations.moneymattersmedia.com/advanced/");
+#endif
+    }
     public static void ShowStatus(string message) {
 #if UNITY_WEBGL && !UNITY_EDITOR
         BN_WebStatus(message ?? string.Empty);
