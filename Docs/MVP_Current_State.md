@@ -12,7 +12,7 @@ Last reviewed: 2026-10-07, against source revision `0d510b3`.
 - Main menu, top HUD, bottom HUD, unit panel, and city panel use UITK.
 - The gold HUD follows the viewing player's seat through turn changes. Local opponents and frozen policy playtests show only the human balance; PBp shows the assigned local seat's balance and hides it for unassigned viewers. Explicit development spectators can display both sides' resources.
 - `TurnManager`, `CityUIManager`, and `UnitUIManager` still supply state/actions to gameplay views.
-- `Tutorial`, `Hotseat`, `BottomStripController`, and the old gameplay UI route are outside the active product path.
+- A dedicated [tester tutorial](Tutorial.md) uses a 7×7 board and the current three-unit rules, with UITK lessons and shared Feedback. `Hotseat`, `BottomStripController`, and the old gameplay UI route remain outside the active product path.
 
 ## AI runtime
 

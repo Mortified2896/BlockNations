@@ -60,7 +60,7 @@ public static class SinglePlayerWebBuild
         var defines = new System.Collections.Generic.List<string> { multiplayer ? "BLOCKNATIONS_ACCOUNT_WEB" : Define };
         if (learnedAi) defines.Add("BLOCKNATIONS_LEARNED_AI_WEB");
         var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions {
-            scenes = new[] { "Assets/Scenes/MainMenu.unity", "Assets/Scenes/SampleScene.unity" },
+            scenes = new[] { "Assets/Scenes/MainMenu.unity", "Assets/Scenes/SampleScene.unity", "Assets/Scenes/Tutorial.unity" },
             target = BuildTarget.WebGL, locationPathName = output,
             options = BuildOptions.None, extraScriptingDefines = defines.ToArray()
         });

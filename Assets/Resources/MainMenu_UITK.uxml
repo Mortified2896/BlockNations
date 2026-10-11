@@ -5,6 +5,7 @@
     <ui:VisualElement name="MainMenuRoot" class="root">
         <ui:VisualElement name="MainPanel" class="panel">
             <ui:Label name="TitleLabel" text="Block Nations" class="title" />
+            <ui:Button name="TutorialButton" text="Learn to play" class="menu-button" />
             <ui:Button name="PlayVsAIButton" text="Play vs AI" class="menu-button" />
             <ui:Button name="PuzzleModeButton" text="Puzzle Mode" class="menu-button" style="display: none;" />
             <ui:Button name="ContinueButton" text="Continue" class="menu-button" />

@@ -2,7 +2,8 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
-using UnityEngine.InputSystem.Controls;
+using UnityEngine.InputSystem.EnhancedTouch;
+using EnhancedTouch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 
 public sealed class GameplayInputOrchestrator : MonoBehaviour
 {
@@ -24,6 +25,9 @@ public sealed class GameplayInputOrchestrator : MonoBehaviour
     {
         public int touchId;
         public Vector2 position;
+        public Vector2 startPosition;
+        public float duration;
+        public bool endedNormally;
         public bool downThisFrame;
         public bool upThisFrame;
         public bool isPressed;
@@ -63,6 +67,7 @@ public sealed class GameplayInputOrchestrator : MonoBehaviour
     private readonly List<RaycastResult> uiRaycastResults = new List<RaycastResult>(16);
     private PointerEventData cachedPointerEventData;
     private EventSystem cachedPointerEventSystem;
+    private bool ownsEnhancedTouchSupport;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
     private float lastUiRaycastExceptionLogTime = -999f;
     private const float UiRaycastExceptionLogCooldownSeconds = 1f;
@@ -89,11 +94,14 @@ public sealed class GameplayInputOrchestrator : MonoBehaviour
         }
 
         Instance = this;
+        EnhancedTouchSupport.Enable();
+        ownsEnhancedTouchSupport = true;
         DontDestroyOnLoad(gameObject);
     }
 
     private void OnDestroy()
     {
+        if (ownsEnhancedTouchSupport) EnhancedTouchSupport.Disable();
         if (Instance == this)
         {
             Instance = null;
@@ -137,6 +145,9 @@ public sealed class GameplayInputOrchestrator : MonoBehaviour
 
         int pointerId = -1;
         Vector2 pointerPosition = lastKnownPointerPosition;
+        Vector2 pressPosition = pointerPosition;
+        float touchDuration = -1f;
+        bool releaseAllowsTap = true;
         bool primaryDown = false;
         bool primaryUp = false;
         bool primaryHeld = false;
@@ -146,6 +157,9 @@ public sealed class GameplayInputOrchestrator : MonoBehaviour
             ActiveTouch touch = activeTouches[0];
             pointerId = touch.touchId;
             pointerPosition = touch.position;
+            pressPosition = touch.startPosition;
+            touchDuration = touch.duration;
+            releaseAllowsTap = touch.endedNormally;
             primaryDown = touch.downThisFrame;
             primaryUp = touch.upThisFrame;
             primaryHeld = touch.isPressed;
@@ -154,6 +168,7 @@ public sealed class GameplayInputOrchestrator : MonoBehaviour
         {
             pointerId = -1;
             pointerPosition = mouse.position.ReadValue();
+            pressPosition = pointerPosition;
             primaryDown = mouse.leftButton.wasPressedThisFrame;
             primaryUp = mouse.leftButton.wasReleasedThisFrame;
             primaryHeld = mouse.leftButton.isPressed;
@@ -232,7 +247,7 @@ public sealed class GameplayInputOrchestrator : MonoBehaviour
         {
             if (primaryDown)
             {
-                BeginPrimaryGesture(pointerId, pointerPosition, pointerOverUiNow, startedFromCurrentPress: true);
+                BeginPrimaryGesture(pointerId, pressPosition, IsPointerOverUi(pointerId, pressPosition), startedFromCurrentPress: true);
             }
             else if (!primaryGestureStarted && primaryHeld)
             {
@@ -262,8 +277,9 @@ public sealed class GameplayInputOrchestrator : MonoBehaviour
                 if (primaryGestureStarted)
                 {
                     float movement = (pointerPosition - primaryStartPosition).magnitude;
-                    float duration = Time.unscaledTime - primaryStartTime;
+                    float duration = touchDuration >= 0 ? touchDuration : Time.unscaledTime - primaryStartTime;
                     bool tapAllowed = primaryGestureStartedFromCurrentPress &&
+                                      releaseAllowsTap &&
                                       !dragActive &&
                                       !primaryGestureBlockedByUi &&
                                       !pointerOverUiNow;
@@ -341,24 +357,25 @@ public sealed class GameplayInputOrchestrator : MonoBehaviour
         releasedTouchId = -1;
         releasedTouchPosition = lastKnownPointerPosition;
 
-        Touchscreen touchscreen = Touchscreen.current;
-        if (touchscreen == null)
+        if (!EnhancedTouchSupport.enabled)
         {
             touchStartedOverUi.Clear();
             return;
         }
 
-        foreach (TouchControl touch in touchscreen.touches)
+        // EnhancedTouch retains start/end records when both arrive between
+        // game updates. Raw TouchControl button flags can lose that gesture.
+        foreach (EnhancedTouch touch in EnhancedTouch.activeTouches)
         {
-            int touchId = touch.touchId.ReadValue();
-            Vector2 position = touch.position.ReadValue();
-            bool down = touch.press.wasPressedThisFrame;
-            bool up = touch.press.wasReleasedThisFrame;
-            bool pressed = touch.press.isPressed;
+            int touchId = touch.touchId;
+            Vector2 position = touch.screenPosition;
+            bool down = touch.phase == UnityEngine.InputSystem.TouchPhase.Began;
+            bool up = touch.phase == UnityEngine.InputSystem.TouchPhase.Ended || touch.phase == UnityEngine.InputSystem.TouchPhase.Canceled;
+            bool pressed = touch.isInProgress;
 
             if (down)
             {
-                touchStartedOverUi[touchId] = IsPointerOverUi(touchId, position);
+                touchStartedOverUi[touchId] = IsPointerOverUi(touchId, touch.startScreenPosition);
             }
 
             if (up && !pressed)
@@ -373,16 +390,22 @@ public sealed class GameplayInputOrchestrator : MonoBehaviour
                 releasedTouchPosition = position;
             }
 
-            if (!pressed)
+            // Keep releases for this snapshot, including a press and release
+            // queued between game updates. They still belong to the touch,
+            // even when a mouse device is present on the web platform.
+            if (!pressed && !down && !up)
                 continue;
 
             activeTouches.Add(new ActiveTouch
             {
                 touchId = touchId,
                 position = position,
+                startPosition = touch.startScreenPosition,
+                duration = (float)(touch.time - touch.startTime),
+                endedNormally = touch.phase == UnityEngine.InputSystem.TouchPhase.Ended,
                 downThisFrame = down,
                 upThisFrame = up,
-                isPressed = true
+                isPressed = pressed
             });
         }
 
@@ -405,7 +428,10 @@ public sealed class GameplayInputOrchestrator : MonoBehaviour
 
         try
         {
-            if (eventSystem.IsPointerOverGameObject(uiPointerId))
+            // The UI-safe touch ID is a mouse ID. Its cached hover can still
+            // point at the button that opened this lesson; raycast the actual
+            // touch position instead of treating that stale mouse hover as UI.
+            if (pointerId < 0 && eventSystem.IsPointerOverGameObject(uiPointerId))
                 return true;
 
             if (cachedPointerEventData == null || cachedPointerEventSystem != eventSystem)

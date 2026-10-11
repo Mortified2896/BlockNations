@@ -637,7 +637,7 @@ public partial class TurnManager : MonoBehaviour
     public event System.Action<bool, string> PlayByPostSubmitResult;
     public event System.Action<bool, string> PlayByPostFetchResult;
     public bool IsGameOverUiVisible =>
-        (gameOver || aiVsAiPausedTournamentSummaryVisible) &&
+        !IsTutorialMatch && (gameOver || aiVsAiPausedTournamentSummaryVisible) &&
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         !aiVsAiDebugRestartPending;
 #else
@@ -3700,7 +3700,7 @@ public partial class TurnManager : MonoBehaviour
 
     System.Collections.IEnumerator StartupSequence()
     {
-        if (PublicWebBuild.UsesGoogleAccounts)
+        if (PublicWebBuild.UsesGoogleAccounts && !externallyDrivenMatch)
         {
             var webMatch = WebAccountClient.ConsumePendingMatch();
             if (webMatch != null)

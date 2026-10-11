@@ -112,6 +112,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private Button continueButton;
     private Button playVsAiButton;
+    private Button tutorialButton;
     private Button puzzleModeButton;
     private Button puzzleModeBackButton;
     private Label puzzleModeStatusLabel;
@@ -545,6 +546,7 @@ public class MainMenuUITKView : MonoBehaviour
 
         continueButton = root.Q<Button>("ContinueButton");
         playVsAiButton = root.Q<Button>("PlayVsAIButton");
+        tutorialButton = root.Q<Button>("TutorialButton");
         puzzleModeButton = root.Q<Button>("PuzzleModeButton");
         puzzleModeBackButton = root.Q<Button>("PuzzleModeBackButton");
         puzzleModeStatusLabel = root.Q<Label>("PuzzleModeStatusLabel");
@@ -1032,6 +1034,7 @@ public class MainMenuUITKView : MonoBehaviour
         {
             playVsAiButton.clicked += HandlePlayVsAiClicked;
         }
+        if (tutorialButton != null) tutorialButton.clicked += HandleTutorialClicked;
 
         if (puzzleModeButton != null)
         {
@@ -1408,6 +1411,7 @@ public class MainMenuUITKView : MonoBehaviour
         {
             playVsAiButton.clicked -= HandlePlayVsAiClicked;
         }
+        if (tutorialButton != null) tutorialButton.clicked -= HandleTutorialClicked;
 
         if (puzzleModeButton != null)
         {
@@ -1821,6 +1825,11 @@ public class MainMenuUITKView : MonoBehaviour
         {
             mainMenuController.ContinueLastSave();
         }
+    }
+
+    private void HandleTutorialClicked()
+    {
+        if (mainMenuController != null) mainMenuController.StartTutorial();
     }
 
     private void HandlePlayVsAiClicked()
@@ -4818,6 +4827,7 @@ public class MainMenuUITKView : MonoBehaviour
         generalSettingsAIVsAiTournamentMatchesPerPairingLabel = null;
         continueButton = null;
         playVsAiButton = null;
+        tutorialButton = null;
         puzzleModeButton = null;
         puzzleModeBackButton = null;
         puzzleModeStatusLabel = null;

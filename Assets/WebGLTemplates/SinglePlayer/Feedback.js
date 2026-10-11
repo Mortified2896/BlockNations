@@ -54,6 +54,7 @@
       const overlay = document.createElement('div'); overlay.className = 'bn-feedback';
       overlay.innerHTML = `<form aria-labelledby="bn-feedback-title" role="dialog" aria-modal="true">
 <h2 id="bn-feedback-title">Send feedback</h2>
+<p id="bn-feedback-context" hidden></p>
 <label for="bn-feedback-type">Type</label><select id="bn-feedback-type"><option>Bug</option><option>Suggestion</option><option>Other</option></select>
 <label for="bn-feedback-description">What happened, or what would you improve?</label><textarea id="bn-feedback-description" maxlength="4000" required></textarea>
 <label class="check"><input id="bn-feedback-include" type="checkbox">Include screenshot</label><img alt="Screenshot attached to your report"><button type="button" id="bn-feedback-remove">Remove screenshot</button>
@@ -62,6 +63,8 @@
       const form = overlay.querySelector('form'), category = form.querySelector('select'), description = form.querySelector('textarea');
       const include = form.querySelector('input'), image = form.querySelector('img'), remove = form.querySelector('#bn-feedback-remove');
       const status = form.querySelector('#bn-feedback-status'), cancel = form.querySelector('#bn-feedback-cancel');
+      const context = form.querySelector('#bn-feedback-context');
+      if (report.mode === 'Tutorial') { context.hidden = false; context.textContent = report.screen; }
       category.value = report.category; description.value = report.description;
       include.checked = !!report.screenshot; include.disabled = !report.screenshot;
       image.hidden = remove.hidden = !report.screenshot;

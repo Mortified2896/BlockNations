@@ -123,6 +123,8 @@ def main():
         release["policy"] = json.loads((SOURCE/"Assets/Resources/LearnedAI/manifest.json").read_text())
     if args.learned_ai:
         release["singlePlayerUnits"] = ["Warrior", "Rider", "Archer"]
+    release["tutorial"] = {"version": "core-three-v1", "boardSize": 7,
+        "units": ["Warrior", "Rider", "Archer"], "lessons": 9}
     (output/"release.json").write_text(json.dumps(release, indent=2)+"\n")
     subprocess.run([sys.executable, str(SOURCE/"Tools/WebRelease/audit.py"), str(output)], check=True)
 

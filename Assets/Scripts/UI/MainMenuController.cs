@@ -255,6 +255,11 @@ public partial class MainMenuController : MonoBehaviour
         }
     }
 
+    public void StartTutorial()
+    {
+        SceneManager.LoadScene(TutorialController.SceneName);
+    }
+
     public void NewGame()
     {
         if (modeSelectionPanel != null)

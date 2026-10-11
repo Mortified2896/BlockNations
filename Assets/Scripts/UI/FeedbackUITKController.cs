@@ -131,7 +131,19 @@ public sealed class FeedbackUITKController : IDisposable
         overlay.style.paddingRight = Mathf.Max(0, bounds.xMax - bottomRight.x) + 24;
     }
 
-    private void Open()
+    public bool IsOpen
+    {
+        get
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return capturing || browserOpen;
+#else
+            return capturing || overlay.style.display == DisplayStyle.Flex;
+#endif
+        }
+    }
+
+    public void Open()
     {
         if (capturing || sending || disposed) return;
         sent = false;
@@ -159,9 +171,7 @@ public sealed class FeedbackUITKController : IDisposable
     {
         // Capture the rendered player view before displaying the report overlay.
         yield return new WaitForEndOfFrame();
-        draft.screen = screen();
-        draft.mode = mode();
-        draft.turn = Mathf.Max(0, turn());
+        // Keep the lesson/context captured when the player opened the form.
 #if UNITY_WEBGL && !UNITY_EDITOR
         draft.screenshot = ""; // Browser captures the rendered canvas in this frame.
         previousKeyboardCapture = WebGLInput.captureAllKeyboardInput;

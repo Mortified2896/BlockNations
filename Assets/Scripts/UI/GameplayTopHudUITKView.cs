@@ -17,6 +17,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
     [Header("Optional Source Overrides")]
     [SerializeField] private TurnManager turnManager;
+    [SerializeField] private TutorialController tutorial;
     private TurnManager subscribedTurnManager;
 
     private UIDocument uiDocument;
@@ -70,6 +71,8 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
     }
 
     public void OnBrowserFeedbackClosed() { feedback?.BrowserClosed(); }
+    public bool IsFeedbackOpen => feedback != null && feedback.IsOpen;
+    public void OpenFeedback() { feedback?.Open(); }
 
     private void Update()
     {
@@ -225,8 +228,8 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         }
         SetNonInteractive(root);
         feedback?.Dispose();
-        feedback = new FeedbackUITKController(this, root, () => "Gameplay",
-            () => turnManager != null ? turnManager.currentMode.ToString() : "None",
+        feedback = new FeedbackUITKController(this, root, () => tutorial != null ? tutorial.FeedbackScreen : "Gameplay",
+            () => tutorial != null ? "Tutorial" : turnManager != null ? turnManager.currentMode.ToString() : "None",
             () => turnManager != null ? turnManager.turnNumber : 0);
         ApplySafeArea(force: true);
         responsiveSizeTierController.Apply(root);

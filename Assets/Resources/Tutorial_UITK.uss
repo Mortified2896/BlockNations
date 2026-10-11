@@ -1,0 +1,21 @@
+.tutorial-root { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }
+.tutorial-demo-blocker { position: absolute; display: none; background-color: rgba(0, 0, 0, 0); }
+.tutorial-exit { position: absolute; color: white; background-color: rgb(22, 33, 47); border-radius: 10px; border-width: 1px; border-color: rgb(111, 137, 170); }
+.tutorial-card { position: absolute; background-color: rgb(22, 33, 47); border-radius: 18px; border-width: 2px; border-color: rgb(67, 86, 111); }
+.tutorial-progress { color: rgb(136, 194, 247); margin-bottom: 8px; white-space: normal; }
+.tutorial-title { color: rgb(255, 255, 255); -unity-font-style: bold; margin-bottom: 12px; white-space: normal; }
+.tutorial-instruction { color: rgb(231, 238, 248); white-space: normal; margin-bottom: 10px; }
+.tutorial-status { color: rgb(170, 236, 195); white-space: normal; margin-bottom: 10px; }
+.tutorial-actions { flex-direction: row; justify-content: space-between; margin-top: 8px; }
+.tutorial-card Button { color: white; border-radius: 10px; border-width: 1px; border-color: rgb(111, 137, 170); margin: 4px; flex-grow: 1; }
+.tutorial-primary { background-color: rgb(39, 103, 165); }
+.tutorial-primary:disabled { opacity: 0.45; }
+.tutorial-secondary { background-color: rgb(46, 63, 83); }
+.tutorial-ring { position: absolute; border-width: 4px; border-radius: 14px; background-color: rgba(0, 0, 0, 0); display: none; }
+.tutorial-origin-ring { border-color: rgb(112, 193, 255); }
+.tutorial-target-ring { border-color: rgb(255, 218, 99); }
+.tutorial-cue { position: absolute; color: white; background-color: rgb(22, 33, 47); border-radius: 8px; -unity-text-align: middle-center; display: none; white-space: nowrap; }
+.tutorial-origin-cue { color: rgb(136, 194, 247); }
+.tutorial-target-cue { color: rgb(255, 218, 99); }
+.tutorial-arrow { position: absolute; background-color: rgb(255, 218, 99); transform-origin: left center; display: none; }
+.tutorial-arrow-head { position: absolute; border-top-width: 4px; border-right-width: 4px; border-color: rgb(255, 218, 99); display: none; }

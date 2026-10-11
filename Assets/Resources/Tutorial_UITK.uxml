@@ -1,0 +1,23 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
+    <Style src="Tutorial_UITK.uss" />
+    <ui:VisualElement name="TutorialRoot" class="tutorial-root" picking-mode="Ignore">
+        <ui:VisualElement name="TutorialDemoBlocker" class="tutorial-demo-blocker" />
+        <ui:VisualElement name="TutorialArrow" class="tutorial-arrow" picking-mode="Ignore" />
+        <ui:VisualElement name="TutorialArrowHead" class="tutorial-arrow-head" picking-mode="Ignore" />
+        <ui:VisualElement name="TutorialOriginRing" class="tutorial-ring tutorial-origin-ring" picking-mode="Ignore" />
+        <ui:VisualElement name="TutorialTargetRing" class="tutorial-ring tutorial-target-ring" picking-mode="Ignore" />
+        <ui:Label name="TutorialOriginCue" class="tutorial-cue tutorial-origin-cue" picking-mode="Ignore" />
+        <ui:Label name="TutorialTargetCue" class="tutorial-cue tutorial-target-cue" picking-mode="Ignore" />
+        <ui:Button name="TutorialExit" text="Exit tutorial" class="tutorial-exit" />
+        <ui:VisualElement name="TutorialCard" class="tutorial-card">
+            <ui:Label name="TutorialProgress" class="tutorial-progress" picking-mode="Ignore" />
+            <ui:Label name="TutorialTitle" class="tutorial-title" picking-mode="Ignore" />
+            <ui:Label name="TutorialInstruction" class="tutorial-instruction" picking-mode="Ignore" />
+            <ui:Label name="TutorialStatus" class="tutorial-status" picking-mode="Ignore" />
+            <ui:VisualElement class="tutorial-actions">
+                <ui:Button name="TutorialDemonstrate" text="Show me" class="tutorial-secondary" />
+                <ui:Button name="TutorialNext" text="Continue" class="tutorial-primary" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>
