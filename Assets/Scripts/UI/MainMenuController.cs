@@ -352,7 +352,7 @@ public partial class MainMenuController : MonoBehaviour
         }
 
         GameModeSelection.SetPendingMode(TurnManager.GameMode.VsAI);
-        AIRecruitVariantSelection.SetPending(recruitVariant);
+        AIRecruitVariantSelection.SetPending(AIRecruitVariantSelection.ForNewGame(recruitVariant));
         AIVsAIDebugSelection.SetPending(
             enableAIVsAIDebugMode,
             sideARecruitVariant,

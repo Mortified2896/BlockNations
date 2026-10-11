@@ -5,8 +5,18 @@ public partial class TurnManager
 {
     public MatchRuleProfile RuleProfile { get; private set; } = MatchRuleProfile.Baseline;
 
-    // Experimental native training/playtests only. Ordinary games and supported
-    // saves/PBp retain the baseline until a release/migration decision is made.
+    // Apply a frozen release's explicit rules before recruitment or loaded units
+    // are presented. Legacy opponents and PBp keep their supported rules.
+    private void ConfigureOrdinaryMatchRules()
+    {
+        if (IsExternallyDrivenMatch) return;
+        RuleProfile = MatchRuleProfile.Baseline;
+        if (currentMode != GameMode.VsAI || !LearnedAIRuntime.IsLearned(aiRecruitVariant)) return;
+        var release = UnityEngine.Resources.Load<LearnedPolicyRelease>(LearnedPolicyRelease.ResourcePath);
+        if (release == null) throw new InvalidOperationException("The frozen learned AI release is missing.");
+        RuleProfile = release.RulesForBoard(gridManager.width);
+    }
+
     public void ConfigureExperimentalRules(MatchRuleProfile profile)
     {
         if (profile == null) throw new ArgumentNullException(nameof(profile));

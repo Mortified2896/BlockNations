@@ -31,6 +31,19 @@ class RetentionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 supervisor.opening_options(run, resume=True)
 
+    def test_resume_preserves_the_recorded_roster_adapter_and_rejects_the_wrong_backend(self):
+        run = self.run_directory('recipe-resume')
+        self.assertEqual(supervisor.trainer_script(run,'dotnet').name,'rated_training.py')
+        (run/'roster-augmentation.json').write_text('{}')
+        with self.assertRaisesRegex(ValueError,'standalone C#'):
+            supervisor.trainer_script(run,'unity')
+        with patch('roster_augmentation.load_recipe',return_value={'version':1}) as validate:
+            self.assertEqual(supervisor.trainer_script(run,'dotnet').name,'roster_augmented_training.py')
+            validate.assert_called_once_with(run)
+        with patch('roster_augmentation.load_recipe',side_effect=ValueError('incompatible recipe')):
+            with self.assertRaisesRegex(ValueError,'incompatible recipe'):
+                supervisor.trainer_script(run,'dotnet')
+
     def test_opening_upgrade_is_explicit_preserves_manifest_and_is_idempotent(self):
         run = self.run_directory('upgrade')
         original = (run/'run.json').read_bytes()

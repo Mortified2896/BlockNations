@@ -5,9 +5,8 @@ It requires Google sign-in and tester approval; the hostname is publicly reachab
 `https://staging.blocknations.moneymattersmedia.com` is reserved for internal development.
 These are distinct release targets; publishing the public game must not overwrite the staging service or its saved matches.
 
-The currently published browser release runs the game and Normal, Rider Focus, and Hard locally on the player's device.
-The [Google-account multiplayer release](Web_Multiplayer_Playtest.md) adds asynchronous two-person 7×7 matches, friends, in-game invitations and opt-in Web Push while keeping those local opponents available. Build that release with `python3 Tools/WebRelease/build.py --multiplayer`; the unqualified command below builds the separate learned-AI candidate.
-The next [learned-AI browser candidate](Learned_AI_Browser_Playtest.md) uses 7×7 with Easy, Medium and Hard presets and bundled local Inference Engine models. It is held for review before public publication.
+The prepared three-unit browser release runs the game and a single frozen learned opponent locally on the player's device. New Play vs AI games use Warrior, Rider and Archer; the AI selector is removed. Its frozen model is independent of the continuing Mac training workload. See the [learned-AI release record](Learned_AI_Browser_Playtest.md) for current validation and publication status.
+The [Google-account multiplayer release](Web_Multiplayer_Playtest.md) adds asynchronous two-person 7×7 matches, friends, in-game invitations and opt-in Web Push. Build the combined three-unit single-player candidate with `python3 Tools/WebRelease/build.py --multiplayer --learned-ai --output Build/CoreThreeWeb`. The account build without `--learned-ai` preserves the legacy local opponents; the unqualified command below builds the historical separate learned-AI candidate with development difficulty presets.
 The local training worker, Python, training spectator, native policy playtest, and external model/API experiments are excluded from both releases.
 
 ## Build isolation and credentials

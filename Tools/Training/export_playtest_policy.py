@@ -18,7 +18,8 @@ from onnx import helper, TensorProto
 from onnx.reference import ReferenceEvaluator
 
 from playtest import latest_checkpoint, read_json
-from training_contract import RULES_VERSION, OPENING_ECONOMY_VERSION, checkpoint_step
+from training_contract import (OPENING_ECONOMY_VERSION, checkpoint_step, run_rules_version,
+                               validate_rules_version, transfer_contract)
 
 PROBABILITIES = "policy_probabilities"
 
@@ -71,10 +72,11 @@ def verify(source: onnx.ModelProto, converted: onnx.ModelProto, seed: int = 42) 
 def export(run: Path, destination: Path, checkpoint: Path | None = None) -> dict:
     manifest = read_json(run / "run.json")
     arena = read_json(run / "arena-status.json")
-    if manifest.get("boardSize") != 7 or arena.get("simulationVersion") != RULES_VERSION:
+    rules = run_rules_version(run)
+    if manifest.get("boardSize") != 7 or arena.get("simulationVersion") != rules:
         raise ValueError("The browser playtest requires a 7x7 checkpoint under the current rules.")
     contract = read_json(run / 'checkpoint-contract.json')
-    if (contract.get('rulesVersion') != RULES_VERSION or contract.get('boardSize') != 7 or
+    if (contract.get('rulesVersion') != rules or contract.get('boardSize') != 7 or
             contract.get('openingEconomyVersion') != OPENING_ECONOMY_VERSION or
             type(contract.get('minimumCheckpointStep')) is not int):
         raise ValueError('The checkpoint has no compatible recorded training contract.')
@@ -94,10 +96,14 @@ def export(run: Path, destination: Path, checkpoint: Path | None = None) -> dict
                 raise
     if requested:
         frozen = read_json(checkpoint.parent/'manifest.json')
-        if (frozen.get('rulesVersion') != RULES_VERSION or frozen.get('boardSize') != 7 or
+        if (frozen.get('rulesVersion') != rules or frozen.get('boardSize') != 7 or
                 frozen.get('openingEconomyVersion') != OPENING_ECONOMY_VERSION or
                 frozen.get('sha256') != hashlib.sha256(weights).hexdigest()):
             raise ValueError('The selected frozen checkpoint does not match its provenance manifest.')
+    return write_release(checkpoint, weights, original_bytes, destination, rules)
+
+
+def write_release(checkpoint, weights, original_bytes, destination, rules, provenance=None):
     source = onnx.load_model_from_string(original_bytes)
     converted = convert(source)
     verification = verify(source, converted)
@@ -107,7 +113,7 @@ def export(run: Path, destination: Path, checkpoint: Path | None = None) -> dict
     model.write_bytes(contents)
     result = {
         "schema": 2, "boardSize": 7, "observationSize": 3120, "actionCount": 259,
-        "rulesVersion": RULES_VERSION, "openingEconomyVersion": OPENING_ECONOMY_VERSION,
+        "rulesVersion": rules, "openingEconomyVersion": OPENING_ECONOMY_VERSION,
         "modelVersion": checkpoint.stem,
         "modelSha256": hashlib.sha256(contents).hexdigest(),
         "checkpointSha256": hashlib.sha256(weights).hexdigest(),
@@ -116,14 +122,85 @@ def export(run: Path, destination: Path, checkpoint: Path | None = None) -> dict
         "exportedUnixSeconds": int(time.time()), "verification": verification,
         "difficultyStatus": "experimental_sampling_presets",
     }
+    if provenance:
+        result.update(provenance)
     (destination / "manifest.json").write_text(json.dumps(result, indent=2) + "\n")
     return result
 
 
+def evaluated_transfer(manifest, receipt, target, config_sha=None):
+    """A transfer is evaluated compatibility, never new-rules training provenance."""
+    contract = transfer_contract(manifest['rulesVersion'], target)
+    if (receipt.get('state') != 'completed' or receipt.get('boardSize') != 7 or
+            receipt.get('openingEconomyVersion') != OPENING_ECONOMY_VERSION or
+            receipt.get('rulesVersion') != target or not receipt.get('results') or
+            receipt.get('candidate', {}).get('sha256') != manifest.get('sha256') or
+            receipt.get('candidate', {}).get('trainedRulesVersion') != manifest['rulesVersion'] or
+            receipt.get('candidate', {}).get('transferRules') != contract or
+            (config_sha is not None and receipt.get('candidate', {}).get('configSha256') != config_sha) or
+            not isinstance(receipt.get('suiteId'), str) or len(receipt['suiteId']) != 64):
+        raise ValueError('A rules transfer requires a completed matching frozen-candidate evaluation.')
+    return contract
+
+
+def export_frozen(manifest_path, destination, target_rules=None, evaluation_receipt=None, sampling_mode='Hard'):
+    # Immutable release selection must not depend on a stopped run's mutable
+    # live arena or missing historical supervisor contract.
+    from evaluate_suite import frozen_actor
+    from frozen_policy import SAMPLING_MODES
+    if sampling_mode not in SAMPLING_MODES:
+        raise ValueError('Choose a supported release sampling mode.')
+    manifest = read_json(manifest_path)
+    source_rules = validate_rules_version(manifest.get('rulesVersion'))
+    target = validate_rules_version(target_rules or source_rules)
+    actor, identity = frozen_actor(manifest_path, source_rules)  # Hash, finite actor and compatible shapes.
+    checkpoint = Path(manifest['checkpoint'])
+    if (checkpoint.is_symlink() or checkpoint.with_suffix('.onnx').is_symlink() or
+            checkpoint_step(checkpoint) != manifest.get('step')):
+        raise ValueError('Use a numbered frozen checkpoint pair with its recorded step.')
+    parent = manifest.get('weightTransfer', {})
+    if parent and manifest['step'] <= parent.get('parentStep', manifest['step']):
+        raise ValueError('Transferred weights must train before claiming the new training rules.')
+    weights, original_bytes = checkpoint.read_bytes(), checkpoint.with_suffix('.onnx').read_bytes()
+    if hashlib.sha256(weights).hexdigest() != actor.sha256:
+        raise ValueError('The frozen checkpoint changed during export.')
+    provenance = {'trainedRulesVersion': source_rules, 'samplingMode': sampling_mode}
+    if target != source_rules:
+        receipt = read_json(evaluation_receipt) if evaluation_receipt is not None else {}
+        provenance['transferRules'] = evaluated_transfer(manifest, receipt, target, identity['configSha256'])
+        if not any(case.get('difficulty') == sampling_mode and case.get('games', 0) > 0 for case in receipt['results']):
+            raise ValueError('The transferred release needs evaluation using its selected sampling mode.')
+        provenance['evaluationSuiteId'] = receipt['suiteId']
+    # Verify the ONNX companion against the selected checkpoint actor itself,
+    # in addition to conversion parity. A neighbouring file is not proof.
+    converted = convert(onnx.load_model_from_string(original_bytes))
+    evaluator = ReferenceEvaluator(converted)
+    random = np.random.default_rng(42)
+    for _ in range(8):
+        observation = random.normal(0, 0.3, (1, 3120)).astype(np.float32)
+        mask = (random.random((1, 259)) > 0.6).astype(np.float32); mask[0, 258] = 1
+        expected = actor.probabilities(observation, mask == 0)
+        actual = evaluator.run(None, {'obs_0': observation, 'action_masks': mask})[0]
+        np.testing.assert_allclose(actual, expected, rtol=1e-4, atol=1e-5)
+    provenance['checkpointActorParitySamples'] = 8
+    return write_release(checkpoint, weights, original_bytes, destination, target, provenance)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--run", type=Path, required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--run", type=Path)
+    source.add_argument("--frozen-manifest", type=Path, help="Immutable, hash-checked evaluated actor selection.")
     parser.add_argument("--destination", type=Path, required=True)
     parser.add_argument("--checkpoint", type=Path, help="Explicit frozen evaluation checkpoint with a matching provenance manifest.")
+    parser.add_argument("--target-rules-version", help="An explicit compatible transfer; original training rules remain recorded.")
+    parser.add_argument("--evaluation-receipt", type=Path, help="Completed target-rules evaluation required for a rules transfer.")
+    parser.add_argument("--sampling-mode", choices=('Policy', 'Easy', 'Medium', 'Hard'), default='Hard')
     args = parser.parse_args()
-    print(json.dumps(export(args.run.resolve(), args.destination.resolve(), args.checkpoint.resolve() if args.checkpoint else None), indent=2))
+    if args.frozen_manifest:
+        if args.checkpoint: parser.error('--checkpoint belongs to --run; use the frozen manifest selection instead.')
+        result = export_frozen(args.frozen_manifest.resolve(), args.destination.resolve(), args.target_rules_version, args.evaluation_receipt, args.sampling_mode)
+    else:
+        if args.target_rules_version or args.evaluation_receipt: parser.error('Rules transfers require --frozen-manifest.')
+        result = export(args.run.resolve(), args.destination.resolve(), args.checkpoint.resolve() if args.checkpoint else None)
+    print(json.dumps(result, indent=2))

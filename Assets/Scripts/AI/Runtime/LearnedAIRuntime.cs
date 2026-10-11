@@ -53,7 +53,9 @@ public sealed class LearnedAIRuntime
     {
         LearnedPolicyRelease release = Resources.Load<LearnedPolicyRelease>(LearnedPolicyRelease.ResourcePath);
         if (release == null) throw new InvalidOperationException("The learned AI release is missing.");
-        manifest = release.Validate(manager.gridManager.width);
+        manifest = release.Validate(manager.gridManager.width, manager.RuleProfile.Version);
+        if (PublicWebBuild.UsesFrozenOpponent && manifest.samplingMode != "Hard")
+            throw new InvalidOperationException("The public AI sampling differs from its evaluated release.");
         if (manager.gridManager.height != manifest.boardSize)
             throw new InvalidOperationException("The learned AI release requires a square board.");
         ModelAsset asset = release.ModelFor(difficulty);
@@ -104,7 +106,7 @@ public sealed class LearnedAIRuntime
     {
         if (!SeatAIActionExecutor.CanAct(manager, seat)) yield break;
         int currentGeneration = generation;
-        LearnedDifficulty difficulty = DifficultyFor(variant);
+        LearnedDifficulty difficulty = PublicWebBuild.UsesFrozenOpponent ? LearnedDifficulty.Hard : DifficultyFor(variant);
         try { Prepare(manager, difficulty); }
         catch (Exception ex) { Fail(ex); yield break; }
         rejected.Clear();

@@ -47,6 +47,19 @@ def read_json(path: Path) -> dict:
         return {}
 
 
+def trainer_script(run: Path, backend: str) -> Path:
+    # Resuming an owned experimental recipe must preserve its input/action
+    # adapter, not silently change back to the normal trainer.
+    name = 'rated_training.py'
+    if (run/'roster-augmentation.json').exists():
+        if backend != 'dotnet':
+            raise ValueError('The recorded roster augmentation requires the standalone C# backend.')
+        from roster_augmentation import load_recipe
+        load_recipe(run)
+        name = 'roster_augmented_training.py'
+    return Path(__file__).with_name(name)
+
+
 def prepare_root(root: Path) -> None:
     if root.is_symlink():
         raise ValueError("Training root must not be a symbolic link.")
@@ -387,7 +400,12 @@ def main() -> int:
                         "BLOCKNATIONS_RATING_SESSION": rating_session, "BLOCKNATIONS_RULES_VERSION": args.rules_version})
     args.curriculum, args.curriculum_distance = curriculum, curriculum_distance
     configure_decoupled(args, run, environment)
-    command = [sys.executable, str(Path(__file__).with_name("rated_training.py")), str(config), "--run-id", args.run_id,
+    try:
+        entrypoint = trainer_script(run, args.backend)
+    except ValueError:
+        lock.unlink()
+        raise
+    command = [sys.executable, str(entrypoint), str(config), "--run-id", args.run_id,
                "--results-dir", str(run / "checkpoints"), "--seed", str(args.seed), "--timeout-wait", "300",
                "--torch-device", "cpu"]
     if args.resume:

@@ -9,8 +9,8 @@ import numpy as np
 import onnx
 from onnx import helper, numpy_helper, TensorProto
 
-from export_playtest_policy import export
-from training_contract import RULES_VERSION
+from export_playtest_policy import export, evaluated_transfer
+from training_contract import RULES_VERSION, CORE_THREE_RULES, transfer_contract
 
 
 class ExportPolicyTests(unittest.TestCase):
@@ -65,6 +65,37 @@ class ExportPolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'provenance'):
             export(self.run,self.run/'tampered-export',self.checkpoint)
         self.assertFalse((self.run/'tampered-export').exists())
+
+    def test_core_three_exports_require_matching_run_arena_and_checkpoint_contract(self):
+        (self.run/'run.json').write_text(json.dumps(dict(boardSize=7,rulesVersion=CORE_THREE_RULES)))
+        with self.assertRaisesRegex(ValueError,'current rules'):
+            export(self.run,self.run/'wrong-arena')
+        (self.run/'arena-status.json').write_text(json.dumps(dict(simulationVersion=CORE_THREE_RULES)))
+        with self.assertRaisesRegex(ValueError,'recorded training contract'):
+            export(self.run,self.run/'wrong-contract')
+        (self.run/'checkpoint-contract.json').write_text(json.dumps(dict(rulesVersion=CORE_THREE_RULES,
+            boardSize=7,openingEconomyVersion=2,minimumCheckpointStep=100)))
+        with patch('export_playtest_policy.latest_checkpoint',return_value=self.checkpoint):
+            result=export(self.run,self.run/'core-three')
+        self.assertEqual(result['rulesVersion'],CORE_THREE_RULES)
+        self.assertEqual(result['checkpointSha256'],hashlib.sha256(self.checkpoint.read_bytes()).hexdigest())
+
+    def test_transfer_needs_completed_target_rules_evaluation_of_the_exact_frozen_actor(self):
+        manifest=dict(rulesVersion=RULES_VERSION,sha256='a'*64)
+        receipt=dict(state='completed',boardSize=7,openingEconomyVersion=2,rulesVersion=CORE_THREE_RULES,
+            suiteId='b'*64,results=[dict(games=64)],candidate=dict(sha256='a'*64,trainedRulesVersion=RULES_VERSION,
+                transferRules=transfer_contract(RULES_VERSION,CORE_THREE_RULES)))
+        self.assertEqual(evaluated_transfer(manifest,receipt,CORE_THREE_RULES),transfer_contract(RULES_VERSION,CORE_THREE_RULES))
+        receipt['candidate']['configSha256']='d'*64
+        self.assertEqual(evaluated_transfer(manifest,receipt,CORE_THREE_RULES,'d'*64),transfer_contract(RULES_VERSION,CORE_THREE_RULES))
+        with self.assertRaisesRegex(ValueError,'completed matching'):
+            evaluated_transfer(manifest,receipt,CORE_THREE_RULES,'e'*64)
+        for key,value in [('state','running'),('rulesVersion',RULES_VERSION),('results',[]),('suiteId','')]:
+            with self.subTest(key=key),self.assertRaisesRegex(ValueError,'completed matching'):
+                evaluated_transfer(manifest,dict(receipt,**{key:value}),CORE_THREE_RULES)
+        receipt['candidate']['sha256']='c'*64
+        with self.assertRaisesRegex(ValueError,'completed matching'):
+            evaluated_transfer(manifest,receipt,CORE_THREE_RULES)
 
 
 if __name__ == '__main__':

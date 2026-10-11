@@ -1,8 +1,10 @@
 # Learned AI browser playtest
 
-This prepares a 7×7 single-player game with Easy, Medium and Hard learned-AI presets. It is a technical playtest candidate. The public Cloudflare release remains the previously reviewed local-AI build until the owner returns to review the trained opponent.
+The owner requested a three-unit learned-AI public release on 2026-10-11. The prepared release starts new 7×7 Play vs AI games with Warrior, Rider and Archer, Archer vision two and its existing shoot-then-move behavior. Its public menu has one frozen opponent and no AI selection. Development difficulty presets and serialized opponent values remain available for historical saves and comparisons. Publication is awaiting clarification of the edited native goal's review gate; the validation and deployment receipt below must identify which artifact actually reached each host.
 
-The 2026-10-10 [balance experiment](AI_Balance_Experiment.md) changes the local rules to v4 and refreshes the embedded experimental actor to a compatible, frozen step-16,089,952 export. Its 24 conversion fixtures have zero probability difference. This refresh prevents loading an incompatible v3 manifest; it does not establish strong play or distinct difficulty bands. The v3 build/receipts below remain historical and are not new-rule browser acceptance. Public deployment stays on hold.
+The earlier v3/v4 candidate details and acceptance below are historical. The new release uses the explicit `blocknations-simulation-v5-core3` target rules and completed balanced evaluation to select the actor. If the strongest actor was trained under an earlier compatible profile, its original training rules and the evaluated transfer are preserved in the release manifest; it is never relabelled as newly trained under core3. Runtime and build validation check the target board, observation schema, legal-action schema and rules.
+
+The public runtime uses the fixed `Hard` sampling setting selected by a matched comparison of Policy, Medium and Hard on the same actor, seeds and fair reference opponents. These settings are retained development tools; the public menu offers one opponent. This choice favors the stronger measured setting and still allows variation among retained choices, but it does not establish diverse tactics or human-level strength. Training continues independently; the published actor changes only through a reviewed export and release.
 
 ## Training and release are separate
 
@@ -10,11 +12,11 @@ The Mac continues its existing four-arena C# simulation and Python PPO learner. 
 
 The browser receives a frozen actor export, not the trainer, optimizer, checkpoint history, local file paths or human match records. Cloudflare serves static files. Unity Inference Engine 2.6.1 evaluates the model on the player's device using the CPU backend, which compiles to WebAssembly for this build. No Codex sign-in, OpenAI API key or remote model request is involved.
 
-The initial frozen candidate is `BlockNationsSeatV2-4139990`: 1,803,075 ONNX bytes, schema 2, rules `blocknations-simulation-v3`. ONNX is a portable model format containing learned parameters and their computation graph. The manifest records the source checkpoint hash, model hash, compatible board/rules/schema and probability output. The release asset explicitly references its models.
+The current frozen candidate is `BlockNationsSeatV2-32730121`: 1,803,075 ONNX bytes, schema 2, target rules `blocknations-simulation-v5-core3`. Its v4 training origin and completed core-three transfer evaluation are preserved explicitly. ONNX contains learned parameters and their computation graph. The manifest records the source checkpoint hash, model hash, compatible board/rules/schema, sampling mode and probability output. The release asset explicitly references its models. The original `BlockNationsSeatV2-4139990` v3 export and the acceptance section from 2026-10-09 below are historical.
 
 The model is bundled in Unity's data asset for this first release. Players download it with the game. Browser caching can avoid repeated transfers, but clearing site data, cache eviction or a changed bundle can require another download. Separate model loading/caching is future work. Aim for a model under 5 MB and measure actual phone memory/latency before increasing it; this is our product budget rather than a hosting limit.
 
-## Initial difficulty and variety
+## Historical initial difficulty and variety
 
 All three presets initially use the same frozen weights. Easy samples more broadly; Medium follows preferred actions more closely; Hard concentrates on the most likely actions. Ties still vary. Sampling uses only legal choices, and difficulty never changes information access or inference work.
 
@@ -48,18 +50,45 @@ The export reads an immutable numbered checkpoint/ONNX pair. It exposes the acto
 
 Exports require a recorded compatible `checkpoint-contract.json` and a step newer than its rules/opening boundary. To export a deliberately selected evaluated candidate, add `--checkpoint '<frozen checkpoint.pt>'`; its adjacent provenance manifest and content hash must agree. Old transferred weights cannot be relabelled merely because a live arena now runs new rules.
 
+For an immutable evaluated parent whose original training rules differ from the target release, use the explicit frozen-actor path:
+
+```sh
+/Users/Jo/.local/share/blocknations-ml/venv/bin/python Tools/Training/export_playtest_policy.py \
+  --frozen-manifest '<frozen evaluated actor manifest.json>' \
+  --target-rules-version blocknations-simulation-v5-core3 \
+  --evaluation-receipt '<completed matching core-three suite.json>' \
+  --sampling-mode Hard \
+  --destination Assets/Resources/LearnedAI
+```
+
+This verifies checkpoint/configuration/ONNX content hashes, finite actor tensors, PT-to-ONNX probability parity, target-rules transfer permission and the evaluated sampling setting before creating release files. It copies no optimizer, private replay or local training path into the browser manifest.
+
 Run `LearnedPolicyReleaseBuilder.Build` in an isolated Unity validation project to explicitly import/update model references. With `BLOCKNATIONS_POLICY_VALIDATION_DATA` pointing at reference fixtures, it also checks the actual Unity CPU backend. The browser builder rejects missing references or model/manifest hash mismatches.
 
 ```sh
-python3 Tools/WebRelease/build.py --output Build/LearnedAI7Web
-python3 Tools/WebRelease/audit.py Build/LearnedAI7Web
+python3 Tools/WebRelease/build.py --multiplayer --learned-ai --output Build/CoreThreeWeb
+python3 Tools/WebRelease/audit.py Build/CoreThreeWeb
 ```
 
 Only the generated browser artifact can be deployed. The isolated snapshot excludes ML-Agents, training scenes/models/code, Unity AI Assistant and PBp credentials. Direct Inference Engine remains because the game needs local inference. Release metadata identifies the frozen policy.
 
-The reviewed candidate is preserved at `Build/LearnedAI7Web`, separately from the normal deployment output. Point an isolated static-assets preview at that directory for inspection; the hosted preview also exercises tester admission. Publishing still requires selecting the reviewed artifact deliberately.
+The current candidate is preserved at `Build/CoreThreeWeb`, separately from the normal deployment output. It keeps the authenticated multiplayer application and adds the frozen three-unit single-player opponent. The earlier `Build/LearnedAI7Web` candidate is historical. Point an isolated static-assets preview at the current directory for inspection; the hosted preview also exercises tester admission. Publishing still requires selecting the reviewed artifact deliberately.
 
 ## Validation and acceptance
+
+### Three-unit release candidate, 2026-10-11
+
+The current candidate passed 81 focused Unity EditMode checks, 24 actual Unity CPU probability fixtures (maximum difference `8.523464E-06`), five exporter checks, 17 web-release checks, 17 supervisor checks and 54 web-worker tests (including the separately merged account/menu changes). The first accepted WebGL artifact has 13 files totaling 30.81 MiB; the largest is 17.14 MiB. Its game-source digest is `a10d74209ecfe2b68cd954547165f4de6a77de52cc4dfc6765a76d380ce3e648`. A compressed/decompressed credential audit found zero matches, including checks against five configured private credential values. Private credentials and human match records are absent from the export.
+
+Desktop Chromium at 1280×800 and touch-enabled mobile Chromium at 390×664 exercised the actual account-gated artifact with synthetic local tester sessions. Both showed one 7×7 setup without an AI selector, offered exactly Warrior/Rider/Archer at recruitment and completed a local learned-AI turn. Desktop Archer recruitment expanded visibility as expected, and a full-page reload/Continue restored the unfinished second-round match. Mobile Rider recruitment and Next worked through touch input. Browser resource requests remained on the local origin, with no inference failures or external model requests. Headless graphics/audio warnings are separate from policy acceptance. This is browser emulation, not a physical iPhone/Safari or Android latency benchmark.
+
+The single public opponent uses the selected 32,730,121-step parent with evaluated `Hard` sampling. A matched supplementary test scored Policy 134/192, Medium 141/192 and Hard 159/192 against the same fair mixed, Warrior and Rider references, seeds and balanced roles. These are reference-opponent results, not human ratings or proof of solved first-player balance. The existing learned difficulty controls remain private development tools rather than three public choices.
+
+Source checks and synthetic browser screenshots are preserved under ignored `Logs/Validation/CoreThreeWeb-20261011/` and `output/playwright/`. Hosted deployment and authenticated acceptance are recorded separately below; local tests do not prove a host was updated. The prior public artifact and frozen weights remain recoverable.
+
+The first candidate reached the authenticated Cloudflare preview as worker version `a69588f3-27f9-48a8-bfa9-48c49b793e66`. Hosted inspection confirmed the one-opponent setup, three recruitment choices, Warrior health 3/3 and an AI turn returning control in round two with no console errors. A separate merged multiplayer/account change removes the duplicate footer entry; the final candidate was rebuilt against that source with digest `03098e39d264cc629e864f50131fc54e5324fa51c76cd51bf860cde1a7bb68d3`, the same actor and all five known-credential checks passing again. The final preview receipt is recorded after deployment. The public learned-AI publication remains awaiting the edited goal's review-gate clarification. No access-store, multiplayer-store or DNS changes are part of this release.
+
+### Historical initial candidate, 2026-10-09
 
 On 2026-10-09:
 

@@ -3,6 +3,15 @@
 /// </summary>
 public static class AIRecruitVariantSelection
 {
+    // A reviewed public release has one opponent. Retain the serialized enum
+    // values and development controls for supported saves and comparisons.
+    public static TurnManager.AIRecruitVariant DefaultForNewGame => PublicWebBuild.UsesFrozenOpponent
+        ? TurnManager.AIRecruitVariant.LearnedHard
+        : PublicWebBuild.UsesGoogleAccounts ? TurnManager.AIRecruitVariant.Default : TurnManager.AIRecruitVariant.LearnedMedium;
+
+    public static TurnManager.AIRecruitVariant ForNewGame(TurnManager.AIRecruitVariant variant) =>
+        PublicWebBuild.UsesFrozenOpponent ? DefaultForNewGame : ForCurrentRuntime(variant);
+
     private static TurnManager.AIRecruitVariant pendingVariant = TurnManager.AIRecruitVariant.LearnedMedium;
 
     public static void SetPending(TurnManager.AIRecruitVariant variant)

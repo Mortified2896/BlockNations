@@ -116,5 +116,10 @@ public sealed class LearnedPolicyPlaytestTests
         Assert.That(release.Validate(7).schema, Is.EqualTo(2));
         foreach (LearnedDifficulty difficulty in Enum.GetValues(typeof(LearnedDifficulty))) Assert.That(release.ModelFor(difficulty), Is.Not.Null);
         Assert.Throws<InvalidOperationException>(() => release.Validate(11));
+        var rules = release.RulesForBoard(7);
+        Assert.That(release.Validate(7, rules.Version).rulesVersion, Is.EqualTo(rules.Version));
+        string otherRules = rules.Version == MatchRuleProfile.CoreThreeVersion
+            ? SimulationRules.Version : MatchRuleProfile.CoreThreeVersion;
+        Assert.Throws<InvalidOperationException>(() => release.Validate(7, otherRules));
     }
 }

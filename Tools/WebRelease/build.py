@@ -24,7 +24,7 @@ def validate_paths(snapshot: Path, output: Path):
         raise ValueError("The output and snapshot must not overlap")
 
 
-def prepare(snapshot: Path, multiplayer=False):
+def prepare(snapshot: Path, multiplayer=False, learned_ai=False):
     if snapshot == SOURCE or SOURCE in snapshot.parents or snapshot in SOURCE.parents:
         raise ValueError("The build snapshot must be outside and separate from the working repository")
     marker = snapshot / SNAPSHOT_MARKER
@@ -46,9 +46,9 @@ def prepare(snapshot: Path, multiplayer=False):
         path = snapshot / relative
         if path.is_dir(): shutil.rmtree(path)
         elif path.exists(): path.unlink()
-    if multiplayer:
-        # The learned single-player candidate is still awaiting review. This
-        # release uses the published local opponents and bundles no frozen actor.
+    if multiplayer and not learned_ai:
+        # Legacy account releases remain reproducible. Including a reviewed
+        # actor is an explicit release choice, never a live-training import.
         for relative in ("Assets/Resources/LearnedAI", "Assets/Resources/LearnedAI.meta"):
             path = snapshot / relative
             if path.is_dir(): shutil.rmtree(path)
@@ -78,12 +78,13 @@ def main():
     parser.add_argument("--snapshot", type=Path, default=Path.home()/".local/share/blocknations-web/project")
     parser.add_argument("--output", type=Path, default=SOURCE/"Build/WebRelease")
     parser.add_argument("--prepare-only", action="store_true")
-    parser.add_argument("--multiplayer", action="store_true", help="Google-account multiplayer with the existing local AI opponents")
+    parser.add_argument("--multiplayer", action="store_true", help="Preserve Google-account multiplayer and access control")
+    parser.add_argument("--learned-ai", action="store_true", help="Publish the frozen three-unit opponent without an AI selector")
     args = parser.parse_args()
     snapshot, output = args.snapshot.resolve(), args.output.resolve()
     validate_paths(snapshot, output)
     prepared_hash = source_digest()
-    prepare(snapshot, multiplayer=args.multiplayer)
+    prepare(snapshot, multiplayer=args.multiplayer, learned_ai=args.learned_ai)
     if source_digest() != prepared_hash:
         raise RuntimeError("Game source changed while preparing the isolated snapshot; prepare it again")
     if args.prepare_only: return
@@ -100,6 +101,7 @@ def main():
         if any(word in key.upper() for word in ("API_KEY", "TOKEN", "SECRET")): env.pop(key)
     env["BLOCKNATIONS_WEB_OUTPUT"] = str(output)
     env["BLOCKNATIONS_WEB_MULTIPLAYER"] = "1" if args.multiplayer else "0"
+    env["BLOCKNATIONS_WEB_LEARNED_AI"] = "1" if args.learned_ai else "0"
     env["EMCC_CORES"] = "2"
     command = ["nice", "-n", "10", str(unity), "-batchmode", "-quit", "-job-worker-count", "2",
                "-projectPath", str(snapshot), "-buildTarget", "WebGL", "-executeMethod", "SinglePlayerWebBuild.Build", "-logFile", str(log)]
@@ -115,9 +117,12 @@ def main():
         raise RuntimeError("Game source changed during the build; rebuild before publishing this artifact")
     release = {"game":"Block Nations", "mode":"account-multiplayer" if args.multiplayer else "single-player",
         "unity":version, "sourceHash":prepared_hash, "boardSize":7,
-        "ai":["Normal", "Rider Focus", "Hard"] if args.multiplayer else ["Easy", "Medium", "Hard"]}
+        "ai":["Learned"] if args.learned_ai else ["Normal", "Rider Focus", "Hard"] if args.multiplayer else ["Easy", "Medium", "Hard"]}
     if args.multiplayer: release["multiplayer"] = {"version":"web-pbp-1", "seats":2, "turns":"asynchronous"}
-    else: release["policy"] = json.loads((SOURCE/"Assets/Resources/LearnedAI/manifest.json").read_text())
+    if args.learned_ai or not args.multiplayer:
+        release["policy"] = json.loads((SOURCE/"Assets/Resources/LearnedAI/manifest.json").read_text())
+    if args.learned_ai:
+        release["singlePlayerUnits"] = ["Warrior", "Rider", "Archer"]
     (output/"release.json").write_text(json.dumps(release, indent=2)+"\n")
     subprocess.run([sys.executable, str(SOURCE/"Tools/WebRelease/audit.py"), str(output)], check=True)
 

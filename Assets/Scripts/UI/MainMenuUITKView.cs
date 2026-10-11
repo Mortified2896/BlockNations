@@ -219,8 +219,7 @@ public class MainMenuUITKView : MonoBehaviour
     private bool clearLocalPbpConfirmVisible;
     private TurnManager.MapSizePreset selectedMapSizePreset = TurnManager.GetDefaultMapSizePreset();
     private int selectedPlayByPostPlayerCount = PlayByPostSeatUtility.MinSeatCount;
-    private TurnManager.AIRecruitVariant selectedAIRecruitVariant = PublicWebBuild.UsesGoogleAccounts
-        ? TurnManager.AIRecruitVariant.Default : TurnManager.AIRecruitVariant.LearnedMedium;
+    private TurnManager.AIRecruitVariant selectedAIRecruitVariant = AIRecruitVariantSelection.DefaultForNewGame;
     private bool selectedStoreSnapshotHistory;
     private bool selectedEnableAIVsAIDebugMode;
     private TurnManager.AIRecruitVariant selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
@@ -1966,8 +1965,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HandleGeneralSettingsAiMediumClicked()
     {
-        selectedAIRecruitVariant = PublicWebBuild.UsesGoogleAccounts
-            ? TurnManager.AIRecruitVariant.Default : TurnManager.AIRecruitVariant.LearnedMedium;
+        selectedAIRecruitVariant = TurnManager.AIRecruitVariant.LearnedMedium;
         RefreshGeneralSettingsSelectionState();
     }
 
@@ -3333,8 +3331,7 @@ public class MainMenuUITKView : MonoBehaviour
         selectedMapSizePreset = mode == PendingGeneralSettingsMode.PlayByPost
             ? TurnManager.MapSizePreset.Small : TurnManager.GetDefaultMapSizePreset();
         selectedPlayByPostPlayerCount = PlayByPostSeatUtility.MinSeatCount;
-        selectedAIRecruitVariant = PublicWebBuild.UsesGoogleAccounts
-            ? TurnManager.AIRecruitVariant.Default : TurnManager.AIRecruitVariant.LearnedMedium;
+        selectedAIRecruitVariant = AIRecruitVariantSelection.DefaultForNewGame;
         selectedStoreSnapshotHistory = false;
         selectedEnableAIVsAIDebugMode = false;
         selectedSideAAIRecruitVariant = TurnManager.AIRecruitVariant.Default;
@@ -3462,7 +3459,7 @@ public class MainMenuUITKView : MonoBehaviour
     {
         bool isVsAi = pendingGeneralSettingsMode == PendingGeneralSettingsMode.VsAI;
         bool disableSnapshotHistory = isVsAi && selectedEnableAIVsAIDebugMode;
-        bool hideGlobalAiStyle = isVsAi && selectedEnableAIVsAIDebugMode;
+        bool hideGlobalAiStyle = isVsAi && (selectedEnableAIVsAIDebugMode || PublicWebBuild.UsesFrozenOpponent);
 
         if (generalSettingsAiSection != null)
         {
@@ -3560,7 +3557,8 @@ public class MainMenuUITKView : MonoBehaviour
         if (generalSettingsSubtitleLabel != null)
             generalSettingsSubtitleLabel.text = isSimulation
                 ? "Choose the map and opponents for this simulation."
-                : isVsAi ? "7×7 · choose your AI difficulty."
+                : isVsAi ? (PublicWebBuild.UsesFrozenOpponent
+                    ? "7×7 · Warrior, Rider and Archer." : "7×7 · choose your AI difficulty.")
                 : "Choose your map size and player count for this new play-by-post match.";
         if (generalSettingsConfirmButton != null)
             generalSettingsConfirmButton.text = isSimulation

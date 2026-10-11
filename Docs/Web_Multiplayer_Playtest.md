@@ -1,6 +1,6 @@
 # Google-account web multiplayer playtest
 
-The Cloudflare playtest at `https://blocknations.moneymattersmedia.com/multiplayer` supports two people on the standard 7×7 board. The owner approved asynchronous saved turns, invitations to registered players by Google display name or exact email, in-game invitations without email delivery, and publication after validation. The web release keeps Normal, Rider Focus and Hard available for single player. The separate learned-AI candidate remains on hold for review.
+The Cloudflare playtest at `https://blocknations.moneymattersmedia.com/multiplayer` supports two people on the standard 7×7 board. The owner approved asynchronous saved turns, invitations to registered players by Google display name or exact email, in-game invitations without email delivery, and publication after validation. On 2026-10-11 the owner requested replacing the single-player selector with one frozen, evaluated learned opponent and the three-unit single-player roster. See the [learned-AI release record](Learned_AI_Browser_Playtest.md) for current publication status. Multiplayer access, saved turns and its supported rules remain separate from that release change.
 
 ## Player flow
 
@@ -41,7 +41,7 @@ The durable outbox retries transient provider failures, removes expired endpoint
 ## Build and deployment
 
 ```sh
-python3 Tools/WebRelease/build.py --multiplayer
+python3 Tools/WebRelease/build.py --multiplayer --learned-ai
 cd Web
 npm ci --ignore-scripts
 npm test
@@ -54,7 +54,7 @@ npm run deploy:preview
 npm run deploy:production
 ```
 
-The account build uses `BLOCKNATIONS_ACCOUNT_WEB`. It removes native PBp credentials, training code/models and the unapproved learned-AI resource from its separate build snapshot. Without `--multiplayer`, the existing learned single-player candidate build remains available and is still held for review. Do not publish it merely as part of this multiplayer rollout.
+The account build uses `BLOCKNATIONS_ACCOUNT_WEB`. The explicit `--learned-ai` release option also enables `BLOCKNATIONS_LEARNED_AI_WEB`, includes only the frozen release actor, requires the three-unit rules and uses its evaluated fixed probability sampling. New Play vs AI games have one opponent and no difficulty selector. Omitting this option reproduces the legacy account build without an actor. Both paths remove native PBp credentials, trainer code, training scenes/models and Unity AI Assistant from the isolated snapshot. This authorization covers the selected release; it does not authorize automatically replacing the live actor whenever training writes another checkpoint.
 
 Keep VAPID keys, session secrets, Cloudflare tokens, build logs, browser fixtures and rollback receipts outside Git. On the release machine, the VAPID key file is `~/.config/blocknations/push.json`, directory mode 700 and file mode 600. Keep that key pair stable across releases so existing device subscriptions remain valid. Retain the existing shared admission `SESSION_SECRET`; multiplayer does not require rotating it or creating another Google OAuth client.
 

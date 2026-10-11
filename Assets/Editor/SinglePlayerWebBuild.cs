@@ -20,11 +20,14 @@ public static class SinglePlayerWebBuild
         if (File.Exists("Assets/Resources/PbpTransportSettings.asset"))
             throw new InvalidOperationException("Multiplayer credential asset must be absent from the web snapshot.");
         bool multiplayer = Environment.GetEnvironmentVariable("BLOCKNATIONS_WEB_MULTIPLAYER") == "1";
-        if (!multiplayer)
+        bool learnedAi = Environment.GetEnvironmentVariable("BLOCKNATIONS_WEB_LEARNED_AI") == "1";
+        if (!multiplayer || learnedAi)
         {
             var policy = Resources.Load<LearnedPolicyRelease>(LearnedPolicyRelease.ResourcePath);
             if (policy == null) throw new InvalidOperationException("The frozen learned AI release is missing.");
-            policy.Validate(7);
+            var manifest = policy.Validate(7, learnedAi ? BlockNations.Simulation.MatchRuleProfile.CoreThreeVersion : null);
+            if (learnedAi && manifest.samplingMode != "Hard")
+                throw new InvalidOperationException("The public opponent requires its evaluated Hard sampling release.");
             foreach (BlockNations.AI.LearnedDifficulty difficulty in Enum.GetValues(typeof(BlockNations.AI.LearnedDifficulty)))
                 policy.ModelFor(difficulty);
             LearnedPolicyReleaseBuilder.ValidateFrozenSource();
@@ -54,10 +57,12 @@ public static class SinglePlayerWebBuild
 #endif
         PlayerSettings.runInBackground = false;
 
+        var defines = new System.Collections.Generic.List<string> { multiplayer ? "BLOCKNATIONS_ACCOUNT_WEB" : Define };
+        if (learnedAi) defines.Add("BLOCKNATIONS_LEARNED_AI_WEB");
         var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions {
             scenes = new[] { "Assets/Scenes/MainMenu.unity", "Assets/Scenes/SampleScene.unity" },
             target = BuildTarget.WebGL, locationPathName = output,
-            options = BuildOptions.None, extraScriptingDefines = new[] { multiplayer ? "BLOCKNATIONS_ACCOUNT_WEB" : Define }
+            options = BuildOptions.None, extraScriptingDefines = defines.ToArray()
         });
         if (report.summary.result != BuildResult.Succeeded)
             throw new InvalidOperationException("Single-player web build failed: " + report.summary.result);

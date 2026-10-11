@@ -3905,8 +3905,10 @@ public partial class TurnManager : MonoBehaviour
 
         if (AIRecruitVariantSelection.TryConsume(out AIRecruitVariant pendingRecruitVariant))
         {
-            aiRecruitVariant = AIRecruitVariantSelection.ForCurrentRuntime(pendingRecruitVariant);
+            aiRecruitVariant = AIRecruitVariantSelection.ForNewGame(pendingRecruitVariant);
         }
+
+        ConfigureOrdinaryMatchRules();
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         ResolveAIVsAIDebugRuntimeSettings(consumePendingSelection: true);
@@ -8143,6 +8145,7 @@ private void PBpDebugSyncNow_Context()
                 : PlayByPostSeatUtility.MinSeatCount;
 
             aiRecruitVariant = AIRecruitVariantSelection.FromSavedValue(save.aiRecruitVariant);
+            ConfigureOrdinaryMatchRules();
 
             SetCurrentGameId(string.IsNullOrEmpty(save.gameId) ? System.Guid.NewGuid().ToString() : save.gameId);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD

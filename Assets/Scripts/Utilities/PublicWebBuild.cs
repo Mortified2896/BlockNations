@@ -12,4 +12,9 @@ public static class PublicWebBuild
     public const bool UsesGoogleAccounts = false;
 #endif
     public const bool IsPublicWeb = IsSinglePlayer || UsesGoogleAccounts;
+#if BLOCKNATIONS_LEARNED_AI_WEB
+    public const bool UsesFrozenOpponent = IsPublicWeb;
+#else
+    public const bool UsesFrozenOpponent = false;
+#endif
 }

@@ -67,5 +67,14 @@ class BuildPathTests(unittest.TestCase):
         self.assertTrue((snapshot/"Assets/Resources/LearnedAI/model.onnx").exists())
         self.assertFalse((snapshot/"Assets/Resources/PbpTransportSettings.asset").exists())
 
+    def test_approved_account_actor_keeps_multiplayer_without_bundling_training_or_credentials(self):
+        self.release_fixture()
+        snapshot = self.root/"approved-account-snapshot"
+        build.prepare(snapshot, multiplayer=True, learned_ai=True)
+        self.assertEqual((snapshot/"Assets/Resources/LearnedAI/model.onnx").read_bytes(), b"synthetic actor")
+        self.assertFalse((snapshot/"Assets/Resources/PbpTransportSettings.asset").exists())
+        self.assertFalse((snapshot/"Assets/Scripts/Training").exists())
+        self.assertEqual(json.loads((snapshot/"Packages/manifest.json").read_text())["dependencies"], {"com.unity.inputsystem": "fixture"})
+
 
 if __name__ == "__main__": unittest.main()

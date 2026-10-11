@@ -9,6 +9,30 @@ using Object = UnityEngine.Object;
 
 public sealed class MatchRuleProfileTests
 {
+    [TestCase(TurnManager.GameMode.VsAI, TurnManager.AIRecruitVariant.LearnedHard)]
+    [TestCase(TurnManager.GameMode.VsAI, TurnManager.AIRecruitVariant.Default)]
+    [TestCase(TurnManager.GameMode.PlayByPost, TurnManager.AIRecruitVariant.LearnedHard)]
+    public void OrdinaryRecruitmentUsesFrozenRulesOnlyForTheLearnedSinglePlayerOpponent(
+        TurnManager.GameMode mode, TurnManager.AIRecruitVariant opponent)
+    {
+        var root = new GameObject("Inactive ordinary rules test"); root.SetActive(false);
+        try
+        {
+            var grid = root.AddComponent<GridManager>(); grid.width = grid.height = 7;
+            var manager = root.AddComponent<TurnManager>(); manager.gridManager = grid;
+            TrainingSceneBuilder.Set(manager, "currentMode", (int)mode);
+            manager.aiRecruitVariant = opponent;
+            typeof(TurnManager).GetMethod("ConfigureOrdinaryMatchRules",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(manager, null);
+            var release = Resources.Load<LearnedPolicyRelease>(LearnedPolicyRelease.ResourcePath);
+            var expected = mode == TurnManager.GameMode.VsAI && LearnedAIRuntime.IsLearned(opponent)
+                ? release.RulesForBoard(7) : MatchRuleProfile.Baseline;
+            Assert.That(manager.RuleProfile.Version, Is.EqualTo(expected.Version));
+            Assert.That(manager.RuleProfile.CanRecruit("scout"), Is.EqualTo(expected.CanRecruit("scout")));
+        }
+        finally { Object.DestroyImmediate(root); }
+    }
+
     private static MatchState Board(MatchRuleProfile profile, int seat = 0) =>
         new MatchState(7, 7, 2, profile.PolicyCatalog, seat, firstSeat: seat, ruleProfile: profile);
 
