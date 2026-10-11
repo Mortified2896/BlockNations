@@ -46,6 +46,12 @@ public sealed class AdvancedNativeModeTests
         Assert.That(manager.gridManager.GetAllTiles().Count(), Is.EqualTo(49));
         Assert.That(Object.FindAnyObjectByType<TutorialController>(), Is.Null);
         Assert.That(Object.FindAnyObjectByType<CameraController>().enabled, Is.True);
+        var advancedUi = Object.FindAnyObjectByType<AdvancedGameplayUITKView>().GetComponent<UIDocument>();
+        Assert.That(advancedUi.panelSettings.themeStyleSheet, Is.Not.Null, "The advanced panel needs a valid serialized runtime theme.");
+        Assert.That(advancedUi.rootVisualElement.worldBound.height, Is.GreaterThan(100));
+        Assert.That(advancedUi.rootVisualElement.Q<Label>("AdvancedGold").worldBound.height, Is.GreaterThan(12),
+            "Resource text must have a font and a measurable rendered size.");
+        Assert.That(advancedUi.rootVisualElement.Q<Button>("AdvancedEndTurn").worldBound.height, Is.GreaterThan(30));
         Assert.That(new SceneSimulationAdapter(manager).State, Is.SameAs(controller.Match.Board));
         controller.RecruitSex = PopulationSex.Female;
         City city = controller.HumanCity;

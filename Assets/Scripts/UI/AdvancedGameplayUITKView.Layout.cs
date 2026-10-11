@@ -55,9 +55,11 @@ public sealed partial class AdvancedGameplayUITKView
         float left = hud.worldBound.xMin + gap, right = hud.worldBound.xMax - gap;
         float top = economyBar.worldBound.yMax + gap;
         float bottomY = bottom.worldBound.yMax - Required<VisualElement>("AdvancedToolbar").worldBound.height - gap;
-        if (lastCityOpen) bottomY -= hud.ClassListContains("advanced-short") ? 308 : 336;
-        else if (lastUnitOpen) bottomY -= 154;
-        else bottomY -= 42;
+        float sheetSpace = lastCityOpen ? (hud.ClassListContains("advanced-short") ? 308 : 336) : lastUnitOpen ? 154 : 42;
+        // On short displays the city sheet overlays the board. Keep the
+        // normal board scale when the space above it cannot hold usable tiles.
+        if (lastCityOpen && bottomY - top - sheetSpace < 220) sheetSpace = 42;
+        bottomY -= sheetSpace;
         float availableWidth = Mathf.Max(80, right - left), availableHeight = Mathf.Max(80, bottomY - top);
         float unitsPerPixel = bounds.height / Screen.height;
         float span = (controller.Manager.gridManager.width + 0.35f) * controller.Manager.gridManager.tileSize;

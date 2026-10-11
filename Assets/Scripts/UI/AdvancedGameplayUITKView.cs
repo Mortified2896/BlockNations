@@ -33,7 +33,8 @@ public sealed partial class AdvancedGameplayUITKView : MonoBehaviour
     {
         if (controller == null || document == null || feedbackDocument == null || feedbackHud == null ||
             cityUI == null || unitUI == null || unitSelection == null || menuActions == null || boardCamera == null ||
-            warriorIcon == null || riderIcon == null || archerIcon == null || document.panelSettings == null)
+            warriorIcon == null || riderIcon == null || archerIcon == null || document.panelSettings == null ||
+            document.panelSettings.themeStyleSheet == null)
             throw new InvalidOperationException("Advanced gameplay UI references must be assigned in the Inspector.");
         runtimePanel = Instantiate(document.panelSettings);
         document.panelSettings = runtimePanel;
@@ -43,6 +44,7 @@ public sealed partial class AdvancedGameplayUITKView : MonoBehaviour
     {
         while (!controller.IsReady) yield return null;
         root = document.rootVisualElement;
+        root.StretchToParentSize();
         hud = Required<VisualElement>("AdvancedHudRoot");
         economyBar = Required<VisualElement>("EconomyBar"); bottom = Required<VisualElement>("AdvancedBottom");
         citySheet = Required<VisualElement>("CitySheet"); unitSheet = Required<VisualElement>("UnitSheet");
@@ -130,6 +132,7 @@ public sealed partial class AdvancedGameplayUITKView : MonoBehaviour
         Text("AdvancedTurn", $"Round {board.Round} · " + (board.GameOver ? "Game over" : humanTurn ? "Your turn" : "Opponent's turn"));
         Text("AdvancedGold", board.GoldForSeat(seat).ToString());
         Text("GoldRate", $"{Rate(income - upkeep)} / turn");
+        Required<Label>("GoldRate").EnableInClassList("negative-rate", income < upkeep);
         Required<Label>("AdvancedGold").tooltip = $"City income {income} gold · Army upkeep {upkeep} gold per turn";
         Text("AdvancedPopulation", home.Civilians.ToString());
         Text("PopulationSplit", $"{home.Men} M · {home.Women} F");
@@ -137,6 +140,7 @@ public sealed partial class AdvancedGameplayUITKView : MonoBehaviour
         Text("HousingDetail", $"{Math.Max(0, forecast.Housing - forecast.Residents)} free");
         Text("AdvancedFood", home.StoredFood.ToString());
         Text("FoodRate", $"{Rate(forecast.FoodBalance)} / turn");
+        Required<Label>("FoodRate").EnableInClassList("negative-rate", forecast.FoodBalance < 0);
         Required<Label>("AdvancedFood").tooltip = $"{forecast.FoodProduced} produced · {forecast.FoodConsumed} consumed per turn";
         Text("AdvancedStatus", controller.Status);
         Required<Button>("AdvancedEndTurn").SetEnabled(humanTurn);

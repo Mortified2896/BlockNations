@@ -21,6 +21,7 @@
 .resource-detail { color: rgb(174, 194, 213); font-size: 12px; white-space: nowrap; }
 .gold-resource .resource-value { color: rgb(246, 211, 128); }
 .food-resource .resource-value { color: rgb(174, 218, 159); }
+.negative-rate { color: rgb(250, 158, 139); }
 .advanced-bottom { position: absolute; left: 0; right: 0; bottom: 0; align-items: center; }
 .board-status { padding: 7px 14px; margin: 8px 12px; background-color: rgba(19, 31, 49, 0.86); border-radius: 8px; font-size: 13px; -unity-text-align: middle-center; }
 .detail-sheet { width: 100%; max-width: 780px; padding: 12px 16px 14px 16px; background-color: rgba(19, 31, 49, 0.97); border-top-width: 1px; border-top-color: rgba(255, 255, 255, 0.25); display: none; }
