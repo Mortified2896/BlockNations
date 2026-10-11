@@ -29,6 +29,25 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
     private int originalCullingMask, originalFrameRate, originalVSyncCount;
     private bool originalBackgroundExecution;
     private string readError;
+    private string resumeCommand;
+    private System.Diagnostics.Process resumeProcess;
+    public string ResumeMessage { get; private set; }
+    public bool CanStartTraining => !CanContinue && !string.IsNullOrEmpty(resumeCommand) &&
+        File.Exists(resumeCommand) && (resumeProcess == null || resumeProcess.HasExited);
+
+    public void StartTraining()
+    {
+        if (!CanStartTraining) return;
+        try
+        {
+            resumeProcess = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo {
+                FileName = "/bin/zsh", Arguments = "\"" + resumeCommand.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"",
+                UseShellExecute = false, CreateNoWindow = true });
+            ResumeMessage = "Starting the saved run. Checkpoints and the shared storage limit are preserved.";
+        }
+        catch (Exception error) when (error is IOException || error is System.ComponentModel.Win32Exception)
+        { ResumeMessage = "Could not start training: " + error.Message; }
+    }
     [Serializable] private sealed class Manifest { public string owner; public int schema, boardSize; }
     [Serializable] private sealed class Clock { public int version, boardSize; public string runId; public double totalSeconds; public bool estimated; }
     [Serializable] private sealed class Control { public bool paused; }
@@ -111,6 +130,7 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
         {
             if (args[i] == "--training-viewer") viewerMode = bool.Parse(args[++i]);
             else if (args[i] == "--viewer-run") runDirectory = args[++i];
+            else if (args[i] == "--training-resume-command") resumeCommand = Path.GetFullPath(args[++i]);
             else if (args[i] == "--training-rules-version") rulesVersion = args[++i];
         }
         if (!viewerMode) { enabled = false; return; }

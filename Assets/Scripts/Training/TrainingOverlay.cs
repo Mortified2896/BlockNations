@@ -251,6 +251,13 @@ public sealed class TrainingOverlay
         GUILayout.Label(spectator.Playtest.TrainingActive ?
             $"{spectator.WorkerCount} parallel {(spectator.WorkerCount == 1 ? "game" : "games")} · learning runs independently" :
             "Training is stopped. Recent games remain available to inspect.", small);
+        if (!spectator.CanContinue && spectator is TrainingViewer viewer)
+        {
+            GUI.enabled = viewer.CanStartTraining;
+            if (GUILayout.Button("Start training again", button)) viewer.StartTraining();
+            GUI.enabled = true;
+            if (!string.IsNullOrEmpty(viewer.ResumeMessage)) GUILayout.Label(viewer.ResumeMessage, small);
+        }
         if (GUILayout.Button(spectator.ShowingLive ? "Watch recent games" : "Watch live training", button))
         { if (spectator.ShowingLive) spectator.WatchRecent(); else spectator.WatchLive(); }
         if (spectator.ShowingLive)
