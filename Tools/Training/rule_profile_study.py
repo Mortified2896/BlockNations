@@ -25,6 +25,7 @@ from bounded_log import BoundedLog
 from decoupled_runtime import configure
 from evaluate_milestone import freeze
 from evaluate_suite import frozen_actor, run as evaluate, worker_digest
+from exploration_pressure import validate_recipe as validate_exploration
 from mlagents.torch_utils import torch
 from supervisor import ROOT_MARKER, atomic_json, interrupt_trainer, read_json, size
 from training_contract import RULES_VERSION, SUPPORTED_RULES, OPENING_ECONOMY_VERSION, transfer_contract, checkpoint_step, run_rules_version
@@ -44,10 +45,12 @@ def experiment_options(parallel_games, learning_rate):
 
 
 def arm_files(root, name, parent_path, recipe_run, rules, worker, steps, seed, *, roster_augmentation=False,
-              parallel_games=1, learning_rate=None):
+              parallel_games=1, learning_rate=None, exploration_pressure=None):
     experiment_options(parallel_games, learning_rate)
-    if type(roster_augmentation) is not bool:
-        raise ValueError('Roster augmentation must be an explicit experiment choice.')
+    if type(roster_augmentation) is not bool or roster_augmentation and exploration_pressure is not None:
+        raise ValueError('Choose an explicit, separate exploration or roster-augmentation experiment.')
+    pressure = validate_exploration(exploration_pressure, rules, 7) if exploration_pressure is not None else None
+    recipe_version = 'rule-profile-study-v3-exploration' if pressure else 'rule-profile-study-v2'
     parent = read_json(parent_path)
     _, identity = frozen_actor(parent_path, parent['rulesVersion'])  # Strict shapes, finite actor and checkpoint hash.
     if parent.get('step') is None or parent.get('step') < 1:
@@ -83,7 +86,9 @@ def arm_files(root, name, parent_path, recipe_run, rules, worker, steps, seed, *
                       optimizer='preserved', contract=transfer_contract(parent['rulesVersion'], rules))
     if learning_rate is not None or parallel_games != 1:
         provenance['trainingOptions'] = dict(parallelGames=parallel_games, learningRateOverride=learning_rate,
-                                            parentLearningRate=previous_rate, recipeVersion='rule-profile-study-v2')
+                                            parentLearningRate=previous_rate, recipeVersion=recipe_version)
+    if pressure:
+        provenance['explorationPressure'] = pressure
     if roster_augmentation:
         transform = dict(version=1, rulesVersion=rules, boardSize=7, mode='per-decision', seed=seed)
         provenance['publicRosterTransform'] = transform
@@ -91,13 +96,15 @@ def arm_files(root, name, parent_path, recipe_run, rules, worker, steps, seed, *
         boardSize=7, behavior='BlockNationsSeatV2', opening='standard', curriculum=False, seed=seed,
         rulesVersion=rules, openingEconomyVersion=OPENING_ECONOMY_VERSION, observationSize=3120, actionCount=259,
         initialWeights='preserved-parent-checkpoint', weightTransfer=provenance,
-        experiment='matched-roster-augmentation' if roster_augmentation else 'matched-rule-profile',
-        recipeVersion='rule-profile-study-v2', parallelGames=parallel_games,
+        experiment='matched-exploration-pressure' if pressure else 'matched-roster-augmentation' if roster_augmentation else 'matched-rule-profile',
+        recipeVersion=recipe_version, parallelGames=parallel_games,
         createdUtc=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())))
     if roster_augmentation:
         from roster_augmentation import load_recipe as check_augmentation
         atomic_json(run/'roster-augmentation.json', transform)
         check_augmentation(run)
+    if pressure:
+        atomic_json(run/'exploration-pressure.json', pressure)
     recipe['rulesVersion'] = rules
     for entry in recipe['opponents']:
         if entry['kind'] != 'frozen-policy':
@@ -147,7 +154,7 @@ def profile_suite(source, rules, worker, destination):
 
 
 def study(root, parent, recipe_run, suite, worker, destination, name, steps, seed, hours, budget_gb,
-          *, profiles=None, roster_augmentation=False, parallel_games=1, learning_rate=None):
+          *, profiles=None, roster_augmentation=False, parallel_games=1, learning_rate=None, exploration_pressure=None):
     experiment_options(parallel_games, learning_rate)
     if profiles is not None and not isinstance(profiles, (list, tuple)):
         raise ValueError('Choose an explicit bounded list of supported rule profiles.')
@@ -156,6 +163,11 @@ def study(root, parent, recipe_run, suite, worker, destination, name, steps, see
             any(not isinstance(profile, str) or profile not in SUPPORTED_RULES for profile in profiles) or
             len(set(profiles)) != len(profiles) or type(roster_augmentation) is not bool):
         raise ValueError('Choose unique supported rule profiles and an explicit augmentation flag.')
+    if roster_augmentation and exploration_pressure is not None:
+        raise ValueError('Test exploration and roster augmentation in separate controlled experiments.')
+    if exploration_pressure is not None:
+        for rules in profiles:
+            validate_exploration(exploration_pressure, rules, 7)
     if (read_json(root/ROOT_MARKER).get('owner') != 'BlockNations.LocalTraining.v1' or root.is_symlink() or
             root.resolve() != root.absolute() or recipe_run.parent != root/'runs'):
         raise ValueError('Use the real marked shared training root and an owned recipe run.')
@@ -171,7 +183,8 @@ def study(root, parent, recipe_run, suite, worker, destination, name, steps, see
     sources.update({parent:sha(parent.read_bytes()), suite:sha(suite.read_bytes()),
                     recipe_run/'training-opponents.json':sha((recipe_run/'training-opponents.json').read_bytes())})
     receipt = dict(version=1, state='running', pid=os.getpid(), addedSteps=steps, seed=seed, workerCount=parallel_games,
-        recipeVersion='rule-profile-study-v2', learningRateOverride=learning_rate,
+        recipeVersion='rule-profile-study-v3-exploration' if exploration_pressure is not None else 'rule-profile-study-v2',
+        learningRateOverride=learning_rate, explorationPressure=exploration_pressure,
         parentManifest=str(parent), profiles=list(profiles), rosterAugmentation=roster_augmentation,
         workerSha256=worker_digest(worker),
         pinnedSources={str(path):value for path,value in sources.items()}, sharedBudgetBytes=int(budget_gb*1e9),
@@ -198,8 +211,14 @@ def study(root, parent, recipe_run, suite, worker, destination, name, steps, see
             mode = {SUPPORTED_RULES[0]:'baseline', SUPPORTED_RULES[1]:'vision2', SUPPORTED_RULES[2]:'core3'}[rules]
             run, environment, provenance = arm_files(root, 'study-'+name+'-'+mode, parent, recipe_run, rules, worker, steps, seed,
                                                     roster_augmentation=roster_augmentation,
-                                                    parallel_games=parallel_games, learning_rate=learning_rate)
+                                                    parallel_games=parallel_games, learning_rate=learning_rate,
+                                                    exploration_pressure=exploration_pressure)
             current_run = run
+            if exploration_pressure is not None:
+                path = run/'exploration-pressure.json'
+                sources[path] = sha(path.read_bytes())
+                receipt['pinnedSources'][str(path)] = sources[path]
+                atomic_json(destination/'study.json', receipt)
             target_suite = profile_suite(suite, rules, worker, destination/(mode+'-suite.json'))
             source_rules = provenance['trainedRulesVersion']
             transfer = transfer_contract(source_rules, rules) if rules != source_rules else None
@@ -252,7 +271,8 @@ def study(root, parent, recipe_run, suite, worker, destination, name, steps, see
                             sha((run/'training-opponents.json').read_bytes()))
             guard()
             after = evaluate(frozen, target_suite, worker, destination/(mode+'-after'))
-            outcome = dict(profile=rules, rosterAugmentation=roster_augmentation, run=str(run), manifest=str(frozen), optimizerStepDelta=deltas,
+            outcome = dict(profile=rules, rosterAugmentation=roster_augmentation, explorationPressure=exploration_pressure,
+                run=str(run), manifest=str(frozen), optimizerStepDelta=deltas,
                 seconds=time.monotonic()-started, decisions=arena['decisions'], rejections=arena['rejections'],
                 suiteId=after['suiteId'], beforeCandidate=initial['candidate'], afterCandidate=after['candidate'])
             receipt['trials'].append(outcome)
@@ -295,10 +315,25 @@ if __name__ == '__main__':
                         help='Record and reproduce the arena count of the recipe being tested.')
     parser.add_argument('--learning-rate', type=float,
                         help='Explicit bounded override for this fresh continuation; retain the parent optimizer.')
+    parser.add_argument('--exploration-coefficient', type=float,
+                        help='Enable the bounded generic legal-action exploration loss in this fresh study.')
+    parser.add_argument('--exploration-entropy-floor', type=float,
+                        help='Normalized entropy threshold, at most 0.25; requires exploration coefficient.')
+    parser.add_argument('--exploration-batch-size', type=int,
+                        help='Auxiliary sample size, 16-128; requires exploration coefficient.')
     args = parser.parse_args()
+    pressure = None
+    if args.exploration_coefficient is not None:
+        if args.profile is None or len(args.profile) != 1:
+            parser.error('An exploration trial requires one explicit target profile.')
+        pressure = dict(version=1, rulesVersion=args.profile[0], boardSize=7, coefficient=args.exploration_coefficient,
+            entropyFloor=args.exploration_entropy_floor if args.exploration_entropy_floor is not None else .25,
+            batchSize=args.exploration_batch_size if args.exploration_batch_size is not None else 128)
+    elif args.exploration_entropy_floor is not None or args.exploration_batch_size is not None:
+        parser.error('Exploration thresholds require an explicit coefficient.')
     torch.set_num_threads(1)
     result = study(args.root, args.parent, args.recipe_run, args.suite, args.worker,
                    args.destination, args.name, args.steps, args.seed, args.hours_per_arm, args.budget_gb,
                    profiles=args.profile, roster_augmentation=args.roster_augmentation,
-                   parallel_games=args.parallel_games, learning_rate=args.learning_rate)
+                   parallel_games=args.parallel_games, learning_rate=args.learning_rate, exploration_pressure=pressure)
     print(json.dumps(dict(state=result['state'], trials=len(result['trials']))))

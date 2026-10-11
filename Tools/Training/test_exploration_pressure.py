@@ -16,9 +16,9 @@ from mlagents.trainers.buffer import BufferKey
 from mlagents.trainers.trajectory import ObsUtil
 
 from dotnet_environment import SPEC
-from exploration_pressure import ExplorationPressure, masked_uniform_kl
+from exploration_pressure import ExplorationPressure, masked_uniform_kl, validate_recipe
 from supervisor import trainer_config
-from training_contract import RULES_VERSION, OBSERVATIONS, ACTIONS
+from training_contract import RULES_VERSION, CORE_THREE_RULES, OBSERVATIONS, ACTIONS
 
 WORKER = Path(os.environ.get('BLOCKNATIONS_TEST_WORKER', 'missing-worker'))
 
@@ -34,9 +34,9 @@ class ExplorationTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def enable(self):
+    def enable(self, rules=RULES_VERSION):
         (self.run/'exploration-pressure.json').write_text(json.dumps(self.recipe))
-        return ExplorationPressure(self.run)
+        return ExplorationPressure(self.run, rules)
 
     def test_missing_recipe_is_disabled_and_wrong_board_or_unbounded_coefficient_is_rejected(self):
         pressure = ExplorationPressure(self.run)
@@ -46,6 +46,14 @@ class ExplorationTests(unittest.TestCase):
             previous = self.recipe[field]; self.recipe[field] = value
             with self.assertRaises(ValueError): self.enable()
             self.recipe[field] = previous
+
+    def test_recipe_validation_is_shared_bounded_and_does_not_mutate_the_callers_configuration(self):
+        copied = validate_recipe(self.recipe, RULES_VERSION, 7)
+        copied['coefficient'] = .01
+        self.assertEqual(self.recipe['coefficient'], .005)
+        for recipe, board in ((dict(self.recipe, boardSize=True), 1), (self.recipe, True), (None, 7),
+                              (dict(self.recipe, coefficient=True), 7), (dict(self.recipe, batchSize=16.0), 7)):
+            with self.assertRaises(ValueError): validate_recipe(recipe, RULES_VERSION, board)
 
     def test_saturated_legal_choices_receive_finite_recovery_gradient_but_illegal_choices_do_not(self):
         logits = torch.tensor([[25., 0., 0., 100.]], requires_grad=True)
@@ -105,13 +113,17 @@ class ExplorationTests(unittest.TestCase):
     @unittest.skipUnless(WORKER.is_file() and os.environ.get('BLOCKNATIONS_TEST_EXPLORATION_PPO'),
                          'Opt-in real PPO optimizer/checkpoint continuation.')
     def test_real_ppo_pressure_continues_checkpointed_optimizer_and_legal_self_play(self):
-        self.enable()
+        self.recipe['rulesVersion'] = CORE_THREE_RULES
+        self.enable(CORE_THREE_RULES)
+        metadata = json.loads((self.run/'run.json').read_text()); metadata['rulesVersion'] = CORE_THREE_RULES
+        (self.run/'run.json').write_text(json.dumps(metadata))
         config = self.run/'trainer.yaml'; config.write_text(json.dumps(trainer_config(4096, 2048)))
         env = dict(os.environ, BLOCKNATIONS_RATING_RUN=str(self.run), BLOCKNATIONS_RATING_BOARD='7',
             BLOCKNATIONS_RATING_SESSION=uuid.uuid4().hex, BLOCKNATIONS_SIMULATION_WORKER=str(WORKER),
             BLOCKNATIONS_PARALLEL_GAMES='4', BLOCKNATIONS_SIMULATION_SEED='42',
             BLOCKNATIONS_SIMULATION_CURRICULUM='false', BLOCKNATIONS_SIMULATION_DISTANCE='2',
-            BLOCKNATIONS_OPENING_ECONOMY_VERSION='2', OMP_NUM_THREADS='2', MKL_NUM_THREADS='2')
+            BLOCKNATIONS_OPENING_ECONOMY_VERSION='2', BLOCKNATIONS_RULES_VERSION=CORE_THREE_RULES,
+            OMP_NUM_THREADS='2', MKL_NUM_THREADS='2')
         command = [sys.executable, str(Path(__file__).with_name('rated_training.py')), str(config),
                    '--run-id', self.run.name, '--results-dir', str(self.run/'checkpoints'), '--seed', '42', '--torch-device', 'cpu']
         checkpoint = self.run/'checkpoints'/self.run.name/'BlockNationsSeatV2/checkpoint.pt'
@@ -143,6 +155,7 @@ class ExplorationTests(unittest.TestCase):
                            min(float(v['step']) for v in optimizer.values()))
         status = json.loads((self.run/'arena-status.json').read_text())
         self.assertEqual(status['rejections'], 0)
+        self.assertEqual(status['simulationVersion'], CORE_THREE_RULES)
         print('Exploration-enabled real PPO Adam continuation:', steps)
 
 

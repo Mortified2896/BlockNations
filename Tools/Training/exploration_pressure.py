@@ -16,6 +16,19 @@ from mlagents.trainers.trajectory import ObsUtil
 from training_contract import RULES_VERSION, OBSERVATIONS, ACTIONS, validate_rules_version
 
 
+def validate_recipe(recipe, rules_version, board_size):
+    rules_version = validate_rules_version(rules_version)
+    if (type(board_size) is not int or board_size < 1 or not isinstance(recipe, dict) or
+            type(recipe.get('version')) is not int or recipe['version'] != 1 or
+            recipe.get('rulesVersion') != rules_version or type(recipe.get('boardSize')) is not int or
+            recipe['boardSize'] != board_size or type(recipe.get('coefficient')) not in (float, int) or
+            not 0 < recipe['coefficient'] <= .02 or type(recipe.get('entropyFloor')) not in (float, int) or
+            not 0 < recipe['entropyFloor'] <= .25 or type(recipe.get('batchSize')) is not int or
+            not 16 <= recipe['batchSize'] <= 128):
+        raise ValueError('Invalid bounded development exploration recipe.')
+    return dict(recipe)
+
+
 def masked_uniform_kl(logits, allowed, entropy_floor):
     if (type(entropy_floor) not in (float, int) or not 0 < entropy_floor <= .25 or
             logits.ndim != 2 or logits.shape != allowed.shape or
@@ -47,14 +60,9 @@ class ExplorationPressure:
             return
         recipe = json.loads(path.read_text())
         manifest = json.loads((Path(run)/'run.json').read_text())
-        if (type(recipe.get('version')) is not int or recipe['version'] != 1 or recipe.get('rulesVersion') != rules_version or
-                manifest.get('owner') != 'BlockNations.LocalTraining.v1' or manifest.get('schema') != 2 or
-                recipe.get('boardSize') != manifest.get('boardSize') or
-                type(recipe.get('coefficient')) not in (float, int) or not 0 < recipe['coefficient'] <= .02 or
-                type(recipe.get('entropyFloor')) not in (float, int) or not 0 < recipe['entropyFloor'] <= .25 or
-                type(recipe.get('batchSize')) is not int or not 16 <= recipe['batchSize'] <= 128):
+        if manifest.get('owner') != 'BlockNations.LocalTraining.v1' or manifest.get('schema') != 2:
             raise ValueError('Invalid bounded development exploration recipe.')
-        self.recipe = recipe
+        self.recipe = validate_recipe(recipe, rules_version, manifest.get('boardSize'))
 
     def prepare(self, policy, buffer, step):
         if self.recipe is None:

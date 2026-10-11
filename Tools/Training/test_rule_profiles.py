@@ -104,6 +104,51 @@ class RuleTransferTests(unittest.TestCase):
         self.assertFalse((self.root/'runs/invalid-options').exists())
         self.assertFalse(destination.exists())
 
+    def test_exploration_continuation_preserves_weights_optimizer_copy_and_records_loss_provenance(self):
+        original = self.checkpoint.read_bytes()
+        pressure = dict(version=1, rulesVersion=CORE_THREE_RULES, boardSize=7,
+                        coefficient=.005, entropyFloor=.25, batchSize=128)
+        run, _, provenance = arm_files(self.root, 'pressure-core3', self.manifest, self.parent,
+            CORE_THREE_RULES, self.worker, 4096, 45, parallel_games=4, learning_rate=.000075, exploration_pressure=pressure)
+        self.assertEqual(self.checkpoint.read_bytes(), original)
+        saved = run/'checkpoints'/run.name/'BlockNationsSeatV2'
+        self.assertEqual((saved/'checkpoint.pt').read_bytes(), original)
+        self.assertEqual(json.loads((run/'exploration-pressure.json').read_text()), pressure)
+        self.assertEqual(provenance['explorationPressure'], pressure)
+        metadata = json.loads((run/'run.json').read_text())
+        self.assertEqual(metadata['recipeVersion'], 'rule-profile-study-v3-exploration')
+        self.assertEqual(metadata['experiment'], 'matched-exploration-pressure')
+        plan = json.loads((run/'trainer.yaml').read_text())['behaviors']['BlockNationsSeatV2']
+        self.assertEqual(plan['hyperparameters']['beta'], .1)
+        self.assertEqual(plan['network_settings'], json.loads(self.config.read_text())['behaviors']['BlockNationsSeatV2']['network_settings'])
+        source = saved/'BlockNationsSeatV2-200.pt'; source.write_bytes(original); source.with_suffix('.onnx').write_bytes(b'fixture')
+        manifest = json.loads(freeze(run, source, 200, (run/'trainer.yaml').read_bytes(), 'recipe').read_text())
+        self.assertEqual(manifest['weightTransfer']['explorationPressure'], pressure)
+        pressure['coefficient'] = .01
+        self.assertEqual(provenance['explorationPressure']['coefficient'], .005)
+
+    def test_invalid_or_combined_exploration_choices_fail_before_creating_artifacts(self):
+        valid = dict(version=1, rulesVersion=CORE_THREE_RULES, boardSize=7,
+                     coefficient=.005, entropyFloor=.25, batchSize=128)
+        for field, value in [('coefficient', 0), ('coefficient', float('nan')), ('coefficient', .03),
+                             ('entropyFloor', .3), ('batchSize', True), ('rulesVersion', RULES_VERSION), ('boardSize', 11)]:
+            with self.assertRaises(ValueError):
+                arm_files(self.root, 'invalid-exploration', self.manifest, self.parent, CORE_THREE_RULES,
+                          self.worker, 4096, 45, exploration_pressure=dict(valid, **{field:value}))
+        with self.assertRaises(ValueError):
+            arm_files(self.root, 'invalid-exploration', self.manifest, self.parent, CORE_THREE_RULES,
+                      self.worker, 4096, 45, exploration_pressure=valid, roster_augmentation=True)
+        destination = self.root/'invalid-exploration-study'
+        with self.assertRaises(ValueError):
+            study(self.root, self.manifest, self.parent, self.suite, self.worker, destination,
+                  'invalid-exploration', 4096, 45, 1, 20, profiles=[CORE_THREE_RULES],
+                  exploration_pressure=dict(valid, coefficient=-.01))
+        with self.assertRaises(ValueError):
+            study(self.root, self.manifest, self.parent, self.suite, self.worker, destination,
+                  'invalid-exploration', 4096, 45, 1, 20, exploration_pressure=valid)
+        self.assertFalse((self.root/'runs/invalid-exploration').exists())
+        self.assertFalse(destination.exists())
+
     def test_augmented_profile_preserves_parent_and_records_transform_in_frozen_provenance(self):
         before = self.checkpoint.read_bytes()
         run, environment, provenance = arm_files(self.root, 'augmented-core3', self.manifest, self.parent,
