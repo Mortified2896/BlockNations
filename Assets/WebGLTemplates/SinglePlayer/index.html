@@ -18,6 +18,7 @@
     progress { width:min(75vw,25rem); }
     #status { max-width:35rem; line-height:1.5; }
     .account-bar { position:relative; z-index:1; flex:none; display:flex; justify-content:flex-end; padding:0 16px env(safe-area-inset-bottom); background:#314d79; }
+    .account-bar[hidden] { display:none; }
     .account-bar a { display:flex; align-items:center; min-height:48px; padding:0 12px; font-size:14px; color:white; text-underline-offset:4px; }
     .account-bar a:focus-visible { outline:2px solid white; outline-offset:-4px; }
     #multiplayer-state { position:absolute; z-index:5; inset:0; background:#314d79; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:24px; text-align:center; }
