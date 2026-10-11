@@ -40,7 +40,7 @@ class RuleTransferTests(unittest.TestCase):
         torch.save({'Policy':actor.state_dict()}, self.checkpoint)
         self.config.write_text(json.dumps({'behaviors':{'BlockNationsSeatV2':{
             'network_settings':{'hidden_units':8, 'num_layers':1, 'normalize':False},
-            'hyperparameters':{'beta':.1, 'learning_rate_schedule':'constant'}}}}))
+            'hyperparameters':{'beta':.1, 'learning_rate':.0003, 'learning_rate_schedule':'constant'}}}}))
         self.manifest = self.folder/'manifest.json'
         self.manifest.write_text(json.dumps(dict(checkpoint=str(self.checkpoint), trainerConfig=str(self.config),
             rulesVersion=RULES_VERSION, boardSize=7, openingEconomyVersion=2, step=100, sha256=digest(self.checkpoint))))
@@ -64,6 +64,45 @@ class RuleTransferTests(unittest.TestCase):
 
     def target(self):
         return arm_files(self.root, 'new-core3', self.manifest, self.parent, CORE_THREE_RULES, self.worker, 4096, 42)
+
+    def test_explicit_recipe_options_preserve_parent_and_reproduce_parallel_gentle_continuation(self):
+        before, original_config = self.checkpoint.read_bytes(), self.config.read_bytes()
+        run, environment, provenance = arm_files(self.root, 'gentle-core3', self.manifest, self.parent,
+            CORE_THREE_RULES, self.worker, 4096, 43, parallel_games=4, learning_rate=.000075)
+        plan = json.loads((run/'trainer.yaml').read_text())['behaviors']['BlockNationsSeatV2']
+        self.assertEqual(plan['hyperparameters']['learning_rate'], .000075)
+        self.assertEqual(plan['hyperparameters']['beta'], .1)
+        self.assertEqual(plan['hyperparameters']['learning_rate_schedule'], 'constant')
+        self.assertEqual(plan['network_settings'], json.loads(original_config)['behaviors']['BlockNationsSeatV2']['network_settings'])
+        self.assertEqual(self.checkpoint.read_bytes(), before)
+        self.assertEqual(self.config.read_bytes(), original_config)
+        self.assertEqual((run/'checkpoints'/run.name/'BlockNationsSeatV2/checkpoint.pt').read_bytes(), before)
+        self.assertEqual(environment['BLOCKNATIONS_PARALLEL_GAMES'], '4')
+        execution = json.loads((run/'execution-settings.json').read_text())
+        self.assertEqual(execution['workerCount'], 4)
+        self.assertEqual(execution['seed'], 43)
+        self.assertEqual(provenance['trainingOptions']['parentLearningRate'], .0003)
+        saved = run/'checkpoints'/run.name/'BlockNationsSeatV2'
+        source = saved/'BlockNationsSeatV2-200.pt'
+        source.write_bytes(before); source.with_suffix('.onnx').write_bytes(b'fixture')
+        frozen = json.loads(freeze(run, source, 200, (run/'trainer.yaml').read_bytes(), 'recipe').read_text())
+        self.assertEqual(frozen['weightTransfer']['trainingOptions'], provenance['trainingOptions'])
+
+    def test_invalid_compute_or_learning_rate_options_fail_without_creating_runs(self):
+        for workers in (0, 3, 5, True, 1.0):
+            with self.assertRaises(ValueError):
+                arm_files(self.root, 'invalid-options', self.manifest, self.parent, CORE_THREE_RULES,
+                          self.worker, 4096, 42, parallel_games=workers)
+        for rate in (0, -.1, .1, float('nan'), float('inf'), True, '0.000075'):
+            with self.assertRaises(ValueError):
+                arm_files(self.root, 'invalid-options', self.manifest, self.parent, CORE_THREE_RULES,
+                          self.worker, 4096, 42, learning_rate=rate)
+        destination = self.root/'invalid-study'
+        with self.assertRaises(ValueError):
+            study(self.root, self.manifest, self.parent, self.suite, self.worker, destination,
+                  'trial', 4096, 42, 1, 20, learning_rate=float('nan'))
+        self.assertFalse((self.root/'runs/invalid-options').exists())
+        self.assertFalse(destination.exists())
 
     def test_augmented_profile_preserves_parent_and_records_transform_in_frozen_provenance(self):
         before = self.checkpoint.read_bytes()

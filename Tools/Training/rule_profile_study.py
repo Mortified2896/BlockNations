@@ -8,6 +8,7 @@ import argparse
 import copy
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -34,7 +35,17 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def arm_files(root, name, parent_path, recipe_run, rules, worker, steps, seed, *, roster_augmentation=False):
+def experiment_options(parallel_games, learning_rate):
+    if type(parallel_games) is not int or parallel_games not in (1, 2, 4):
+        raise ValueError('Choose a supported training arena count: 1, 2 or 4.')
+    if learning_rate is not None and (type(learning_rate) not in (int, float) or
+            not math.isfinite(learning_rate) or not 0 < learning_rate <= .01):
+        raise ValueError('Choose a finite learning-rate override between 0 and 0.01.')
+
+
+def arm_files(root, name, parent_path, recipe_run, rules, worker, steps, seed, *, roster_augmentation=False,
+              parallel_games=1, learning_rate=None):
+    experiment_options(parallel_games, learning_rate)
     if type(roster_augmentation) is not bool:
         raise ValueError('Roster augmentation must be an explicit experiment choice.')
     parent = read_json(parent_path)
@@ -60,12 +71,19 @@ def arm_files(root, name, parent_path, recipe_run, rules, worker, steps, seed, *
     plan = json.loads(Path(parent['trainerConfig']).read_text())
     behavior = plan['behaviors']['BlockNationsSeatV2']
     behavior.update(max_steps=parent['step']+steps, checkpoint_interval=min(50000, steps), keep_checkpoints=3)
-    # Preserve every optimization setting, including beta and its schedule.
+    # Preserve optimization settings unless a bounded override is explicitly
+    # part of this fresh study. The copied optimizer state remains intact.
+    previous_rate = behavior['hyperparameters'].get('learning_rate')
+    if learning_rate is not None:
+        behavior['hyperparameters']['learning_rate'] = float(learning_rate)
     atomic_json(run/'trainer.yaml', plan)
     provenance = dict(parentManifest=str(parent_path), parentStep=parent['step'],
                       checkpointSha256=identity['sha256'], configSha256=identity['configSha256'],
                       trainedRulesVersion=parent['rulesVersion'], targetRulesVersion=rules,
                       optimizer='preserved', contract=transfer_contract(parent['rulesVersion'], rules))
+    if learning_rate is not None or parallel_games != 1:
+        provenance['trainingOptions'] = dict(parallelGames=parallel_games, learningRateOverride=learning_rate,
+                                            parentLearningRate=previous_rate, recipeVersion='rule-profile-study-v2')
     if roster_augmentation:
         transform = dict(version=1, rulesVersion=rules, boardSize=7, mode='per-decision', seed=seed)
         provenance['publicRosterTransform'] = transform
@@ -74,6 +92,7 @@ def arm_files(root, name, parent_path, recipe_run, rules, worker, steps, seed, *
         rulesVersion=rules, openingEconomyVersion=OPENING_ECONOMY_VERSION, observationSize=3120, actionCount=259,
         initialWeights='preserved-parent-checkpoint', weightTransfer=provenance,
         experiment='matched-roster-augmentation' if roster_augmentation else 'matched-rule-profile',
+        recipeVersion='rule-profile-study-v2', parallelGames=parallel_games,
         createdUtc=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())))
     if roster_augmentation:
         from roster_augmentation import load_recipe as check_augmentation
@@ -107,7 +126,7 @@ def arm_files(root, name, parent_path, recipe_run, rules, worker, steps, seed, *
     environment = dict(os.environ, BLOCKNATIONS_RATING_RUN=str(run), BLOCKNATIONS_RATING_BOARD='7',
         BLOCKNATIONS_RATING_SESSION=uuid.uuid4().hex, OMP_NUM_THREADS='1', MKL_NUM_THREADS='1', OPENBLAS_NUM_THREADS='1',
         PYTHONUNBUFFERED='1')
-    configure(SimpleNamespace(backend='dotnet', worker=worker, parallel_games=1, seed=seed, board_size=7,
+    configure(SimpleNamespace(backend='dotnet', worker=worker, parallel_games=parallel_games, seed=seed, board_size=7,
               curriculum=False, curriculum_distance=2, opening_economy_version=2, rules_version=rules), run, environment)
     return run, environment, provenance
 
@@ -128,7 +147,8 @@ def profile_suite(source, rules, worker, destination):
 
 
 def study(root, parent, recipe_run, suite, worker, destination, name, steps, seed, hours, budget_gb,
-          *, profiles=None, roster_augmentation=False):
+          *, profiles=None, roster_augmentation=False, parallel_games=1, learning_rate=None):
+    experiment_options(parallel_games, learning_rate)
     if profiles is not None and not isinstance(profiles, (list, tuple)):
         raise ValueError('Choose an explicit bounded list of supported rule profiles.')
     profiles = tuple(profiles) if profiles is not None else SUPPORTED_RULES
@@ -150,7 +170,8 @@ def study(root, parent, recipe_run, suite, worker, destination, name, steps, see
     sources = {path:sha(path.read_bytes()) for path in Path(__file__).parent.glob('*.py')}
     sources.update({parent:sha(parent.read_bytes()), suite:sha(suite.read_bytes()),
                     recipe_run/'training-opponents.json':sha((recipe_run/'training-opponents.json').read_bytes())})
-    receipt = dict(version=1, state='running', pid=os.getpid(), addedSteps=steps, seed=seed, workerCount=1,
+    receipt = dict(version=1, state='running', pid=os.getpid(), addedSteps=steps, seed=seed, workerCount=parallel_games,
+        recipeVersion='rule-profile-study-v2', learningRateOverride=learning_rate,
         parentManifest=str(parent), profiles=list(profiles), rosterAugmentation=roster_augmentation,
         workerSha256=worker_digest(worker),
         pinnedSources={str(path):value for path,value in sources.items()}, sharedBudgetBytes=int(budget_gb*1e9),
@@ -176,7 +197,8 @@ def study(root, parent, recipe_run, suite, worker, destination, name, steps, see
             guard()
             mode = {SUPPORTED_RULES[0]:'baseline', SUPPORTED_RULES[1]:'vision2', SUPPORTED_RULES[2]:'core3'}[rules]
             run, environment, provenance = arm_files(root, 'study-'+name+'-'+mode, parent, recipe_run, rules, worker, steps, seed,
-                                                    roster_augmentation=roster_augmentation)
+                                                    roster_augmentation=roster_augmentation,
+                                                    parallel_games=parallel_games, learning_rate=learning_rate)
             current_run = run
             target_suite = profile_suite(suite, rules, worker, destination/(mode+'-suite.json'))
             source_rules = provenance['trainedRulesVersion']
@@ -269,9 +291,14 @@ if __name__ == '__main__':
     parser.add_argument('--budget-gb', type=float, default=20)
     parser.add_argument('--profile', choices=SUPPORTED_RULES, action='append', help='Limit this owned study to selected profiles.')
     parser.add_argument('--roster-augmentation', action='store_true', help='Use the explicit public capability/slot permutation trainer.')
+    parser.add_argument('--parallel-games', type=int, choices=(1, 2, 4), default=1,
+                        help='Record and reproduce the arena count of the recipe being tested.')
+    parser.add_argument('--learning-rate', type=float,
+                        help='Explicit bounded override for this fresh continuation; retain the parent optimizer.')
     args = parser.parse_args()
     torch.set_num_threads(1)
     result = study(args.root, args.parent, args.recipe_run, args.suite, args.worker,
                    args.destination, args.name, args.steps, args.seed, args.hours_per_arm, args.budget_gb,
-                   profiles=args.profile, roster_augmentation=args.roster_augmentation)
+                   profiles=args.profile, roster_augmentation=args.roster_augmentation,
+                   parallel_games=args.parallel_games, learning_rate=args.learning_rate)
     print(json.dumps(dict(state=result['state'], trials=len(result['trials']))))

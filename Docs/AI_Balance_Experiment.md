@@ -475,3 +475,26 @@ The frozen export verifies the PT actor against its paired ONNX over eight input
 After the controlled trial completed, `mac-7x7-entropy-20261011` saved its final checkpoint and exited cleanly with `user_stop` and exit code 0. Its strong historical references remain saved. The new `mac-7x7-core3-gentle-20261011` run continues the selected step-32,730,121 parent and optimizer under core-three rules with four independent C# arenas. It retains the approved opening, fair observations, retained-reference league, PPO settings and beta 0.1; the recorded recipe changes the learning rate from `0.0003` to `0.000075`. The hypothesis is that smaller updates reduce the forgetting seen in both million-step continuations. This is a measured experiment, not an assurance of improvement. Capability-slot augmentation is not active in this continuation.
 
 Maximum hours is 0, so there is no duration limit. The supervisor enforces the shared 20 GB allowance across the marked training root, checkpoint reserve, free-disk guard and bounded retention. At launch verification it was running on four arenas, saved fresh checkpoints and rejected no actions, with approximately 3.53/20 GB shared storage occupied. No viewer is automatically launched. Preserve the parent and compare frozen milestones against the same target-rules reference pack before promoting any subsequent checkpoint. Checkpoint health and training throughput are separate from assessed strength.
+
+## First gentle-update milestone and reproducible continuations, 2026-10-11
+
+The four-arena main run passed one million additional learned steps. Frozen step **33,749,992**, checkpoint SHA-256 `5ca6ac1b0183019a882788522829112fd27f91f74c51cf8679b3dcd77b89666b`, completed the identical 13-case core-three reference pack used for its transferred parent. Both receipts have suite ID `f38eb2fc623123bb2863c3864a859326a7694ff77eaec05709791174b8945efa`; both sides use core-three rules, including older frozen references. Results are retained inside the capped training root at `runs/mac-7x7-core3-gentle-20261011/evaluations/core3-one-million-v1/`. The parent comparison remains in `Logs/Validation/RuleProfileStudy-20261011/catalog-million/core3-before/`.
+
+| Fixed measurement | Preserved parent | Gentle-update milestone |
+| --- | ---: | ---: |
+| External-reference wins, out of 704 | 643 | 659 |
+| Mixed tactical opponent, out of 64 | 64 | 64 |
+| Warrior tactical opponent, out of 64 | 48 | 48 |
+| Rider tactical opponent, out of 64 | 64 | 64 |
+| Archer tactical opponent, out of 64 | 45 | 64 |
+| Retained raw-policy case, seed 30001, out of 128 | 114 | 120 |
+| Retained raw-policy case, seed 40001, out of 128 | 119 | 116 |
+| Held-out learned opponent, seed 50001, out of 128 | 125 | 119 |
+| Hard self-match first-player share, 320 captures | 100% | 0% |
+| Raw-policy self-match first-player share, 256 captures | 56.3% | 21.1% |
+
+There were no interruptions. The tactical Archer improvement accounts for most of the aggregate gain, while two learned-opponent cases regressed. It is therefore promising evidence for smaller updates, not a demonstrated improvement on every matchup. The Archer case was won using Riders; the 256 raw-policy self-matches recruited only one Archer. This does not establish useful Archer play. The opposite Hard starting-role sweeps also fail the balance criterion. Repeated deterministic openings, one training seed and a narrow opponent pack limit independence. Do not tune opening gold to fit this one checkpoint, or promote it on aggregate wins alone. Compare directly with the preserved parent on additional held-out seeds and repeat the continuation across independent training seeds before selecting it for playtests.
+
+`rule_profile_study.py` now accepts explicit `--parallel-games 1|2|4` and an optional finite positive `--learning-rate` override up to `0.01`. Defaults preserve the existing study behavior. The run, study receipt and frozen weight-transfer provenance record the actual arena count, old/new learning rate and `rule-profile-study-v2` recipe. The parent checkpoint is copied without changing its weights or Adam state; other hyperparameters and network settings are preserved. This allows independent continuations of the current four-arena, `0.000075` recipe without editing an existing run or changing its controlled conditions.
+
+Validation includes 15 focused rule-transfer tests and a real 4,096-step four-arena PPO continuation from the preserved parent, seed 9042. The latter completed, advanced every retained Adam counter by 48, saved finite policy weights with a paired ONNX, used learning rate `0.000075` in the saved optimizer, and recorded zero rejected actions. Its small before/after benchmark validates the runner, not playing strength. The receipt is `runs/mac-7x7-core3-gentle-20261011/evaluations/runner-options-smoke/study.json` inside the shared budget. Independent million-step continuations use the unchanged retained-opponent recipe and fixed reference pack; they are separate experiments rather than changes to the still-running main learner.
