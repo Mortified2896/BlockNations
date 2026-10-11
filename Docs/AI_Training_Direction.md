@@ -31,6 +31,10 @@ Completion requires the following evidence:
 
 The immediate next gate is to finish the already running one-million-step core-three capability/roster permutation trial and compare it with its completed unaugmented control. Both use the same preserved parent, opponents and compute budget. Let the conditions remain fixed until the result is recorded. Promote a recipe only on measured strength, role balance and useful counterplay; if the result is negative, use it to choose the next generic representation, history or exploration change instead of repeatedly increasing training time without a hypothesis.
 
+After that trial finishes, save and stop the separate four-unit continuation and direct the main training compute to the three-unit target. Keep its strongest frozen checkpoints and reproducible recipes as historical comparisons; an ongoing four-unit learner is not needed to preserve a reference. Do not automatically promote a weaker core-three result merely to replace that workload. A negative result should inform the next controlled core-three experiment.
+
+Distinguish a reference policy's training origin from the rules of its evaluation match. Older v4 weights may remain in the core-three opponent pool, but both sides must play the same core-three rules, including Archer vision 2 and the disabled Scout recruitment mask. These transferred references test retained challenges; they are not sufficient evidence of three-unit balance or strength. Establish primary same-rules benchmarks from frozen core-three parents/champions and compare new candidates with matched core-three controls. Keep four-unit-rule outcomes in their separate benchmark series, without pooling them into three-unit ratings or starting-role balance.
+
 Keep substantive progress checks every four hours while work continues, reporting checkpoint health, shared storage, completed experiment results and the next unresolved gate. Routine unchanged status stays quiet. Filling storage or finishing an experimental step budget does not complete this goal.
 
 ## 1. One authoritative simulation, independent of rendering
