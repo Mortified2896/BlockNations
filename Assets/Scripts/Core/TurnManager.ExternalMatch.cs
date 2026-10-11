@@ -65,6 +65,7 @@ public partial class TurnManager
 
     public bool TryAdvanceExternalMatchTurn(int completedSeat)
     {
+        if (IsAdvancedMatch) return advancedMatchController.TryEndTurn(completedSeat);
         if (!externallyDrivenMatch || !ExternalMatchReady || gameOver || !IsTurnOwnedBySeat(completedSeat)) return false;
         var recordedState = HasSimulationCommandObservers ? new SceneSimulationAdapter(this).State : null;
         var command = new BlockNations.Simulation.MatchCommand(BlockNations.Simulation.MatchActionKind.EndTurn, completedSeat);

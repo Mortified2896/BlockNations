@@ -1,20 +1,19 @@
-# Advanced 7×7 economy prototype
+# Advanced 7×7 mode
 
-Started 2026-10-11. This experimental 7×7 mode has a standalone **single-player browser playtest** against a deterministic scripted opponent, plus a two-human Editor window. It has no AI training or tutorial integration. Matches exist only in memory; refreshing, closing or starting a new match resets them.
+Started 2026-10-11. This experimental 7×7 mode launches inside the normal game and uses its existing board, sprites, fog, action markers and touch input. It runs against a deterministic scripted opponent; a separate two-human Editor window remains available for rule experiments. It has no AI training or tutorial integration. Matches exist only in memory; refreshing, closing or starting a new match resets them.
 
 ## Playtest
 
-From the normal main menu, choose **Advanced 7×7 (experimental)** below **Play vs AI**, or use the browser footer's **Advanced 7×7** link beside **Account**. You can also open **https://blocknations.moneymattersmedia.com/advanced/** using your approved Google account. The browser opens the playtest in the same tab and keeps your existing sign-in. You control the blue seat; the red scripted opponent acts after **End turn**. Pick a balance preset before pressing **New match**.
+Open **https://blocknations.moneymattersmedia.com/** with your approved Google account and choose **Advanced 7×7** directly below **Play vs AI**. The button loads the dedicated Advanced scene inside the same Unity game. Legacy `/advanced/` links redirect to this main menu.
 
-For local hotseat play, use Unity **6000.4.0f1** and open **Tools → Block Nations → Advanced 7x7 Playtest**. Play Mode and a scene are not required.
+- Tap your blue city, or the **City** toolbar button. **Recruit** offers male/female population choices and Warrior, Rider and Archer cards with their cost and attack/range.
+- **Develop** offers Housing, Farm and Market upgrades. Each card displays its level, cost and actual immediate output gain, including a zero gain when workers limit production.
+- **Population** shows civilian men/women, soldiers, growth pairs/progress and production/consumption. The resource bar stays on the board and shows gold/net income, civilian population, occupied housing and stored/net food.
+- Select your unit on the original game board and tap a destination or target. Movement, attacks, fog and yellow action markers use the same presentation/input components as ordinary gameplay. The unit sheet displays sex, combat stats and upkeep. Disband an unused unit at home to restore its population point.
+- Press **End turn** to run the scripted opponent. Capture its city to win; **Play again** starts a fresh advanced match.
+- **Menu** offers return to the game, the main menu, and an explicit new match with either equal strength or the class strength experiment. Choosing a preset affects the new match only.
 
-- Choose male or female population and recruit a Warrior, Rider or Archer using the city controls. Move the stationed unit before recruiting again.
-- Select one of your units on the 7×7 board, then click a green destination to move or attack. The shared simulation handles movement, combat, visibility, hidden blockers and action budgets. Starting city positions are public; enemy units outside current vision remain hidden.
-- Upgrade Housing, Food or Gold using the city buttons. Read current output and the recruitment forecast before buying. An upgrade raises capacity; remaining civilian workers also limit actual output.
-- In the browser, end the turn and wait for the scripted opponent to finish. In the Editor hotseat window, pass control; the next player's board stays behind a handoff screen until they reveal it.
-- Capture the opponent's city to win. **New match** resets the experiment. Disband an unused soldier at its home city to return its population point; moving or attacking prevents disbanding that turn.
-
-The browser uses its own touch-oriented UITK view and a scene generated only inside a dedicated build snapshot. The normal main menu links to this separate browser playtest. Persistence and browser multiplayer remain separate integration work.
+For local hotseat rule experiments, use Unity **6000.4.0f1**, **Tools → Block Nations → Advanced 7x7 Playtest**. Play Mode and a scene are not required for that development window.
 
 ## Rules and provisional values
 
@@ -39,7 +38,7 @@ Population points represent recruitable adult cohorts. Births abstract gradual r
 
 Growth resolves at the start of the incoming seat's turn, after the standard kernel resets actions. Standard kernel city income is zero in this wrapper; the advanced economy is the sole income source. Food/production use the pre-birth population. Food casualties and hunger resolve before gold upkeep; survivors pay upkeep. Each city has its own food and population pool; gold belongs to the seat.
 
-Recruiting a man lowers civilian pairs immediately if men become the smaller group. Losing that soldier makes the loss permanent; a survivor can restore the pool by returning and disbanding. Recruiting women has the corresponding effect. A sex pool can reach zero, stopping growth. The UI warns when a recruitment would do that; it does not silently forbid the choice.
+Recruiting a man lowers civilian pairs immediately if men become the smaller group. Losing that soldier makes the loss permanent; a survivor can restore the pool by returning and disbanding. Recruiting women has the corresponding effect. A sex pool can reach zero, stopping growth. The UI shows the number of remaining growth pairs before recruitment; it does not silently forbid a zero-pair choice.
 
 ## Combat balance choice
 
@@ -57,11 +56,13 @@ The intended product default remains a design choice. Both exist so the choice c
 - `AdvancedMatch`: explicit seat ownership, advanced purchases and disbanding, shared combat/movement transitions, and per-owner-turn economy settlement.
 - `AdvancedEconomyPlaytestWindow`: two-human in-memory board and city controls. Commands enter the wrapper; standard recruit commands are rejected because they omit the population choice.
 - `AdvancedSimpleOpponent`: explicit-seat legal purchases, movement and attacks; uses its own economy and visible legal actions. It reserves food/upkeep, preserves civilian pairs and targets the public opposing city. It does not load learned actors or inspect hidden enemy units.
-- `AdvancedGamePlaytestView`: browser UITK controls, visible board, purchase forecasts and animated opponent turns. Serialized references are wired by the dedicated build script.
-- `AdvancedPlaytestUiTests`: graphics-backed regression coverage for legal purchase buttons and turn restrictions.
+- `AdvancedMatchController`: the temporary native match driver and stable simulation-to-scene ID mapping. It projects wrapper results into the established units/cities, preserves per-unit combat definitions, and runs the scripted opponent incrementally.
+- `AdvancedGameplayUITKView`: an explicitly wired UITK resource bar, city/unit sheets and menu; the original scene renderer/input continues to own the board.
+- `SceneSimulationAdapter` and `LegalActionService`: use the authoritative advanced state and its stable IDs only in the dedicated scene; ordinary matches retain their existing capture/project boundary.
+- `AdvancedNativeModeTests`: the actual main-menu launch, native recruitment/movement, population deduction, exact income/upkeep settlement, opponent turn, capture, restart, combat preset and save/load isolation.
 - `AdvancedEconomyTests` and `AdvancedSimpleOpponentTests`: rule invariants, standard-economy regression coverage, fog invariance and bounded complete scripted matches, executable in Unity and a standalone .NET test project.
 
-The existing shared `MatchEngine`, `MatchState`, unit catalog, learned schema, training workers, product `GameMode`, gameplay serialization and PBp protocols are unchanged. The mutable `Board` property exposes the existing kernel state to the Editor renderer and tests; any future adapter must send commands through `AdvancedMatch`, rather than call `MatchEngine.Apply` or mutate that board directly.
+The shared `MatchEngine`, `MatchState`, unit catalog, learned schema, training workers, product `GameMode` values, gameplay serialization and PBp protocols remain compatible. The external match boundary identifies advanced mode explicitly without adding a persisted enum or payload. The mutable `Board` property exposes the existing kernel state to presentation and tests; all gameplay commands enter `AdvancedMatch`. Standard kernel income and begin-turn helpers reject an active advanced match, preventing double settlement. The scene disables autosaving, and advanced save/load entry points cannot overwrite or import a standard match.
 
 Persistent saves or browser multiplayer need an explicitly approved versioned advanced payload, with city demographics/infrastructure/growth/food, soldier sex/home city and rules/preset identity. An advanced snapshot must never load as a standard economy match or acquire silently different rules during fast iteration. Preserve supported standard saves and PBp migrations.
 
@@ -86,8 +87,8 @@ dotnet test Tools/AdvancedMode/BlockNations.AdvancedMode.Tests.csproj
 
 Run Unity EditMode tests using the installed Editor and `-testFilter "AdvancedEconomyTests|AdvancedSimpleOpponentTests"` (see [testing notes](Unity_Testing.md)). The pure economy fixture supports `-nographics`; the complete Editor suite needs graphics. Check a fresh passed result, not just a process exit.
 
-Build the dedicated browser export with `python3 Tools/AdvancedMode/build.py`. It copies only shared simulation, advanced view/layout/template, three unit sprites and project settings into an owned snapshot outside the checkout. It excludes learned actors, saves and account credentials. Unity generates its build scene inside that snapshot; no existing scene is edited. `Build/AdvancedWeb/release.json` identifies the rules and source hash. The release audit checks exported content before deployment.
+Build the normal account game with `python3 Tools/WebRelease/build.py --multiplayer --learned-ai`, using an owned snapshot outside the checkout. `SinglePlayerWebBuild` includes MainMenu, SampleScene, Tutorial and Advanced. The frozen ordinary opponent remains separate from the advanced scripted opponent. `Build/WebRelease/release.json` records the source hash and the included advanced scene.
 
-Deploy with `npm run deploy:advanced --prefix Web` after setting the existing session signing secret privately on `blocknations-advanced`. The Worker serves only `/advanced/` on the existing hostname and reuses the existing approval service and host-only session. Its scoped route and assets are independent of the normal game, tutorial and multiplayer releases. Anonymous entries redirect to `/access`; anonymous binary assets return 403. If signing in takes you back to the normal game, reopen the advanced link.
+Audit and deploy the normal bundle with `npm run deploy:production --prefix Web`. Deploy the legacy redirect with `npm run deploy:advanced --prefix Web`; that Worker has no game asset binding and serves no independent prototype bytes. Google admission, standard saves and PBp transport continue through their established paths.
 
-The browser publishes `window.advancedGameState` for read-only QA, containing only the local economy and visible units. Browser checks must use actual UI actions and confirm the resulting state. Automated tests establish rule invariants and bounded opponent behavior, not gameplay balance or physical iPhone acceptance.
+For acceptance, inspect the actual main-menu click into the Advanced scene, native board movement/recruitment, resource changes and the opponent's return turn. Check the resource bar and all city tabs on narrow portrait and desktop viewports. A successful deployment alone does not prove a signed-in physical iPhone session.

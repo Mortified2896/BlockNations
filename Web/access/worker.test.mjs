@@ -116,23 +116,25 @@ test("anonymous visitors see sign-in and cannot fetch any game payload", async (
   assert.equal(assetsRead, before);
 });
 
-test("advanced route shares approval while its assets remain separately scoped", async () => {
+test("retired advanced links return to the real main menu and never serve prototype assets", async () => {
   const before = assetsRead;
   const anonymous = await advancedWorker.fetch(new Request(GAME + "/advanced/"), env);
-  assert.equal(anonymous.status, 303); assert.equal(anonymous.headers.get("Location"), "/access");
+  assert.equal(anonymous.status, 303); assert.equal(anonymous.headers.get("Location"), "/");
+  assert.equal(anonymous.headers.get("Cache-Control"), "private, no-store");
   for (const path of ["/advanced/Build/game.wasm.unityweb", "/advanced/release.json"])
-    assert.equal((await advancedWorker.fetch(new Request(GAME + path), env)).status, 403);
+    assert.equal((await advancedWorker.fetch(new Request(GAME + path), env)).status, 404);
   assert.equal(assetsRead, before);
   assert.equal((await advancedWorker.fetch(new Request(GAME + "/other"), env)).status, 404);
   assert.equal((await advancedWorker.fetch(new Request(GAME + "/advanced-extra"), env)).status, 404);
-  assert.equal((await advancedWorker.fetch(new Request(GAME + "/advanced"), env)).headers.get("Location"), "/advanced/");
+  assert.equal((await advancedWorker.fetch(new Request(GAME + "/advanced"), env)).headers.get("Location"), "/");
   const person = await identity("advanced-reviewer", "approved");
   const session = await signIn(person);
-  for (const [path, asset] of [["/advanced/", "/index.html"], ["/advanced/release.json", "/release.json"], ["/advanced/Build/game.wasm.unityweb", "/Build/game.wasm.unityweb"]]) {
+  for (const path of ["/advanced/", "/advanced/index.html"]) {
     const response = await advancedWorker.fetch(new Request(GAME + path, { headers: { Cookie: session.cookie } }), env);
-    assert.equal(response.status, 200); assert.equal(response.headers.get("Cache-Control"), "private, no-store");
-    assert.equal(await response.text(), "game bytes:" + asset);
+    assert.equal(response.status, 303); assert.equal(response.headers.get("Cache-Control"), "private, no-store");
+    assert.equal(response.headers.get("Location"), "/");
   }
+  assert.equal(assetsRead, before, "The legacy route must not fetch independent game bytes.");
 });
 
 test("cold sign-in uses existing Google auth endpoint and registered Review callback", async () => {

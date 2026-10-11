@@ -1838,7 +1838,7 @@ public class MainMenuUITKView : MonoBehaviour
 
     private void HandleAdvancedPlaytestClicked()
     {
-        WebAccountClient.OpenAdvancedPlaytest();
+        if (mainMenuController != null) mainMenuController.StartAdvancedGame();
     }
 
     private void HandlePlayVsAiClicked()

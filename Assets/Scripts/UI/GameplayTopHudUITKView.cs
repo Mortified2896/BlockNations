@@ -228,8 +228,8 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         }
         SetNonInteractive(root);
         feedback?.Dispose();
-        feedback = new FeedbackUITKController(this, root, () => tutorial != null ? tutorial.FeedbackScreen : "Gameplay",
-            () => tutorial != null ? "Tutorial" : turnManager != null ? turnManager.currentMode.ToString() : "None",
+        feedback = new FeedbackUITKController(this, root, () => tutorial != null ? tutorial.FeedbackScreen : turnManager != null && turnManager.IsAdvancedMatch ? "Advanced 7×7" : "Gameplay",
+            () => tutorial != null ? "Tutorial" : turnManager != null && turnManager.IsAdvancedMatch ? "Advanced" : turnManager != null ? turnManager.currentMode.ToString() : "None",
             () => turnManager != null ? turnManager.turnNumber : 0);
         ApplySafeArea(force: true);
         responsiveSizeTierController.Apply(root);

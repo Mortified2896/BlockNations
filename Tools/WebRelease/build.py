@@ -118,6 +118,7 @@ def main():
     release = {"game":"Block Nations", "mode":"account-multiplayer" if args.multiplayer else "single-player",
         "unity":version, "sourceHash":prepared_hash, "boardSize":7,
         "ai":["Learned"] if args.learned_ai else ["Normal", "Rider Focus", "Hard"] if args.multiplayer else ["Easy", "Medium", "Hard"]}
+    release["advanced"] = {"scene": "Advanced", "boardSize": 7, "opponent": "scripted", "temporaryMatches": True}
     if args.multiplayer: release["multiplayer"] = {"version":"web-pbp-1", "seats":2, "turns":"asynchronous"}
     if args.learned_ai or not args.multiplayer:
         release["policy"] = json.loads((SOURCE/"Assets/Resources/LearnedAI/manifest.json").read_text())

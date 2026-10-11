@@ -1,0 +1,144 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
+    <Style src="AdvancedGameplay_UITK.uss" />
+    <ui:VisualElement name="AdvancedHudRoot" class="advanced-hud" picking-mode="Ignore">
+        <ui:VisualElement name="EconomyBar" class="economy-bar">
+            <ui:VisualElement class="economy-heading">
+                <ui:VisualElement class="economy-heading-copy" picking-mode="Ignore">
+                    <ui:Label text="Advanced 7×7" class="advanced-mode-title" />
+                    <ui:Label name="AdvancedTurn" text="Round 1 · Your turn" class="muted" />
+                </ui:VisualElement>
+                <ui:Button name="AdvancedFeedback" text="Feedback" class="quiet-button" />
+            </ui:VisualElement>
+            <ui:VisualElement class="resource-row" picking-mode="Ignore">
+                <ui:VisualElement class="resource gold-resource" picking-mode="Ignore">
+                    <ui:Label text="GOLD" class="resource-caption" />
+                    <ui:Label name="AdvancedGold" text="9" class="resource-value" />
+                    <ui:Label name="GoldRate" text="+3 / turn" class="resource-detail" />
+                </ui:VisualElement>
+                <ui:VisualElement class="resource" picking-mode="Ignore">
+                    <ui:Label text="PEOPLE" class="resource-caption" />
+                    <ui:Label name="AdvancedPopulation" text="12" class="resource-value" />
+                    <ui:Label name="PopulationSplit" text="6 M · 6 F" class="resource-detail" />
+                </ui:VisualElement>
+                <ui:VisualElement class="resource" picking-mode="Ignore">
+                    <ui:Label text="HOUSING" class="resource-caption" />
+                    <ui:Label name="AdvancedHousing" text="12 / 16" class="resource-value" />
+                    <ui:Label name="HousingDetail" text="4 free" class="resource-detail" />
+                </ui:VisualElement>
+                <ui:VisualElement class="resource food-resource" picking-mode="Ignore">
+                    <ui:Label text="FOOD" class="resource-caption" />
+                    <ui:Label name="AdvancedFood" text="16" class="resource-value" />
+                    <ui:Label name="FoodRate" text="+4 / turn" class="resource-detail" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement name="AdvancedBottom" class="advanced-bottom" picking-mode="Ignore">
+            <ui:Label name="AdvancedStatus" text="Tap your city to recruit or develop it." class="board-status" picking-mode="Ignore" />
+            <ui:VisualElement name="CitySheet" class="detail-sheet">
+                <ui:VisualElement class="sheet-heading">
+                    <ui:Label text="Your city" class="sheet-title" />
+                    <ui:Label name="CityPopulationSummary" class="muted sheet-summary" />
+                    <ui:Button name="CloseCity" text="×" class="close-button" />
+                </ui:VisualElement>
+                <ui:VisualElement class="tab-row">
+                    <ui:Button name="RecruitTab" text="Recruit" class="tab selected" />
+                    <ui:Button name="DevelopTab" text="Develop" class="tab" />
+                    <ui:Button name="PopulationTab" text="Population" class="tab" />
+                </ui:VisualElement>
+                <ui:VisualElement name="RecruitTabContent" class="tab-content">
+                    <ui:VisualElement class="sex-row">
+                        <ui:Button name="RecruitMale" text="Male · 6" class="sex-button selected" />
+                        <ui:Button name="RecruitFemale" text="Female · 6" class="sex-button" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="purchase-row">
+                        <ui:Button name="AdvancedRecruitWarrior" class="purchase-card first-card">
+                            <ui:VisualElement name="WarriorIcon" class="unit-icon" picking-mode="Ignore" />
+                            <ui:Label text="Warrior" class="purchase-title" />
+                            <ui:Label name="WarriorStats" class="purchase-detail" />
+                            <ui:Label text="2 gold + 1 person" class="purchase-cost" />
+                        </ui:Button>
+                        <ui:Button name="AdvancedRecruitRider" class="purchase-card">
+                            <ui:VisualElement name="RiderIcon" class="unit-icon" picking-mode="Ignore" />
+                            <ui:Label text="Rider" class="purchase-title" />
+                            <ui:Label name="RiderStats" class="purchase-detail" />
+                            <ui:Label text="2 gold + 1 person" class="purchase-cost" />
+                        </ui:Button>
+                        <ui:Button name="AdvancedRecruitArcher" class="purchase-card last-card">
+                            <ui:VisualElement name="ArcherIcon" class="unit-icon" picking-mode="Ignore" />
+                            <ui:Label text="Archer" class="purchase-title" />
+                            <ui:Label name="ArcherStats" class="purchase-detail" />
+                            <ui:Label text="2 gold + 1 person" class="purchase-cost" />
+                        </ui:Button>
+                    </ui:VisualElement>
+                    <ui:Label name="RecruitConsequence" class="sheet-note" />
+                </ui:VisualElement>
+                <ui:VisualElement name="DevelopTabContent" class="tab-content">
+                    <ui:VisualElement class="purchase-row">
+                        <ui:Button name="UpgradeHousing" class="purchase-card upgrade-card first-card">
+                            <ui:Label text="Housing" class="purchase-title" />
+                            <ui:Label name="HousingLevel" class="muted" />
+                            <ui:Label name="HousingGain" class="upgrade-gain" />
+                            <ui:Label name="HousingCost" class="purchase-cost" />
+                        </ui:Button>
+                        <ui:Button name="UpgradeFood" class="purchase-card upgrade-card">
+                            <ui:Label text="Farm" class="purchase-title" />
+                            <ui:Label name="FoodLevel" class="muted" />
+                            <ui:Label name="FoodGain" class="upgrade-gain" />
+                            <ui:Label name="FoodCost" class="purchase-cost" />
+                        </ui:Button>
+                        <ui:Button name="UpgradeGold" class="purchase-card upgrade-card last-card">
+                            <ui:Label text="Market" class="purchase-title" />
+                            <ui:Label name="GoldLevel" class="muted" />
+                            <ui:Label name="GoldGain" class="upgrade-gain" />
+                            <ui:Label name="GoldCost" class="purchase-cost" />
+                        </ui:Button>
+                    </ui:VisualElement>
+                    <ui:Label name="UpgradeNote" class="sheet-note" />
+                </ui:VisualElement>
+                <ui:VisualElement name="PopulationTabContent" class="tab-content">
+                    <ui:Label name="PopulationDetail" class="population-detail" />
+                    <ui:Label name="GrowthDetail" class="sheet-note" />
+                    <ui:ProgressBar name="GrowthProgress" low-value="0" high-value="12" title="Population growth" />
+                    <ui:Label name="SupplyDetail" class="sheet-note" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+            <ui:VisualElement name="UnitSheet" class="detail-sheet unit-sheet">
+                <ui:VisualElement class="sheet-heading">
+                    <ui:Label name="AdvancedUnitName" class="sheet-title" />
+                    <ui:Button name="CloseUnit" text="×" class="close-button" />
+                </ui:VisualElement>
+                <ui:Label name="AdvancedUnitStats" class="unit-stats" />
+                <ui:VisualElement class="unit-supply-row">
+                    <ui:Label name="UnitSupply" class="sheet-note" />
+                    <ui:Button name="DisbandUnit" text="Disband" class="quiet-button" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+            <ui:VisualElement name="AdvancedToolbar" class="advanced-toolbar">
+                <ui:Button name="AdvancedMenu" text="Menu" class="toolbar-button" />
+                <ui:Button name="OpenCity" text="City" class="toolbar-button" />
+                <ui:Button name="AdvancedEndTurn" text="End turn" class="toolbar-button primary-button" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement name="AdvancedResult" class="result-overlay">
+            <ui:VisualElement class="result-card">
+                <ui:Label name="AdvancedResultTitle" class="result-title" />
+                <ui:Label name="AdvancedResultMessage" class="result-message" />
+                <ui:Button name="AdvancedPlayAgain" text="Play again" class="toolbar-button primary-button" />
+                <ui:Button name="AdvancedResultMenu" text="Main menu" class="toolbar-button" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement name="AdvancedMenuOverlay" class="result-overlay">
+            <ui:VisualElement class="result-card">
+                <ui:Label text="Advanced mode" class="sheet-title" />
+                <ui:Label text="Experimental · Single player" class="sheet-note" />
+                <ui:Label text="Recruitment strength" class="sheet-note" />
+                <ui:DropdownField name="StrengthBalance" class="strength-field" />
+                <ui:Label name="StrengthDescription" class="sheet-note" />
+                <ui:Label text="New match resets this temporary game." class="sheet-note" />
+                <ui:Button name="AdvancedNewMatch" text="Start new match" class="toolbar-button" />
+                <ui:Button name="AdvancedResume" text="Back to game" class="toolbar-button primary-button" />
+                <ui:Button name="AdvancedExit" text="Main menu" class="toolbar-button" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

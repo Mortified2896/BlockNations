@@ -8,10 +8,11 @@ Last reviewed: 2026-10-07, against source revision `0d510b3`.
 
 - Unity 6000.4.0f1, as recorded in `ProjectSettings/ProjectVersion.txt`.
 - iOS and Android first, with touch interaction and the New Input System.
-- Active build scenes: `Assets/Scenes/MainMenu.unity` and `Assets/Scenes/SampleScene.unity`.
+- Active game scenes: `Assets/Scenes/MainMenu.unity`, `Assets/Scenes/SampleScene.unity`, `Assets/Scenes/Tutorial.unity` and `Assets/Scenes/Advanced.unity`.
 - Main menu, top HUD, bottom HUD, unit panel, and city panel use UITK.
 - The gold HUD follows the viewing player's seat through turn changes. Local opponents and frozen policy playtests show only the human balance; PBp shows the assigned local seat's balance and hides it for unassigned viewers. Explicit development spectators can display both sides' resources.
 - `TurnManager`, `CityUIManager`, and `UnitUIManager` still supply state/actions to gameplay views.
+- [Advanced 7×7](Advanced_Game_Mode.md) launches directly from the main menu, reuses the native board/input and adds temporary demographics, food, housing, upkeep and city upgrades. Its opponent is scripted; it is excluded from training, tutorial lessons and standard save/PBp formats.
 - A dedicated [tester tutorial](Tutorial.md) uses a 7×7 board and the current three-unit rules, with UITK lessons and shared Feedback. `Hotseat`, `BottomStripController`, and the old gameplay UI route remain outside the active product path.
 
 ## AI runtime

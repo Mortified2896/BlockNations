@@ -14,7 +14,7 @@ Start with the current state, then use the relevant implementation/setup referen
 | [General AI Training Direction](AI_Training_Direction.md) | Proposed shared simulation, adaptable policy representation, fair memory, reproducible experiments, and local phone inference. |
 | [Observation Contract v3](../Tools/ObservationContract/README.md) | Opt-in public role/capability inputs, preserved actor/critic/Adam initialization, synthetic parity checks and pending separate activation. |
 | [7×7 Balance Experiment](AI_Balance_Experiment.md) | Approved whole-number units, 2/3 opening, continued weights, generic opponent mix, balanced fixed evaluations and v4 model lineage. |
-| [Advanced 7×7 Mode](Advanced_Game_Mode.md) | Experimental human-only Editor playtest: city demographics, recruitment, upkeep, food, housing, upgrades and unresolved product integration choices. |
+| [Advanced 7×7 Mode](Advanced_Game_Mode.md) | Experimental in-game 7×7 single player with a scripted opponent, native board/UI, city demographics, recruitment, upkeep, food, housing and upgrades. |
 | [Shared C# Simulation](Shared_Simulation_Implementation.md) | Implemented rules kernel, gameplay/training adapters, compatibility corrections, parity checks, measured throughput and remaining boundaries. |
 | [Decoupled Training and Viewer](Decoupled_Training_Implementation.md) | Shared C# parallel arenas, one PPO learner, independent replay/live viewer, resume compatibility and measured Mac throughput. |
 | [Development Follow-ups](Development_Followups.md) | Known issues, proposed boundaries, unresolved decisions, targeted checks. |

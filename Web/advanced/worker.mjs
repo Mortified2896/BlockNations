@@ -1,23 +1,11 @@
-import access from "../access/worker.mjs";
-
-// A scoped route ahead of the main game custom domain. Reuses admission and
-// the existing host-only session, but serves only the independent advanced export.
+// Legacy prototype links now return to the actual game's main menu. The main
+// game's existing Google approval gate authorizes its HTML and binary assets.
 export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-    if (url.pathname !== "/advanced" && !url.pathname.startsWith("/advanced/"))
-      return new Response("Not found", { status: 404 });
-    if (url.pathname === "/advanced")
-      return new Response(null, { status: 308, headers: { Location: "/advanced/", "Cache-Control": "private, no-store" } });
-    const scoped = { ...env, ASSETS: { fetch(assetRequest) {
-      const assetURL = new URL(assetRequest.url);
-      assetURL.pathname = assetURL.pathname.slice("/advanced".length);
-      if (assetURL.pathname === "/") assetURL.pathname = "/index.html";
-      return env.ASSETS.fetch(new Request(assetURL, assetRequest));
-    } } };
-    const response = await access.fetch(request, scoped);
-    if (url.pathname === "/advanced/" && response.status === 403)
-      return new Response(null, { status: 303, headers: { Location: "/access", "Cache-Control": "private, no-store" } });
-    return response;
+  async fetch(request) {
+    const path = new URL(request.url).pathname;
+    if (path === "/advanced" || path === "/advanced/" || path === "/advanced/index.html")
+      return new Response(null, { status: 303, headers: { Location: "/", "Cache-Control": "private, no-store" } });
+    // Retire the independent export rather than serving stale prototype bytes.
+    return new Response("Not found", { status: 404, headers: { "Cache-Control": "private, no-store" } });
   },
 };

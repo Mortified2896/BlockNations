@@ -1,0 +1,88 @@
+.advanced-hud {
+    position: absolute; left: 0; right: 0; top: 0; bottom: 0;
+    color: rgb(244, 246, 250); font-size: 16px;
+}
+.advanced-hud Label { white-space: normal; }
+.economy-bar {
+    position: absolute; left: 0; right: 0; top: 0;
+    padding: 12px 18px 14px 18px;
+    background-color: rgba(19, 31, 49, 0.93);
+    border-bottom-width: 1px; border-bottom-color: rgba(255, 255, 255, 0.18);
+}
+.economy-heading { flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.economy-heading-copy { flex-grow: 1; }
+.advanced-mode-title { font-size: 20px; -unity-font-style: bold; margin-bottom: 2px; }
+.muted { color: rgb(170, 186, 208); font-size: 13px; }
+.resource-row { flex-direction: row; }
+.resource { flex-grow: 1; flex-basis: 0; padding: 0 10px; border-left-width: 1px; border-left-color: rgba(255, 255, 255, 0.13); }
+.gold-resource { border-left-width: 0; padding-left: 0; }
+.resource-caption { color: rgb(166, 185, 207); font-size: 11px; letter-spacing: 1px; }
+.resource-value { font-size: 25px; -unity-font-style: bold; margin-top: 2px; white-space: nowrap; }
+.resource-detail { color: rgb(174, 194, 213); font-size: 12px; white-space: nowrap; }
+.gold-resource .resource-value { color: rgb(246, 211, 128); }
+.food-resource .resource-value { color: rgb(174, 218, 159); }
+.advanced-bottom { position: absolute; left: 0; right: 0; bottom: 0; align-items: center; }
+.board-status { padding: 7px 14px; margin: 8px 12px; background-color: rgba(19, 31, 49, 0.86); border-radius: 8px; font-size: 13px; -unity-text-align: middle-center; }
+.detail-sheet { width: 100%; max-width: 780px; padding: 12px 16px 14px 16px; background-color: rgba(19, 31, 49, 0.97); border-top-width: 1px; border-top-color: rgba(255, 255, 255, 0.25); display: none; }
+.sheet-heading { flex-direction: row; align-items: center; margin-bottom: 6px; }
+.sheet-title { font-size: 21px; -unity-font-style: bold; flex-grow: 1; }
+.sheet-summary { margin-right: 10px; }
+.close-button { width: 44px; height: 44px; font-size: 24px; color: rgb(255,255,255); background-color: rgba(255,255,255,0.07); border-width: 0; border-radius: 8px; margin: 0; }
+.tab-row, .sex-row, .purchase-row { flex-direction: row; }
+.tab-row { margin-bottom: 12px; border-bottom-width: 1px; border-bottom-color: rgba(255,255,255,0.14); }
+.tab, .sex-button { flex-grow: 1; flex-basis: 0; height: 44px; margin: 0; color: rgb(179,196,219); background-color: rgba(255,255,255,0); border-width: 0; font-size: 15px; }
+.tab { border-bottom-width: 3px; border-bottom-color: rgba(255,255,255,0); border-radius: 0; }
+.tab.selected { color: rgb(250,219,145); border-bottom-color: rgb(224,187,102); }
+.sex-row { margin-bottom: 10px; background-color: rgba(255,255,255,0.04); border-radius: 8px; }
+.sex-button { height: 44px; border-radius: 8px; border-width: 1px; border-color: rgba(255,255,255,0); }
+.sex-button.selected { color: rgb(248,224,169); background-color: rgba(211,178,102,0.1); border-color: rgba(227,190,108,0.65); }
+.purchase-card { flex-grow: 1; flex-basis: 0; min-width: 0; height: 140px; margin: 0 4px; padding: 8px 2px; justify-content: center; align-items: center; background-color: rgb(41,59,84); border-width: 1px; border-color: rgba(157,181,211,0.35); border-radius: 10px; color: rgb(246,248,252); }
+.purchase-card.first-card { margin-left: 0; }
+.purchase-card.last-card { margin-right: 0; }
+.purchase-card:hover, .toolbar-button:hover, .quiet-button:hover { background-color: rgb(57,80,110); }
+.purchase-card:disabled { opacity: 0.45; }
+.purchase-card Label { -unity-text-align: middle-center; }
+.unit-icon { width: 44px; height: 44px; margin-bottom: 5px; -unity-background-scale-mode: scale-to-fit; }
+.purchase-title { font-size: 17px; -unity-font-style: bold; white-space: nowrap; }
+.purchase-detail { font-size: 12px; color: rgb(182,203,225); margin-top: 4px; }
+.purchase-cost { font-size: 12px; color: rgb(244,213,146); margin-top: 8px; }
+.upgrade-card { height: 140px; }
+.upgrade-card .muted { margin-top: 4px; }
+.upgrade-gain { font-size: 18px; margin-top: 10px; color: rgb(194,221,186); }
+.sheet-note { font-size: 13px; color: rgb(179,196,215); margin-top: 10px; }
+.population-detail { font-size: 18px; margin: 6px 0; }
+#GrowthProgress { margin-top: 12px; height: 24px; }
+#GrowthProgress .unity-progress-bar__background { background-color: rgb(35,51,71); border-radius: 4px; }
+#GrowthProgress .unity-progress-bar__progress { background-color: rgb(119,151,97); }
+#GrowthProgress .unity-progress-bar__title { font-size: 12px; color: white; }
+.unit-stats { font-size: 18px; margin: 6px 0; }
+.unit-supply-row { flex-direction: row; align-items: center; justify-content: space-between; }
+.unit-supply-row .sheet-note { flex-grow: 1; margin-top: 0; }
+.quiet-button { color: rgb(225,233,246); font-size: 13px; height: 44px; margin: 0; padding: 0 12px; background-color: rgba(255,255,255,0.08); border-width: 1px; border-color: rgba(255,255,255,0.16); border-radius: 8px; }
+.advanced-toolbar { width: 100%; max-width: 780px; flex-direction: row; padding: 10px 12px; background-color: rgba(19,31,49,0.97); }
+.toolbar-button { flex-grow: 1; flex-basis: 0; height: 50px; margin: 0 4px; padding: 0 8px; font-size: 16px; -unity-font-style: bold; color: rgb(240,245,252); background-color: rgb(41,59,84); border-width: 1px; border-color: rgba(157,181,211,0.35); border-radius: 10px; }
+.primary-button { color: rgb(28,36,49); background-color: rgb(227,195,119); border-color: rgb(239,210,148); }
+.primary-button:hover { background-color: rgb(246,219,155); }
+.primary-button:disabled { color: rgb(163,175,191); background-color: rgb(41,59,84); border-color: rgba(157,181,211,0.2); }
+.result-overlay { position: absolute; left: 0; right: 0; top: 0; bottom: 0; align-items: center; justify-content: center; background-color: rgba(11,19,31,0.78); display: none; }
+.result-card { width: 90%; max-width: 440px; padding: 28px; background-color: rgb(29,45,66); border-radius: 16px; }
+.result-title { font-size: 30px; -unity-font-style: bold; color: rgb(246,215,140); margin-bottom: 12px; }
+.result-message { font-size: 17px; margin-bottom: 22px; }
+.result-card .toolbar-button { flex-grow: 0; flex-basis: auto; margin: 5px 0; }
+.advanced-compact .economy-bar { padding: 10px 14px 12px 14px; }
+.advanced-compact .resource { padding: 0 7px; }
+.advanced-compact .resource-value { font-size: 22px; }
+.advanced-compact .resource-detail { font-size: 11px; }
+.advanced-compact .resource-caption { font-size: 10px; }
+.advanced-compact .detail-sheet { padding: 8px 12px 12px 12px; }
+.advanced-compact .purchase-title { font-size: 16px; }
+.advanced-compact .purchase-card { height: 128px; }
+.advanced-compact .purchase-cost { font-size: 11px; }
+.advanced-compact .sheet-summary { font-size: 12px; }
+.advanced-short .economy-heading { margin-bottom: 6px; }
+.advanced-short .unit-icon { width: 30px; height: 30px; }
+.advanced-short .purchase-card { height: 106px; }
+.advanced-short .board-status { display: none; }
+.advanced-inspecting .board-status { display: none; }
+.strength-field { margin: 10px 0; height: 44px; }
+.strength-field .unity-base-field__input { font-size: 15px; background-color: rgb(41,59,84); color: white; border-width: 1px; border-color: rgba(157,181,211,0.35); border-radius: 8px; padding: 8px; }

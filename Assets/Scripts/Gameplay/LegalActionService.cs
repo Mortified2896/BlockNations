@@ -25,13 +25,17 @@ public static class LegalActionService
     {
         var result = new List<LegalTurnAction>();
         if (manager == null || manager.gridManager == null || manager.gameOver || !manager.IsTurnOwnedBySeat(seat)) return result;
+        if (manager.IsAdvancedMatch && !manager.AdvancedController.IsReady) return result;
         var adapter = new SceneSimulationAdapter(manager);
         bool[] mask = adapter.VisibilityMask(visible);
-        List<MatchLegalAction> actions = unit != null ? MatchEngine.LegalUnitActions(adapter.State, seat, unit.GetInstanceID(), mask) :
+        List<MatchLegalAction> actions = unit != null ? MatchEngine.LegalUnitActions(adapter.State, seat, adapter.UnitId(unit), mask) :
             MatchEngine.LegalActions(adapter.State, seat, mask);
         foreach (MatchLegalAction action in actions)
         {
             if (unitsOnly && action.Command.Kind != MatchActionKind.Move && action.Command.Kind != MatchActionKind.Attack) continue;
+            if (manager.IsAdvancedMatch && action.Command.Kind == MatchActionKind.Recruit &&
+                manager.AdvancedController.Match.RecruitBlockReason(seat, action.Command.ActorId,
+                    action.Command.RecruitType, manager.AdvancedController.RecruitSex) != null) continue;
             result.Add(adapter.SceneAction(action));
         }
         return result;

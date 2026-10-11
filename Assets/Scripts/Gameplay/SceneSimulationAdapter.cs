@@ -16,6 +16,13 @@ public sealed class SceneSimulationAdapter
     public SceneSimulationAdapter(TurnManager manager)
     {
         this.manager = manager ?? throw new ArgumentNullException(nameof(manager));
+        if (manager.IsAdvancedMatch && manager.AdvancedController.IsReady)
+        {
+            State = manager.AdvancedController.Match.Board;
+            foreach (var pair in manager.AdvancedController.SceneUnits) Units.Add(pair.Key, pair.Value);
+            foreach (var pair in manager.AdvancedController.SceneCities) Cities.Add(pair.Key, pair.Value);
+            return;
+        }
         GridManager grid = manager.gridManager;
         var tiles = new bool[grid.width * grid.height];
         foreach (TileVisibility tile in grid.GetAllTiles()) tiles[grid.width * tile.gridY + tile.gridX] = true;
@@ -82,13 +89,19 @@ public sealed class SceneSimulationAdapter
             State.RecruitType(command.RecruitType)?.RecruitCost ?? 0);
     }
 
+    public int UnitId(Unit unit) => unit == null ? 0 : manager.IsAdvancedMatch
+        ? manager.AdvancedController.UnitId(unit) : unit.GetInstanceID();
+    public int CityId(City city) => city == null ? 0 : manager.IsAdvancedMatch
+        ? manager.AdvancedController.CityId(city) : city.GetInstanceID();
+
     public MatchCommand Command(LegalTurnAction action) => new MatchCommand((MatchActionKind)action.ActionType, action.SeatIndex,
-        action.ActionType == LegalActionType.CityRecruit ? action.City != null ? action.City.GetInstanceID() : 0 : action.Unit != null ? action.Unit.GetInstanceID() : 0,
+        action.ActionType == LegalActionType.CityRecruit ? CityId(action.City) : UnitId(action.Unit),
         action.TargetTile != null ? State.Position(action.TargetTile.gridX, action.TargetTile.gridY) : -1,
-        action.TargetUnit != null ? action.TargetUnit.GetInstanceID() : 0, action.RecruitUnitTypeId);
+        UnitId(action.TargetUnit), action.RecruitUnitTypeId);
 
     public bool TryApply(LegalTurnAction action)
     {
+        if (manager.IsAdvancedMatch) return manager.AdvancedController.TryApply(action);
         if (action.ActionType == LegalActionType.EndTurn || !manager.IsTurnOwnedBySeat(action.SeatIndex)) return false;
         GameObject recruitPrefab = action.ActionType == LegalActionType.CityRecruit ? manager.GetUnitPrefabForType(action.RecruitUnitTypeId) : null;
         if (action.ActionType == LegalActionType.CityRecruit && (recruitPrefab == null || recruitPrefab.GetComponent<Unit>() == null)) return false;
@@ -116,11 +129,13 @@ public sealed class SceneSimulationAdapter
 
     public void BeginTurn(int seat)
     {
+        if (manager.IsAdvancedMatch && manager.AdvancedController.IsReady) throw new InvalidOperationException("Advanced turn settlement belongs to AdvancedMatch.");
         MatchEngine.BeginTurn(State, seat);
         ProjectResourcesAndPieces(0);
     }
     public void CollectIncome(int seat)
     {
+        if (manager.IsAdvancedMatch && manager.AdvancedController.IsReady) throw new InvalidOperationException("Advanced income belongs to AdvancedMatch.");
         MatchEngine.CollectIncome(State, seat);
         manager.ApplySimulationGold(State);
     }
