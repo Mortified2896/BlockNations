@@ -6,20 +6,22 @@ using BlockNations.AI;
 using BlockNations.Simulation;
 using BlockNations.Training;
 
-// Development-only synthetic positions. World-state outcome labels are never
+// Development-only diagnostic positions. World-state outcome labels are never
 // passed to a model: the model receives only the existing fair schema/masks.
 internal static class Program
 {
     internal static readonly JsonSerializerOptions Json = new() { IncludeFields = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private static int Main(string[] args)
     {
-        if (args.SequenceEqual(new[] { "--self-test" })) return ProbeChecks.Run();
-        if (args.Length != 2 || args[0] != "--cases") throw new ArgumentException("Use --cases <synthetic-case-file> or --self-test.");
+        if (args.SequenceEqual(new[] { "--self-test" })) { ProbeChecks.Run(); return ReplayChecks.Run(); }
+        if (args.SequenceEqual(new[] { "--replay-fixture" })) { Console.WriteLine(JsonSerializer.Serialize(ReplayChecks.Game(), Json)); return 0; }
+        if (args.Length == 2 && args[0] == "--replay-cases") return ReplayCaseExtractor.Write(args[1]);
+        if (args.Length != 2 || args[0] != "--cases") throw new ArgumentException("Use --cases <case-file>, --replay-cases <replay-file> or --self-test.");
         if (new FileInfo(args[1]).Length > 1_048_576) throw new ArgumentException("Probe inputs are limited to 1 MiB.");
         byte[] contents = File.ReadAllBytes(args[1]);
         ProbeCase[] cases = JsonSerializer.Deserialize<ProbeCase[]>(contents, Json) ?? throw new ArgumentException("Missing probe cases.");
         if (cases.Length < 1 || cases.Length > 32 || cases.Select(c => c.name).Distinct().Count() != cases.Length)
-            throw new ArgumentException("Use 1-32 uniquely named synthetic positions.");
+            throw new ArgumentException("Use 1-32 uniquely named diagnostic positions.");
         if (!BitConverter.IsLittleEndian) throw new PlatformNotSupportedException("Probe model vectors require float32 little-endian encoding.");
         var output = new { version = 1, schema = LearnedActionSchema.Version, encoding = "float32-le", observationSize = LearnedActionSchema.ObservationSize,
             actionCount = LearnedActionSchema.ActionCount, inputSha256 = Hash(contents),
@@ -46,13 +48,7 @@ internal static class Program
             throw new ArgumentException("Public starting cities need valid positions and distinct seats.");
         // Restore explicitly under the chosen rules; spectator Restore defaults
         // to the historical profile and is not an inference compatibility gate.
-        var state = new MatchState(7, 7, 2, rules.PolicyCatalog, frame.seat, frame.round,
-            frame.cityVision, frame.incomePerCity, frame.tiles, firstSeat: frame.firstSeat, ruleProfile: rules);
-        for (int seat = 0; seat < 2; seat++) state.SetGold(seat, frame.gold[seat]);
-        foreach (TraceCity city in frame.cities) state.AddCity(new SimulationCity(city.id, city.seat, city.position, city.recruited));
-        foreach (TraceUnit unit in frame.units)
-            state.AddUnit(new SimulationUnit(unit.id, unit.seat, unit.position, state.RecruitType(unit.type) ??
-                throw new ArgumentException("Unknown probe unit type."), unit.health, unit.movesUsed, unit.attacksUsed, unit.surprisedRound));
+        MatchState state = Restore(frame, rules);
         var observer = new SimulationObservationSource();
         observer.SetPublicStartingCities(input.publicCities);
         var context = observer.Observe(state, state.CurrentTurnSeat, previouslySeen: input.previouslySeen);
@@ -79,6 +75,19 @@ internal static class Program
         }
         return new ProbeResult { name = input.name, rulesVersion = rules.Version, seat = state.CurrentTurnSeat,
             firstSeat = state.FirstSeat, decisions = decisions.ToArray() };
+    }
+
+    internal static MatchState Restore(TrainingTraceState frame, MatchRuleProfile rules)
+    {
+        var state = new MatchState(7, 7, 2, rules.PolicyCatalog, frame.seat, frame.round,
+            frame.cityVision, frame.incomePerCity, frame.tiles, firstSeat: frame.firstSeat, ruleProfile: rules);
+        for (int seat = 0; seat < 2; seat++) state.SetGold(seat, frame.gold[seat]);
+        foreach (TraceCity city in frame.cities) state.AddCity(new SimulationCity(city.id, city.seat, city.position, city.recruited));
+        foreach (TraceUnit unit in frame.units)
+            state.AddUnit(new SimulationUnit(unit.id, unit.seat, unit.position, state.RecruitType(unit.type) ??
+                throw new ArgumentException("Unknown probe unit type."), unit.health, unit.movesUsed, unit.attacksUsed, unit.surprisedRound));
+        state.RestoreOutcome(frame.gameOver, frame.winner);
+        return state;
     }
 
     private static ProbeDecision Decision(AIObservation observation, int source, ProbeLabel[] labels)

@@ -1,4 +1,4 @@
-"""Score synthetic fair positions without training or changing a policy.
+"""Score fair diagnostic positions without training or changing a policy.
 
 Outputs joint probabilities over the two decision stages, not match win rates.
 Outcome labels are analysis only and are never supplied to the frozen actor.
@@ -27,7 +27,7 @@ def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def score(manifest, probe, cases, destination, root, transfer=None, modes=('Policy', 'Hard')):
+def score(manifest, probe, cases, destination, root, transfer=None, modes=('Policy', 'Hard'), provenance=None):
     root = root.absolute()
     if (root.is_symlink() or root.resolve() != root or read_json(root / ROOT_MARKER).get('owner') != 'BlockNations.LocalTraining.v1' or
             not destination.resolve().is_relative_to(root) or destination.exists()):
@@ -43,6 +43,26 @@ def score(manifest, probe, cases, destination, root, transfer=None, modes=('Poli
         TRAINING / 'evaluate_suite.py', TRAINING / 'training_contract.py')}
     if transfer is not None:
         sources[str(transfer)] = sha(transfer)
+    case_provenance = None
+    if provenance is not None:
+        if not provenance.resolve().is_relative_to(root / 'benchmarks') or provenance.stat().st_size > 1_048_576:
+            raise ValueError('Use bounded replay provenance inside the shared benchmark folder.')
+        case_provenance = read_json(provenance)
+        from extract_replay_positions import MEASUREMENT
+        if (case_provenance.get('version') != 1 or case_provenance.get('measurement') != MEASUREMENT or
+                case_provenance.get('casesSha256') != sha(cases) or case_provenance.get('probeAssemblySha256') != sha(assembly) or
+                case_provenance.get('boardSize') != 7 or not 1 <= case_provenance.get('selectedPositions', 0) <= 32 or
+                not 1 <= case_provenance.get('recordedGames', 0) <= 8 or
+                len(case_provenance.get('sources', [])) != case_provenance['recordedGames']):
+            raise ValueError('Replay provenance does not match the diagnostic inputs.')
+        sources[str(provenance)] = sha(provenance)
+        for replay in case_provenance['sources']:
+            path = (root / replay['path']).resolve()
+            if not path.is_relative_to(root / 'benchmarks') and not (path.is_relative_to(root / 'runs') and 'evaluations' in path.relative_to(root).parts):
+                raise ValueError('Replay provenance cannot reference human-match or external files.')
+            if replay.get('verifiedTransitions') != replay.get('frames', 0) - 1 or sha(path) != replay.get('sha256'):
+                raise ValueError('A verified replay source changed after extraction.')
+            sources[str(path)] = replay['sha256']
     result = subprocess.run([str(probe), '--cases', str(cases)], capture_output=True, check=True, timeout=60)
     payload = json.loads(result.stdout)
     if (payload.get('version') != 1 or payload.get('schema') != 2 or payload.get('encoding') != 'float32-le' or
@@ -54,6 +74,10 @@ def score(manifest, probe, cases, destination, root, transfer=None, modes=('Poli
     if len(rules) != 1:
         raise ValueError('Keep position scores from different rulesets in separate receipts.')
     rules_version = rules.pop()
+    if case_provenance is not None and (rules_version != case_provenance.get('rulesVersion') or
+            len(payload['cases']) != case_provenance['selectedPositions'] or
+            [c['name'] for c in payload['cases']] != [c['name'] for c in case_provenance.get('caseRecords', [])]):
+        raise ValueError('Replay case identities or target rules changed after extraction.')
     actor, identity = frozen_actor(manifest, rules_version, read_json(transfer) if transfer else None)
     import base64
     summaries = []
@@ -88,19 +112,27 @@ def score(manifest, probe, cases, destination, root, transfer=None, modes=('Poli
                     actions.append(dict(label, source=source, probability=float(weights[0, source] * weights[index, label['encoded']])))
             if abs(sum(a['probability'] for a in actions)-1) > 1e-6:
                 raise ValueError('The joint action probabilities do not sum to one.')
+            def ranged(action):
+                return (action['kind'] == 'Attack' and max(abs(action['actorPosition'] % 7 - action['destination'] % 7),
+                    abs(action['actorPosition'] // 7 - action['destination'] // 7)) > 1)
             summaries.append(dict(name=case['name'], seat=case['seat'], firstSeat=case['firstSeat'], mode=mode,
                 visibleWinProbability=sum(a['probability'] for a in actions if a.get('visibleWin')),
                 visibleKillProbability=sum(a['probability'] for a in actions if a.get('killedVisibleUnit')),
                 endTurnProbability=sum(a['probability'] for a in actions if a['kind'] == 'EndTurn'),
                 moveProbability=sum(a['probability'] for a in actions if a['kind'] == 'Move'),
                 attackProbability=sum(a['probability'] for a in actions if a['kind'] == 'Attack'),
+                availableRangedAttacks=sum(ranged(a) for a in actions),
+                rangedAttackProbability=sum(a['probability'] for a in actions if ranged(a)),
+                visibleRangedKillProbability=sum(a['probability'] for a in actions if ranged(a) and a.get('killedVisibleUnit')),
                 actions=sorted(actions, key=lambda a: -a['probability'])))
     if any(sha(Path(path)) != fingerprint for path, fingerprint in sources.items()):
         raise ValueError('Probe sources or frozen inputs changed during evaluation.')
     receipt = dict(version=2, state='completed', rulesVersion=rules_version, boardSize=7, observationSchema=payload['schema'],
-        measurement='synthetic-position-joint-action-probabilities',
+        measurement=case_provenance['measurement'] if case_provenance else 'synthetic-position-joint-action-probabilities',
         candidate=identity, sources=sources, probeAssemblySha256=payload['assemblySha256'],
         packages={name: version(name) for name in ('torch', 'mlagents', 'numpy')}, results=summaries)
+    if case_provenance is not None:
+        receipt['caseProvenance'] = case_provenance
     contents = json.dumps(receipt, indent=2)+'\n'
     if len(contents.encode()) > 1_048_576:
         raise ValueError('Keep position-score receipts within 1 MiB.')
@@ -115,9 +147,10 @@ if __name__ == '__main__':
     for name in ('candidate-manifest', 'probe', 'cases', 'destination', 'root'):
         parser.add_argument('--'+name, type=Path, required=True)
     parser.add_argument('--candidate-transfer', type=Path)
+    parser.add_argument('--case-provenance', type=Path)
     parser.add_argument('--difficulty', choices=SAMPLING_MODES, action='append')
     args = parser.parse_args()
     torch.set_num_threads(1)
     receipt = score(args.candidate_manifest, args.probe, args.cases, args.destination, args.root,
-                    args.candidate_transfer, tuple(args.difficulty or ('Policy', 'Hard')))
+                    args.candidate_transfer, tuple(args.difficulty or ('Policy', 'Hard')), args.case_provenance)
     print(json.dumps(dict(state=receipt['state'], rows=len(receipt['results']), candidate=receipt['candidate']['actorId'])))

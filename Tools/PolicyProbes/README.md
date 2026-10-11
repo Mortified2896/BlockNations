@@ -1,6 +1,6 @@
 # Frozen-policy position probes
 
-This development tool measures action preferences in synthetic legal positions. It compiles the same C# rules, fair observation source and action schema used by the game and training worker. It neither trains a model nor changes an active run, reward, roster or release.
+This development tool measures action preferences in synthetic legal positions or verified recorded games. It compiles the same C# rules, fair observation source and action schema used by the game and training worker. It neither trains a model nor changes an active run, reward, roster or release.
 
 ```sh
 dotnet build Tools/PolicyProbes/BlockNations.PolicyProbes.csproj --configuration Release
@@ -35,3 +35,22 @@ The scoring boundary, real compiled projection, provenance, mixed-rules rejectio
 ```sh
 /Users/Jo/.local/share/blocknations-ml/venv/bin/python -m unittest discover -s Tools/PolicyProbes -p 'test_*.py'
 ```
+
+## Recorded full-game positions
+
+`extract_replay_positions.py` accepts up to eight completed automated evaluation replays from the marked training root. It excludes human-match folders, symlinks, truncated histories, tactical curriculum openings, interrupted games and incompatible rules. The C# tool verifies every recorded transition by applying a fair legal command from the preceding state. It carries allocation counters through deaths and recruitment and reconstructs explored tiles using only each seat's own observations at macro-action boundaries. Public cities come from the standard opening. Descriptions and private world-state labels do not enter inference.
+
+```sh
+/Users/Jo/.local/share/blocknations-ml/venv/bin/python Tools/PolicyProbes/extract_replay_positions.py \
+  --replay '<training-root>/benchmarks/<completed-evaluation>/workers/0/replays/recent-0.json' \
+  --probe /Users/Jo/GitHub/BlockNations/Tools/PolicyProbes/bin/Release/net8.0/BlockNations.PolicyProbes \
+  --root '/Users/Jo/Library/Application Support/BlockNations/Training' \
+  --destination '<training-root>/benchmarks/<new-review>/cases.json' \
+  --provenance '<training-root>/benchmarks/<new-review>/provenance.json'
+```
+
+Repeat `--replay` to add sources. The extractor selects up to 32 evenly spaced recorded positions with legal attacks or fully visible city-capture opportunities. Both output files must be new, bounded benchmark artifacts. Score them with the command above, additionally passing `--case-provenance <provenance.json>`. The scorer verifies the original replay, case and assembly hashes, preserves source/frame/recorded-candidate-seat links and reports joint ranged-attack probabilities. Attack distance is derived from the labelled board positions; the shared C# engine determines legality and outcomes.
+
+These are diagnostic preferences in a small selected sample, not match win rates, a representative frequency estimate or independent balance games. Frames within one game are dependent, and separate traces may repeat deterministic lines. The sample can contain both the recorded candidate's and the reference opponent's positions; scores in reference-owned positions test generalization rather than the candidate's natural play distribution. A legal shot can compete with another useful action. Keep action alternatives and visible wins when interpreting a low shooting probability. Never feed these evaluation positions into training or change rewards to make them pass.
+
+The self-test also creates a complete legal recorded game with a ranged opportunity and a visible city capture, and rejects altered resources, skipped transitions, truncated/unfinished histories, old rules and nonstandard openings. `--replay-fixture` emits that test fixture for the Python boundary checks; it is not a training scenario.

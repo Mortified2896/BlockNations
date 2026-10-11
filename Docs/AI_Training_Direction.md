@@ -37,7 +37,7 @@ Separately, on 2026-10-11 the owner requested a public Cloudflare update with th
 
 Distinguish a reference policy's training origin from the rules of its evaluation match. Older v4 weights may remain in the core-three opponent pool, but both sides must play the same core-three rules, including Archer vision 2 and the disabled Scout recruitment mask. These transferred references test retained challenges; they are not sufficient evidence of three-unit balance or strength. Establish primary same-rules benchmarks from frozen core-three parents/champions and compare new candidates with matched core-three controls. Keep four-unit-rule outcomes in their separate benchmark series, without pooling them into three-unit ratings or starting-role balance.
 
-Keep substantive progress checks every four hours while work continues, reporting checkpoint health, shared storage, completed experiment results and the next unresolved gate. Routine unchanged status stays quiet. Filling storage or finishing an experimental step budget does not complete this goal.
+Keep substantive progress checks every six hours while work continues, reporting checkpoint health, shared storage, completed experiment results and the next unresolved gate. Routine unchanged status stays quiet. Filling storage or finishing an experimental step budget does not complete this goal.
 
 ## 1. One authoritative simulation, independent of rendering
 

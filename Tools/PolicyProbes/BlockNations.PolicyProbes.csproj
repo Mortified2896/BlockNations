@@ -11,5 +11,7 @@
     <Compile Include="../../Assets/Scripts/Training/Core/TrainingTrace.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="ProbeChecks.cs" />
+    <Compile Include="ReplayCaseExtractor.cs" />
+    <Compile Include="ReplayChecks.cs" />
   </ItemGroup>
 </Project>
