@@ -5,34 +5,23 @@
   "actionCount": 259,
   "rulesVersion": "blocknations-simulation-v5-core3",
   "openingEconomyVersion": 2,
-  "modelVersion": "BlockNationsSeatV2-32730121",
-  "modelSha256": "2d37481f2de23c51fcdaa8727e8a4f3e40ecea139c7dd3995188c30a2dfcfbbc",
-  "checkpointSha256": "4e135da8db12b4cb49960da9e4719c72891299f3c88d18902fc7fa0a521989c5",
-  "sourceOnnxSha256": "172ddbf38ca08fa29693180c34f066f96fca900ca7a6bdfb8c32a822b9f15148",
+  "modelVersion": "BlockNationsSeatV2-33749992",
+  "modelSha256": "c4ad1f6a1673b110157a2d9906c097c9d237d7e6b2706aafc0889e5f85a1a6c1",
+  "checkpointSha256": "5ca6ac1b0183019a882788522829112fd27f91f74c51cf8679b3dcd77b89666b",
+  "sourceOnnxSha256": "db73cb213c055344f8d8c9568570329529a16f671022cc2155d329b77ee12015",
   "probabilityOutput": "policy_probabilities",
   "modelBytes": 1803075,
-  "exportedUnixSeconds": 1791692769,
+  "exportedUnixSeconds": 1791700332,
   "verification": {
     "samples": 24,
     "maximumProbabilityError": 0.0,
     "maskedActionsVerified": true
   },
   "difficultyStatus": "experimental_sampling_presets",
-  "trainedRulesVersion": "blocknations-simulation-v4",
+  "trainedRulesVersion": "blocknations-simulation-v5-core3",
   "samplingMode": "Hard",
-  "transferRules": {
-    "sourceRulesVersion": "blocknations-simulation-v4",
-    "targetRulesVersion": "blocknations-simulation-v5-core3",
-    "modelSchema": 2,
-    "policyCatalog": [
-      "archer",
-      "rider",
-      "scout",
-      "warrior"
-    ],
-    "observationSize": 3120,
-    "actionCount": 259
-  },
+  "checkpointActorParitySamples": 8,
   "evaluationSuiteId": "f38eb2fc623123bb2863c3864a859326a7694ff77eaec05709791174b8945efa",
-  "checkpointActorParitySamples": 8
+  "evaluationReceiptSha256": "bd6087a50b58e8cf5a6e3fab96b35e88d72686998e2b31db754a4f3d70249b86",
+  "evaluatedActorId": "71a7d015420b454b89cca82d"
 }
