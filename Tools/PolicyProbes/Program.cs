@@ -73,8 +73,17 @@ internal static class Program
             }).ToArray();
             decisions.Add(Decision(observation, source, labels));
         }
+        // Recorded choices are analysis labels only. Multiple two-stage paths
+        // can produce one macro action, notably EndTurn at either stage.
+        if (input.recordedChoices != null && (input.recordedChoices.Length < 1 ||
+            input.recordedChoices.Length > LearnedActionSchema.Positions + 1 ||
+            input.recordedChoices.Any(c => c == null) ||
+            input.recordedChoices.Select(c => (c.source, c.encoded)).Distinct().Count() != input.recordedChoices.Length ||
+            input.recordedChoices.Any(c => c.source == -1 && c.encoded != LearnedActionSchema.EndTurn ||
+                !decisions.Any(d => d.source == c.source && d.available.Contains(c.encoded)))))
+            throw new ArgumentException("Recorded macro choices must belong to the fair two-stage masks.");
         return new ProbeResult { name = input.name, rulesVersion = rules.Version, seat = state.CurrentTurnSeat,
-            firstSeat = state.FirstSeat, decisions = decisions.ToArray() };
+            firstSeat = state.FirstSeat, recordedChoices = input.recordedChoices, decisions = decisions.ToArray() };
     }
 
     internal static MatchState Restore(TrainingTraceState frame, MatchRuleProfile rules)
@@ -107,11 +116,13 @@ internal sealed class ProbeCase
     public TrainingTraceState state;
     public AICityState[] publicCities;
     public bool[] previouslySeen = null;
+    public ProbeRecordedChoice[] recordedChoices = null;
 }
 internal sealed class ProbeResult
 {
     public string name, rulesVersion;
     public int seat, firstSeat;
+    public ProbeRecordedChoice[] recordedChoices;
     public ProbeDecision[] decisions;
 }
 internal sealed class ProbeDecision
@@ -126,4 +137,8 @@ internal sealed class ProbeLabel
     public int encoded, actorPosition, destination;
     public string kind;
     public bool actualWin, visibleWin, killedVisibleUnit, hiddenBlocker;
+}
+internal sealed class ProbeRecordedChoice
+{
+    public int source, encoded;
 }

@@ -55,14 +55,24 @@ internal static class ReplayCaseExtractor
             // legacy values; clamping must not validate an altered recording.
             string expected = Signature(trace.frames[index + 1]);
             MatchState next = null;
+            var matching = new List<MatchCommand>();
             foreach (MatchCommand command in context.Commands.Values)
             {
                 MatchState after = state.Copy();
-                if (MatchEngine.Apply(after, command).Applied && Signature(after) == expected) { next = after; break; }
+                if (MatchEngine.Apply(after, command).Applied && Signature(after) == expected)
+                { next ??= after; matching.Add(command); }
             }
             if (next == null) throw new ArgumentException($"Replay transition {index} does not follow a fair legal action.");
+            var recorded = new List<ProbeRecordedChoice>();
+            if (matching.Any(c => c.Kind == MatchActionKind.EndTurn))
+                recorded.Add(new ProbeRecordedChoice { source = -1, encoded = LearnedActionSchema.EndTurn });
+            foreach (int source in LearnedActionSchema.Choices(context.Observation, -1).Keys.Where(s => s != LearnedActionSchema.EndTurn))
+                foreach (var choice in LearnedActionSchema.Choices(context.Observation, source))
+                    if (matching.Contains(context.Commands[choice.Value.Key]))
+                        recorded.Add(new ProbeRecordedChoice { source = source, encoded = choice.Key });
             var candidate = new ProbeCase { name = $"frame_{index:D3}", rulesVersion = trace.rulesVersion,
-                state = frame, publicCities = publicCities, previouslySeen = (bool[])context.Observation.Seen.Clone() };
+                state = frame, publicCities = publicCities, previouslySeen = (bool[])context.Observation.Seen.Clone(),
+                recordedChoices = recorded.ToArray() };
             var labels = Program.Build(candidate).decisions.Skip(1).SelectMany(d => d.analysis).ToArray();
             if (labels.Any(a => a.kind == "Attack" || a.visibleWin)) cases.Add(candidate);
             // Keep the actual allocation counters after deaths/recruitment;

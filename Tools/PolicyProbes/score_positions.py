@@ -78,6 +78,8 @@ def score(manifest, probe, cases, destination, root, transfer=None, modes=('Poli
             len(payload['cases']) != case_provenance['selectedPositions'] or
             [c['name'] for c in payload['cases']] != [c['name'] for c in case_provenance.get('caseRecords', [])]):
         raise ValueError('Replay case identities or target rules changed after extraction.')
+    if case_provenance is None and any(case.get('recordedChoices') is not None for case in payload['cases']):
+        raise ValueError('Recorded action labels require verified replay provenance.')
     actor, identity = frozen_actor(manifest, rules_version, read_json(transfer) if transfer else None)
     import base64
     summaries = []
@@ -85,6 +87,15 @@ def score(manifest, probe, cases, destination, root, transfer=None, modes=('Poli
         decisions = case['decisions']
         if not decisions or decisions[0]['source'] != -1:
             raise ValueError('A position needs source-selection followed by its legal action rows.')
+        recorded = case.get('recordedChoices')
+        if recorded is not None:
+            if (not isinstance(recorded, list) or not 1 <= len(recorded) <= 122 or
+                    any(not isinstance(choice, dict) or type(choice.get('source')) is not int or
+                        type(choice.get('encoded')) is not int for choice in recorded)):
+                raise ValueError('Invalid recorded macro-action labels.')
+            recorded = {(choice['source'], choice['encoded']) for choice in recorded}
+            if len(recorded) != len(case['recordedChoices']):
+                raise ValueError('Recorded choices must not repeat equivalent two-stage paths.')
         vectors, masks = [], []
         for row in decisions:
             vector = np.frombuffer(base64.b64decode(row['model'], validate=True), dtype='<f4')
@@ -115,7 +126,10 @@ def score(manifest, probe, cases, destination, root, transfer=None, modes=('Poli
             def ranged(action):
                 return (action['kind'] == 'Attack' and max(abs(action['actorPosition'] % 7 - action['destination'] % 7),
                     abs(action['actorPosition'] // 7 - action['destination'] // 7)) > 1)
-            summaries.append(dict(name=case['name'], seat=case['seat'], firstSeat=case['firstSeat'], mode=mode,
+            actual = [a for a in actions if recorded is not None and (a['source'], a['encoded']) in recorded]
+            if recorded is not None and len(actual) != len(recorded):
+                raise ValueError('Recorded choices must match the fair macro-action labels.')
+            summary = dict(name=case['name'], seat=case['seat'], firstSeat=case['firstSeat'], mode=mode,
                 visibleWinProbability=sum(a['probability'] for a in actions if a.get('visibleWin')),
                 visibleKillProbability=sum(a['probability'] for a in actions if a.get('killedVisibleUnit')),
                 endTurnProbability=sum(a['probability'] for a in actions if a['kind'] == 'EndTurn'),
@@ -124,10 +138,16 @@ def score(manifest, probe, cases, destination, root, transfer=None, modes=('Poli
                 availableRangedAttacks=sum(ranged(a) for a in actions),
                 rangedAttackProbability=sum(a['probability'] for a in actions if ranged(a)),
                 visibleRangedKillProbability=sum(a['probability'] for a in actions if ranged(a) and a.get('killedVisibleUnit')),
-                actions=sorted(actions, key=lambda a: -a['probability'])))
+                actions=sorted(actions, key=lambda a: -a['probability']))
+            if recorded is not None:
+                summary.update(recordedActionProbability=sum(a['probability'] for a in actual),
+                    recordedActionKinds=sorted({a['kind'] for a in actual}),
+                    recordedActionRanged=any(ranged(a) for a in actual),
+                    recordedChoiceCount=len(recorded), recordedChoices=case['recordedChoices'])
+            summaries.append(summary)
     if any(sha(Path(path)) != fingerprint for path, fingerprint in sources.items()):
         raise ValueError('Probe sources or frozen inputs changed during evaluation.')
-    receipt = dict(version=2, state='completed', rulesVersion=rules_version, boardSize=7, observationSchema=payload['schema'],
+    receipt = dict(version=3, state='completed', rulesVersion=rules_version, boardSize=7, observationSchema=payload['schema'],
         measurement=case_provenance['measurement'] if case_provenance else 'synthetic-position-joint-action-probabilities',
         candidate=identity, sources=sources, probeAssemblySha256=payload['assemblySha256'],
         packages={name: version(name) for name in ('torch', 'mlagents', 'numpy')}, results=summaries)

@@ -37,6 +37,25 @@ internal static class ReplayChecks
         if (!cases.Any(c => Program.Build(c).decisions.Skip(1).SelectMany(d => d.analysis).Any(a => a.visibleWin)))
             throw new Exception("Recorded city-capture opportunity was not projected.");
         if (cases.Any(c => c.previouslySeen == null || c.previouslySeen.Length != 49)) throw new Exception("Replay observation history was lost.");
+        if (cases.Any(c => c.recordedChoices == null || c.recordedChoices.Length == 0)) throw new Exception("Recorded macro choices were lost.");
+        foreach (var item in cases)
+        {
+            var labelled = Program.Build(item);
+            var recorded = item.recordedChoices; item.recordedChoices = null;
+            var plain = Program.Build(item); item.recordedChoices = recorded;
+            if (labelled.decisions.Length != plain.decisions.Length ||
+                !labelled.decisions.Zip(plain.decisions).All(pair => pair.First.model == pair.Second.model &&
+                pair.First.available.SequenceEqual(pair.Second.available)))
+                throw new Exception("Recorded action labels leaked into model inputs.");
+            if (recorded.Any(r => r.source == -1))
+            {
+                if (recorded.Length != labelled.decisions.Length || recorded.Any(r => r.encoded != LearnedActionSchema.EndTurn))
+                    throw new Exception("EndTurn paths were not recorded at both decision stages.");
+            }
+        }
+        if (!cases.Any(c => Program.Build(c).decisions.Skip(1).Any(d => d.analysis.Any(a => a.visibleWin &&
+            c.recordedChoices.Any(r => r.source == d.source && r.encoded == a.encoded)))))
+            throw new Exception("The recorded city-capture choice was not preserved.");
         void Reject(TrainingTrace invalid)
         {
             try { ReplayCaseExtractor.Extract(invalid); throw new Exception("Accepted an invalid replay history."); }
@@ -50,7 +69,7 @@ internal static class ReplayChecks
         trace = Game(); trace.frames[0].units = new[] { new TraceUnit { id = 20, seat = 0, position = 9, type = "rider", health = 30 } }; Reject(trace);
         trace = Game(); trace.frames[1].units[0].health = 9999; Reject(trace);
         trace = Game(); trace.frames[2].units[0].movesUsed = 9999; Reject(trace);
-        Console.WriteLine("11 recorded-replay checks passed");
+        Console.WriteLine("15 recorded-replay checks passed");
         return 0;
     }
 }

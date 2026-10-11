@@ -50,6 +50,48 @@ class ReplayExtractionTests(unittest.TestCase):
         self.assertTrue(any(r['rangedAttackProbability'] > 0 for r in scores['results']))
         self.assertTrue(actor.inputs)
         self.assertEqual(scores['caseProvenance']['recordedGames'], 1)
+        self.assertTrue(all(0 <= r['recordedActionProbability'] <= 1 for r in scores['results']))
+        ended = [r for r in scores['results'] if r['recordedActionKinds'] == ['EndTurn']]
+        self.assertTrue(ended)
+        self.assertTrue(any(r['availableRangedAttacks'] for r in ended))
+        for row in ended:
+            self.assertAlmostEqual(row['recordedActionProbability'], row['endTurnProbability'])
+        self.assertTrue(any(r['recordedActionKinds'] == ['Move'] and r['visibleWinProbability'] > 0 for r in scores['results']))
+
+    def test_recorded_action_labels_do_not_change_numeric_actor_inputs(self):
+        self.extract()
+        labelled = json.loads(self.cases.read_text())
+        plain = [{k:v for k,v in case.items() if k != 'recordedChoices'} for case in labelled]
+        unlabelled = self.root/'benchmarks/plain.json'; unlabelled.write_text(json.dumps(plain))
+        outputs = [subprocess.run([str(self.probe),'--cases',str(path)],capture_output=True,check=True).stdout
+                   for path in (self.cases,unlabelled)]
+        projections = [json.loads(output) for output in outputs]
+        for a,b in zip(projections[0]['cases'],projections[1]['cases']):
+            self.assertEqual([(r['model'],r['available']) for r in a['decisions']],
+                             [(r['model'],r['available']) for r in b['decisions']])
+
+    def test_malformed_recorded_choices_are_rejected_before_inference(self):
+        self.extract()
+        source = json.loads(self.cases.read_text())
+        manifest = self.root/'manifest.json'; manifest.write_text('{}')
+        for choices in ([dict(source=-1,encoded=0)], [dict(source=999,encoded=258)],
+                        [dict(source=-1,encoded=258)]*2, []):
+            changed = [dict(source[0], recordedChoices=choices)]
+            cases = self.root/'benchmarks/malformed.json'; cases.write_text(json.dumps(changed))
+            with patch.object(scoring, 'frozen_actor') as inference:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    scoring.score(manifest,self.probe,cases,self.root/'invalid.json',self.root)
+                inference.assert_not_called()
+            self.assertFalse((self.root/'invalid.json').exists())
+
+    def test_recorded_labels_require_replay_provenance(self):
+        self.extract()
+        manifest = self.root/'manifest.json'; manifest.write_text('{}')
+        with patch.object(scoring, 'frozen_actor') as inference:
+            with self.assertRaisesRegex(ValueError, 'require verified replay provenance'):
+                scoring.score(manifest,self.probe,self.cases,self.root/'invalid.json',self.root)
+            inference.assert_not_called()
+        self.assertFalse((self.root/'invalid.json').exists())
 
     def test_tampered_trajectory_creates_no_artifacts(self):
         replay = json.loads(self.fixture); replay['frames'][1]['gold'][0] += 1
