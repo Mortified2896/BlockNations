@@ -7,6 +7,8 @@ public sealed partial class AdvancedGameplayUITKView
     private Vector2Int lastScreen;
     private bool refitBoard = true;
     private bool lastCityOpen, lastUnitOpen;
+    private Vector2 lastRootSize;
+    private Vector4 lastBoardArea;
 #if UNITY_WEBGL && !UNITY_EDITOR
     [DllImport("__Internal")] private static extern float AdvancedCanvasPixelRatio();
 #endif
@@ -32,8 +34,17 @@ public sealed partial class AdvancedGameplayUITKView
         hud.style.left = safe.xMin / scale; hud.style.right = (screen.x - safe.xMax) / scale;
         bool cityOpen = citySheet.resolvedStyle.display != DisplayStyle.None;
         bool unitOpen = unitSheet.resolvedStyle.display != DisplayStyle.None;
-        if (screen != lastScreen || cityOpen != lastCityOpen || unitOpen != lastUnitOpen) refitBoard = true;
+        Vector2 rootSize = root.worldBound.size;
+        var toolbar = Required<VisualElement>("AdvancedToolbar");
+        Vector4 boardArea = new Vector4(hud.worldBound.xMin, hud.worldBound.xMax,
+            economyBar.worldBound.yMax, toolbar.worldBound.yMin);
+        // Fonts and panel scaling can settle after the first screen-size pass.
+        // Fit again when the actual header/toolbar geometry becomes available.
+        if (screen != lastScreen || cityOpen != lastCityOpen || unitOpen != lastUnitOpen ||
+            (rootSize - lastRootSize).sqrMagnitude > 0.25f || (boardArea - lastBoardArea).sqrMagnitude > 0.25f)
+            refitBoard = true;
         lastScreen = screen; lastCityOpen = cityOpen; lastUnitOpen = unitOpen;
+        lastRootSize = rootSize; lastBoardArea = boardArea;
         if (refitBoard && root.panel != null && economyBar.worldBound.height > 0 && bottom.worldBound.height > 0)
         {
             refitBoard = !TryFitBoard();
@@ -54,7 +65,7 @@ public sealed partial class AdvancedGameplayUITKView
         float gap = 12f;
         float left = hud.worldBound.xMin + gap, right = hud.worldBound.xMax - gap;
         float top = economyBar.worldBound.yMax + gap;
-        float bottomY = bottom.worldBound.yMax - Required<VisualElement>("AdvancedToolbar").worldBound.height - gap;
+        float bottomY = Required<VisualElement>("AdvancedToolbar").worldBound.yMin - gap;
         float sheetSpace = lastCityOpen ? (hud.ClassListContains("advanced-short") ? 308 : 336) : lastUnitOpen ? 154 : 42;
         // On short displays the city sheet overlays the board. Keep the
         // normal board scale when the space above it cannot hold usable tiles.
