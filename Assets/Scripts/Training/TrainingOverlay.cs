@@ -9,7 +9,10 @@ public sealed class TrainingOverlay
     private Vector2 scroll;
     private readonly int[] displayedGold = new int[2];
     private double nextGoldRefresh;
-    private bool showRunFolder;
+    private bool showRunFolder, showPoolElo;
+    private double nextReferencePoll;
+    private TrainingReferenceScore referenceScore;
+    private string referenceRun;
     private double nextHumanLearningRefresh;
     private string humanLearningDirectory;
     private HumanLearningStatus humanLearning;
@@ -48,7 +51,7 @@ public sealed class TrainingOverlay
                 replayView.Draw(arena.Replay.LatestFrame, arena.Replay.OpeningFrame, arena.BoardSize, vision, arena.SpectatorBackgroundColor, showActionMarkers: false);
             GUILayout.BeginArea(new Rect(24, 24, width - 24, Screen.height / Scale - 48));
             scroll = GUILayout.BeginScrollView(scroll, false, false);
-            if (arena.IsTraining) { DrawTrainingMatches(arena); DrawPlaytest(arena); GUILayout.Space(12); }
+            if (arena.IsTraining) { DrawTrainingMatches(arena); DrawReferenceScore(arena); DrawPlaytest(arena); GUILayout.Space(12); }
             if (arena is ITrainingSpectator spectator) DrawSpectatorControls(spectator);
             if (arena.IsTraining) DrawVision();
             if (arena.IsTraining) DrawHumanLearning(arena);
@@ -123,22 +126,7 @@ public sealed class TrainingOverlay
             if (arena.IsTraining)
             {
                 GUILayout.Space(22);
-                TrainingEloHistory elo = arena.EloHistory;
-                GUILayout.Label("Match-result Elo", title);
-                GUILayout.Label(elo == null ? "Waiting for complete match results…" :
-                    $"{elo.points[elo.points.Count - 1].elo:F0} Elo · start {elo.points[0].elo:F0}", label);
-                Rect chart = GUILayoutUtility.GetRect(width - 48, 140);
-                if (elo != null) DrawChart(chart, elo);
-                GUILayout.Label("X: rated matches · Y: self-play Elo", small);
-                GUILayout.Label("New history · relative to training opponents. Not human Elo.", small);
-                if (elo != null)
-                {
-                    GUILayout.Label(elo.FirstRecordedMatch > 0 ?
-                        $"Earlier chart samples unavailable. Showing match {elo.FirstRecordedMatch:N0} onward." :
-                        "Curve summarises the full recorded history.", small);
-                    GUILayout.Label($"Rated {elo.wins + elo.losses:N0} · W {elo.wins:N0} / L {elo.losses:N0}", small);
-                    GUILayout.Label($"Limits {elo.interruptions:N0} · policy changed {elo.unrated:N0}", small);
-                }
+                DrawPoolElo(arena);
                 GUILayout.Space(12);
                 TrainingProgressHistory progress = arena.Progress;
                 GUILayout.Label($"{arena.BoardSize} × {arena.BoardSize} outcomes", title);
@@ -238,14 +226,7 @@ public sealed class TrainingOverlay
         if (arena is ITrainingSpectator)
         {
             GUILayout.Label($"Training: {(arena.Elapsed > 0 ? arena.Decisions / arena.Elapsed : 0):F1} decisions/s", small);
-            if (arena.EloHistory != null)
-            {
-                GUILayout.Space(12);
-                GUILayout.Label("Match-result Elo", title);
-                GUILayout.Label($"{arena.EloHistory.points[arena.EloHistory.points.Count - 1].elo:F0} Elo · relative to training opponents", label);
-                DrawChart(GUILayoutUtility.GetRect(1, 140, GUILayout.ExpandWidth(true)), arena.EloHistory);
-                GUILayout.Label($"Rated {arena.EloHistory.wins + arena.EloHistory.losses:N0} · self-play telemetry, not human Elo", small);
-            }
+            DrawPoolElo(arena);
             int captures = arena.Progress.firstPlayerWins + arena.Progress.secondPlayerWins;
             if (captures > 0) GUILayout.Label($"First-player wins {100f * arena.Progress.firstPlayerWins / captures:F1}% · second {100f * arena.Progress.secondPlayerWins / captures:F1}% · {captures:N0} captures", small);
         }
@@ -293,6 +274,58 @@ public sealed class TrainingOverlay
         GUILayout.Label(spectator.Playtest.TrainingActive ? "Closing this viewer leaves training running." :
             "Closing this viewer ends the local playtest session.", small);
         GUILayout.Space(12);
+    }
+
+    private void DrawReferenceScore(ITrainingView arena)
+    {
+        if (Time.realtimeSinceStartupAsDouble >= nextReferencePoll || referenceRun != arena.TrainingRunDirectory)
+        {
+            nextReferencePoll = Time.realtimeSinceStartupAsDouble + 5;
+            referenceRun = arena.TrainingRunDirectory;
+            referenceScore = null;
+            try
+            {
+                if (!string.IsNullOrEmpty(referenceRun))
+                {
+                    string path = System.IO.Path.Combine(referenceRun, "fixed-reference-status.json");
+                    if (System.IO.File.Exists(path) && new System.IO.FileInfo(path).Length < 64000)
+                    {
+                        var value = JsonUtility.FromJson<TrainingReferenceScore>(System.IO.File.ReadAllText(path));
+                        if (value != null && value.IsValid(arena.BoardSize, new System.IO.DirectoryInfo(referenceRun).Name, arena.SimulationVersion))
+                            referenceScore = value;
+                    }
+                }
+            }
+            catch (System.IO.IOException) { }
+            catch (ArgumentException) { }
+        }
+        GUILayout.Label("Strength against fixed opponents", title);
+        if (referenceScore == null) GUILayout.Label("Awaiting a verified benchmark. Training Elo is diagnostic only.", small);
+        else
+        {
+            var latest = referenceScore.latest;
+            var champion = referenceScore.champion;
+            GUILayout.Label($"Latest evaluated: {latest.Percent:F1}% · {latest.wins:N0}/{latest.games:N0} wins", label);
+            GUILayout.Label($"Retained champion: {champion.Percent:F1}% · {champion.wins:N0}/{champion.games:N0} wins", small);
+            GUILayout.Label($"Latest checkpoint: {latest.checkpoint}", small);
+            GUILayout.Label($"Latest first: {latest.firstWins}/{latest.firstGames} · second: {latest.secondWins}/{latest.secondGames}", small);
+            GUILayout.Label($"Difference from champion: {latest.Percent - champion.Percent:+0.0;-0.0;0.0} percentage points", small);
+            GUILayout.Label("Same fixed references · human difficulty remains unproven", small);
+        }
+        GUILayout.Space(12);
+    }
+
+    private void DrawPoolElo(ITrainingView arena)
+    {
+        showPoolElo = GUILayout.Toggle(showPoolElo, "Show training-pool Elo diagnostics");
+        if (!showPoolElo) return;
+        TrainingEloHistory elo = arena.EloHistory;
+        GUILayout.Label("Training-pool Elo (unanchored)", title);
+        GUILayout.Label("Changing opponents and inherited ratings. A rise does not prove stronger play.", small);
+        if (elo == null) { GUILayout.Label("Awaiting match results…", small); return; }
+        GUILayout.Label($"{elo.points[elo.points.Count - 1].elo:F0} · {elo.wins + elo.losses:N0} rated games", label);
+        DrawChart(GUILayoutUtility.GetRect(1, 140, GUILayout.ExpandWidth(true)), elo);
+        GUILayout.Label("X: rated training games · Y: relative pool rating", small);
     }
 
     private void DrawTrainingMatches(ITrainingView arena)

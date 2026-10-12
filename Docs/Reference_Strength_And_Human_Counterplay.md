@@ -1,0 +1,29 @@
+# Reference strength and human counterplay
+
+Implemented on 2026-10-12 following the owner's concern that training-pool Elo could rise without broad improvement and that copying human wins did not train defense against them.
+
+## Progress display
+
+The inspector now leads with **Strength against fixed opponents**: the latest completed candidate's wins/games, the retained champion's score, first/second-role results, checkpoint identity and percentage-point difference. It reads optional `fixed-reference-status.json` telemetry generated only from fully checked matching benchmark receipts. Same-policy games are excluded; interrupted games remain in the denominator as non-wins. Different reference packs cannot be compared. This is a measured benchmark score, not an invented absolute Elo or a guarantee of human strength.
+
+`reference_score.publish` verifies the selected champion and both complete evaluations through the existing provenance/record checks. The automatic evaluator publishes this telemetry after each completed promotion decision. The existing match-result rating/ledger is preserved. Its chart is behind **Show training-pool Elo diagnostics**, labelled unanchored and unsuitable as proof of stronger play. Only presentation and optional generated development telemetry change; gameplay scenes, saved-game/PBp formats, rewards and policy inputs retain their contracts.
+
+The inspected live self-play configuration uses a window of 40 recent snapshots, saves snapshots every 25,000 learning steps and selects the latest snapshot with probability 0.25 within learned self-play. These are recent snapshots, not a ranked top-40 list. Forty percent of matches use the existing eight-entry fixed challenger league and sixty percent use learned self-play. A moving pool can still specialize or forget; the fixed benchmark and per-opponent results remain necessary.
+
+## Separate counterplay experiment
+
+`human_counterplay.prepare` fits an inference challenger from completed compatible human wins using only the recorded human seat's fair observations and legal masks. It begins from a checked preserved actor, uses bounded masked behavioral cloning with its own optimizer and records training-set loss before/after. It does not modify the source checkpoint, demonstrations, main learner, frozen champion or published model.
+
+The prepared challenger is placed in an explicitly isolated, owned recipe run. It replaces the existing Rider-only tactical probe in that trial's eight-entry league, at the same weight; opponent probability, other references, rules and rewards remain unchanged. This is a controlled opponent change, not a Rider purchase rule for the defender. The defender chooses every move from its own legitimate observation and receives ordinary match rewards, so playing against this policy creates genuine on-policy opportunities to learn counterplay.
+
+The challenger retains source non-actor modules for file compatibility, but its actor was fitted with a separate Adam optimizer. It is an inference opponent, not a resumable defender training checkpoint. Its manifest records this lineage. Defender trial continuations separately retain and advance their original PPO optimizer states.
+
+Four wins and 267 recorded decisions cannot establish a representative human policy. Reduced demonstration loss proves fitting, not robust reproduction of the owner's attacks. Counterplay utility must be evaluated, including actual human playtests and held-out attack states. Prepared/trial models never automatically replace the private champion or enter the main recipe. Private recordings and generated models remain outside Git under the owned shared-budget training root.
+
+## Research-backed priorities
+
+Unity provides PPO, recurrent memory, imitation and recent-snapshot self-play, but game-specific information and training population design remain necessary. Its [configuration guidance](https://unity-technologies.github.io/ml-agents/Training-Configuration-File/) explicitly discusses self-play stability/generality trade-offs and memory; its [overview](https://github.com/Unity-Technologies/ml-agents/blob/develop/com.unity.ml-agents/Documentation~/ML-Agents-Overview.md) describes behavioral cloning as imitation rather than counter-strategy learning.
+
+For this game's observed specialization, prioritize fair public starting-role/capability inputs and legitimate observation history, then opponent selection that targets weaknesses while retaining diverse challenges. [Recurrent model-free RL](https://arxiv.org/abs/2110.05038) supports memory as a useful partial-observability baseline. [PSRO](https://arxiv.org/abs/1711.00832) trains responses to strategy mixtures, and [AlphaStar](https://www.nature.com/articles/s41586-019-1724-z) combines a diverse league, human data and exploiters. [ICLR 2024 population-growth research](https://proceedings.iclr.cc/paper_files/paper/2024/hash/a6ab94e907d24814e3a3ceda39a2ec64-Abstract-Conference.html) and [ICML 2025 A-PSRO](https://proceedings.mlr.press/v267/hu25n.html) examine exploitability/improvement measures beyond a scalar relative rating. These support the direction; none establishes a plug-and-play best algorithm for BlockNations.
+
+No-fog pretraining remains an isolated curriculum hypothesis. It cannot replace memory when fog is restored, and final selection must measure normal-fog performance. Continue matched controls and both-role/held-out tests before adopting new learning recipes.

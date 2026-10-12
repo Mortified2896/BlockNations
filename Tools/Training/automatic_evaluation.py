@@ -123,6 +123,8 @@ def perform_job(run, worker, job_path):
             if not str(error).startswith(('Candidate increased', 'Candidate regressed', 'Candidate did not improve')):
                 raise
             job.update(state='retained', champion=incumbent['checkpoint'], reason=str(error))
+        from reference_score import publish
+        publish(run, manifest, job_path.parent / 'results/suite.json')
     except BaseException as error:
         job.update(state='cancelled' if isinstance(error, KeyboardInterrupt) else 'failed', reason=str(error))
     finally:

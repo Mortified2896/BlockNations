@@ -4,6 +4,20 @@ using UnityEngine;
 public sealed class TrainingProgressHistoryTests
 {
     [Test]
+    public void FixedReferenceScoreRejectsOtherRunsRulesAndInconsistentRoles()
+    {
+        var status = JsonUtility.FromJson<TrainingReferenceScore>(
+            "{\"version\":1,\"source\":\"verified-fixed-reference-v1\",\"boardSize\":7,\"runId\":\"run\",\"rulesVersion\":\"rules\",\"suiteId\":\"fixed\"," +
+            "\"champion\":{\"checkpoint\":\"old\",\"games\":8,\"wins\":6,\"losses\":2,\"firstGames\":4,\"secondGames\":4,\"firstWins\":3,\"secondWins\":3}," +
+            "\"latest\":{\"checkpoint\":\"new\",\"games\":8,\"wins\":5,\"losses\":2,\"interruptions\":1,\"firstGames\":4,\"secondGames\":4,\"firstWins\":2,\"secondWins\":3}}");
+        Assert.That(status.IsValid(7, "run", "rules"), Is.True);
+        Assert.That(status.IsValid(7, "other", "rules"), Is.False);
+        Assert.That(status.IsValid(7, "run", "other"), Is.False);
+        status.latest.firstWins++;
+        Assert.That(status.IsValid(7, "run", "rules"), Is.False);
+    }
+
+    [Test]
     public void CurriculumOutcomesDoNotInflateFullBoardTrend()
     {
         var history = new TrainingProgressHistory { boardSize = 5 };

@@ -18,6 +18,7 @@ Start with the current state, then use the relevant implementation/setup referen
 | [Shared C# Simulation](Shared_Simulation_Implementation.md) | Implemented rules kernel, gameplay/training adapters, compatibility corrections, parity checks, measured throughput and remaining boundaries. |
 | [Decoupled Training and Viewer](Decoupled_Training_Implementation.md) | Shared C# parallel arenas, one PPO learner, independent replay/live viewer, resume compatibility and measured Mac throughput. |
 | [Automatic AI Evaluations](Automatic_AI_Evaluation.md) | Recurring cumulative-decision benchmarks, guarded private champion promotion, bounded evidence and live total match counters. |
+| [Reference Strength and Human Counterplay](Reference_Strength_And_Human_Counterplay.md) | Anchored benchmark display, isolated human-derived challenger preparation and research priorities for broader defense. |
 | [Development Follow-ups](Development_Followups.md) | Known issues, proposed boundaries, unresolved decisions, targeted checks. |
 | [PBp Compatibility Policy](PBp-Compatibility.md) | Current protocol/app-version gates and retirement policy. |
 | [PBp Migration Ledger](PbP_Migration_Ledger.md) | Protocol 3/4/5 history and current migration window. |

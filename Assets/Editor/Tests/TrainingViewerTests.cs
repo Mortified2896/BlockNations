@@ -11,6 +11,18 @@ using UnityEngine.TestTools;
 
 public sealed class TrainingViewerTests
 {
+    private static void WriteReferenceFixture(string run)
+    {
+        int board = JsonUtility.FromJson<TrainingProgressHistory>(File.ReadAllText(
+            Directory.GetFiles(run, "board-*-progress.json")[0])).boardSize;
+        var result = new TrainingReferenceScore.Result { checkpoint = "fixture", games = 704, wins = 594, losses = 110,
+            firstGames = 352, secondGames = 352, firstWins = 274, secondWins = 320 };
+        var reference = new TrainingReferenceScore { version = 1, source = "verified-fixed-reference-v1", boardSize = board,
+            runId = new DirectoryInfo(run).Name, rulesVersion = BlockNations.Simulation.SimulationRules.Version,
+            suiteId = "fixture-suite", champion = result, latest = result };
+        File.WriteAllText(Path.Combine(run, "fixed-reference-status.json"), JsonUtility.ToJson(reference));
+    }
+
     [TestCase(4, 1400, 900)] [TestCase(4, 2400, 1398)]
     [TestCase(1, 1200, 720)] [TestCase(8, 1400, 900)] [TestCase(16, 2400, 1398)]
     public void AllGamePanelsStayInsideTheirViewportWithoutOverlapping(int count, int width, int height)
@@ -59,6 +71,7 @@ public sealed class TrainingViewerTests
             File.WriteAllText(Path.Combine(folder, "arena-status.json"), JsonUtility.ToJson(status));
             if (worker == 0) File.WriteAllText(Path.Combine(run, "arena-status.json"), JsonUtility.ToJson(status));
         }
+        WriteReferenceFixture(run);
         TrainingSceneBuilder.PrepareViewer(run); TrainingSceneBuilder.ShowBoard();
         SessionState.SetString("BlockNations.FourViewerFixture", run);
         yield return new EnterPlayMode();
@@ -129,6 +142,7 @@ public sealed class TrainingViewerTests
         var progress = new TrainingProgressHistory { boardSize = 5, fullBoardMatches = 13000,
             fullBoardCaptures = 13000, curriculumMatches = 20 };
         File.WriteAllText(Path.Combine(run, "board-5-progress.json"), JsonUtility.ToJson(progress));
+        WriteReferenceFixture(run);
         TrainingSceneBuilder.PrepareViewer(run); TrainingSceneBuilder.ShowBoard();
         SessionState.SetString("BlockNations.ViewerFixture", run);
         yield return new EnterPlayMode();

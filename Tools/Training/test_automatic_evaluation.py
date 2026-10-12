@@ -166,6 +166,7 @@ class AutomaticEvaluationTests(unittest.TestCase):
                 patch('automatic_evaluation.latest_checkpoint', return_value=source), \
                 patch('evaluate_milestone.freeze', return_value=manifest), \
                 patch('evaluate_suite.run', return_value=dict(results=[dict(games=64)], suiteId='fixed')) as evaluate, \
+                patch('reference_score.publish'), \
                 patch('playtest_champion.select', side_effect=ValueError('Candidate regressed against a fixed opponent or starting role; champion preserved.')) as select:
             result = perform_job(self.run, self.worker, job_path)
         evaluate.assert_called_once();select.assert_called_once_with(self.run, manifest, job_dir / 'results/suite.json')
