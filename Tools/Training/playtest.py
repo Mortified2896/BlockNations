@@ -175,7 +175,7 @@ class PlaytestSession:
             # Closing the human window ends the SDK environment as well.
             ready = self.state["state"] == "playing" and (self.process.returncode == 0 or status.get("returnRequested"))
             self.state.update(state="finished" if ready else "error",
-                              message="Returned to training." if ready else "Model playtest closed unexpectedly; see playtest/inference.log.")
+                              message="Snapshot match closed." if ready else "Model playtest closed unexpectedly; see playtest/inference.log.")
             self.process = None
             self.log.close()
             self.log = None

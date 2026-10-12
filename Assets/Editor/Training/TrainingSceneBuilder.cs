@@ -137,9 +137,10 @@ public static class TrainingSceneBuilder
     {
         GameMenuActions menu = Root<GameMenuActions>(scene, "GameMenuActions");
         Set(menu, "useAlternateExit", true);
+        Set(menu, "alternateExitLabel", "Close match");
         var callback = menu.AlternateExit;
         while (callback.GetPersistentEventCount() > 0) UnityEventTools.RemovePersistentListener(callback, 0);
-        UnityEventTools.AddPersistentListener(callback, arena.ReturnToTraining);
+        UnityEventTools.AddPersistentListener(callback, arena.CloseHumanPlaytest);
         EditorUtility.SetDirty(menu);
         TrainingHumanPresentation presentation = arena.GetComponent<TrainingHumanPresentation>();
         if (presentation == null) presentation = arena.gameObject.AddComponent<TrainingHumanPresentation>();

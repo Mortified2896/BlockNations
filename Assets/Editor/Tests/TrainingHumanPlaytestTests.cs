@@ -173,17 +173,26 @@ public sealed class TrainingHumanPlaytestTests
     [Test]
     public void AuthoredTrainingMenuExitTargetsItsArenaAndProductMenuIsPreserved()
     {
+        string run = Path.Combine(Path.GetTempPath(), "bn-close-match-" + Guid.NewGuid().ToString("N"));
+        string human = Path.Combine(run, "playtest");
+        Directory.CreateDirectory(human);
         try
         {
-            var arena = TrainingSceneBuilder.Prepare("", 42, false, false, human: true);
+            var arena = TrainingSceneBuilder.Prepare(Path.Combine(human, "arena-status.json"), 42, false, false, human: true);
             var menu = UnityEngine.Object.FindFirstObjectByType<GameMenuActions>();
             Assert.That(menu.AlternateExit.GetPersistentEventCount(), Is.EqualTo(1));
             Assert.That(menu.AlternateExit.GetPersistentTarget(0), Is.SameAs(arena));
-            Assert.That(menu.AlternateExit.GetPersistentMethodName(0), Is.EqualTo(nameof(TrainingArena.ReturnToTraining)));
+            Assert.That(menu.AlternateExit.GetPersistentMethodName(0), Is.EqualTo(nameof(TrainingArena.CloseHumanPlaytest)));
+            Assert.That(menu.MenuLabel, Is.EqualTo("Close match"));
+            menu.QuitToMainMenu();
+            Assert.That(File.Exists(Path.Combine(run, "viewer.request")), Is.False, "Close match must not request another window.");
+            Assert.That(File.Exists(Path.Combine(run, "viewer-live.request")), Is.False);
+            Assert.That(File.Exists(Path.Combine(run, "stop.request")), Is.False);
+            Assert.That(File.Exists(Path.Combine(run, "training-control.json")), Is.False);
             EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Single);
             Assert.That(UnityEngine.Object.FindFirstObjectByType<GameMenuActions>().MenuLabel, Is.EqualTo("Menu"));
         }
-        finally { EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single); }
+        finally { EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single); Directory.Delete(run, true); }
     }
 
     [TestCase(BlockNations.AI.LearnedDifficulty.Easy)]

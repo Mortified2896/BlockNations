@@ -8,6 +8,7 @@ import sys
 import threading
 import time
 from bounded_log import BoundedLog
+from native_viewer import find_viewer, alive, focus
 from training_opponents import load_recipe, recipe_id
 from training_contract import (RULES_VERSION, OPENING_ECONOMY_VERSION, LEGACY_OPENING_ECONOMY_VERSION,
                                validate_opening_economy, latest_saved_step, validate_rules_version, run_rules_version)
@@ -83,13 +84,22 @@ class ViewerSession:
             app = next((path for path in (app, *app.parents) if path.suffix == '.app'), app)
         self.run, self.app, self.enabled = run, app, enabled
         self.process, self.output_thread = None, None
+        self.external_pid = 0
         self.initial_launch = enabled
         self.error = ''
 
-    def launch(self):
+    def launch(self, *, activate=False):
         if self.process is not None and self.process.poll() is None:
+            if activate:
+                focus(self.process.pid)
             return  # One supervisor-owned viewer at a time.
         try:
+            self.external_pid = find_viewer(self.run)
+            if self.external_pid:
+                self.error = ''
+                if activate and not focus(self.external_pid):
+                    self.error = 'The existing inspector is open but could not be brought to the front.'
+                return  # A desktop/independent inspector remains owned by its launcher.
             if self.app is None:
                 raise ValueError('Configure a built Mac viewer/player to watch this run.')
             with (self.app / 'Contents/Info.plist').open('rb') as stream:
@@ -124,7 +134,7 @@ class ViewerSession:
             self.output_thread = threading.Thread(target=capture, daemon=True)
             self.output_thread.start()
             self.error = ''
-        except (OSError, ValueError, KeyError, plistlib.InvalidFileException) as error:
+        except (OSError, ValueError, KeyError, plistlib.InvalidFileException, subprocess.SubprocessError) as error:
             self.error = str(error)  # Optional viewer failure never stops a learner.
 
     def poll(self, arena, state):
@@ -134,9 +144,12 @@ class ViewerSession:
             request.unlink()
         if self.enabled and (requested or (self.initial_launch and arena.get('trainerConnected'))):
             self.initial_launch = False
-            self.launch()
+            self.launch(activate=requested)
+        if self.external_pid and not alive(self.external_pid):
+            self.external_pid = 0
         state.update(viewerAvailable=self.enabled and self.app is not None,
-                     viewerPid=self.process.pid if self.process and self.process.poll() is None else 0,
+                     viewerPid=self.process.pid if self.process and self.process.poll() is None else self.external_pid,
+                     viewerOwned=self.process is not None and self.process.poll() is None,
                      viewerError=self.error)
 
     def close(self):

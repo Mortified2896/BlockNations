@@ -24,6 +24,7 @@ public static class TrainingPlayerBuild
     {
         if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play Mode before building.");
         if (!File.Exists(TrainingSceneBuilder.ScenePath)) throw new FileNotFoundException("Create the training scene first.");
+        TrainingSceneBuilder.PrepareHumanPlaytestWiring();
         string output = Environment.GetEnvironmentVariable("BLOCKNATIONS_TRAINING_APP");
         if (string.IsNullOrWhiteSpace(output)) output = Path.GetFullPath("Build/LocalTrainingV2.app");
         Directory.CreateDirectory(Path.GetDirectoryName(output));
