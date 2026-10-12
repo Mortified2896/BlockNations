@@ -123,6 +123,9 @@ public sealed class TrainingViewerTests
         string serializedStatus = JsonUtility.ToJson(status);
         File.WriteAllText(Path.Combine(run, "arena-status.json"), serializedStatus);
         File.WriteAllText(Path.Combine(run, "workers", "0", "arena-status.json"), serializedStatus);
+        var progress = new TrainingProgressHistory { boardSize = 5, fullBoardMatches = 13000,
+            fullBoardCaptures = 13000, curriculumMatches = 20 };
+        File.WriteAllText(Path.Combine(run, "board-5-progress.json"), JsonUtility.ToJson(progress));
         TrainingSceneBuilder.PrepareViewer(run); TrainingSceneBuilder.ShowBoard();
         SessionState.SetString("BlockNations.ViewerFixture", run);
         yield return new EnterPlayMode();
@@ -137,6 +140,26 @@ public sealed class TrainingViewerTests
         Assert.That(viewer.Replay.Inspecting, Is.True);
         Assert.That(Unity.MLAgents.Academy.IsInitialized, Is.False, "A spectator must not initialize an ML environment.");
         Assert.That(viewer.Replay.CurrentGame.sourceKey, Does.EndWith(":0:1"));
+        Assert.That(viewer.Progress.fullBoardMatches, Is.EqualTo(13000));
+        Assert.That(viewer.Progress.curriculumMatches, Is.EqualTo(20));
+        Assert.That(viewer.Games, Is.EqualTo(1), "The session count must remain separate from the resumed total.");
+        progress = JsonUtility.FromJson<TrainingProgressHistory>(File.ReadAllText(Path.Combine(run, "board-5-progress.json")));
+        progress.boardSize = 7;
+        File.WriteAllText(Path.Combine(run, "board-5-progress.json"), JsonUtility.ToJson(progress));
+        yield return new WaitForSecondsRealtime(.7f);
+        Assert.That(viewer.Progress.fullBoardMatches, Is.EqualTo(13000));
+        Assert.That(viewer.Progress.boardSize, Is.EqualTo(5), "Reject valid telemetry for another board.");
+        progress.boardSize = 5; progress.RecordMatch(true, false);
+        File.WriteAllText(Path.Combine(run, "board-5-progress.json"), JsonUtility.ToJson(progress));
+        status = JsonUtility.FromJson<TrainingArena.ArenaStatus>(serializedStatus);
+        status.games = 0;
+        serializedStatus = JsonUtility.ToJson(status);
+        File.WriteAllText(Path.Combine(run, "arena-status.json"), serializedStatus);
+        yield return new WaitForSecondsRealtime(.7f);
+        Assert.That(viewer.Progress.fullBoardMatches, Is.EqualTo(13001));
+        Assert.That(viewer.Progress.curriculumMatches, Is.EqualTo(20));
+        Assert.That(viewer.Games, Is.Zero, "Restarting a session must not reset the saved match total.");
+        Assert.That(viewer.Replay.CurrentGame.number, Is.EqualTo(1), "Cumulative display must not renumber recorded replays.");
         viewer.Replay.Playing = false;
         viewer.Replay.Step(0); // Show the recorded Rider before its winning move.
         Assert.That(File.Exists(Path.Combine(run, "training-control.json")), Is.False, "Pausing replay never pauses the learner.");

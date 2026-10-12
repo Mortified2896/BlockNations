@@ -48,7 +48,7 @@ public sealed class TrainingOverlay
                 replayView.Draw(arena.Replay.LatestFrame, arena.Replay.OpeningFrame, arena.BoardSize, vision, arena.SpectatorBackgroundColor, showActionMarkers: false);
             GUILayout.BeginArea(new Rect(24, 24, width - 24, Screen.height / Scale - 48));
             scroll = GUILayout.BeginScrollView(scroll, false, false);
-            if (arena.IsTraining) { DrawPlaytest(arena); GUILayout.Space(12); }
+            if (arena.IsTraining) { DrawTrainingMatches(arena); DrawPlaytest(arena); GUILayout.Space(12); }
             if (arena is ITrainingSpectator spectator) DrawSpectatorControls(spectator);
             if (arena.IsTraining) DrawVision();
             if (arena.IsTraining) DrawHumanLearning(arena);
@@ -77,7 +77,15 @@ public sealed class TrainingOverlay
                 if (arena.CanReturnToTraining && GUILayout.Button("Back to training", button)) arena.ReturnToTraining();
             }
             if (allLive) GUILayout.Label($"{((ITrainingSpectator)arena).WorkerCount} live snapshots · {arena.BoardSize} × {arena.BoardSize}", label);
-            else GUILayout.Label($"Match {arena.Games + 1} · round {arena.Round}/{arena.RoundLimit}", label);
+            else if (arena is ITrainingSpectator liveSpectator)
+            {
+                var liveGame = liveSpectator.LiveBoards.Count > liveSpectator.SelectedWorker ?
+                    liveSpectator.LiveBoards[liveSpectator.SelectedWorker]?.Game : null;
+                GUILayout.Label(liveGame != null ? $"Simulation {liveGame.worker + 1} · session match {liveGame.number:N0}" :
+                    "Waiting for a live match…", label);
+                GUILayout.Label($"Round {arena.Round}/{arena.RoundLimit}", small);
+            }
+            else GUILayout.Label($"Session match {arena.Games + 1:N0} · round {arena.Round}/{arena.RoundLimit}", label);
             GUILayout.Label(arena.FullOpening ? $"Standard opening · {arena.BoardSize} × {arena.BoardSize}" :
                 $"Curriculum stage {arena.CurriculumDistance} · distance {arena.StartingDistance}", small);
             GUILayout.Space(12);
@@ -197,9 +205,10 @@ public sealed class TrainingOverlay
         TrainingReplayHistory.Frame frame = replay.CurrentFrame;
         double now = Time.realtimeSinceStartupAsDouble;
         GUILayout.Label("Recent match replay", title);
-        GUILayout.Label($"Match {game.number} · {game.boardSize} × {game.boardSize} · round {frame.round}", label);
+        GUILayout.Label($"Replay · {game.boardSize} × {game.boardSize} · round {frame.round}", label);
         GUILayout.Label($"Blue gold {frame.blueGold}    Red gold {frame.redGold}", label);
-        GUILayout.Label($"Simulation {game.worker + 1} · {(game.firstSeat == 0 ? "Blue" : "Red")} moved first", small);
+        GUILayout.Label($"Simulation {game.worker + 1} · session match {game.number:N0}", small);
+        GUILayout.Label($"{(game.firstSeat == 0 ? "Blue" : "Red")} moved first · session numbers reset on restart", small);
         DrawTrainingTime(arena);
         DrawStorage(arena);
         GUILayout.Label(!arena.CanContinue ? "Training is stopped or disconnected." : arena.Paused ? "Live training is paused." : "Training continues at full speed.", small);
@@ -228,7 +237,7 @@ public sealed class TrainingOverlay
         if (game.truncated) GUILayout.Label("Long match: replay buffer kept the opening and final state; some later actions are omitted.", small);
         if (!string.IsNullOrEmpty(arena.Failure)) GUILayout.Label(arena.Failure, small);
         GUILayout.Space(12);
-        GUILayout.Label($"Live run: {arena.Games:N0} matches · {arena.Actions:N0} actions", small);
+        GUILayout.Label($"This session: {arena.Actions:N0} actions", small);
         if (arena is ITrainingSpectator)
         {
             GUILayout.Label($"Training: {(arena.Elapsed > 0 ? arena.Decisions / arena.Elapsed : 0):F1} decisions/s", small);
@@ -286,6 +295,17 @@ public sealed class TrainingOverlay
         GUI.enabled = true;
         GUILayout.Label(spectator.Playtest.TrainingActive ? "Closing this viewer leaves training running." :
             "Closing this viewer ends the local playtest session.", small);
+        GUILayout.Space(12);
+    }
+
+    private void DrawTrainingMatches(ITrainingView arena)
+    {
+        TrainingProgressHistory progress = arena.Progress;
+        GUILayout.Label(progress != null && progress.boardSize == arena.BoardSize ?
+            $"Total training matches: {(long)progress.fullBoardMatches + progress.curriculumMatches:N0}" :
+            "Total training matches: awaiting history", label);
+        GUILayout.Label($"Completed across resumes · this {arena.BoardSize} × {arena.BoardSize} run", small);
+        GUILayout.Label($"This session: {arena.Games:N0} completed · all simulations", small);
         GUILayout.Space(12);
     }
 

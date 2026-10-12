@@ -200,7 +200,7 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
             worker = Read<TrainingArena.ArenaStatus>(Path.Combine(runDirectory, "workers", selectedWorker.ToString(), "arena-status.json")) ?? worker;
             string runId = new DirectoryInfo(runDirectory).Name;
             var progress = Read<TrainingProgressHistory>(Path.Combine(runDirectory, $"board-{BoardSize}-progress.json"));
-            if (progress != null && progress.IsValid()) Progress = progress;
+            if (progress != null && progress.boardSize == BoardSize && progress.IsValid()) Progress = progress;
             var elo = Read<TrainingEloHistory>(Path.Combine(runDirectory, "match-elo.json"));
             if (elo != null && elo.IsValid(BoardSize, runId)) EloHistory = elo;
             var storage = Read<TrainingStorageStatus>(Path.Combine(runDirectory, "supervisor-status.json"));
