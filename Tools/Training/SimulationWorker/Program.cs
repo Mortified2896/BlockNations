@@ -30,7 +30,10 @@ internal static class Program
 
     private static int Main(string[] args)
     {
-        try { Run(args); return 0; }
+        try {
+            if (Array.IndexOf(args, "--episode-corpus-input") >= 0)
+                EpisodeCorpusBuilder.Write(Argument(args,"--episode-corpus-input",""),Argument(args,"--episode-corpus-output",""));
+            else Run(args); return 0; }
         catch (Exception error) { Console.Error.WriteLine(error); return 1; }
     }
     private static void Run(string[] args)
@@ -42,12 +45,24 @@ internal static class Program
         bool curriculum = bool.Parse(Argument(args, "--curriculum", "false"));
         int openingEconomyVersion = int.Parse(Argument(args, "--opening-economy-version", MatchOpening.CurrentEconomyVersion.ToString()));
         int fixedFirstSeat = int.Parse(Argument(args, "--first-seat", "-1"));
+        int observationVersion = int.Parse(Argument(args, "--observation-version", "2"));
+        LearnedObservationContract.Size(observationVersion);
+        string episodePath = Argument(args, "--episode-starts", "");
+        EpisodeStartRecipe starts = null;
+        if (episodePath != "")
+        {
+            string owned = Path.GetFullPath(Path.Combine(run, "episode-starts.json"));
+            if (Path.GetFullPath(episodePath) != owned || (File.GetAttributes(owned) & FileAttributes.ReparsePoint) != 0 || new FileInfo(owned).Length > 4 * 1024 * 1024)
+                throw new ArgumentException("Episode starts must be a bounded owned-run file.");
+            starts = JsonSerializer.Deserialize<EpisodeStartRecipe>(File.ReadAllText(owned), Json);
+            if (starts == null) throw new ArgumentException("Missing episode-start recipe.");
+        }
         MatchRuleProfile rules = MatchRuleProfile.Resolve(Argument(args, "--rules-version", SimulationRules.Version));
         if (count < 1 || count > 16 || !Guid.TryParseExact(session, "N", out _) || distance < 2 || distance > 8 || distance % 2 != 0)
             throw new ArgumentException("Invalid worker/session configuration.");
         OwnedDirectory(run);
         var arenas = Enumerable.Range(0, count).Select(i => new SelfPlayArena(i, size, unchecked(seed + i * 7919), curriculum, distance,
-            rules.PolicyCatalog, openingEconomyVersion, fixedFirstSeat, rules)).ToArray();
+            rules.PolicyCatalog, openingEconomyVersion, fixedFirstSeat, rules, observationVersion, starts)).ToArray();
         string progressPath = Path.Combine(run, $"board-{size}-progress.json");
         var progress = File.Exists(progressPath) ? JsonSerializer.Deserialize<TrainingProgressHistory>(File.ReadAllText(progressPath), Json) : new TrainingProgressHistory { boardSize = size };
         if (progress == null || !progress.IsValid() || progress.boardSize != size) throw new InvalidOperationException("Invalid saved training progress.");
@@ -130,7 +145,7 @@ internal static class Program
                 round = a.State.Round, seat = a.State.CurrentTurnSeat, curriculumDistance = a.CurriculumDistance, seed = a.Seed,
                 roundLimit = a.RoundLimit, elapsedSeconds = now, decisionsPerSecond = now > 0 ? a.Decisions / now : 0,
                 fullOpening = a.FullOpening, gold0 = a.State.GoldForSeat(0), gold1 = a.State.GoldForSeat(1),
-                boardSize = size, schema = LearnedActionSchema.Version, lastAction = a.LastAction, failure = "",
+                boardSize = size, schema = observationVersion, decisionLengths = a.DecisionMetrics.Snapshot(), episodeStartId = a.EpisodeStartId, lastAction = a.LastAction, failure = "",
                 simulationVersion = rules.Version, simulationBackend = "standalone-dotnet", policyVersion = "",
                 spectatorFailure = spectator.Error
             }).ToArray();
@@ -152,8 +167,8 @@ internal static class Program
                 .Where(a => request.referenceAgents == null || request.referenceAgents.Contains(a.Worker * 2 + request.referenceSeat))
                 .Select(a => new ActionRequest { agent = a.Worker * 2 + request.referenceSeat,
                     action = a.ReferenceChoice(request.recruitType, request.workBudget) }).ToArray() : Array.Empty<ActionRequest>();
-            Console.WriteLine(JsonSerializer.Serialize(new { protocol = 1, rulesVersion = rules.Version, behavior = LearnedActionSchema.BehaviorName,
-                observationSize = LearnedActionSchema.ObservationSize, actionCount = LearnedActionSchema.ActionCount, steps, stats, referenceActions,
+            Console.WriteLine(JsonSerializer.Serialize(new { protocol = 1, rulesVersion = rules.Version, behavior = LearnedObservationContract.Behavior(observationVersion),
+                observationSize = LearnedObservationContract.Size(observationVersion), observationVersion, actionVersion = LearnedActionSchema.Version, actionCount = LearnedActionSchema.ActionCount, steps, stats, referenceActions,
                 recruitTypes = rules.PolicyCatalog.Select(t => t.TypeId).ToArray(),
                 enabledRecruitTypes = rules.RecruitableUnits.Select(t => t.TypeId).ToArray() }, Json));
         }

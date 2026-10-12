@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Security.Cryptography;
 using UnityEditor;
+using BlockNations.AI;
 using Unity.InferenceEngine;
 using UnityEngine;
 
@@ -56,10 +57,15 @@ public static class LearnedPolicyReleaseBuilder
         Dataset dataset = JsonUtility.FromJson<Dataset>(File.ReadAllText(fixturePath));
         if (dataset?.examples == null || dataset.examples.Length == 0) throw new InvalidOperationException("No policy validation fixtures.");
         using var worker = new Worker(ModelLoader.Load(asset), BackendType.CPU);
+        var manifest=JsonUtility.FromJson<LearnedPolicyRelease.Manifest>(File.ReadAllText(DirectoryPath+"manifest.json"));
+        if (manifest == null || !LearnedObservationContract.Supports(manifest.schema) || manifest.observationSize != LearnedObservationContract.Size(manifest.schema))
+            throw new InvalidOperationException("CPU fixture observation contract differs from the release.");
         float largestError = 0;
         foreach (Example example in dataset.examples)
         {
-            using var input = new Tensor<float>(new TensorShape(1, 3120), example.observation);
+            if (example.observation?.Length != manifest.observationSize || example.mask?.Length != 259 || example.probabilities?.Length != 259)
+                throw new InvalidOperationException("CPU fixture dimensions differ from the selected release.");
+            using var input = new Tensor<float>(new TensorShape(1, manifest.observationSize), example.observation);
             using var mask = new Tensor<float>(new TensorShape(1, 259), example.mask);
             worker.SetInput("obs_0", input); worker.SetInput("action_masks", mask);
             worker.Schedule();

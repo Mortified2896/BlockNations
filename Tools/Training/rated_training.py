@@ -142,7 +142,8 @@ def main():
     import mlagents.trainers.trainer.trainer_factory as factory
     factory.GhostTrainer = WholeMatchGhostTrainer
     from human_imitation import install as install_human_imitation
-    install_human_imitation(factory)
+    if os.environ.get('BLOCKNATIONS_HUMAN_IMITATION', 'enabled') == 'enabled':
+        install_human_imitation(factory)
     def assignment():
         if ACTIVE_TRAINER is None:
             return None

@@ -18,6 +18,7 @@ public sealed class LearnedPolicyRelease : ScriptableObject
     public sealed class Manifest
     {
         public int schema;
+        public int actionSchema;
         public int boardSize;
         public int observationSize;
         public int actionCount;
@@ -33,8 +34,9 @@ public sealed class LearnedPolicyRelease : ScriptableObject
     {
         if (metadata == null) throw new InvalidOperationException("The learned AI release has no manifest.");
         Manifest manifest = JsonUtility.FromJson<Manifest>(metadata.text);
-        if (manifest == null || manifest.schema != LearnedActionSchema.Version || manifest.boardSize != boardSize ||
-            manifest.observationSize != LearnedActionSchema.ObservationSize || manifest.actionCount != LearnedActionSchema.ActionCount ||
+        if (manifest == null || !LearnedObservationContract.Supports(manifest.schema) || manifest.boardSize != boardSize ||
+            manifest.observationSize != LearnedObservationContract.Size(manifest.schema) ||
+            (manifest.schema > 2 && manifest.actionSchema != LearnedActionSchema.Version) || manifest.actionCount != LearnedActionSchema.ActionCount ||
             string.IsNullOrEmpty(manifest.rulesVersion) || string.IsNullOrEmpty(manifest.modelVersion) ||
             (expectedRulesVersion != null && manifest.rulesVersion != expectedRulesVersion) ||
             manifest.probabilityOutput != "policy_probabilities")

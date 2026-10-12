@@ -11,6 +11,7 @@ using UnityEngine;
 public sealed class LearnedAIRuntime
 {
     private readonly SeatAIObservationSource observer = new SeatAIObservationSource();
+    private readonly FairEnemyHistory[] history = { new FairEnemyHistory(), new FairEnemyHistory() };
     private readonly HashSet<string> rejected = new HashSet<string>(StringComparer.Ordinal);
     private Worker worker;
     private ModelAsset loadedAsset;
@@ -41,6 +42,7 @@ public sealed class LearnedAIRuntime
     {
         generation++;
         observer.ResetKnowledge();
+        foreach (var memory in history) memory.Reset();
         rejected.Clear();
         knowsStartingCities = false;
         random = null;
@@ -124,8 +126,8 @@ public sealed class LearnedAIRuntime
             for (int stage = 0; stage < 2; stage++)
             {
                 Dictionary<int, AIAction> choices = LearnedActionSchema.Choices(context.Observation, source);
-                using (var input = new Tensor<float>(new TensorShape(1, LearnedActionSchema.ObservationSize),
-                    LearnedActionSchema.Encode(context.Observation, source)))
+                using (var input = new Tensor<float>(new TensorShape(1, manifest.observationSize),
+                    LearnedObservationContract.Encode(manifest.schema, context.Observation, source, manager.PublicStartingSeatIndex, history[seat])))
                 using (var mask = new Tensor<float>(new TensorShape(1, LearnedActionSchema.ActionCount), LearnedActionSampling.Mask(choices.Keys)))
                 {
                     worker.SetInput("obs_0", input);

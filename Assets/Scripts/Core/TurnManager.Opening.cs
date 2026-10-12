@@ -2,6 +2,8 @@ using BlockNations.Simulation;
 
 public partial class TurnManager
 {
+    public int PublicStartingSeatIndex => externallyDrivenMatch ? ExternalFirstSeatIndex : 0;
+
     private void InitializeSeatGoldForNewGame(int seatCount)
     {
         EnsureSeatGoldCapacity(seatCount);

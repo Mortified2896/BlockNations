@@ -11,6 +11,7 @@ from pathlib import Path
 
 from evaluate_policy import FrozenActor, TacticalActor, evaluate
 from frozen_policy import SAMPLING_MODES
+from model_contract import behavior, checkpoint_schema
 from mlagents.torch_utils import torch
 from training_contract import RULES_VERSION, OPENING_ECONOMY_VERSION, validate_rules_version, validate_transfer
 
@@ -44,7 +45,10 @@ def frozen_actor(manifest_path, rules_version=RULES_VERSION, transfer=None):
     if checkpoint.parent.resolve() != manifest_path.parent.resolve() or config.parent.resolve() != checkpoint.parent.resolve():
         raise ValueError('Frozen weights and configuration must belong to the manifest directory.')
     config_contents = config.read_bytes()
-    network = json.loads(config_contents)['behaviors']['BlockNationsSeatV2']['network_settings']
+    schema = checkpoint_schema(checkpoint)
+    if manifest.get('schema', schema) != schema or manifest.get('observationVersion', schema) != schema:
+        raise ValueError('Frozen model contract differs from its checkpoint identity.')
+    network = json.loads(config_contents)['behaviors'][behavior(schema)]['network_settings']
     actor = FrozenActor(checkpoint, network)
     if actor.sha256 != manifest['sha256']:
         raise ValueError('Frozen benchmark weights changed after selection.')
@@ -105,7 +109,7 @@ def prepare(candidate_manifest, suite_path, *, candidate_transfer=None):
                      packages={name: version(name) for name in ('mlagents', 'torch', 'numpy')},
                      evaluatorSources={name: digest(Path(__file__).with_name(name))
                                        for name in ('evaluate_suite.py', 'evaluate_policy.py', 'frozen_policy.py', 'playtest_sampling.py',
-                                                    'training_contract.py', 'dotnet_environment.py', 'training_opponents.py')})
+                                                    'training_contract.py', 'model_contract.py', 'dotnet_environment.py', 'training_opponents.py')})
     suite_id = hashlib.sha256(json.dumps(canonical, sort_keys=True).encode()).hexdigest()
     return candidate, identity, prepared, dict(canonical, suiteId=suite_id)
 

@@ -35,6 +35,7 @@ class FrozenPolicy:
         if expected_sha256 is not None and self.sha256 != expected_sha256:
             raise ValueError('Frozen opponent checkpoint changed after validation.')
         self.name = Path(checkpoint).stem
+        self.observation_size = behavior_spec.observation_specs[0].shape[0]
         self.actor = SimpleActor(behavior_spec.observation_specs, NetworkSettings(**network), behavior_spec.action_spec)
         state = torch.load(io.BytesIO(contents), map_location='cpu')['Policy']
         if any(not torch.isfinite(value).all() for value in state.values()):
@@ -48,7 +49,10 @@ class FrozenPolicy:
 
     def probabilities(self, observation, action_mask):
         with torch.no_grad():
-            tensor = torch.as_tensor(observation)
+            from model_contract import SIZES
+            if observation.ndim != 2 or observation.shape[1] not in SIZES.values() or observation.shape[1] < self.observation_size:
+                raise ValueError('Frozen actor needs its recorded contract or an unchanged newer prefix.')
+            tensor = torch.as_tensor(observation[:, :self.observation_size])
             allowed = torch.as_tensor(~action_mask, dtype=torch.float32)
             encoded, _ = self.actor.network_body([tensor])
             probabilities = self.actor.action_model._get_dists(encoded, allowed).discrete[0].probs.cpu().numpy()

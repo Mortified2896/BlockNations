@@ -19,6 +19,7 @@ from mlagents_envs.base_env import ActionTuple
 from dotnet_environment import DotNetEnvironment, NAMES, SPEC
 from frozen_policy import FrozenPolicy, SAMPLING_MODES, evaluation_weights
 from training_contract import RULES_VERSION, OPENING_ECONOMY_VERSION, validate_rules_version
+from model_contract import spec, checkpoint_schema, behavior
 
 
 def wilson(wins, games):
@@ -33,7 +34,8 @@ def wilson(wins, games):
 
 class FrozenActor(FrozenPolicy):
     def __init__(self, checkpoint, network):
-        super().__init__(checkpoint, network, SPEC)
+        self.observation_version = checkpoint_schema(checkpoint)
+        super().__init__(checkpoint, network, spec(self.observation_version))
 
 
 class TacticalActor:
@@ -52,6 +54,7 @@ class TacticalActor:
 def evaluate(worker, directory, candidate, reference=None, *, games_per_cell=16, seed=10001,
              reference_type='', reference_work=64, difficulty='Hard', reference_difficulty=None, rules_version=RULES_VERSION):
     rules_version = validate_rules_version(rules_version)
+    observation_version = max(getattr(candidate, "observation_version", 2), getattr(reference, "observation_version", 2))
     if games_per_cell < 4 or games_per_cell % 4:
         raise ValueError('Games per cell must be a positive multiple of four.')
     reference_difficulty = reference_difficulty or difficulty
@@ -67,7 +70,7 @@ def evaluate(worker, directory, candidate, reference=None, *, games_per_cell=16,
             cell = directory / f'first-{first}-candidate-{candidate_seat}'
             cell.mkdir()
             env = DotNetEnvironment(worker, cell, 4, seed, 7, False, 2, uuid.uuid4().hex,
-                                   opening_economy_version=OPENING_ECONOMY_VERSION, first_seat=first, rules_version=rules_version)
+                                   opening_economy_version=OPENING_ECONOMY_VERSION, first_seat=first, rules_version=rules_version, observation_version=observation_version)
             # Independent seeded streams for each colour, unaffected by Torch RNG.
             randoms = [np.random.default_rng(seed + seat*7919) for seat in (0, 1)]
             finished = [0]*4
@@ -76,7 +79,7 @@ def evaluate(worker, directory, candidate, reference=None, *, games_per_cell=16,
             try:
                 env.reset()
                 while min(finished) < quota:
-                    _, terminals = env.get_steps(NAMES[candidate_seat])
+                    _, terminals = env.get_steps(env.names[candidate_seat])
                     for index, agent in enumerate(terminals.agent_id):
                         arena = int(agent)//2
                         if finished[arena] < quota:
@@ -92,7 +95,7 @@ def evaluate(worker, directory, candidate, reference=None, *, games_per_cell=16,
                         recruits[arena] = [Counter(), Counter()]
                     if min(finished) >= quota:
                         break
-                    for seat, name in enumerate(NAMES):
+                    for seat, name in enumerate(env.names):
                         decisions, _ = env.get_steps(name)
                         if not len(decisions):
                             continue
@@ -122,7 +125,7 @@ def evaluate(worker, directory, candidate, reference=None, *, games_per_cell=16,
         if not game['interrupted'] and game['winner'] == game['candidateSeat']:
             winning_recruits.update(game['candidateRecruits'])
     result = dict(version=1, rulesVersion=rules_version, boardSize=7, openingEconomyVersion=OPENING_ECONOMY_VERSION,
-        candidate=candidate.name, candidateSha256=candidate.sha256,
+        candidate=candidate.name, candidateSha256=candidate.sha256, observationVersion=observation_version,
         reference=reference.name, referenceSha256=reference.sha256,
         referenceRecruitType=getattr(reference,'recruit_type',None), referenceWork=getattr(reference,'work',None),
         candidateRecruitType=getattr(candidate,'recruit_type',None), candidateWork=getattr(candidate,'work',None),
@@ -160,7 +163,7 @@ if __name__ == '__main__':
     torch.set_num_threads(2)
     if (args.checkpoint or args.reference_checkpoint) and not args.trainer_config:
         parser.error('Neural checkpoints require their trainer config.')
-    network = json.loads(args.trainer_config.read_text())['behaviors']['BlockNationsSeatV2']['network_settings'] if args.trainer_config else None
+    network = json.loads(args.trainer_config.read_text())['behaviors'][behavior(checkpoint_schema(args.checkpoint or args.reference_checkpoint))]['network_settings'] if args.trainer_config else None
     candidate = FrozenActor(args.checkpoint, network) if args.checkpoint else TacticalActor(args.reference_work)
     reference = FrozenActor(args.reference_checkpoint, network) if args.reference_checkpoint else None
     result = evaluate(args.worker, args.destination, candidate, reference, games_per_cell=args.games_per_cell,

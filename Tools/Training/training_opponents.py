@@ -56,7 +56,7 @@ def validate_recipe(run, recipe, rules_version=RULES_VERSION):
         raise ValueError('Incompatible training opponent recipe; keep at least half the games as learned self-play.')
     if recipe['version'] == 2:
         manifest = json.loads((Path(run)/'run.json').read_text())
-        if (manifest.get('owner') != 'BlockNations.LocalTraining.v1' or manifest.get('schema') != 2 or
+        if (manifest.get('owner') != 'BlockNations.LocalTraining.v1' or manifest.get('schema') not in (2, 3, 4) or
                 recipe.get('boardSize') != manifest.get('boardSize') or run_rules_version(run) != rules_version or
                 recipe.get('openingEconomyVersion') != OPENING_ECONOMY_VERSION or
                 manifest.get('openingEconomyVersion') != OPENING_ECONOMY_VERSION or
@@ -192,17 +192,17 @@ class TrainingOpponents:
                 advice = env.reference_actions(opponent_seat, **options)
             else:
                 from frozen_policy import FrozenPolicy, evaluation_weights
-                name = 'BlockNationsSeatV2?team='+str(opponent_seat)
+                name = env.names[opponent_seat] if hasattr(env, 'names') else 'BlockNationsSeatV2?team='+str(opponent_seat)
                 if index not in self.actors:
                     config_path = owned_frozen_path(self.run,entry['trainerConfig'])
                     plan = json.loads(checked_contents(config_path,entry['configSha256'],256_000))
                     self.actors[index] = FrozenPolicy(owned_frozen_path(self.run,entry['checkpoint']),
-                        plan['behaviors']['BlockNationsSeatV2']['network_settings'], env.behavior_specs[name],
+                        plan['behaviors']['BlockNationsSeatV2']['network_settings'], __import__('model_contract').spec(2),
                         entry['checkpointSha256'],entry['actorId'])
                 decisions,_ = env.get_steps(name)
                 rows = [decisions.agent_id_to_index[agent] for agent in group]
                 mask = decisions.action_mask[0][rows]
-                weights = evaluation_weights(self.actors[index].probabilities(decisions.obs[0][rows],mask),entry['sampling'])
+                weights = evaluation_weights(self.actors[index].probabilities(decisions.obs[0][rows, :3120],mask),entry['sampling'])
                 advice = {agent:int(self.randoms[agent//2].choice(weights.shape[1],p=weights[row])) for row,agent in enumerate(group)}
                 if any(mask[row,advice[agent]] for row,agent in enumerate(group)):
                     raise ValueError('Retained opponent produced an illegal choice.')

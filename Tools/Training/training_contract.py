@@ -52,12 +52,16 @@ def validate_opening_economy(version):
 
 
 def checkpoint_step(path):
-    match = re.fullmatch(r'BlockNationsSeatV2-(\d+)\.pt', Path(path).name)
+    match = re.fullmatch(r'BlockNationsSeatV[234]-(\d+)\.pt', Path(path).name)
     if not match:
         raise ValueError('Use an immutable numbered checkpoint.')
     return int(match[1])
 
 
 def latest_saved_step(run):
-    directory = Path(run)/'checkpoints'/Path(run).name/'BlockNationsSeatV2'
-    return max((checkpoint_step(path) for path in directory.glob('BlockNationsSeatV2-*.pt')), default=0)
+    import json
+    from model_contract import behavior
+    contract = json.loads((Path(run)/'run.json').read_text()) if (Path(run)/'run.json').exists() else {}
+    name = behavior(contract.get('schema', 2))
+    directory = Path(run)/'checkpoints'/Path(run).name/name
+    return max((checkpoint_step(path) for path in directory.glob(name+'-*.pt')), default=0)

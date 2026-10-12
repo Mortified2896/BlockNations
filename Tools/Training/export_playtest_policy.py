@@ -18,6 +18,7 @@ from onnx import helper, TensorProto
 from onnx.reference import ReferenceEvaluator
 
 from playtest import latest_checkpoint, read_json
+from model_contract import SIZES, checkpoint_schema
 from training_contract import (OPENING_ECONOMY_VERSION, checkpoint_step, run_rules_version,
                                validate_rules_version, transfer_contract)
 
@@ -46,10 +47,12 @@ def verify(source: onnx.ModelProto, converted: onnx.ModelProto, seed: int = 42) 
     original.graph.output.append(helper.make_tensor_value_info(source_probability, TensorProto.FLOAT, ["batch", 259]))
     original = onnx.utils.Extractor(original).extract_model(["obs_0", "action_masks"], [source_probability])
     before, after = ReferenceEvaluator(original), ReferenceEvaluator(converted)
+    size = next(i for i in source.graph.input if i.name == 'obs_0').type.tensor_type.shape.dim[1].dim_value
+    if size not in SIZES.values(): raise ValueError('Unsupported exported observation size.')
     random = np.random.default_rng(seed)
     largest_error = 0.0
     for sample in range(24):
-        observation = random.normal(0, 0.3, (1, 3120)).astype(np.float32)
+        observation = random.normal(0, 0.3, (1, size)).astype(np.float32)
         mask = (random.random((1, 259)) > 0.6).astype(np.float32)
         mask[0, 258] = 1  # EndTurn is always available to an owning seat.
         if sample == 0:
@@ -112,7 +115,7 @@ def write_release(checkpoint, weights, original_bytes, destination, rules, prove
     model = destination / "Compact7.onnx"
     model.write_bytes(contents)
     result = {
-        "schema": 2, "boardSize": 7, "observationSize": 3120, "actionCount": 259,
+        "schema": checkpoint_schema(checkpoint), "actionSchema": 2, "boardSize": 7, "observationSize": SIZES[checkpoint_schema(checkpoint)], "actionCount": 259,
         "rulesVersion": rules, "openingEconomyVersion": OPENING_ECONOMY_VERSION,
         "modelVersion": checkpoint.stem,
         "modelSha256": hashlib.sha256(contents).hexdigest(),
@@ -177,7 +180,7 @@ def export_frozen(manifest_path, destination, target_rules=None, evaluation_rece
     evaluator = ReferenceEvaluator(converted)
     random = np.random.default_rng(42)
     for _ in range(8):
-        observation = random.normal(0, 0.3, (1, 3120)).astype(np.float32)
+        observation = random.normal(0, 0.3, (1, actor.observation_size)).astype(np.float32)
         mask = (random.random((1, 259)) > 0.6).astype(np.float32); mask[0, 258] = 1
         expected = actor.probabilities(observation, mask == 0)
         actual = evaluator.run(None, {'obs_0': observation, 'action_masks': mask})[0]

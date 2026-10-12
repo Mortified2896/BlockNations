@@ -11,5 +11,6 @@
     <Compile Include="../../../Assets/Scripts/Training/Core/*.cs" />
     <Compile Include="../../../Assets/Scripts/Training/TrainingProgressHistory.cs" />
     <Compile Include="Program.cs" />
+    <Compile Include="EpisodeCorpusBuilder.cs" />
   </ItemGroup>
 </Project>

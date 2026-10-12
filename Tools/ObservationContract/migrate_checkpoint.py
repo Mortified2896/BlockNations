@@ -35,25 +35,27 @@ def _finite_tensor(value, shape):
         raise ValueError('Checkpoint tensor has an unsupported shape, dtype, device or non-finite value.')
 
 
-def _expanded(value):
-    _finite_tensor(value, (128, LEGACY_OBSERVATIONS))
-    return torch.cat((value, torch.zeros((128, OBSERVATIONS - LEGACY_OBSERVATIONS), dtype=value.dtype)), dim=1)
+def _expanded(value, source_size=LEGACY_OBSERVATIONS, target_size=OBSERVATIONS):
+    _finite_tensor(value, (128, source_size))
+    return torch.cat((value, torch.zeros((128, target_size - source_size), dtype=value.dtype)), dim=1)
 
 
-def migrate(checkpoint, network):
+def migrate(checkpoint, network, *, source_size=LEGACY_OBSERVATIONS, target_size=OBSERVATIONS):
     """Return a new checkpoint; never mutate the parent or reset learning state."""
     validate_network(network)
+    if (source_size, target_size) not in ((3120, 3259), (3259, 4712)):
+        raise ValueError('Only explicitly versioned, unchanged-prefix extensions are supported.')
     if not isinstance(checkpoint, dict) or set(checkpoint) != {'Policy', 'global_step', 'Optimizer:critic', 'Optimizer:value_optimizer'}:
         raise ValueError('Unsupported checkpoint structure.')
     policy, critic, optimizer = (checkpoint[key] for key in ('Policy', 'Optimizer:critic', 'Optimizer:value_optimizer'))
     actor_shapes = {
         'version_number': (1,), 'is_continuous_int_deprecated': (1,), 'continuous_act_size_vector': (1,),
         'discrete_act_size_vector': (1, 1), 'act_size_vector_deprecated': (1,), 'memory_size_vector': (1,),
-        INPUT_WEIGHT: (128, LEGACY_OBSERVATIONS), 'network_body._body_endoder.seq_layers.0.bias': (128,),
+        INPUT_WEIGHT: (128, source_size), 'network_body._body_endoder.seq_layers.0.bias': (128,),
         'network_body._body_endoder.seq_layers.2.weight': (128, 128), 'network_body._body_endoder.seq_layers.2.bias': (128,),
         'action_model._discrete_distribution.branches.0.weight': (ACTIONS, 128),
         'action_model._discrete_distribution.branches.0.bias': (ACTIONS,)}
-    critic_shapes = {INPUT_WEIGHT: (128, LEGACY_OBSERVATIONS), 'network_body._body_endoder.seq_layers.0.bias': (128,),
+    critic_shapes = {INPUT_WEIGHT: (128, source_size), 'network_body._body_endoder.seq_layers.0.bias': (128,),
         'network_body._body_endoder.seq_layers.2.weight': (128, 128), 'network_body._body_endoder.seq_layers.2.bias': (128,),
         'value_heads.value_heads.extrinsic.weight': (1, 128), 'value_heads.value_heads.extrinsic.bias': (1,)}
     if not isinstance(policy, dict) or not isinstance(critic, dict) or set(policy) != set(actor_shapes) or set(critic) != set(critic_shapes):
@@ -80,8 +82,8 @@ def migrate(checkpoint, network):
             optimizer['param_groups'][0].get('amsgrad') is not False or
             set(optimizer['state']) != set(range(6, 18))):
         raise ValueError('Unsupported or incomplete Adam parameter association.')
-    shapes = [(128, LEGACY_OBSERVATIONS), (128,), (128, 128), (128,), (ACTIONS, 128), (ACTIONS,),
-              (128, LEGACY_OBSERVATIONS), (128,), (128, 128), (128,), (1, 128), (1,)]
+    shapes = [(128, source_size), (128,), (128, 128), (128,), (ACTIONS, 128), (ACTIONS,),
+              (128, source_size), (128,), (128, 128), (128,), (1, 128), (1,)]
     for parameter, shape in zip(range(6, 18), shapes):
         state = optimizer['state'][parameter]
         if not isinstance(state, dict) or set(state) != {'step', 'exp_avg', 'exp_avg_sq'}:
@@ -96,10 +98,10 @@ def migrate(checkpoint, network):
 
     migrated = copy.deepcopy(checkpoint)
     for key in ('Policy', 'Optimizer:critic'):
-        migrated[key][INPUT_WEIGHT] = _expanded(checkpoint[key][INPUT_WEIGHT])
+        migrated[key][INPUT_WEIGHT] = _expanded(checkpoint[key][INPUT_WEIGHT], source_size, target_size)
     for parameter in (6, 12):
         for name in ('exp_avg', 'exp_avg_sq'):
-            migrated['Optimizer:value_optimizer']['state'][parameter][name] = _expanded(optimizer['state'][parameter][name])
+            migrated['Optimizer:value_optimizer']['state'][parameter][name] = _expanded(optimizer['state'][parameter][name], source_size, target_size)
     return migrated
 
 

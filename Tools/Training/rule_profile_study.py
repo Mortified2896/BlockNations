@@ -30,6 +30,7 @@ from mlagents.torch_utils import torch
 from supervisor import ROOT_MARKER, atomic_json, interrupt_trainer, read_json, size
 from training_contract import RULES_VERSION, SUPPORTED_RULES, OPENING_ECONOMY_VERSION, transfer_contract, checkpoint_step, run_rules_version
 from training_opponents import load_recipe, owned_frozen_path, validate_recipe
+from model_contract import checkpoint_schema, behavior as model_behavior, SIZES
 
 
 def sha(data):
@@ -37,8 +38,8 @@ def sha(data):
 
 
 def experiment_options(parallel_games, learning_rate):
-    if type(parallel_games) is not int or parallel_games not in (1, 2, 4):
-        raise ValueError('Choose a supported training arena count: 1, 2 or 4.')
+    if type(parallel_games) is not int or parallel_games not in (1, 2, 4, 8, 16):
+        raise ValueError('Choose a supported training arena count: 1, 2, 4, 8 or 16.')
     if learning_rate is not None and (type(learning_rate) not in (int, float) or
             not math.isfinite(learning_rate) or not 0 < learning_rate <= .01):
         raise ValueError('Choose a finite learning-rate override between 0 and 0.01.')
@@ -60,7 +61,11 @@ def arm_files(root, name, parent_path, recipe_run, rules, worker, steps, seed, *
         raise ValueError('Choose a preserved, bounded retained-opponent league.')
     run = root/'runs'/name
     run.mkdir(exist_ok=False)
-    saved = run/'checkpoints'/name/'BlockNationsSeatV2'
+    schema = checkpoint_schema(parent['checkpoint'])
+    behavior_name = model_behavior(schema)
+    if schema != 2 and parent['rulesVersion'] != rules:
+        raise ValueError('New observation contracts require a separately audited rule-profile transfer.')
+    saved = run/'checkpoints'/name/behavior_name
     saved.mkdir(parents=True)
     source = Path(parent['checkpoint'])
     if checkpoint_step(source) != parent['step']:
@@ -72,7 +77,7 @@ def arm_files(root, name, parent_path, recipe_run, rules, worker, steps, seed, *
         raise ValueError('The preserved parent changed during study preparation.')
     (saved/'checkpoint.pt').write_bytes(contents)
     plan = json.loads(Path(parent['trainerConfig']).read_text())
-    behavior = plan['behaviors']['BlockNationsSeatV2']
+    behavior = plan['behaviors'][behavior_name]
     behavior.update(max_steps=parent['step']+steps, checkpoint_interval=min(50000, steps), keep_checkpoints=3)
     # Preserve optimization settings unless a bounded override is explicitly
     # part of this fresh study. The copied optimizer state remains intact.
@@ -84,6 +89,7 @@ def arm_files(root, name, parent_path, recipe_run, rules, worker, steps, seed, *
                       checkpointSha256=identity['sha256'], configSha256=identity['configSha256'],
                       trainedRulesVersion=parent['rulesVersion'], targetRulesVersion=rules,
                       optimizer='preserved', contract=transfer_contract(parent['rulesVersion'], rules))
+    provenance['contract'].update(modelSchema=schema, observationSize=SIZES[schema])
     if learning_rate is not None or parallel_games != 1:
         provenance['trainingOptions'] = dict(parallelGames=parallel_games, learningRateOverride=learning_rate,
                                             parentLearningRate=previous_rate, recipeVersion=recipe_version)
@@ -92,9 +98,9 @@ def arm_files(root, name, parent_path, recipe_run, rules, worker, steps, seed, *
     if roster_augmentation:
         transform = dict(version=1, rulesVersion=rules, boardSize=7, mode='per-decision', seed=seed)
         provenance['publicRosterTransform'] = transform
-    atomic_json(run/'run.json', dict(owner='BlockNations.LocalTraining.v1', schema=2, runId=name,
-        boardSize=7, behavior='BlockNationsSeatV2', opening='standard', curriculum=False, seed=seed,
-        rulesVersion=rules, openingEconomyVersion=OPENING_ECONOMY_VERSION, observationSize=3120, actionCount=259,
+    atomic_json(run/'run.json', dict(owner='BlockNations.LocalTraining.v1', schema=schema, runId=name,
+        boardSize=7, behavior=behavior_name, opening='standard', curriculum=False, seed=seed,
+        rulesVersion=rules, openingEconomyVersion=OPENING_ECONOMY_VERSION, observationSize=SIZES[schema], actionCount=259,
         initialWeights='preserved-parent-checkpoint', weightTransfer=provenance,
         experiment='matched-exploration-pressure' if pressure else 'matched-roster-augmentation' if roster_augmentation else 'matched-rule-profile',
         recipeVersion=recipe_version, parallelGames=parallel_games,

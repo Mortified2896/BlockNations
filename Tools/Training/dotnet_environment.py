@@ -20,6 +20,7 @@ from mlagents.trainers.env_manager import EnvManager, EnvironmentStep
 from training_contract import (RULES_VERSION, OBSERVATIONS, ACTIONS, OPENING_ECONOMY_VERSION,
                                POLICY_CATALOG, CORE_THREE_RULES, validate_opening_economy, validate_rules_version)
 from training_opponents import TrainingOpponents
+from model_contract import SIZES, behavior, names, spec, validate_schema
 
 BEHAVIOR = 'BlockNationsSeatV2'
 NAMES = [BEHAVIOR + '?team=' + str(seat) for seat in (0, 1)]
@@ -35,8 +36,11 @@ def atomic_json(path, data):
 
 class DotNetEnvironment(BaseEnv):
     def __init__(self, executable, run, workers, seed, size, curriculum, distance, session, policy_provider=lambda: None,
-                 opening_economy_version=OPENING_ECONOMY_VERSION, first_seat=-1, rules_version=RULES_VERSION):
+                 opening_economy_version=OPENING_ECONOMY_VERSION, first_seat=-1, rules_version=RULES_VERSION, observation_version=2, episode_starts=None):
         self.rules_version = validate_rules_version(rules_version)
+        self.observation_version = validate_schema(observation_version)
+        self.behavior, self.names, self.spec = behavior(observation_version), names(observation_version), spec(observation_version)
+        self.observation_size = SIZES[observation_version]
         opening_economy_version = validate_opening_economy(opening_economy_version)
         if type(first_seat) is not int or first_seat not in (-1, 0, 1):
             raise ValueError('Choose a random starter or explicit seat 0/1 for evaluation.')
@@ -45,6 +49,8 @@ class DotNetEnvironment(BaseEnv):
         self.run, self.workers = Path(run).absolute(), workers
         self.policy_provider = policy_provider
         self.opponents = TrainingOpponents(self.run, seed, self.rules_version)
+        if episode_starts is not None and (Path(episode_starts).absolute() != self.run/'episode-starts.json' or first_seat >= 0 or curriculum):
+            raise ValueError('Episode starts require the owned training recipe, not evaluation or distance curriculum.')
         self.actions, self.results, self.stats = {}, {}, []
         self.closed = False
         self.failure = ''
@@ -64,7 +70,9 @@ class DotNetEnvironment(BaseEnv):
         command = prefix + ['--run', str(self.run), '--workers', str(workers), '--seed', str(seed),
                             '--size', str(size), '--curriculum', str(bool(curriculum)).lower(), '--distance', str(distance), '--session', session,
                             '--opening-economy-version', str(opening_economy_version), '--first-seat', str(first_seat),
-                            '--rules-version', self.rules_version]
+                            '--rules-version', self.rules_version, '--observation-version', str(observation_version)]
+        if episode_starts is not None:
+            command += ['--episode-starts', str(Path(episode_starts).absolute())]
         self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                         text=True, bufsize=1, cwd=self.run)
         self.reader = threading.Thread(target=self._read, daemon=True)
@@ -91,7 +99,7 @@ class DotNetEnvironment(BaseEnv):
 
     @property
     def behavior_specs(self):
-        return {name: SPEC for name in NAMES}
+        return {name: self.spec for name in self.names}
 
     def _exchange(self, request):
         if self.closed:
@@ -108,8 +116,8 @@ class DotNetEnvironment(BaseEnv):
             self.failure = str(response) + ' ' + self.stderr_tail
             self._publish_status(force=True, failure=self.failure)
             raise RuntimeError(str(response) + ' ' + self.stderr_tail) from response
-        if (response.get('protocol') != 1 or response.get('behavior') != BEHAVIOR or
-                response.get('observationSize') != OBSERVATIONS or response.get('actionCount') != ACTIONS or
+        if (response.get('protocol') != 1 or response.get('behavior') != self.behavior or
+                response.get('observationSize') != self.observation_size or response.get('actionCount') != ACTIONS or
                 response.get('rulesVersion') != self.rules_version):
             raise ValueError('C# rules/model protocol mismatch; do not train on an incompatible worker.')
         self.stats = response['stats']
@@ -125,20 +133,20 @@ class DotNetEnvironment(BaseEnv):
             return  # Telemetry only: retain the previous decision agents/tensors.
         if request['op'] == 'reference':
             actions = {item['agent']: item['action'] for item in response['referenceActions']}
-            decisions, _ = self.get_steps(NAMES[request['referenceSeat']])
+            decisions, _ = self.get_steps(self.names[request['referenceSeat']])
             for agent, choice in actions.items():
                 if agent not in decisions.agent_id_to_index or not 0 <= choice < ACTIONS or decisions.action_mask[0][decisions.agent_id_to_index[agent], choice]:
                     raise ValueError('Reference produced a stale or masked choice.')
             return actions  # Read-only evaluation advice never advances a game.
         self.results = {}
-        for seat, name in enumerate(NAMES):
+        for seat, name in enumerate(self.names):
             decisions = [item for item in response['steps'] if item['seat'] == seat and not item['terminal']]
             terminal = [item for item in response['steps'] if item['seat'] == seat and item['terminal']]
             def observations(items):
                 values = [np.frombuffer(base64.b64decode(item['observation'], validate=True), dtype='<f4') for item in items]
-                if any(value.shape != (OBSERVATIONS,) or not np.isfinite(value).all() for value in values):
+                if any(value.shape != (self.observation_size,) or not np.isfinite(value).all() for value in values):
                     raise ValueError('Invalid policy tensor.')
-                return [np.stack(values) if values else np.empty((0, OBSERVATIONS), dtype=np.float32)]
+                return [np.stack(values) if values else np.empty((0, self.observation_size), dtype=np.float32)]
             def identifiers(items):
                 ids = np.array([item['agent'] for item in items], dtype=np.int32)
                 if len(set(ids)) != len(ids) or any(i < 0 or i >= self.workers * 2 or i % 2 != seat for i in ids):
@@ -172,6 +180,9 @@ class DotNetEnvironment(BaseEnv):
                       challengerDecisionsByPolicy=dict(self.opponents.decisions_by_policy),
                       decisionsPerSecond=status['decisions']/max(.001, now-self.started), updatedUnix=time.time())
         atomic_json(self.run / 'arena-status.json', status)
+        atomic_json(self.run / 'decision-diagnostics.json', dict(version=1, observationVersion=self.observation_version,
+                    source='all-seat-arena-decisions', workers=[worker['decisionLengths'] for worker in self.stats if 'decisionLengths' in worker],
+                    arenaDecisions=status['decisions'], boardActions=status['actions'], updatedUnix=time.time()))
 
     def reset(self):
         self.actions.clear()
@@ -232,7 +243,7 @@ class DotNetEnvironment(BaseEnv):
     def get_steps(self, behavior_name):
         if behavior_name not in self.behavior_specs:
             raise KeyError(behavior_name)
-        return self.results.get(behavior_name, (DecisionSteps.empty(SPEC), TerminalSteps.empty(SPEC)))
+        return self.results.get(behavior_name, (DecisionSteps.empty(self.spec), TerminalSteps.empty(self.spec)))
 
     def close(self):
         if self.closed:
@@ -309,7 +320,9 @@ def install(learn, policy_provider):
                                      int(os.environ['BLOCKNATIONS_RATING_BOARD']), os.environ['BLOCKNATIONS_SIMULATION_CURRICULUM'] == 'true',
                                      int(os.environ['BLOCKNATIONS_SIMULATION_DISTANCE']), os.environ['BLOCKNATIONS_RATING_SESSION'], policy_provider,
                                      opening_economy_version=int(os.environ.get('BLOCKNATIONS_OPENING_ECONOMY_VERSION', OPENING_ECONOMY_VERSION)),
-                                     rules_version=os.environ.get('BLOCKNATIONS_RULES_VERSION', RULES_VERSION))
+                                     rules_version=os.environ.get('BLOCKNATIONS_RULES_VERSION', RULES_VERSION),
+                                     observation_version=int(os.environ.get('BLOCKNATIONS_OBSERVATION_VERSION', '2')),
+                                     episode_starts=os.environ.get('BLOCKNATIONS_EPISODE_STARTS'))
         return create
     learn.create_environment_factory = factory
     learn.SubprocessEnvManager = BatchedSimulationManager

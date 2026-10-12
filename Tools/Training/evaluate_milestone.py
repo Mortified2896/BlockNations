@@ -13,6 +13,7 @@ import tempfile
 import time
 
 from evaluate_suite import frozen_actor, worker_digest, run as evaluate
+from model_contract import checkpoint_schema, SIZES
 from playtest import latest_checkpoint, atomic_json
 from training_contract import RULES_VERSION, OPENING_ECONOMY_VERSION, run_rules_version
 
@@ -62,13 +63,16 @@ def freeze(run, source, after_step, config, recipe_sha):
         for path, data in zip(sources, contents):
             (temporary/path.name).write_bytes(data)
         (temporary/'trainer.yaml').write_bytes(config)
-        manifest = dict(checkpoint=str(temporary/source.name),trainerConfig=str(temporary/'trainer.yaml'),
+        schema = checkpoint_schema(source)
+        manifest = dict(schema=schema, observationVersion=schema, observationSize=SIZES[schema], actionCount=259, checkpoint=str(temporary/source.name),trainerConfig=str(temporary/'trainer.yaml'),
             sha256=digest(contents[0]),step=step,afterStep=after_step,
             boardSize=7,rulesVersion=rules_version,openingEconomyVersion=OPENING_ECONOMY_VERSION,
             trainingRecipeSha256=recipe_sha,trainerConfigSha256=digest(config),frozenUnix=time.time())
         run_manifest = json.loads((run/'run.json').read_text())
         if 'weightTransfer' in run_manifest:
             manifest['weightTransfer'] = run_manifest['weightTransfer']
+        if 'informationTreatment' in run_manifest:
+            manifest['informationTreatment'] = run_manifest['informationTreatment']
         atomic_json(temporary/'manifest.json',manifest)
         actor, _ = frozen_actor(temporary/'manifest.json', rules_version)  # Strict shapes and finite weights.
         manifest.update(actorId=actor.actor_id,checkpoint=str(final/source.name),trainerConfig=str(final/'trainer.yaml'))

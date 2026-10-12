@@ -32,6 +32,12 @@ namespace BlockNations.Training
         private readonly bool curriculum;
         private readonly int openingEconomyVersion;
         private readonly int fixedFirstSeat;
+        private readonly int observationVersion;
+        private readonly EpisodeStartRecipe episodeStarts;
+        private readonly FairEnemyHistory[] history = { new FairEnemyHistory(), new FairEnemyHistory() };
+        public DecisionLengthMetrics DecisionMetrics { get; } = new DecisionLengthMetrics();
+        public int ObservationVersion => observationVersion;
+        public string EpisodeStartId { get; private set; }
         private readonly UnitDefinition[] roster;
         private readonly MatchRuleProfile ruleProfile;
         private readonly SimulationObservationSource observer = new SimulationObservationSource();
@@ -53,11 +59,12 @@ namespace BlockNations.Training
         public int CurriculumDistance { get; private set; }
         public bool FullOpening { get; private set; }
         public bool CanDecide => !terminalReported;
-        public int RoundLimit => FullOpening ? 100 : 30;
+        public int RoundLimit => FullOpening || EpisodeStartId != null ? 100 : 30;
         public string LastAction { get; private set; }
 
         public SelfPlayArena(int worker, int size, int seed, bool curriculum, int distance, IEnumerable<UnitDefinition> roster,
-            int openingEconomyVersion = MatchOpening.CurrentEconomyVersion, int fixedFirstSeat = -1, MatchRuleProfile ruleProfile = null)
+            int openingEconomyVersion = MatchOpening.CurrentEconomyVersion, int fixedFirstSeat = -1, MatchRuleProfile ruleProfile = null,
+            int observationVersion = 2, EpisodeStartRecipe episodeStarts = null)
         {
             if (worker < 0 || !LearnedActionSchema.SupportsBoard(size) || (curriculum && size != 11)) throw new ArgumentException("Invalid training arena configuration.");
             Worker = worker; BoardSize = size; Seed = seed; random = new Random(seed);
@@ -65,6 +72,10 @@ namespace BlockNations.Training
             this.openingEconomyVersion = openingEconomyVersion;
             if (fixedFirstSeat < -1 || fixedFirstSeat > 1) throw new ArgumentOutOfRangeException(nameof(fixedFirstSeat));
             this.fixedFirstSeat = fixedFirstSeat;
+            if (!LearnedObservationContract.Supports(observationVersion)) throw new ArgumentException("Unsupported observation version.");
+            if (episodeStarts != null && (curriculum || fixedFirstSeat >= 0)) throw new ArgumentException("Episode starts are training-only standard-opening curricula.");
+            episodeStarts?.Validate(size, ruleProfile?.Version ?? SimulationRules.Version, openingEconomyVersion);
+            this.observationVersion = observationVersion; this.episodeStarts = episodeStarts;
             this.ruleProfile = ruleProfile;
             this.curriculum = curriculum; CurriculumDistance = distance;
             this.roster = roster.OrderBy(t => t.TypeId, StringComparer.Ordinal).ToArray();
@@ -78,9 +89,13 @@ namespace BlockNations.Training
             source[0] = source[1] = -1; seatDecisions[0] = seatDecisions[1] = 0;
             matchDecisions = turnActions = 0; terminalReported = openingRecorded = false; assignment = latestAssignment = null;
             observer.ResetKnowledge();
+            foreach (var memory in history) memory.Reset();
+            DecisionMetrics.ResetMatch();
+            EpisodeStartCase start = episodeStarts?.Choose(random); EpisodeStartId = start?.id;
             FullOpening = !curriculum || random.Next(5) == 0;
             int first = random.Next(2), low = 1, high = BoardSize - 2;
             if (fixedFirstSeat >= 0) first = fixedFirstSeat;
+            if (start != null) first = start.firstSeat;
             bool mirror = false;
             if (!FullOpening)
             {
@@ -102,7 +117,8 @@ namespace BlockNations.Training
             }
             MatchEngine.BeginTurn(State, first);
             observer.SetPublicStartingCities(State.Cities.Select(c => new AICityState { Seat = c.Seat, X = c.Position % BoardSize, Y = c.Position / BoardSize }).ToArray());
-            LastAction = (first == 0 ? "Blue" : "Red") + " moves first";
+            if (start != null) { EpisodeStartRecipe.Replay(start, State, observer, history); FullOpening = false; }
+            LastAction = start == null ? (first == 0 ? "Blue" : "Red") + " moves first" : "Reachable training start";
             Trace = new TrainingTrace { worker = Worker, match = Games + 1, boardSize = BoardSize, firstSeat = first, rulesVersion = State.RulesVersion };
             Trace.Record(TrainingTraceState.Capture(State, LastAction));
         }
@@ -112,7 +128,7 @@ namespace BlockNations.Training
             int seat = State.CurrentTurnSeat;
             AIObservation observation = observer.Observe(State, seat).Observation;
             return new ArenaAgentStep { agent = Worker * 2 + seat, seat = seat,
-                observation = LearnedActionSchema.Encode(observation, source[seat]), available = LearnedActionSchema.Choices(observation, source[seat]).Keys.ToArray() };
+                observation = LearnedObservationContract.Encode(observationVersion, observation, source[seat], State.FirstSeat, history[seat]), available = LearnedActionSchema.Choices(observation, source[seat]).Keys.ToArray() };
         }
 
         // Evaluation-only reference, using exactly the seat's fair observation.
@@ -161,6 +177,7 @@ namespace BlockNations.Training
             var context = observer.Observe(State, seat);
             var choices = LearnedActionSchema.Choices(context.Observation, source[seat]);
             if (!choices.TryGetValue(encoded.Value, out AIAction selected)) throw new InvalidOperationException("Policy produced a masked action.");
+            DecisionMetrics.Decision(seat, source[seat] >= 0, encoded == LearnedActionSchema.EndTurn);
             Decisions++; matchDecisions++; seatDecisions[seat]++;
             if (encoded != LearnedActionSchema.EndTurn && source[seat] < 0) source[seat] = encoded.Value;
             else
@@ -170,16 +187,18 @@ namespace BlockNations.Training
                 LastAction = Describe(command);
                 if (!MatchEngine.Apply(State, command).Applied) throw new InvalidOperationException("Authoritative action rejected.");
                 Actions++; turnActions = command.Kind == MatchActionKind.EndTurn ? 0 : turnActions + 1;
+                if (command.Kind == MatchActionKind.EndTurn) DecisionMetrics.EndTurn(seat);
                 if (!State.GameOver) Trace.Record(TrainingTraceState.Capture(State, LastAction));
             }
             bool interrupted = !State.GameOver && (State.Round > RoundLimit || matchDecisions >= 20000 || turnActions > 4096);
             if (!State.GameOver && !interrupted) return new[] { Decision() };
             terminalReported = true;
+            DecisionMetrics.EndGame(interrupted);
             var terminal = new ArenaAgentStep[2];
             for (int owner = 0; owner < 2; owner++)
                 terminal[owner] = new ArenaAgentStep { agent = Worker * 2 + owner, seat = owner, terminal = true, interrupted = interrupted,
                     reward = interrupted ? 0 : State.WinnerSeat == owner ? 1 : -1,
-                    observation = LearnedActionSchema.Encode(observer.Observe(State, owner).Observation, source[owner]) };
+                    observation = LearnedObservationContract.Encode(observationVersion, observer.Observe(State, owner).Observation, source[owner], State.FirstSeat, history[owner]) };
             LastAction = interrupted ? "Match interrupted at turn/action limit" : (State.WinnerSeat == 0 ? "Blue" : "Red") + " captures city and wins";
             var end = Event("end", assignment); end.interrupted = interrupted; end.winner = State.WinnerSeat;
             end.policyChanged = Trace.policyChanged;

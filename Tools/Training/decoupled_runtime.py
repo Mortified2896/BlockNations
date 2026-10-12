@@ -64,7 +64,7 @@ def configure(args, run, environment):
         (run / 'checkpoint-contract.json.tmp').replace(contract_path)
     record = dict(version=1, backend='standalone-dotnet', workerCount=args.parallel_games,
                   torchThreads=getattr(args, 'torch_threads', None),
-                  rulesVersion=rules, modelSchema=2, openingEconomyVersion=economy,
+                  rulesVersion=rules, modelSchema=read_json(run/'run.json').get('schema', 2), openingEconomyVersion=economy,
                   seedConvention='seed + arena * 7919', seed=args.seed,
                   updatedUtc=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()))
     recipe = load_recipe(run, rules)
