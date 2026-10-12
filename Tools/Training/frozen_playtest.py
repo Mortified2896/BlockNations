@@ -18,6 +18,18 @@ def strict_load(self, load_path, policy=None, reset_global_steps=False):
         active_policy.set_step(0)
 
 
+def run_inference():
+    options = learn.parse_command_line()
+    if not options.checkpoint_settings.inference:
+        raise ValueError("Frozen human playtests require --inference.")
+    # The SDK otherwise treats closing a human window as a failed worker and
+    # launches another native player. A frozen match ends when its player exits.
+    # Enforce this in the fresh child so an already-running supervisor also
+    # picks up the fix on its next playtest, without restarting the learner.
+    options.env_settings.max_lifetime_restarts = 0
+    learn.run_cli(options)
+
+
 if __name__ == "__main__":
     import os
     import mlagents.trainers
@@ -27,4 +39,4 @@ if __name__ == "__main__":
     TorchModelSaver._load_model = strict_load
     install_difficulty(os.environ.get('BLOCKNATIONS_PLAYTEST_DIFFICULTY', 'Medium'))
     install_interactive_environment(learn)
-    learn.main()
+    run_inference()

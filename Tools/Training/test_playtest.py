@@ -68,6 +68,48 @@ class PlaytestTests(unittest.TestCase):
         self.assertIn("self_play", original["behaviors"][BEHAVIOR])
         self.assertNotIn("init_path", original["behaviors"][BEHAVIOR])
 
+    def test_actual_sdk_cannot_restart_a_closed_frozen_player(self):
+        from frozen_playtest import run_inference
+        from mlagents_envs.exception import UnityCommunicatorStoppedException
+        from mlagents.trainers import learn
+        from mlagents.trainers.subprocess_env_manager import (
+            SubprocessEnvManager, EnvironmentResponse, EnvironmentCommand)
+
+        config = self.run / 'inference.yaml'
+        config.write_text(json.dumps(frozen_config(trainer_config(100000, 5000), Path('/frozen.pt'))))
+        before = config.read_bytes()
+        argv = ['frozen_playtest.py', str(config), '--inference', '--max-lifetime-restarts', '10']
+        with patch('sys.argv', argv), patch('frozen_playtest.learn.run_cli') as run:
+            run_inference()
+        options = run.call_args.args[0]
+        self.assertTrue(options.checkpoint_settings.inference)
+        self.assertEqual(options.env_settings.max_lifetime_restarts, 0)
+        manager = SubprocessEnvManager.__new__(SubprocessEnvManager)
+        manager.run_options = options
+        manager.restart_counts = [0]
+        manager.recent_restart_timestamps = [[]]
+        closed = UnityCommunicatorStoppedException('Human window closed.')
+        response = EnvironmentResponse(EnvironmentCommand.ENV_EXITED, 0, closed)
+        with patch.object(manager, '_drain_step_queue', return_value={}), \
+                patch.object(manager, 'create_worker') as launch:
+            with self.assertRaises(UnityCommunicatorStoppedException):
+                manager._restart_failed_workers(response)
+            launch.assert_not_called()
+        self.assertEqual(config.read_bytes(), before)
+        # Normal learner invocations retain the SDK's configured restart policy.
+        with patch('sys.argv', ['mlagents-learn', str(config)]):
+            self.assertEqual(learn.parse_command_line().env_settings.max_lifetime_restarts, 10)
+
+    def test_frozen_entrypoint_rejects_training_before_running_the_sdk(self):
+        from frozen_playtest import run_inference
+        config = self.run / 'config.yaml'
+        config.write_text(json.dumps(trainer_config(100000, 5000)))
+        with patch('sys.argv', ['frozen_playtest.py', str(config)]), \
+                patch('frozen_playtest.learn.run_cli') as run:
+            with self.assertRaisesRegex(ValueError, '--inference'):
+                run_inference()
+            run.assert_not_called()
+
     @patch("playtest.subprocess.Popen")
     def test_one_frozen_inference_session_with_separate_outputs_and_return(self, launch):
         source = self.checkpoint(10)
