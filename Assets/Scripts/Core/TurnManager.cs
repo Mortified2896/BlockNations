@@ -2160,6 +2160,11 @@ public partial class TurnManager : MonoBehaviour
 
         GameMode previousMode = currentMode;
         currentMode = mode;
+        // Starting cities can already exist when GridManager.Start ran first.
+        // Seed the selected capacity before any simulation-backed UI/visibility.
+        if (currentMode == GameMode.PlayByPost &&
+            PlayByPostSeatCountSelection.TryPeek(out int pendingSeatCount))
+            configuredPlayByPostSeatCount = pendingSeatCount;
 
         if (previousMode != currentMode)
         {

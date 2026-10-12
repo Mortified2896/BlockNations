@@ -236,7 +236,7 @@ async function handle(request, env) {
     const matchId = url.searchParams.get("match");
     const response = await multiplayerAPI(new Request(env.GAME_ORIGIN + "/api/multiplayer/matches/" + matchId), env, user);
     const result = await response.json();
-    if (!response.ok || !result.ok || result.match.status === "waiting" || (result.match.status !== "finished" && result.match.players.length < 2)) {
+    if (!response.ok || !result.ok || result.match.status === "waiting" || (result.match.status !== "finished" && result.match.players.length < (result.match.seatCount ?? 2))) {
       return redirect("/multiplayer?lobby=" + matchId);
     }
   }

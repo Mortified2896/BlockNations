@@ -1,8 +1,27 @@
 using UnityEngine.SceneManagement;
+using UnityEngine;
+using System.Collections;
 
 public partial class MainMenuController
 {
+    public static bool CanStartAdvancedGame => Application.isEditor ||
+        (PublicWebBuild.UsesGoogleAccounts && WebAccountClient.IsAdmin);
+
     public void StartAdvancedGame()
+    {
+        if (!CanStartAdvancedGame) return;
+        if (PublicWebBuild.UsesGoogleAccounts) StartCoroutine(StartAdvancedForAdmin());
+        else LoadAdvancedGame();
+    }
+
+    private IEnumerator StartAdvancedForAdmin()
+    {
+        bool verified = false;
+        yield return WebAccountClient.Initialize(ok => verified = ok);
+        if (verified && CanStartAdvancedGame) LoadAdvancedGame();
+    }
+
+    private void LoadAdvancedGame()
     {
         SaveLoadRequest.ClearPending();
         CameraController.ClearPendingRestoreState();

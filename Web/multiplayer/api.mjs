@@ -53,12 +53,13 @@ export async function multiplayerAPI(request, env, user) {
     }
     data = await readJSON(request);
     if (!data) return Response.json({ ok: false, error: "INVALID_REQUEST" }, { status: 400 });
-    if (["social-review", "find", "friend-request", "friend-answer", "invite", "invite-answer", "push-subscribe", "push-unsubscribe", "push-test"].includes(suffix)) operation = suffix;
-    const match = /^matches\/([a-f0-9]{32})\/(initialize|turn|cancel)$/.exec(suffix);
+    if (["social-review", "find", "create", "friend-request", "friend-answer", "invite", "invite-answer", "push-subscribe", "push-unsubscribe", "push-test"].includes(suffix)) operation = suffix;
+    const match = /^matches\/([a-f0-9]{32})\/(initialize|turn|cancel|start)$/.exec(suffix);
     if (match) { operation = match[2]; data.matchId = match[1]; }
   }
   if (!operation) return Response.json({ ok: false, error: "NOT_FOUND" }, { status: 404 });
   const actor = await publicPlayer(user);
+  actor.canAdminister = user.can_administer === true;
   const store = env.MULTIPLAYER_STORE.get(env.MULTIPLAYER_STORE.idFromName(env.GAME_ORIGIN));
   return store.fetch(new Request("https://multiplayer.internal/" + operation, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actor, directory, data, origin: env.GAME_ORIGIN }),

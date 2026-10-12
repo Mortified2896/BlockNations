@@ -311,6 +311,7 @@ public class MainMenuUITKView : MonoBehaviour
         }
 
         ApplySafeArea(force: false);
+        SetVisible(advancedPlaytestButton, MainMenuController.CanStartAdvancedGame);
         feedback?.RefreshSafeArea();
         responsiveSizeTierController.Apply(root);
         ApplyMenuPhoneLayoutClasses();
@@ -431,6 +432,7 @@ public class MainMenuUITKView : MonoBehaviour
         ConfigureActiveGamesList();
         RefreshVersionLabel();
         BindButtons();
+        SetVisible(advancedPlaytestButton, MainMenuController.CanStartAdvancedGame);
         feedback?.Dispose();
         feedback = new FeedbackUITKController(this, root, FeedbackScreen, () => "Menu", () => 0);
         RefreshContinueButtonVisibility();

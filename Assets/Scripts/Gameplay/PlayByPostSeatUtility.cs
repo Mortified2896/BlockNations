@@ -61,6 +61,17 @@ public static class PlayByPostSeatUtility
         return $"Player {NormalizeSeatIndex(seatIndex) + 1}";
     }
 
+    public static string ColourName(int seatIndex)
+    {
+        switch (seatIndex) {
+            case 0: return "Blue";
+            case 1: return "Red";
+            case 2: return "Green";
+            case 3: return "Yellow";
+            default: return BuildPlayerLabel(seatIndex);
+        }
+    }
+
     public static string ResolveSeatDisplayNameOrFallback(int seatIndex, string typedDisplayName)
     {
         string normalized = LocalPlayerProfileStore.NormalizeTypedDisplayName(typedDisplayName);

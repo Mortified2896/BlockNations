@@ -12,7 +12,7 @@ public sealed class MatchRuleProfileTests
     [TestCase(TurnManager.GameMode.VsAI, TurnManager.AIRecruitVariant.LearnedHard)]
     [TestCase(TurnManager.GameMode.VsAI, TurnManager.AIRecruitVariant.Default)]
     [TestCase(TurnManager.GameMode.PlayByPost, TurnManager.AIRecruitVariant.LearnedHard)]
-    public void OrdinaryRecruitmentUsesFrozenRulesOnlyForTheLearnedSinglePlayerOpponent(
+    public void OrdinarySinglePlayerAndMultiplayerUseTheThreeUnitRoster(
         TurnManager.GameMode mode, TurnManager.AIRecruitVariant opponent)
     {
         var root = new GameObject("Inactive ordinary rules test"); root.SetActive(false);
@@ -26,9 +26,11 @@ public sealed class MatchRuleProfileTests
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(manager, null);
             var release = Resources.Load<LearnedPolicyRelease>(LearnedPolicyRelease.ResourcePath);
             var expected = mode == TurnManager.GameMode.VsAI && LearnedAIRuntime.IsLearned(opponent)
-                ? release.RulesForBoard(7) : MatchRuleProfile.Baseline;
+                ? release.RulesForBoard(7) : MatchRuleProfile.CoreThree;
             Assert.That(manager.RuleProfile.Version, Is.EqualTo(expected.Version));
             Assert.That(manager.RuleProfile.CanRecruit("scout"), Is.EqualTo(expected.CanRecruit("scout")));
+            Assert.That(manager.RuleProfile.RecruitableUnits.Select(unit => unit.TypeId),
+                Is.EquivalentTo(new[] { "warrior", "rider", "archer" }));
         }
         finally { Object.DestroyImmediate(root); }
     }

@@ -5,12 +5,12 @@ public partial class TurnManager
 {
     public MatchRuleProfile RuleProfile { get; private set; } = MatchRuleProfile.Baseline;
 
-    // Apply a frozen release's explicit rules before recruitment or loaded units
-    // are presented. Legacy opponents and PBp keep their supported rules.
+    // Ordinary single-player and PBp use the current three-unit roster. The
+    // stable catalog still loads supported older saves containing Scouts.
     private void ConfigureOrdinaryMatchRules()
     {
         if (IsExternallyDrivenMatch) return;
-        RuleProfile = MatchRuleProfile.Baseline;
+        RuleProfile = MatchRuleProfile.CoreThree;
         if (currentMode != GameMode.VsAI || !LearnedAIRuntime.IsLearned(aiRecruitVariant)) return;
         var release = UnityEngine.Resources.Load<LearnedPolicyRelease>(LearnedPolicyRelease.ResourcePath);
         if (release == null) throw new InvalidOperationException("The frozen learned AI release is missing.");

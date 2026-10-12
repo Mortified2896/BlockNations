@@ -1,9 +1,10 @@
 import { validSubscription, sendPush } from "./push.mjs";
+import { startingCities, nextEligibleSequence } from "./opening.mjs";
 
 // A private, origin-scoped SQLite Durable Object. Identity is supplied only by
 // the Google admission Worker, never by a browser's request body.
 const ID = /^[a-f0-9]{32}$/;
-export const WEB_MATCH_VERSION = "web-pbp-1";
+export const WEB_MATCH_VERSION = "web-pbp-2-core3";
 const STATES = ["Active", "Eliminated", "Resigned"];
 
 class Fault extends Error {
@@ -28,6 +29,7 @@ export class MultiplayerStore {
       seq INTEGER NOT NULL DEFAULT 2, revision INTEGER NOT NULL DEFAULT 1,
       snapshot TEXT, last_actor TEXT, last_base INTEGER, last_payload TEXT);
     CREATE INDEX IF NOT EXISTS match_queue ON matches(status,kind,created);
+    CREATE TABLE IF NOT EXISTS match_capacity (match_id TEXT PRIMARY KEY, seat_count INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS seats (
       match_id TEXT NOT NULL, seat INTEGER NOT NULL, player_id TEXT NOT NULL,
       PRIMARY KEY(match_id,seat), UNIQUE(match_id,player_id));
@@ -75,6 +77,7 @@ export class MultiplayerStore {
   members(id) {
     return this.all("SELECT s.seat,p.id,p.name FROM seats s JOIN players p ON p.id=s.player_id WHERE s.match_id=? ORDER BY s.seat", id);
   }
+  capacity(id) { return this.one("SELECT seat_count FROM match_capacity WHERE match_id=?", id)?.seat_count ?? 2; }
   summary(match, actor) {
     const players = this.members(match.id);
     const state = match.snapshot ? JSON.parse(match.snapshot) : null;
@@ -82,13 +85,13 @@ export class MultiplayerStore {
       seatIndex: players.find(p => p.id === actor)?.seat ?? -1, players, seq: match.seq,
       revision: match.revision, ready: Boolean(state), currentTurnSeatIndex: state?.currentTurnSeatIndex ?? 0,
       turnNumber: state?.turnNumber ?? 1, winnerSeatIndex: state?.hasWinnerSeatIndex ? state.winnerSeatIndex : -1,
-      created: match.created, updated: match.updated, boardSize: 7 };
+      created: match.created, updated: match.updated, boardSize: 7, seatCount: this.capacity(match.id) };
   }
   canonical(match) {
     if (!match.snapshot) return null;
     const snapshot = JSON.parse(match.snapshot);
     const members = this.members(match.id);
-    snapshot.seats = [0, 1].map(seatIndex => {
+    snapshot.seats = Array.from({length: this.capacity(match.id)}, (_, seatIndex) => {
       const member = members.find(player => player.seat === seatIndex);
       const state = snapshot.seats?.find(seat => seat.seatIndex === seatIndex)?.state;
       return { seatIndex, state: member ? STATES.includes(state) ? state : "Active" : "Unclaimed",
@@ -98,13 +101,26 @@ export class MultiplayerStore {
     snapshot.playerTwoTypedDisplayName = snapshot.seats[1].typedDisplayName;
     return JSON.stringify(snapshot);
   }
-  create(actor, opponent = null) {
+  create(actor, opponent = null, seatCount = 2, kind = "public") {
     const id = freshId(), now = Date.now();
-    this.sql.exec("INSERT INTO matches(id,kind,status,version,created,updated) VALUES(?,?,?,?,?,?)", id,
-      opponent ? "invite" : "public", opponent ? "active" : "waiting", WEB_MATCH_VERSION, now, now);
+    this.sql.exec("INSERT INTO matches(id,kind,status,version,created,updated,seq) VALUES(?,?,?,?,?,?,?)", id,
+      opponent ? "invite" : kind, "waiting", WEB_MATCH_VERSION, now, now, seatCount);
+    this.sql.exec("INSERT INTO match_capacity VALUES(?,?)", id, seatCount);
     this.sql.exec("INSERT INTO seats VALUES(?,0,?)", id, actor);
     if (opponent) this.sql.exec("INSERT INTO seats VALUES(?,1,?)", id, opponent);
     return this.match(id, actor);
+  }
+  join(match, actor, origin) {
+    require(match.status === "waiting", "MATCH_ALREADY_STARTED", 409);
+    const members = this.members(match.id), count = this.capacity(match.id);
+    require(!members.some(player => player.id === actor), "ALREADY_JOINED", 409);
+    require(members.length < count, "MATCH_ALREADY_STARTED", 409);
+    const seat = Array.from({length: count}, (_, index) => index).find(index => !members.some(player => player.seat === index));
+    this.sql.exec("INSERT INTO seats VALUES(?,?,?)", match.id, seat, actor);
+    const full = members.length + 1 === count;
+    this.sql.exec("UPDATE matches SET revision=revision+1,updated=? WHERE id=?", Date.now(), match.id);
+    if (full) for (const member of [...members, {id: actor}]) this.notify(member.id, "joined:" + match.id,
+      "Your online lobby is full. The host can start the game.", "/multiplayer?lobby=" + match.id, origin);
   }
   notify(playerId, eventId, body, path = "/multiplayer", origin) {
     if (!playerId || !this.env.VAPID_PUBLIC_KEY || !this.env.VAPID_PRIVATE_KEY) return;
@@ -140,26 +156,30 @@ export class MultiplayerStore {
     if (next?.time) await this.ctx.storage.setAlarm(Math.max(Date.now() + 1000, next.time));
   }
   validateSnapshot(snapshot, match) {
+    const count = this.capacity(match.id);
+    const validSeat = seat => Number.isSafeInteger(seat) && seat >= 0 && seat < count;
     require(snapshot && typeof snapshot === "object" && !Array.isArray(snapshot), "INVALID_SNAPSHOT");
     require(snapshot.gameId === match.id && snapshot.mode === "PlayByPost" && snapshot.protocolVersion === 5 &&
       typeof snapshot.appVersion === "string" && snapshot.appVersion.length <= 80 && snapshot.appVersion.length > 0 &&
-      snapshot.boardWidth === 7 && snapshot.boardHeight === 7 && snapshot.mapSizePreset === "Standard7" && snapshot.seatCount === 2,
+      snapshot.boardWidth === 7 && snapshot.boardHeight === 7 && snapshot.mapSizePreset === "Standard7" && snapshot.seatCount === count,
     "INCOMPATIBLE_SNAPSHOT", 409);
     require(Number.isSafeInteger(snapshot.turnNumber) && snapshot.turnNumber >= 1 && snapshot.turnNumber <= 1000000 &&
-      [0, 1].includes(snapshot.currentTurnSeatIndex) && snapshot.transportSeq === snapshot.turnNumber * 2 + snapshot.currentTurnSeatIndex &&
+      validSeat(snapshot.currentTurnSeatIndex) && snapshot.transportSeq === snapshot.turnNumber * count + snapshot.currentTurnSeatIndex &&
       snapshot.isPlayerTurn === (snapshot.currentTurnSeatIndex === 0) && typeof snapshot.gameOver === "boolean", "INVALID_TURN");
-    require(Array.isArray(snapshot.seats) && snapshot.seats.length === 2 &&
+    require(Array.isArray(snapshot.seats) && snapshot.seats.length === count &&
       snapshot.seats.every((seat, i) => seat?.seatIndex === i && ["Unclaimed", ...STATES].includes(seat.state)), "INVALID_SEATS");
-    require(Array.isArray(snapshot.seatGold) && snapshot.seatGold.length === 2 &&
+    require(Array.isArray(snapshot.seatGold) && snapshot.seatGold.length === count &&
       snapshot.seatGold.every(gold => Number.isSafeInteger(gold) && gold >= 0 && gold <= 1000000), "INVALID_GOLD");
     require(Array.isArray(snapshot.tiles) && snapshot.tiles.length === 49 && Array.isArray(snapshot.cities) &&
       snapshot.cities.length <= 49 && Array.isArray(snapshot.units) && snapshot.units.length <= 196, "INVALID_BOARD");
     const inBoard = (x, y) => Number.isSafeInteger(x) && x >= 0 && x < 7 && Number.isSafeInteger(y) && y >= 0 && y < 7;
     require(snapshot.tiles.every(tile => inBoard(tile?.x, tile?.y)) &&
       new Set(snapshot.tiles.map(tile => tile.x + "," + tile.y)).size === 49 &&
-      snapshot.cities.every(city => inBoard(city?.x, city?.y) && [0,1].includes(city.ownerSeatIndex)) &&
-      snapshot.units.every(unit => Number.isFinite(unit?.x) && Number.isFinite(unit?.y) && Math.abs(unit.x) <= 10 && Math.abs(unit.y) <= 10 && [0,1].includes(unit.ownerSeatIndex)), "INVALID_BOARD");
-    if (snapshot.gameOver) require(snapshot.hasWinnerSeatIndex === true && [0,1].includes(snapshot.winnerSeatIndex), "INVALID_WINNER");
+      snapshot.cities.every(city => inBoard(city?.x, city?.y) && validSeat(city.ownerSeatIndex)) &&
+      snapshot.units.every(unit => Number.isFinite(unit?.x) && Number.isFinite(unit?.y) && Math.abs(unit.x) <= 10 && Math.abs(unit.y) <= 10 && validSeat(unit.ownerSeatIndex)), "INVALID_BOARD");
+    if (this.one("SELECT match_id FROM match_capacity WHERE match_id=?", match.id))
+      require(snapshot.units.every(unit => ["warrior","rider","archer"].includes(unit.unitTypeId)), "INVALID_ROSTER");
+    if (snapshot.gameOver) require(snapshot.hasWinnerSeatIndex === true && validSeat(snapshot.winnerSeatIndex), "INVALID_WINNER");
   }
 
   operate(operation, input) {
@@ -172,7 +192,7 @@ export class MultiplayerStore {
     this.remember(input.actor);
     for (const player of input.directory ?? []) this.remember(player);
     this.limit(actor, operation === "turn" ? "turn" : operation === "next" ? "poll" : "lobby", operation === "next" ? 90 : operation === "turn" ? 30 : 90);
-    if (operation === "session") return { player: this.player(actor), version: WEB_MATCH_VERSION };
+    if (operation === "session") return { player: this.player(actor), version: WEB_MATCH_VERSION, canAdminister: input.actor.canAdminister === true };
     if (operation === "push-config") return { publicKey: this.env.VAPID_PUBLIC_KEY ?? "",
       enabled: Boolean(this.env.VAPID_PUBLIC_KEY && this.env.VAPID_PRIVATE_KEY) };
     if (["push-subscribe", "push-unsubscribe", "push-test"].includes(operation)) {
@@ -210,25 +230,25 @@ export class MultiplayerStore {
         incoming: link.requester !== actor, player: this.socialPlayer(link.a === actor ? link.b : link.a) }));
       const invites = this.all("SELECT * FROM invitations WHERE (sender=? OR recipient=?) AND status IN ('pending','accepted') ORDER BY created DESC LIMIT 100", actor, actor)
         .map(invite => ({ id: invite.id, status: invite.status, incoming: invite.recipient === actor,
-          player: this.socialPlayer(invite.recipient === actor ? invite.sender : invite.recipient), matchId: invite.match_id }));
+          player: this.socialPlayer(invite.recipient === actor ? invite.sender : invite.recipient), matchId: invite.match_id,
+          seatCount: invite.match_id ? this.capacity(invite.match_id) : 2 }));
       return { player: this.socialPlayer(actor), matches, friendships, invites, version: WEB_MATCH_VERSION };
     }
-    if (operation === "find") {
+    if (operation === "find" || operation === "create") {
       require(data.version === WEB_MATCH_VERSION, "UPDATE_REQUIRED", 409);
-      const owned = this.one(`SELECT m.* FROM matches m JOIN seats s ON s.match_id=m.id
-        WHERE s.player_id=? AND m.kind='public' AND m.status='waiting' AND m.version=? LIMIT 1`, actor, WEB_MATCH_VERSION);
+      const count = data.seatCount ?? 2;
+      require([2,3,4].includes(count), "INVALID_SEAT_COUNT");
+      const kind = operation === "create" ? "invite" : "public";
+      const owned = this.one(`SELECT m.* FROM matches m JOIN seats s ON s.match_id=m.id LEFT JOIN match_capacity c ON c.match_id=m.id
+        WHERE s.player_id=? AND m.kind=? AND m.status='waiting' AND m.version=? AND COALESCE(c.seat_count,2)=? LIMIT 1`, actor, kind, WEB_MATCH_VERSION, count);
       if (owned) return { match: this.summary(owned, actor) };
       require(this.one("SELECT COUNT(*) count FROM matches m JOIN seats s ON s.match_id=m.id WHERE s.player_id=? AND m.status IN ('active','waiting')", actor).count < 20, "TOO_MANY_MATCHES", 409);
-      const waiting = this.one(`SELECT m.* FROM matches m WHERE m.kind='public' AND m.status='waiting' AND m.version=?
-        AND NOT EXISTS(SELECT 1 FROM seats s WHERE s.match_id=m.id AND s.player_id=?) ORDER BY m.created,m.id LIMIT 1`, WEB_MATCH_VERSION, actor);
-      const match = waiting ?? this.create(actor);
-      if (waiting) {
-        this.sql.exec("INSERT INTO seats VALUES(?,1,?)", waiting.id, actor);
-        this.sql.exec("UPDATE matches SET status='active',revision=revision+1,updated=? WHERE id=?", Date.now(), waiting.id);
-        const host = this.members(waiting.id).find(player => player.seat === 0);
-        this.notify(host.id, "joined:" + waiting.id, "Your online lobby is full. Open the lobby to start playing.", "/multiplayer?lobby=" + waiting.id, input.origin);
-        if (waiting.seq % 2 === 1) this.notify(actor, "turn:" + waiting.id + ":" + waiting.seq, "It's your turn in your new match.", "/?match=" + waiting.id, input.origin);
-      }
+      if (operation === "create") return { match: this.summary(this.create(actor, null, count, kind), actor) };
+      const waiting = this.one(`SELECT m.* FROM matches m LEFT JOIN match_capacity c ON c.match_id=m.id WHERE m.kind='public' AND m.status='waiting' AND m.version=?
+        AND COALESCE(c.seat_count,2)=? AND (SELECT COUNT(*) FROM seats s WHERE s.match_id=m.id)<COALESCE(c.seat_count,2)
+        AND NOT EXISTS(SELECT 1 FROM seats s WHERE s.match_id=m.id AND s.player_id=?) ORDER BY m.created,m.id LIMIT 1`, WEB_MATCH_VERSION, count, actor);
+      const match = waiting ?? this.create(actor, null, count);
+      if (waiting) this.join(waiting, actor, input.origin);
       return { match: this.summary(this.match(match.id, actor), actor) };
     }
     if (operation === "match" || operation === "next") {
@@ -240,6 +260,24 @@ export class MultiplayerStore {
       }
       return { match: this.summary(match, actor), json: this.canonical(match), seq: match.seq };
     }
+    if (operation === "start") {
+      const match = this.match(data.matchId, actor);
+      require(match.seat === 0, "HOST_REQUIRED", 403);
+      if (match.status === "active") return { match: this.summary(match, actor) };
+      require(match.status === "waiting", "MATCH_CLOSED", 409);
+      const count = this.members(match.id).length;
+      require(count >= 2 && count <= 4, "NOT_ENOUGH_PLAYERS", 409);
+      // Freeze the joined seats at start. Outstanding invitations cannot join a running game.
+      if (!match.snapshot) {
+        this.sql.exec("INSERT INTO match_capacity VALUES(?,?) ON CONFLICT(match_id) DO UPDATE SET seat_count=excluded.seat_count", match.id, count);
+        this.sql.exec("UPDATE matches SET seq=? WHERE id=?", count, match.id);
+      } else require(count === this.capacity(match.id), "LOBBY_NOT_FULL", 409);
+      this.sql.exec("UPDATE matches SET status='active',revision=revision+1,updated=? WHERE id=?", Date.now(), match.id);
+      this.sql.exec("UPDATE invitations SET status='declined' WHERE match_id=? AND status='pending'", match.id);
+      for (const member of this.members(match.id)) this.notify(member.id, "started:" + match.id,
+        "The host started your match. Open it to play.", "/?match=" + match.id, input.origin);
+      return { match: this.summary(this.match(match.id, actor), actor) };
+    }
     if (operation === "cancel") {
       const match = this.match(data.matchId, actor);
       require(match.status === "waiting" && match.seat === 0, "MATCH_ALREADY_STARTED", 409);
@@ -248,7 +286,8 @@ export class MultiplayerStore {
     }
     if (operation === "initialize" || operation === "turn") {
       const match = this.match(data.matchId, actor);
-      require(match.status !== "waiting" && (this.members(match.id).length === 2 || (operation === "turn" && match.status === "finished")), "LOBBY_NOT_FULL", 409);
+      const count = this.capacity(match.id);
+      require(match.status !== "waiting" && (this.members(match.id).length === count || (operation === "turn" && match.status === "finished")), "LOBBY_NOT_FULL", 409);
       require(match.status === "active" || (operation === "turn" && match.status === "finished"), "MATCH_CLOSED", 409);
       require(typeof data.json === "string" && new TextEncoder().encode(data.json).length <= 2000000, "INVALID_SNAPSHOT");
       let snapshot;
@@ -256,10 +295,10 @@ export class MultiplayerStore {
       this.validateSnapshot(snapshot, match);
       if (operation === "initialize") {
         if (!match.snapshot) {
-          require(snapshot.transportSeq === 2 && !snapshot.gameOver && snapshot.units.length === 0 &&
-            snapshot.cities.length === 2 && snapshot.cities.some(city => city.ownerSeatIndex === 0 && city.x === 1 && city.y === 1) &&
-            snapshot.cities.some(city => city.ownerSeatIndex === 1 && city.x === 5 && city.y === 5) &&
-            snapshot.seatGold[0] === 3 && snapshot.seatGold[1] === 2, "INVALID_OPENING");
+          require(snapshot.transportSeq === count && !snapshot.gameOver && snapshot.units.length === 0 &&
+            snapshot.cities.length === count && startingCities(count, match.id).every(start =>
+              snapshot.cities.some(city => city.ownerSeatIndex === start.ownerSeatIndex && city.x === start.x && city.y === start.y)) &&
+            snapshot.seatGold.every((gold, seat) => gold === (seat === 0 ? 3 : 2)), "INVALID_OPENING");
           this.sql.exec("UPDATE matches SET snapshot=?,revision=revision+1,updated=? WHERE id=?", data.json, Date.now(), match.id);
         }
       } else {
@@ -271,17 +310,16 @@ export class MultiplayerStore {
           const previous = JSON.parse(match.snapshot);
           require(previous.currentTurnSeatIndex === match.seat, "NOT_YOUR_TURN", 403);
           require(snapshot.appVersion === previous.appVersion, "UPDATE_REQUIRED", 409);
-          require(snapshot.transportSeq === match.seq + 1 ||
-            (snapshot.gameOver && snapshot.transportSeq === match.seq + 2), "INVALID_SEQUENCE", 409);
-          for (let seat = 0; seat < 2; seat++) {
+          require(snapshot.transportSeq === nextEligibleSequence(previous, snapshot), "INVALID_SEQUENCE", 409);
+          for (let seat = 0; seat < count; seat++) {
             const oldState = previous.seats[seat].state, newState = snapshot.seats[seat].state;
             require(!["Resigned","Eliminated"].includes(oldState) || newState === oldState, "INVALID_SEATS");
             require(newState !== "Resigned" || oldState === "Resigned" || seat === match.seat, "INVALID_SEATS");
           }
           this.sql.exec(`UPDATE matches SET snapshot=?,seq=?,revision=revision+1,status=?,updated=?,last_actor=?,last_base=?,last_payload=? WHERE id=?`,
             data.json, snapshot.transportSeq, snapshot.gameOver ? "finished" : match.status, Date.now(), actor, data.baseSeq, data.json, match.id);
-          const recipient = this.members(match.id).find(player => player.seat === (snapshot.gameOver ? 1 - match.seat : snapshot.currentTurnSeatIndex));
-          this.notify(recipient?.id, "turn:" + match.id + ":" + snapshot.transportSeq,
+          const recipients = this.members(match.id).filter(player => snapshot.gameOver ? player.id !== actor : player.seat === snapshot.currentTurnSeatIndex);
+          for (const recipient of recipients) this.notify(recipient.id, "turn:" + match.id + ":" + snapshot.transportSeq,
             snapshot.gameOver ? "Your match has finished. Open it to see the result." : "It's your turn in Block Nations.", "/?match=" + match.id, input.origin);
         }
       }
@@ -302,11 +340,18 @@ export class MultiplayerStore {
         this.notify(target, "friend:" + id + ":" + Date.now(), "You received a friend request.", "/multiplayer", input.origin);
         return { friendshipId: id };
       }
-      const existing = this.one("SELECT id FROM invitations WHERE sender=? AND recipient=? AND status='pending'", actor, target);
+      let lobby = null;
+      if (data.matchId) {
+        lobby = this.match(data.matchId, actor);
+        require(lobby.seat === 0, "HOST_REQUIRED", 403);
+        require(lobby.status === "waiting" && this.members(lobby.id).length < this.capacity(lobby.id), "MATCH_ALREADY_STARTED", 409);
+        require(!this.members(lobby.id).some(player => player.id === target), "ALREADY_JOINED", 409);
+      }
+      const existing = this.one("SELECT id FROM invitations WHERE sender=? AND recipient=? AND status='pending' AND COALESCE(match_id,'')=?", actor, target, lobby?.id ?? "");
       if (existing) return { inviteId: existing.id };
       require(this.one("SELECT COUNT(*) count FROM invitations WHERE sender=? AND status='pending'", actor).count < 20, "TOO_MANY_INVITES", 409);
       const id = freshId();
-      this.sql.exec("INSERT INTO invitations VALUES(?,?,?,'pending',NULL,?)", id, actor, target, Date.now());
+      this.sql.exec("INSERT INTO invitations VALUES(?,?,?,'pending',?,?)", id, actor, target, lobby?.id ?? null, Date.now());
       this.notify(target, "invite:" + id, "You received an invitation to a 7×7 match.", "/multiplayer", input.origin);
       return { inviteId: id };
     }
@@ -326,13 +371,19 @@ export class MultiplayerStore {
       if (invite.status === "accepted" && data.action === "accept") return { match: this.summary(this.match(invite.match_id, actor), actor) };
       require(invite.status === "pending", "INVITE_CLOSED", 409);
       if (data.action === "accept") {
-        for (const player of [invite.sender, invite.recipient]) {
+        for (const player of (invite.match_id ? [invite.recipient] : [invite.sender, invite.recipient])) {
           require(this.one("SELECT COUNT(*) count FROM matches m JOIN seats s ON s.match_id=m.id WHERE s.player_id=? AND m.status IN ('active','waiting')", player).count < 20, "TOO_MANY_MATCHES", 409);
         }
       }
-      const match = data.action === "accept" ? this.create(invite.sender, invite.recipient) : null;
+      let match = null;
+      if (data.action === "accept") {
+        if (invite.match_id) {
+          match = this.match(invite.match_id, invite.sender);
+          this.join(match, actor, input.origin);
+        } else match = this.create(invite.sender, invite.recipient);
+      }
       this.sql.exec("UPDATE invitations SET status=?,match_id=? WHERE id=?", match ? "accepted" : "declined", match?.id ?? null, invite.id);
-      if (match) this.notify(invite.sender, "accepted:" + invite.id, "Your match invitation was accepted. Your game is ready.", "/?match=" + match.id, input.origin);
+      if (match) this.notify(invite.sender, "accepted:" + invite.id, "Your match invitation was accepted. Open the lobby to start when ready.", "/multiplayer?lobby=" + match.id, input.origin);
       return match ? { match: this.summary(match, actor) } : { saved: true };
     }
     throw new Fault("NOT_FOUND", 404);

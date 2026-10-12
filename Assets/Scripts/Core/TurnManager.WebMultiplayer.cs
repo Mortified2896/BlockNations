@@ -20,7 +20,7 @@ public partial class TurnManager
             RefreshEndTurnButtonInteractable(force: true);
             TryBuildSaveJsonForDisk(out string opening);
             WebAccountClient.MatchReply initialized = null;
-            yield return WebAccountClient.Write(launch.match.id, "initialize", opening, 2, value => initialized = value);
+            yield return WebAccountClient.Write(launch.match.id, "initialize", opening, launch.match.seatCount, value => initialized = value);
             if (initialized?.ok != true) {
                 WebAccountClient.ShowStatus("The opening could not be saved online. Return to the lobby and try again.");
                 yield break;

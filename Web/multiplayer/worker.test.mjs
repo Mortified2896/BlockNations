@@ -5,6 +5,7 @@ import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import worker from "../access/worker.mjs";
 import { seal, SESSION_COOKIE } from "../access/tokens.mjs";
 import { WEB_MATCH_VERSION, MultiplayerStore } from "./store.mjs";
+import { startingCities } from "./opening.mjs";
 import { DatabaseSync } from "node:sqlite";
 
 const GAME = "https://blocknations.moneymattersmedia.com";
@@ -13,7 +14,7 @@ let mf, env;
 const identities = new Map();
 before(async () => {
   mf = new Miniflare(convertV4MiniflareOptions({
-    modules: await Promise.all(["service.mjs", "store.mjs", "push.mjs"].map(async name => ({
+    modules: await Promise.all(["service.mjs", "store.mjs", "push.mjs", "opening.mjs"].map(async name => ({
       type: "ESModule", path: new URL("./" + name, import.meta.url).pathname,
       contents: await readFile(new URL("./" + name, import.meta.url), "utf8"),
     }))), compatibilityDate: "2026-10-08",
@@ -59,15 +60,15 @@ async function call(actor, path, body, options = {}) {
   }), environment);
   return { status: response.status, headers: response.headers, ...(await response.json()) };
 }
-async function find(actor) { return call(actor, "find", { version: WEB_MATCH_VERSION }); }
-function opening(matchId) {
+async function find(actor, seatCount = 2) { return call(actor, "find", { version: WEB_MATCH_VERSION, seatCount }); }
+async function start(actor, id) { return call(actor, "matches/" + id + "/start", {}); }
+function opening(matchId, seatCount = 2) {
   return { version: "3", protocolVersion: 5, appVersion: "1.0.4", gameId: matchId, mode: "PlayByPost",
     aiRecruitVariant: "Default", mapSizePreset: "Standard7", boardWidth: 7, boardHeight: 7,
-    seatCount: 2, currentTurnSeatIndex: 0, isPlayerTurn: true, transportSeq: 2, turnNumber: 1,
-    seatGold: [3, 2], playerGold: 3, aiGold: 2, visibilityRadius: 2, gameOver: false, hasWinnerSeatIndex: false,
-    seats: [0,1].map(seatIndex => ({ seatIndex, state: "Unclaimed", claimedPlayerId: "forged-id", typedDisplayName: "forged-name" })),
-    cities: [{ x: 1, y: 1, ownerSeatIndex: 0, isPlayerOwned: true, hasRecruitedThisTurn: false },
-      { x: 5, y: 5, ownerSeatIndex: 1, isPlayerOwned: false, hasRecruitedThisTurn: false }],
+    seatCount, currentTurnSeatIndex: 0, isPlayerTurn: true, transportSeq: seatCount, turnNumber: 1,
+    seatGold: Array.from({length:seatCount},(_,seat)=>seat===0?3:2), playerGold: 3, aiGold: 2, visibilityRadius: 2, gameOver: false, hasWinnerSeatIndex: false,
+    seats: Array.from({length:seatCount},(_,seatIndex) => ({ seatIndex, state: "Unclaimed", claimedPlayerId: "forged-id", typedDisplayName: "forged-name" })),
+    cities: startingCities(seatCount,matchId).map(city=>({...city,isPlayerOwned:city.ownerSeatIndex===0,hasRecruitedThisTurn:false})),
     units: [], tiles: Array.from({ length: 49 }, (_, n) => ({ x: n % 7, y: Math.floor(n / 7), seenSeatIndices: [], playerSeen: false, opponentSeen: false })) };
 }
 async function startPair() {
@@ -75,6 +76,7 @@ async function startPair() {
   const first = await find(a), second = await find(b);
   assert.equal(first.match.id, second.match.id);
   const id = first.match.id;
+  assert.equal((await start(a,id)).status,200);
   const initial = await call(a, "matches/" + id + "/initialize", { json: JSON.stringify(opening(id)) });
   assert.equal(initial.status, 200);
   return { a, b, id, initial };
@@ -82,8 +84,8 @@ async function startPair() {
 function next(snapshot) {
   const state = structuredClone(snapshot);
   state.transportSeq++;
-  state.currentTurnSeatIndex = state.transportSeq % 2;
-  state.turnNumber = Math.floor(state.transportSeq / 2);
+  state.currentTurnSeatIndex = state.transportSeq % state.seatCount;
+  state.turnNumber = Math.floor(state.transportSeq / state.seatCount);
   state.isPlayerTurn = state.currentTurnSeatIndex === 0;
   return state;
 }
@@ -122,14 +124,15 @@ test("find creates one open match, retries reuse it, and the next player joins i
   assert.equal(repeated.match.id, first.match.id);
   assert.equal(second.match.id, first.match.id);
   assert.equal(second.match.seatIndex, 1);
-  assert.equal(second.match.status, "active");
+  assert.equal(second.match.status, "waiting");
+  assert.equal((await start(a,first.match.id)).status,200);
   assert.equal(second.match.players.length, 2);
   assert.equal(second.match.boardSize, 7);
   assert.equal((await call(a, "matches/" + first.match.id + "/cancel", {})).status, 409);
 });
 test("simultaneous finds reserve each seat once and do not overfill a match", async () => {
   const players = await Promise.all(Array.from({ length: 6 }, (_, i) => person("Concurrent " + i)));
-  const results = await Promise.all(players.map(find));
+  const results = await Promise.all(players.map(player => find(player)));
   assert.ok(results.every(result => result.status === 200));
   const counts = new Map();
   for (const result of results) counts.set(result.match.id, (counts.get(result.match.id) ?? 0) + 1);
@@ -137,7 +140,7 @@ test("simultaneous finds reserve each seat once and do not overfill a match", as
 });
 test("either reserved member can initialize; concurrent initialization keeps one opening", async () => {
   const a = await person("Initial Host"), b = await person("Initial Guest");
-  const match = await find(a); await find(b);
+  const match = await find(a); await find(b); await start(a,match.match.id);
   const json = JSON.stringify(opening(match.match.id));
   const [one, two] = await Promise.all([call(a, "matches/" + match.match.id + "/initialize", { json }), call(b, "matches/" + match.match.id + "/initialize", { json })]);
   assert.equal(one.status, 200); assert.equal(two.status, 200);
@@ -308,7 +311,8 @@ test("a one-player lobby cannot initialize or advance until the second player jo
   assert.equal(waiting.json,null); assert.equal(waiting.seq,2); assert.equal(waiting.match.ready,false);
   assert.equal((await call(host,"lobby")).matches.find(match=>match.id===id).players.length,1);
   const joined = await find(guest);
-  assert.equal(joined.match.id, id); assert.equal(joined.match.status,"active");
+  assert.equal(joined.match.id, id); assert.equal(joined.match.status,"waiting");
+  assert.equal((await start(host,id)).status,200);
   const initialized = await call(guest,"matches/"+id+"/initialize",{json:JSON.stringify(opening(id))});
   assert.equal(initialized.status,200);
   assert.equal(JSON.parse(initialized.json).seats[1].typedDisplayName,"Later Guest");
@@ -323,6 +327,8 @@ test("game opening links redirect to the lobby until full and enforce membership
     assert.equal(waiting.status,303);assert.equal(waiting.headers.get("Location"),"/multiplayer?lobby="+id);
   }
   await find(guest);
+  assert.equal((await open(guest,"/?match="+id)).status,303);
+  await start(host,id);
   const full=await open(guest,"/?match="+id);
   assert.equal(full.status,200);assert.equal(await full.text(),"synthetic game bytes");
   const rejected=await open(outsider,"/?match="+id);
@@ -361,8 +367,126 @@ test("a previously saved waiting game keeps its progress when the lobby fills", 
     assert.throws(()=>store.operate("turn",{actor:host,data:{matchId:id,json:JSON.stringify(next(snapshot)),baseSeq:3}}),/LOBBY_NOT_FULL/);
     const before=store.operate("match",{actor:host,data:{matchId:id}});assert.equal(before.seq,3);assert.equal(JSON.parse(before.json).seatGold[0],7);
     const joined=store.operate("find",{actor:guest,data:{version:WEB_MATCH_VERSION}});assert.equal(joined.match.id,id);assert.equal(joined.match.currentTurnSeatIndex,1);
+    store.operate("start",{actor:host,data:{matchId:id}});
     const restored=store.operate("match",{actor:guest,data:{matchId:id}});assert.equal(restored.seq,3);assert.equal(JSON.parse(restored.json).seatGold[0],7);
     assert.equal(JSON.parse(restored.json).seats[1].typedDisplayName,"Legacy Guest");
     assert.equal(store.operate("turn",{actor:guest,data:{matchId:id,json:JSON.stringify(next(JSON.parse(restored.json))),baseSeq:3}}).seq,4);
   } finally {database.close()}
+});
+
+for (const capacity of [3,4]) for (let joined=2;joined<=capacity;joined++) {
+  test(`host can start a ${capacity}-seat lobby with ${joined} players and all turns use the actual count`,async()=>{
+    const players=await Promise.all(Array.from({length:joined},(_,i)=>person(`Group ${capacity}-${joined}-${i}`)));
+    const first=await find(players[0],capacity),id=first.match.id;
+    assert.equal((await start(players[0],id)).error,"NOT_ENOUGH_PLAYERS");
+    for (const player of players.slice(1)) assert.equal((await find(player,capacity)).match.id,id);
+    assert.equal((await call(players[0],"matches/"+id)).match.status,"waiting");
+    assert.equal((await start(players[1],id)).error,"HOST_REQUIRED");
+    assert.equal((await call(players[1],"matches/"+id+"/initialize",{json:JSON.stringify(opening(id,joined))})).error,"LOBBY_NOT_FULL");
+    const started=await start(players[0],id);
+    assert.equal(started.match.seatCount,joined); assert.equal(started.match.seq,joined);
+    assert.equal((await start(players[0],id)).match.revision,started.match.revision);
+    const initial=await call(players[1],"matches/"+id+"/initialize",{json:JSON.stringify(opening(id,joined))});
+    assert.equal(initial.status,200,initial.error);
+    let snapshot=JSON.parse(initial.json),seq=joined;
+    assert.equal(snapshot.seats.length,joined);
+    for(let seat=0;seat<joined;seat++){
+      assert.equal(snapshot.currentTurnSeatIndex,seat);
+      const state=next(snapshot);
+      assert.equal((await submit(players[(seat+1)%joined],id,state,seq)).error,"NOT_YOUR_TURN");
+      const accepted=await submit(players[seat],id,state,seq);
+      assert.equal(accepted.status,200,accepted.error);
+      seq=accepted.seq;snapshot=JSON.parse(accepted.json);
+    }
+    assert.equal(snapshot.currentTurnSeatIndex,0);assert.equal(snapshot.turnNumber,2);
+  });
+}
+
+test("lobby sizes have separate queues and invalid sizes never create matches",async()=>{
+  const a=await person("Separate Three"),b=await person("Separate Four");
+  const three=await find(a,3),four=await find(b,4);
+  assert.notEqual(three.match.id,four.match.id);
+  for(const count of [0,1,5,"3",2.5]) assert.equal((await find(a,count)).error,"INVALID_SEAT_COUNT");
+  await call(a,"matches/"+three.match.id+"/cancel",{});await call(b,"matches/"+four.match.id+"/cancel",{});
+});
+
+test("group invitations join one lobby; host can start early and unanswered invitations close",async()=>{
+  const host=await person("Group Invite Host"),guests=await Promise.all([person("Group Invite A"),person("Group Invite B"),person("Group Invite Late")]);
+  const found=await find(host,4),id=found.match.id;
+  const targets=await Promise.all(guests.map(guest=>call(guest,"session")));
+  const invitations=[];
+  for(const target of targets) invitations.push(await call(host,"invite",{matchId:id,playerId:target.player.id}));
+  for(let index=0;index<2;index++){
+    const reply=await call(guests[index],"invite-answer",{id:invitations[index].inviteId,action:"accept"});
+    assert.equal(reply.match.id,id);assert.equal(reply.match.status,"waiting");
+  }
+  assert.equal((await start(guests[0],id)).error,"HOST_REQUIRED");
+  const started=await start(host,id);assert.equal(started.match.seatCount,3);
+  assert.equal((await call(guests[2],"invite-answer",{id:invitations[2].inviteId,action:"accept"})).error,"INVITE_CLOSED");
+  assert.equal((await call(guests[2],"matches/"+id)).status,404);
+});
+
+test("four-player progression skips resigned and eliminated seats without allowing arbitrary jumps",async()=>{
+  const players=await Promise.all(Array.from({length:4},(_,i)=>person("Skip Seat "+i)));
+  const found=await find(players[0],4),id=found.match.id;
+  for(const player of players.slice(1)) await find(player,4);
+  await start(players[0],id);
+  const initial=await call(players[0],"matches/"+id+"/initialize",{json:JSON.stringify(opening(id,4))});
+  let state=JSON.parse(initial.json);state.seats[1].state="Eliminated";state.currentTurnSeatIndex=2;state.transportSeq=6;state.isPlayerTurn=false;
+  const accepted=await submit(players[0],id,state,4);assert.equal(accepted.status,200,accepted.error);
+  state=next(JSON.parse(accepted.json));state.seats[0].state="Resigned";
+  assert.equal((await submit(players[2],id,state,6)).error,"INVALID_SEATS");
+  state=JSON.parse(accepted.json);state.seats[2].state="Resigned";state.currentTurnSeatIndex=3;state.transportSeq=7;
+  const resigned=await submit(players[2],id,state,6);assert.equal(resigned.status,200,resigned.error);
+  state=JSON.parse(resigned.json);state.currentTurnSeatIndex=0;state.transportSeq=8;state.turnNumber=2;state.isPlayerTurn=true;
+  assert.equal((await submit(players[3],id,state,7)).status,200);
+});
+
+test("admin capability comes from the verified account and updates after role revocation",async()=>{
+  const actor=await person("Admin Capability");
+  assert.equal((await call(actor,"session")).canAdminister,false);
+  identities.get(actor.sid).can_administer=true;
+  assert.equal((await call(actor,"session")).canAdminister,true);
+  identities.get(actor.sid).can_administer=false;
+  assert.equal((await call(actor,"session")).canAdminister,false);
+});
+
+test("new multiplayer snapshots reject Scout recruitment and unknown unit types",async()=>{
+  const {a,id,initial}=await startPair();
+  for(const unitTypeId of ["scout","unknown"]){
+    const state=next(JSON.parse(initial.json));state.units=[{unitTypeId,ownerSeatIndex:0,x:0,y:0}];
+    assert.equal((await submit(a,id,state,2)).error,"INVALID_ROSTER");
+  }
+});
+
+test("private group lobbies are invitation-only and public matchmaking never fills them",async()=>{
+  const host=await person("Private Group Host"),guest=await person("Private Group Guest");
+  const created=await call(host,"create",{version:WEB_MATCH_VERSION,seatCount:4});
+  const id=created.match.id;assert.equal(created.match.kind,"invite");
+  assert.equal((await call(host,"create",{version:WEB_MATCH_VERSION,seatCount:4})).match.id,id);
+  const publicMatch=await find(guest,4);assert.notEqual(publicMatch.match.id,id);
+  await call(guest,"matches/"+publicMatch.match.id+"/cancel",{});
+  const target=(await call(guest,"session")).player;
+  const invite=await call(host,"invite",{matchId:id,playerId:target.id});
+  assert.equal((await call(guest,"invite-answer",{id:invite.inviteId,action:"accept"})).match.id,id);
+  assert.equal((await start(host,id)).match.seatCount,2);
+});
+
+test("legacy active two-player snapshots remain readable and accept retained Scout units",()=>{
+  const database=new DatabaseSync(":memory:");
+  const sql={exec(query,...args){if(!args.length&&query.includes("CREATE TABLE")){database.exec(query);return{toArray:()=>[]}}const rows=database.prepare(query).all(...args);return{toArray:()=>rows}}};
+  const store=new MultiplayerStore({storage:{sql}},{});
+  const host={id:"c".repeat(32),name:"Old Host",email:"old-host@example.test"};
+  const guest={id:"d".repeat(32),name:"Old Guest",email:"old-guest@example.test"};
+  try{
+    store.remember(host);store.remember(guest);
+    const match=store.create(host.id,guest.id),snapshot=opening(match.id);
+    snapshot.units=[{unitTypeId:"scout",ownerSeatIndex:0,x:0,y:0}];
+    sql.exec("DELETE FROM match_capacity WHERE match_id=?",match.id);
+    sql.exec("UPDATE matches SET version='web-pbp-1',status='active',snapshot=? WHERE id=?",JSON.stringify(snapshot),match.id);
+    const read=store.operate("match",{actor:host,data:{matchId:match.id}});
+    assert.equal(read.match.seatCount,2);assert.equal(read.match.version,"web-pbp-1");
+    const advanced=next(JSON.parse(read.json));
+    assert.equal(store.operate("turn",{actor:host,data:{matchId:match.id,json:JSON.stringify(advanced),baseSeq:2}}).seq,3);
+  }finally{database.close()}
 });

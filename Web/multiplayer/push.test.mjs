@@ -123,7 +123,8 @@ test("asynchronous open matches remain joinable when the host returns days later
     f.store.sql.exec("UPDATE matches SET created=?,updated=? WHERE id=?", Date.now()-3*86400000, Date.now()-3*86400000, first.match.id);
     const second = await f.call("find", f.other, { version: WEB_MATCH_VERSION });
     assert.equal(second.match.id, first.match.id);
-    assert.equal(second.match.status, "active");
+    assert.equal(second.match.status, "waiting");
+    assert.equal((await f.call("start", f.actor, {matchId:first.match.id})).match.status,"active");
     assert.equal(second.match.seatIndex, 1);
   } finally { f.db.close(); }
 });

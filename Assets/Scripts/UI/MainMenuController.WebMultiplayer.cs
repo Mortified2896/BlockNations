@@ -17,7 +17,7 @@ public partial class MainMenuController
         WebAccountClient.ShowStatus("Opening your online match…");
         WebAccountClient.MatchReply reply = null;
         yield return WebAccountClient.Request("matches/" + matchId, null, value => reply = value);
-        if (reply?.ok != true || reply.match?.version != WebAccountClient.MatchVersion || reply.match.seatIndex < 0) {
+        if (reply?.ok != true || reply.match == null || !WebAccountClient.SupportsMatchVersion(reply.match.version) || reply.match.seatIndex < 0) {
             WebAccountClient.ShowStatus("This match could not be opened. Return to the lobby to refresh your matches.");
             yield break;
         }
@@ -30,7 +30,12 @@ public partial class MainMenuController
         PlayerPrefs.DeleteKey(PlayByPostPendingNewGameIdKey);
         GameModeSelection.SetPendingMode(TurnManager.GameMode.PlayByPost);
         MapSizeSelection.SetPending(TurnManager.MapSizePreset.Standard7);
-        PlayByPostSeatCountSelection.SetPending(2);
+        if (reply.match.status == "waiting" || reply.match.players == null ||
+            (reply.match.status != "finished" && reply.match.players.Length < reply.match.seatCount)) {
+            WebAccountClient.OpenLobby();
+            yield break;
+        }
+        PlayByPostSeatCountSelection.SetPending(reply.match.seatCount);
         SceneManager.LoadScene(gameplaySceneName);
     }
 }

@@ -9,9 +9,11 @@ using UnityEngine.Networking;
 // This client has no access to cookies, OAuth tokens, email addresses or API keys.
 public static class WebAccountClient
 {
-    public const string MatchVersion = "web-pbp-1";
+    public const string MatchVersion = "web-pbp-2-core3";
+    public static bool SupportsMatchVersion(string version) => version == MatchVersion || version == "web-pbp-1";
     public static string PlayerId { get; private set; } = string.Empty;
     public static string DisplayName { get; private set; } = string.Empty;
+    public static bool IsAdmin { get; private set; }
     public static MatchReply PendingMatch { get; private set; }
     public static MatchReply AcceptedMatch { get; private set; }
     public static string LastError { get; private set; }
@@ -20,10 +22,10 @@ public static class WebAccountClient
     [Serializable] public sealed class Player { public string id; public string name; public int seat; }
     [Serializable] public sealed class Match {
         public string id; public string version; public string status; public int seatIndex;
-        public int seq; public int revision; public int currentTurnSeatIndex; public bool ready; public Player[] players;
+        public int seq; public int revision; public int currentTurnSeatIndex; public int seatCount = 2; public bool ready; public Player[] players;
     }
     [Serializable] public sealed class MatchReply {
-        public bool ok; public string error; public Player player; public Match match; public string json; public int seq;
+        public bool ok; public bool canAdminister; public string error; public Player player; public Match match; public string json; public int seq;
     }
     [Serializable] private sealed class SnapshotWrite {
         public string json; public int baseSeq;
@@ -45,11 +47,13 @@ public static class WebAccountClient
 
     public static IEnumerator Initialize(Action<bool> done)
     {
+        IsAdmin = false;
         MatchReply reply = null;
         yield return Request("session", null, value => reply = value);
         if (reply?.ok == true && !string.IsNullOrEmpty(reply.player?.id)) {
             PlayerId = reply.player.id;
             DisplayName = reply.player.name;
+            IsAdmin = reply.canAdminister;
             done(true);
         } else done(false);
     }

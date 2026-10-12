@@ -4,7 +4,7 @@ Started 2026-10-11. This experimental 7×7 mode launches inside the normal game 
 
 ## Playtest
 
-Open **https://blocknations.moneymattersmedia.com/** with your approved Google account and choose **Advanced 7×7** directly below **Play vs AI**. The button loads the dedicated Advanced scene inside the same Unity game. Legacy `/advanced/` links redirect to this main menu.
+Open **https://blocknations.moneymattersmedia.com/** with an approved **administrator** Google account and choose **Advanced 7×7** directly below **Play vs AI**. The button loads the dedicated Advanced scene inside the same Unity game. Regular testers do not see this entry and cannot launch it through the menu controller. The launch rechecks the verified account role. Unity Editor development access remains available. Legacy `/advanced/` links redirect to this main menu.
 
 - Tap your blue city, or the **City** toolbar button. **Recruit** offers male/female population choices and Warrior, Rider and Archer cards with their cost and attack/range.
 - **Develop** offers Housing, Farm and Market upgrades. Each card displays its level, cost and actual immediate output gain, including a zero gain when workers limit production.

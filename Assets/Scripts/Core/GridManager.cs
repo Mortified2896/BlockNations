@@ -53,7 +53,9 @@ public class GridManager : MonoBehaviour
             TurnManager.GetBoardDimensionsForPreset(pendingMapSize, out initialWidth, out initialHeight);
         }
 
-        RebuildGrid(initialWidth, initialHeight, recalculateVisibility: true);
+        // TurnManager establishes the match seats and computes the first
+        // visibility pass after initialization/loading. Start order is undefined.
+        RebuildGrid(initialWidth, initialHeight);
     }
 
     public bool HasDimensions(int targetWidth, int targetHeight)
@@ -223,6 +225,9 @@ public class GridManager : MonoBehaviour
                 anchors.Add(new Vector2Int(centerX, bottom));
                 anchors.Add(new Vector2Int(right, top));
                 anchors.Add(new Vector2Int(left, top));
+                if (PublicWebBuild.UsesGoogleAccounts && width == height)
+                    anchors = MultiplayerStartingLayout.AssignThreePlayerStarts(anchors, width,
+                        WebAccountClient.AcceptedMatch?.match?.id);
                 break;
 
             case 4:
