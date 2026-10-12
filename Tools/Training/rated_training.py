@@ -131,6 +131,14 @@ class WholeMatchGhostTrainer(GhostTrainer):
 def main():
     if mlagents.trainers.__version__ != '1.1.0':
         raise RuntimeError('Whole-match rating adapter requires audited ML-Agents 1.1.0.')
+    threads = os.environ.get('BLOCKNATIONS_TORCH_THREADS')
+    if threads is not None:
+        # ML-Agents overrides OMP/MKL_NUM_THREADS at import. Set this afterwards,
+        # before constructing actors, so small inference batches obey our budget.
+        from mlagents.torch_utils import torch
+        if threads not in ('1', '2', '4', '8'):
+            raise ValueError('Choose 1, 2, 4 or 8 PyTorch CPU threads.')
+        torch.set_num_threads(int(threads))
     import mlagents.trainers.trainer.trainer_factory as factory
     factory.GhostTrainer = WholeMatchGhostTrainer
     from human_imitation import install as install_human_imitation

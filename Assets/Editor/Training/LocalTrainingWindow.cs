@@ -96,7 +96,7 @@ public sealed class LocalTrainingWindow : EditorWindow
             decoupled = EditorGUILayout.Toggle("Decoupled C# training", decoupled);
             if (decoupled)
             {
-                parallelGames = EditorGUILayout.IntPopup("Parallel games", parallelGames, new[] { "1", "2", "4" }, new[] { 1, 2, 4 });
+                parallelGames = EditorGUILayout.IntPopup("Parallel games", parallelGames, new[] { "1", "2", "4", "8", "16" }, new[] { 1, 2, 4, 8, 16 });
                 EditorGUILayout.LabelField("Simulation worker", TrainingSimulationWorkerBuild.WorkerPath);
                 playerPath = EditorGUILayout.TextField("Viewer/playtest player (.app)", string.IsNullOrEmpty(playerPath) ? Path.GetFullPath("Build/LocalTrainingV2.app") : playerPath);
             }
@@ -195,7 +195,8 @@ public sealed class LocalTrainingWindow : EditorWindow
         if (decoupled)
         {
             if (!File.Exists(TrainingSimulationWorkerBuild.WorkerPath)) throw new FileNotFoundException("Build the Mac training player and C# worker first.", TrainingSimulationWorkerBuild.WorkerPath);
-            if (parallelGames != 1 && parallelGames != 2 && parallelGames != 4) throw new ArgumentException("Choose 1, 2 or 4 parallel games.");
+            if (parallelGames != 1 && parallelGames != 2 && parallelGames != 4 && parallelGames != 8 && parallelGames != 16)
+                throw new ArgumentException("Choose 1, 2, 4, 8 or 16 parallel games.");
             if (string.IsNullOrEmpty(player)) player = Path.GetFullPath("Build/LocalTrainingV2.app");
         }
         id = TrainingRunSelection.ResolveId(RootPath, id, resume, boardSize, DateTime.UtcNow);

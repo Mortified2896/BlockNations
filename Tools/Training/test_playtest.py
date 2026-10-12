@@ -153,7 +153,8 @@ class PlaytestTests(unittest.TestCase):
         self.assertIn('--inference', arguments)
         self.assertNotIn('--resume', arguments)
         self.assertEqual(launch.call_args.kwargs['env']['BLOCKNATIONS_PLAYTEST_DIFFICULTY'], 'Hard')
-        self.assertIn(source.stem + ' / Hard', arguments)
+        self.assertEqual(arguments[arguments.index('--training-policy-version')+1],
+                         source.stem + ' / Hard / fixed comparison checkpoint')
         self.write('playtest/arena-status.json', {'trainerConnected':True, 'round':1})
         session.poll({})
         self.assertEqual(session.state['difficulty'], 'Hard')

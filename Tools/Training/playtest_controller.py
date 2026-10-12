@@ -9,12 +9,13 @@ import tempfile
 import time
 
 from decoupled_runtime import ViewerSession
-from playtest import PlaytestSession, latest_checkpoint, atomic_json, read_json
+from playtest import PlaytestSession, atomic_json, read_json
 from supervisor import prepare_root, size
+from playtest_champion import preferred_checkpoint
 
 
 def freeze(run):
-    source = latest_checkpoint(run)
+    source, selection = preferred_checkpoint(run)
     directory = run / 'frozen-playtests' / source.stem
     if directory.is_symlink() or directory.parent.is_symlink():
         raise ValueError('Frozen playtest storage must not be linked.')
@@ -37,6 +38,7 @@ def freeze(run):
         finally:
             temporary.unlink(missing_ok=True)
     atomic_json(directory / 'manifest.json', dict(version=1, checkpoint=source.stem, sha256=digest,
+                checkpointSelection=selection,
                 boardSize=read_json(run/'run.json')['boardSize'], difficulties=['Easy', 'Medium', 'Hard'],
                 difficultyStatus='experimental_sampling_presets'))
     return target
@@ -78,7 +80,7 @@ def main():
     state = dict(previous, state='playtesting', supervisorPid=os.getpid(), trainerPid=0, trainerReady=False,
                  viewerPid=0, playtestAvailable=True, error='', stopReason='', backend='standalone-dotnet')
     try:
-        source = latest_checkpoint(run)
+        source, _ = preferred_checkpoint(run)
         reserve = previous.get('reserveBytes', 512_000_000)
         budget = previous.get('budgetBytes', 20_000_000_000)
         # Allow space for a retained frozen source and one temporary inference copy.
@@ -86,7 +88,8 @@ def main():
             raise ValueError('Insufficient shared training storage or free disk for a frozen playtest.')
         frozen = freeze(run)
         state['frozenPlaytestCheckpoint'] = frozen.stem
-        session = PlaytestSession(run, args.env, frozen_checkpoint=frozen, training_active=False)
+        session = PlaytestSession(run, args.env, frozen_checkpoint=frozen, training_active=False,
+                                 frozen_selection=read_json(frozen.parent/'manifest.json')['checkpointSelection'])
         viewer = ViewerSession(run, args.env, enabled=True)
         viewer.initial_launch = False
         (run/'stop.request').unlink(missing_ok=True)

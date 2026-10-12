@@ -73,9 +73,11 @@ def frozen_config(config: dict, checkpoint: Path) -> dict:
 
 
 class PlaytestSession:
-    def __init__(self, run: Path, environment: Path | None, frozen_checkpoint: Path | None = None, training_active=True):
+    def __init__(self, run: Path, environment: Path | None, frozen_checkpoint: Path | None = None, training_active=True,
+                 frozen_selection='fixed comparison checkpoint'):
         self.run, self.environment = run, environment
         self.frozen_checkpoint, self.training_active = frozen_checkpoint, training_active
+        self.frozen_selection = frozen_selection
         self.process = None
         self.log = None
         self.deadline = None
@@ -99,7 +101,11 @@ class PlaytestSession:
             first_seat = request.get('firstSeat', 0)
             if type(first_seat) is not int or first_seat not in (0, 1):
                 raise ValueError('Choose whether you or the AI moves first.')
-            source = self.frozen_checkpoint or latest_checkpoint(self.run)
+            from playtest_champion import preferred_checkpoint
+            if self.frozen_checkpoint is not None:
+                source, selection = self.frozen_checkpoint, self.frozen_selection
+            else:
+                source, selection = preferred_checkpoint(self.run, request.get('checkpointSource', 'Champion'))
             scratch = self.run / "playtest"
             if scratch.is_symlink():
                 raise ValueError("The playtest scratch directory cannot be a symbolic link.")
@@ -114,7 +120,8 @@ class PlaytestSession:
             manifest = read_json(self.run / "run.json")
             rules = run_rules_version(self.run)
             self.state.update({"checkpoint": source.stem, "sha256": digest, "boardSize": manifest["boardSize"],
-                               "difficulty": difficulty, "firstSeat": first_seat, "rulesVersion": rules})
+                               "difficulty": difficulty, "firstSeat": first_seat, "rulesVersion": rules,
+                               "checkpointSelection": selection})
             atomic_json(scratch / "session.json", dict(self.state, owner=OWNER, source=str(source)))
             config = scratch / "inference.yaml"
             atomic_json(config, frozen_config(read_json(self.run / "trainer.yaml"), snapshot))
@@ -131,7 +138,7 @@ class PlaytestSession:
                        "--training-rules-version", rules,
                        "--training-seed", str(manifest["seed"]), "--training-human-seat", "0",
                        "--training-first-seat", str(first_seat),
-                       "--training-policy-version", source.stem + ' / ' + difficulty, "--training-playtest-return", "true"]
+                       "--training-policy-version", source.stem + ' / ' + difficulty + ' / ' + selection, "--training-playtest-return", "true"]
             environment = {key: value for key, value in os.environ.items() if not key.startswith("BLOCKNATIONS_RATING_")}
             environment.update({"PYTHONUNBUFFERED": "1", "OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "2"})
             environment['BLOCKNATIONS_PLAYTEST_DIFFICULTY'] = difficulty

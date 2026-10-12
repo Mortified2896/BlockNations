@@ -139,7 +139,9 @@ def protected_files(run: Path, snapshot: dict[Path, os.stat_result] | None = Non
             protected.add(path)
             # Preserve a resumable network/optimizer alongside a pinned export.
             protected.add(path.with_suffix(".pt"))
-    for checkpoint in run.rglob("checkpoint.json"):
+    if snapshot is None:
+        snapshot = file_snapshot(run)
+    for checkpoint in (path for path in snapshot if path.name == "checkpoint.json"):
         metadata = read_json(checkpoint)
         last = metadata.get("last_checkpoint", {})
         filename = last.get("file_path")
@@ -152,8 +154,6 @@ def protected_files(run: Path, snapshot: dict[Path, os.stat_result] | None = Non
                 protected.add(checkpoint.parent / candidate.name)
     # Trainer releases differ in checkpoint metadata location. Always retain the
     # newest .pt per behavior directory even if metadata cannot be interpreted.
-    if snapshot is None:
-        snapshot = file_snapshot(run)
     checkpoints: dict[Path, list[Path]] = {}
     for path in snapshot:
         if path.suffix == ".pt":
@@ -166,13 +166,21 @@ def protected_files(run: Path, snapshot: dict[Path, os.stat_result] | None = Non
     return protected
 
 
-def prune(root: Path, active: Path, target_bytes: int, log_limit: int = 500 * MB) -> list[str]:
+def prune(root: Path, active: Path, target_bytes: int, log_limit: int = 500 * MB,
+          inventory: dict[Path, os.stat_result] | None = None) -> list[str]:
     removed = []
     candidates = []
     logs = []
     snapshot = {}
+    by_run = {}
+    if inventory is not None:
+        prefix = (root/'runs').parts
+        for path, entry in inventory.items():
+            if path.parts[:len(prefix)] == prefix and len(path.parts) > len(prefix)+1:
+                owner = root/'runs'/path.parts[len(prefix)]
+                by_run.setdefault(owner, {})[path] = entry
     for run in owned_runs(root):
-        run_snapshot = file_snapshot(run)
+        run_snapshot = file_snapshot(run) if inventory is None else by_run.get(run, {})
         snapshot.update(run_snapshot)
         protected = protected_files(run, run_snapshot)
         for path in run_snapshot:
@@ -199,7 +207,9 @@ def prune(root: Path, active: Path, target_bytes: int, log_limit: int = 500 * MB
         removed.append(str(path.relative_to(root)))
     candidates.extend(path for path in logs if str(path.relative_to(root)) not in removed)
     candidates.sort(key=lambda path: snapshot[path].st_mtime_ns)
-    used = size(root)
+    used = size(root) if inventory is None else (
+        sum(entry.st_size for entry in inventory.values()) -
+        sum(snapshot[root/relative].st_size for relative in removed))
     for path in candidates:
         if used <= target_bytes:
             break
@@ -210,6 +220,34 @@ def prune(root: Path, active: Path, target_bytes: int, log_limit: int = 500 * MB
         used -= snapshot[path].st_size
         removed.append(str(path.relative_to(root)))
     return removed
+
+
+class StorageMonitor:
+    """Bound full-tree work while retaining fast disk/control checks.
+
+    Use one inventory for retention, usage and checkpoint counts. Close to the
+    save reserve we return to the existing two-second polling cadence.
+    """
+    def __init__(self, root, run, target, reserve):
+        self.root, self.run, self.target, self.reserve = root, run, target, reserve
+        self.next_check = 0
+        self.values = {}
+
+    def poll(self, now):
+        if now < self.next_check:
+            return [], self.values
+        inventory = file_snapshot(self.root)
+        removed = prune(self.root, self.run, self.target, inventory=inventory)
+        for relative in removed:
+            inventory.pop(self.root/relative, None)
+        used = sum(entry.st_size for entry in inventory.values())
+        active = [path for path in inventory if path.is_relative_to(self.run)]
+        interval = 30 if self.target-used > max(1_000_000_000, self.reserve*2) else 2
+        self.next_check = now+interval
+        self.values = dict(usedBytes=used, checkpointCount=sum(path.suffix == '.pt' for path in active),
+                           exportCount=sum(path.suffix == '.onnx' for path in active),
+                           storageCheckedUnix=time.time(), storageCheckIntervalSeconds=interval)
+        return removed, self.values
 
 
 
@@ -319,7 +357,9 @@ def main() -> int:
     parser.add_argument("--env", type=Path, help="Native training player; required for human playtests even with --backend dotnet and --no-auto-viewer.")
     parser.add_argument("--backend", choices=("unity", "dotnet"), default="unity")
     parser.add_argument("--worker", type=Path, default=Path(__file__).resolve().parents[2] / "Build/TrainingWorker/BlockNations.TrainingWorker.dll")
-    parser.add_argument("--parallel-games", type=int, choices=(1, 2, 4), default=2)
+    parser.add_argument("--parallel-games", type=int, choices=(1, 2, 4, 8, 16), default=2)
+    parser.add_argument("--torch-threads", type=int, choices=(1, 2, 4, 8), default=2,
+                        help="CPU inference/update threads; benchmark small batches before increasing this.")
     parser.add_argument("--no-auto-viewer", action="store_true", help="Keep the optional viewer closed until explicitly requested.")
     args = parser.parse_args()
     if args.backend == "dotnet" and not args.worker.is_file():
@@ -406,6 +446,7 @@ def main() -> int:
     environment.update({"BLOCKNATIONS_RATING_RUN": str(run), "BLOCKNATIONS_RATING_BOARD": str(args.board_size),
                         "BLOCKNATIONS_RATING_SESSION": rating_session, "BLOCKNATIONS_RULES_VERSION": args.rules_version})
     args.curriculum, args.curriculum_distance = curriculum, curriculum_distance
+    environment['BLOCKNATIONS_TORCH_THREADS'] = str(args.torch_threads)
     configure_decoupled(args, run, environment)
     try:
         entrypoint = trainer_script(run, args.backend)
@@ -465,10 +506,13 @@ def main() -> int:
         output_thread.start()
         reason = "trainer_finished"
         rating_wait_started = None
+        storage = StorageMonitor(root, run, budget-reserve, reserve)
         while process.poll() is None:
             elapsed = time.monotonic() - started
-            removed.extend(prune(root, run, budget - reserve))
-            used, free = size(root), shutil.disk_usage(root).free
+            retired, inventory = storage.poll(time.monotonic())
+            removed.extend(retired)
+            state.update(inventory)
+            used, free = inventory['usedBytes'], shutil.disk_usage(root).free
             state.update({"state": "running", "elapsedSeconds": elapsed, "usedBytes": used, "freeBytes": free,
                           "removedArtifacts": removed[-20:], "updatedUtc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
             resident = process_tree_rss(process.pid)
@@ -484,8 +528,6 @@ def main() -> int:
             atomic_json(run / "training-time.json", training_time.snapshot())
             if arena.get("trainerConnected"):
                 state["trainerReady"] = True
-            state["checkpointCount"] = len(list(run.rglob("*.pt")))
-            state["exportCount"] = len(list(run.rglob("*.onnx")))
             # A paused resume cannot produce its first whole-match rating. Give
             # each active interval its own grace period before checking the protocol.
             rating_wait_started = rating_wait_start(arena, rating_wait_started, time.monotonic())

@@ -31,6 +31,37 @@ class RetentionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 supervisor.opening_options(run, resume=True)
 
+    def test_storage_inventory_is_reused_between_controls_and_faster_near_the_reserve(self):
+        run = self.run_directory('monitor')
+        monitor = supervisor.StorageMonitor(self.root, run, 2_000_000_000, 512_000_000)
+        snapshot = {run/'Policy-1.pt': type('Stat', (), {'st_size': 10, 'st_mtime_ns': 1})()}
+        with patch.object(supervisor, 'file_snapshot', return_value=snapshot) as inventory, \
+                patch.object(supervisor, 'prune', return_value=[]) as prune:
+            _, state = monitor.poll(0)
+            self.assertEqual(state['storageCheckIntervalSeconds'], 30)
+            self.assertEqual(state['checkpointCount'], 1)
+            for now in (1, 2, 10, 29):
+                self.assertEqual(monitor.poll(now)[1]['usedBytes'], 10)
+            inventory.assert_called_once(); prune.assert_called_once()
+            snapshot[run/'Policy-1.pt'].st_size = 1_100_000_000
+            _, state = monitor.poll(30)
+            self.assertEqual(state['storageCheckIntervalSeconds'], 2)
+            monitor.poll(31); self.assertEqual(inventory.call_count, 2)
+            monitor.poll(32); self.assertEqual(inventory.call_count, 3)
+
+    def test_reused_inventory_counts_removed_logs_before_retiring_models(self):
+        old = self.run_directory('old-with-logs')
+        historical = old/'Policy-1.pt'; historical.write_bytes(b'history')
+        latest = old/'Policy-2.pt'; latest.write_bytes(b'latest')
+        log = old/'trainer.log'; log.write_bytes(b'large old log'*100)
+        active = self.run_directory('active')
+        inventory = supervisor.file_snapshot(self.root)
+        target = sum(entry.st_size for entry in inventory.values())-log.stat().st_size
+        retired = supervisor.prune(self.root, active, target, log_limit=0, inventory=inventory)
+        self.assertIn(str(log.relative_to(self.root)), retired)
+        self.assertTrue(historical.exists())
+        self.assertTrue(latest.exists())
+
     def test_resume_preserves_the_recorded_roster_adapter_and_rejects_the_wrong_backend(self):
         run = self.run_directory('recipe-resume')
         self.assertEqual(supervisor.trainer_script(run,'dotnet').name,'rated_training.py')
