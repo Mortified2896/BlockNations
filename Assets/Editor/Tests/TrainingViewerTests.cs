@@ -39,6 +39,8 @@ public sealed class TrainingViewerTests
         File.WriteAllText(Path.Combine(run, "run.json"), "{\"owner\":\"BlockNations.LocalTraining.v1\",\"schema\":2,\"boardSize\":7}");
         string session = Guid.NewGuid().ToString("N");
         File.WriteAllText(Path.Combine(run, "rating-session.json"), "{\"session\":\"" + session + "\"}");
+        File.WriteAllText(Path.Combine(run, "board-7-progress.json"), JsonUtility.ToJson(
+            new TrainingProgressHistory { boardSize = 7, fullBoardMatches = 1170000, fullBoardCaptures = 1170000 }));
         var policy = new PolicyAssignment { learningSeat = 0, learner = "fixture-a", opponent = "fixture-b" };
         for (int worker = 0; worker < 4; worker++)
         {
@@ -76,6 +78,7 @@ public sealed class TrainingViewerTests
         viewer.ShowingAllLive = true;
         Assert.That(viewer.ShowingLive && viewer.ShowingAllLive, Is.True);
         Assert.That(viewer.LiveBoards.Count, Is.EqualTo(4));
+        Assert.That(TrainingOverlay.TotalTrainingMatches(viewer), Is.EqualTo(1170000));
         for (int i = 0; i < 4; i++)
         {
             Assert.That(viewer.LiveBoards[i].Current, Is.Not.Null, viewer.Failure);
@@ -158,6 +161,7 @@ public sealed class TrainingViewerTests
         yield return new WaitForSecondsRealtime(.7f);
         Assert.That(viewer.Progress.fullBoardMatches, Is.EqualTo(13001));
         Assert.That(viewer.Progress.curriculumMatches, Is.EqualTo(20));
+        Assert.That(TrainingOverlay.TotalTrainingMatches(viewer), Is.EqualTo(13021));
         Assert.That(viewer.Games, Is.Zero, "Restarting a session must not reset the saved match total.");
         Assert.That(viewer.Replay.CurrentGame.number, Is.EqualTo(1), "Cumulative display must not renumber recorded replays.");
         viewer.Replay.Playing = false;

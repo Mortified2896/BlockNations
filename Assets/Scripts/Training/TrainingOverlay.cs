@@ -79,10 +79,7 @@ public sealed class TrainingOverlay
             if (allLive) GUILayout.Label($"{((ITrainingSpectator)arena).WorkerCount} live snapshots · {arena.BoardSize} × {arena.BoardSize}", label);
             else if (arena is ITrainingSpectator liveSpectator)
             {
-                var liveGame = liveSpectator.LiveBoards.Count > liveSpectator.SelectedWorker ?
-                    liveSpectator.LiveBoards[liveSpectator.SelectedWorker]?.Game : null;
-                GUILayout.Label(liveGame != null ? $"Simulation {liveGame.worker + 1} · session match {liveGame.number:N0}" :
-                    "Waiting for a live match…", label);
+                GUILayout.Label($"Simulation {liveSpectator.SelectedWorker + 1} · total matches {TotalTrainingMatches(arena):N0}", label);
                 GUILayout.Label($"Round {arena.Round}/{arena.RoundLimit}", small);
             }
             else GUILayout.Label($"Session match {arena.Games + 1:N0} · round {arena.Round}/{arena.RoundLimit}", label);
@@ -302,12 +299,15 @@ public sealed class TrainingOverlay
     {
         TrainingProgressHistory progress = arena.Progress;
         GUILayout.Label(progress != null && progress.boardSize == arena.BoardSize ?
-            $"Total training matches: {(long)progress.fullBoardMatches + progress.curriculumMatches:N0}" :
+            $"Total training matches: {TotalTrainingMatches(arena):N0}" :
             "Total training matches: awaiting history", label);
         GUILayout.Label($"Completed across resumes · this {arena.BoardSize} × {arena.BoardSize} run", small);
         GUILayout.Label($"This session: {arena.Games:N0} completed · all simulations", small);
         GUILayout.Space(12);
     }
+
+    public static long TotalTrainingMatches(ITrainingView arena) =>
+        (long)arena.Progress.fullBoardMatches + arena.Progress.curriculumMatches;
 
     private void DrawTrainingTime(ITrainingView arena)
     {

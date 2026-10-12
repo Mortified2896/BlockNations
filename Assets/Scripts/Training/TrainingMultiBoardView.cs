@@ -36,7 +36,7 @@ public sealed class TrainingMultiBoardView
             TrainingReplayHistory.Frame frame = live?.Current;
             GUI.Box(panel, GUIContent.none);
             GUI.Label(new Rect(panel.x + 10, panel.y + 5, panel.width - 96, 24), frame == null ? $"Game {i + 1}" :
-                $"Game {i + 1} · session {live.Game.number:N0} · round {frame.round}/{live.RoundLimit}", heading);
+                $"Game {i + 1} · total {TrainingOverlay.TotalTrainingMatches(spectator):N0} · round {frame.round}/{live.RoundLimit}", heading);
             if (GUI.Button(new Rect(panel.xMax - 80, panel.y + 5, 70, 25), "Focus"))
             { spectator.SelectedWorker = i; spectator.ShowingAllLive = false; }
             if (frame == null)

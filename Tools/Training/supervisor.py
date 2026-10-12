@@ -11,6 +11,7 @@ from run_limits import RunLimits, continuous_config, is_continuous
 from playtest import PlaytestSession
 from decoupled_runtime import configure as configure_decoupled, ViewerSession
 from bounded_log import BoundedLog
+from automatic_evaluation_session import AutomaticEvaluationSession
 from training_contract import (OPENING_ECONOMY_VERSION, LEGACY_OPENING_ECONOMY_VERSION,
                                RULES_VERSION, SUPPORTED_RULES, validate_opening_economy, run_rules_version)
 import json
@@ -474,6 +475,7 @@ def main() -> int:
     output_thread = None
     playtest = PlaytestSession(run, args.env)
     viewer = ViewerSession(run, args.env, enabled=args.backend == "dotnet")
+    automatic_evaluation = AutomaticEvaluationSession(run, args.worker)
     if args.no_auto_viewer:
         viewer.initial_launch = False
     training_time = TrainingTime.load(run, args.run_id, args.board_size)
@@ -522,6 +524,7 @@ def main() -> int:
             atomic_json(root / "active.json", {"runId": args.run_id, "supervisorPid": os.getpid()})
             arena = read_json(run / "arena-status.json")
             playtest.poll(arena)
+            automatic_evaluation.poll()
             viewer.poll(arena, state)
             training_time.tick(time.monotonic(), bool(arena.get("trainerConnected")) and
                                not arena.get("paused", False) and not arena.get("failure"))
@@ -575,6 +578,7 @@ def main() -> int:
                 output_thread.join(timeout=5)
             playtest.close()
             viewer.close()
+            automatic_evaluation.close()
             state["viewerPid"] = 0
             state["updatedUtc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
             if state.get("stopReason") == "supervisor_failure" and process is not None:

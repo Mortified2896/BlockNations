@@ -17,6 +17,7 @@ Start with the current state, then use the relevant implementation/setup referen
 | [Advanced 7×7 Mode](Advanced_Game_Mode.md) | Experimental in-game 7×7 single player with a scripted opponent, native board/UI, city demographics, recruitment, upkeep, food, housing and upgrades. |
 | [Shared C# Simulation](Shared_Simulation_Implementation.md) | Implemented rules kernel, gameplay/training adapters, compatibility corrections, parity checks, measured throughput and remaining boundaries. |
 | [Decoupled Training and Viewer](Decoupled_Training_Implementation.md) | Shared C# parallel arenas, one PPO learner, independent replay/live viewer, resume compatibility and measured Mac throughput. |
+| [Automatic AI Evaluations](Automatic_AI_Evaluation.md) | Recurring cumulative-decision benchmarks, guarded private champion promotion, bounded evidence and live total match counters. |
 | [Development Follow-ups](Development_Followups.md) | Known issues, proposed boundaries, unresolved decisions, targeted checks. |
 | [PBp Compatibility Policy](PBp-Compatibility.md) | Current protocol/app-version gates and retirement policy. |
 | [PBp Migration Ledger](PbP_Migration_Ledger.md) | Protocol 3/4/5 history and current migration window. |
