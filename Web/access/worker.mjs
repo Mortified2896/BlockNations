@@ -31,7 +31,9 @@ function secured(response) {
   // All protected bytes must pass authorization again, even after logout/revocation.
   result.headers.set("Cache-Control", "private, no-store");
   result.headers.set("Vary", "Cookie");
-  result.headers.set("Referrer-Policy", "no-referrer");
+  // Chrome sends Origin: null on form POSTs from no-referrer documents.
+  // Keep same-origin form origins usable without leaking referrers off-site.
+  result.headers.set("Referrer-Policy", "same-origin");
   result.headers.set("X-Content-Type-Options", "nosniff");
   result.headers.set("X-Frame-Options", "DENY");
   result.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");

@@ -77,6 +77,8 @@ Only a currently approved Review administrator can manage that queue.
 Game approval changes only `game_testers` in the private `blocknations-access` Durable Object namespace. It never upgrades the Review account's status or role.
 Review-only approval grants automatic game access; removing it removes inherited game access unless the person has a separate game approval.
 
+Protected responses use `Referrer-Policy: same-origin`. Chrome can send `Origin: null` for form POSTs from `no-referrer` documents, which conflicts with the exact-origin check on tester decisions, logout and account switching. The same-origin policy preserves those form submissions while withholding referrers from other sites; missing, null and foreign mutation origins remain rejected. The 2026-10-12 fix passed all 58 web tests and a live Chrome tester approval that persisted after reload.
+
 `Web/access/worker.mjs` runs before **every** game asset in production and preview, including HTML, the loader, framework, data, Wasm, release metadata and alternate paths. The install manifest, two icons and push-only service-worker/client scripts are public shell assets; they contain no game data or credentials.
 Anonymous visitors see the sign-in page; other unauthorised game-file requests receive 403.
 Protected responses use `private, no-store`. Auth/storage failures return 503 and never fall back to public assets.

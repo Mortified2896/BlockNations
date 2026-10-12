@@ -184,6 +184,8 @@ test("game approval is immediate but never changes article approval or role", as
   assert.equal((await request("/admin/testers", { session: playerLogin.cookie })).status, 403);
   const queue = await request("/admin/testers", { session: ownerLogin.cookie });
   assert.equal(queue.status, 200);
+  assert.equal(queue.headers.get("Referrer-Policy"), "same-origin",
+    "Chrome form POSTs must retain their origin for the strict admission check");
   assert.match(await queue.text(), /Waiting for game approval/);
   const approved = await request("/admin/testers/decision", {
     session: ownerLogin.cookie, method: "POST", sourceOrigin: GAME,
@@ -280,7 +282,7 @@ test("admin mutations reject CSRF, unapproved admins and invalid targets without
   const owner = await identity("csrf-owner", "approved", "admin"); const login = await signIn(owner);
   const player = await identity("csrf-player"); await signIn(player);
   const body = new URLSearchParams({ auth_user_id: player.uid, status: "approved" });
-  for (const sourceOrigin of [undefined, "https://evil.test", REVIEW]) {
+  for (const sourceOrigin of [undefined, "null", "https://evil.test", REVIEW]) {
     assert.equal((await request("/admin/testers/decision", { session: login.cookie, sourceOrigin, method: "POST", body })).status, 403);
   }
   assert.equal((await request("/admin/testers/decision", { session: login.cookie, sourceOrigin: GAME, method: "POST", body: new URLSearchParams({ auth_user_id: "missing", status: "approved" }) })).status, 404);
