@@ -16,6 +16,14 @@ public static class TrainingPlayerBuild
         if (!File.Exists(TrainingSceneBuilder.ScenePath)) TrainingSceneBuilder.Create();
         TrainingSceneBuilder.PrepareHumanPlaytestWiring();
         TrainingSimulationWorkerBuild.Build();
+        BuildMacPlayer();
+    }
+
+    // Rebuild the viewer/human player without replacing a running simulation worker.
+    public static void BuildMacPlayer()
+    {
+        if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play Mode before building.");
+        if (!File.Exists(TrainingSceneBuilder.ScenePath)) throw new FileNotFoundException("Create the training scene first.");
         string output = Environment.GetEnvironmentVariable("BLOCKNATIONS_TRAINING_APP");
         if (string.IsNullOrWhiteSpace(output)) output = Path.GetFullPath("Build/LocalTrainingV2.app");
         Directory.CreateDirectory(Path.GetDirectoryName(output));

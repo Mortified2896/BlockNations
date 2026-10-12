@@ -23,6 +23,8 @@ public sealed class TrainingPlaytestBridge
     public string Message { get; private set; }
     public LearnedDifficulty Difficulty { get; set; } = LearnedDifficulty.Medium;
     public bool HumanStarts { get; set; } = true;
+    public bool RandomStarts { get; set; }
+    public string UnavailableReason { get; private set; }
     public bool TrainingActive { get; private set; }
     public string FrozenCheckpoint { get; private set; }
 
@@ -45,6 +47,10 @@ public sealed class TrainingPlaytestBridge
             FrozenCheckpoint = supervisor?.frozenPlaytestCheckpoint;
             Available = supervisor != null && supervisor.playtestAvailable && supervisor.checkpointCount > 0 &&
                 (TrainingActive || supervisor.state == "playtesting");
+            UnavailableReason = supervisor == null ? "Waiting for the training supervisor." :
+                !supervisor.playtestAvailable ? "No playtest player configured. Resume training with --env pointing to the matching native player." :
+                supervisor.checkpointCount == 0 ? "Waiting for the first saved checkpoint." :
+                "Start training or the frozen playtest controller to open a match.";
             string path = Path.Combine(directory, "playtest-status.json");
             Status status = File.Exists(path) ? JsonUtility.FromJson<Status>(File.ReadAllText(path)) : null;
             // A supervisor-owned launch can also restore an open playtest after a viewer restart.
@@ -55,7 +61,7 @@ public sealed class TrainingPlaytestBridge
             {
                 if (Enum.TryParse(status.difficulty, out LearnedDifficulty restored) && Enum.IsDefined(typeof(LearnedDifficulty), restored))
                     Difficulty = restored;
-                HumanStarts = status.firstSeat == 0;
+                if (!RandomStarts) HumanStarts = status.firstSeat == 0;
                 Message = status.message;
                 if (status.state == "finished" || status.state == "error") Finish();
             }
@@ -79,7 +85,7 @@ public sealed class TrainingPlaytestBridge
         try
         {
             File.WriteAllText(path + ".tmp", JsonUtility.ToJson(new Request { requestId = requestId,
-                difficulty = Difficulty.ToString(), firstSeat = HumanStarts ? 0 : 1 }));
+                difficulty = Difficulty.ToString(), firstSeat = RandomStarts ? UnityEngine.Random.Range(0, 2) : HumanStarts ? 0 : 1 }));
             if (File.Exists(path)) File.Replace(path + ".tmp", path, null);
             else File.Move(path + ".tmp", path);
         }

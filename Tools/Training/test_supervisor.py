@@ -56,6 +56,18 @@ class RetentionTests(unittest.TestCase):
         self.assertEqual(supervisor.opening_options(run, True, upgrade=True), 2)
         self.assertEqual(len(supervisor.read_json(run/'run.json')['openingTransitions']), 1)
 
+    def test_paused_resume_gets_a_full_rating_grace_period_after_unpausing(self):
+        paused = dict(trainerConnected=True, paused=True)
+        active = dict(trainerConnected=True, paused=False)
+        self.assertIsNone(supervisor.rating_wait_start(paused, None, 0))
+        self.assertIsNone(supervisor.rating_wait_start(paused, None, 300))
+        start = supervisor.rating_wait_start(active, None, 301)
+        self.assertEqual(start, 301)
+        self.assertEqual(supervisor.rating_wait_start(active, start, 320), 301)
+        self.assertIsNone(supervisor.rating_wait_start(paused, start, 321))
+        self.assertEqual(supervisor.rating_wait_start(active, None, 600), 600)
+        self.assertIsNone(supervisor.rating_wait_start({}, start, 601))
+
     def run_directory(self, name):
         run = self.root / "runs" / name
         run.mkdir()

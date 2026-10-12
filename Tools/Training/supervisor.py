@@ -292,6 +292,13 @@ def interrupt_trainer(process: subprocess.Popen, timeout: float = 90) -> None:
             process.wait()
 
 
+def rating_wait_start(arena, previous, now):
+    """Start the protocol grace period only while a connected trainer can play."""
+    if not arena.get("trainerConnected") or arena.get("paused", False):
+        return None
+    return now if previous is None else previous
+
+
 def main() -> int:
     global stop_requested
     parser = argparse.ArgumentParser()
@@ -309,7 +316,7 @@ def main() -> int:
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--upgrade-opening-economy", action="store_true", help="Explicitly move a resumed run to the current opening recipe, preserving its old manifest.")
     parser.add_argument("--full-openings", action="store_true", help="Disable the tactical opening curriculum for a new run.")
-    parser.add_argument("--env", type=Path)
+    parser.add_argument("--env", type=Path, help="Native training player; required for human playtests even with --backend dotnet and --no-auto-viewer.")
     parser.add_argument("--backend", choices=("unity", "dotnet"), default="unity")
     parser.add_argument("--worker", type=Path, default=Path(__file__).resolve().parents[2] / "Build/TrainingWorker/BlockNations.TrainingWorker.dll")
     parser.add_argument("--parallel-games", type=int, choices=(1, 2, 4), default=2)
@@ -457,6 +464,7 @@ def main() -> int:
         output_thread = threading.Thread(target=capture_output, daemon=True)
         output_thread.start()
         reason = "trainer_finished"
+        rating_wait_started = None
         while process.poll() is None:
             elapsed = time.monotonic() - started
             removed.extend(prune(root, run, budget - reserve))
@@ -478,13 +486,16 @@ def main() -> int:
                 state["trainerReady"] = True
             state["checkpointCount"] = len(list(run.rglob("*.pt")))
             state["exportCount"] = len(list(run.rglob("*.onnx")))
+            # A paused resume cannot produce its first whole-match rating. Give
+            # each active interval its own grace period before checking the protocol.
+            rating_wait_started = rating_wait_start(arena, rating_wait_started, time.monotonic())
             if stop_requested or stop_path.exists():
                 reason = "user_stop"
             elif limit_reason := limits.stop_reason(elapsed, used, free):
                 reason = limit_reason
             elif arena.get("failure"):
                 reason = "arena_failure"
-            elif arena.get("trainerConnected") and elapsed > 30 and rating_session not in read_json(run / "match-elo.json").get("sequences", {}):
+            elif rating_wait_started is not None and time.monotonic() - rating_wait_started > 30 and rating_session not in read_json(run / "match-elo.json").get("sequences", {}):
                 reason = "rating_protocol_mismatch"
                 state["error"] = "Training player does not emit whole-match results. Rebuild the Mac training player."
             else:

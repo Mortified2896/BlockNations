@@ -106,6 +106,53 @@ public sealed class TrainingHumanPlaytestTests
     }
 
     [Test]
+    public void RandomOpeningResolvesEachLaunchAndRemainsSelectedAfterCompletion()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "bn-random-opening-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var root = new GameObject("Random opening"); root.SetActive(false);
+        var randomState = UnityEngine.Random.state;
+        try
+        {
+            var viewer = root.AddComponent<TrainingViewer>();
+            TrainingSceneBuilder.Set(viewer, "runDirectory", directory);
+            File.WriteAllText(Path.Combine(directory, "supervisor-status.json"),
+                "{\"state\":\"running\",\"playtestAvailable\":false,\"checkpointCount\":10}");
+            viewer.Playtest.Poll(viewer);
+            Assert.That(viewer.Playtest.Available, Is.False);
+            Assert.That(viewer.Playtest.UnavailableReason, Does.Contain("--env"));
+            File.WriteAllText(Path.Combine(directory, "supervisor-status.json"),
+                "{\"state\":\"running\",\"playtestAvailable\":true,\"checkpointCount\":10}");
+            viewer.Playtest.RandomStarts = true;
+            UnityEngine.Random.InitState(123);
+            var seats = new System.Collections.Generic.HashSet<int>();
+            for (int launch = 0; launch < 20; launch++)
+            {
+                typeof(TrainingPlaytestBridge).GetField("nextPoll", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(viewer.Playtest, -1d);
+                viewer.Playtest.Poll(viewer);
+                viewer.Playtest.Start(viewer);
+                var request = JsonUtility.FromJson<Request>(File.ReadAllText(Path.Combine(directory, "playtest.request.json")));
+                Assert.That(request.firstSeat, Is.InRange(0, 1));
+                seats.Add(request.firstSeat);
+                File.WriteAllText(Path.Combine(directory, "playtest-status.json"),
+                    "{\"state\":\"finished\",\"requestId\":\"" + request.requestId + "\",\"firstSeat\":" + request.firstSeat + "}");
+                typeof(TrainingPlaytestBridge).GetField("nextPoll", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(viewer.Playtest, -1d);
+                viewer.Playtest.Poll(viewer);
+                Assert.That(viewer.Playtest.RandomStarts, Is.True);
+                Assert.That(viewer.Playtest.Busy, Is.False);
+            }
+            Assert.That(seats, Is.EquivalentTo(new[] { 0, 1 }));
+            Assert.That(File.Exists(Path.Combine(directory, "training-control.json")), Is.False);
+        }
+        finally
+        {
+            UnityEngine.Random.state = randomState;
+            UnityEngine.Object.DestroyImmediate(root);
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Test]
     public void PlaytestMenuInvokesItsExplicitExitWithoutLoadingMainMenu()
     {
         var root = new GameObject("Playtest exit"); root.SetActive(false);

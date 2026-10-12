@@ -305,8 +305,10 @@ public sealed class TrainingOverlay
         GUI.enabled = !arena.Playtest.Busy;
         arena.Playtest.Difficulty = (BlockNations.AI.LearnedDifficulty)GUILayout.Toolbar(
             (int)arena.Playtest.Difficulty, new[] { "Easy", "Medium", "Hard" }, button);
-        arena.Playtest.HumanStarts = GUILayout.Toolbar(arena.Playtest.HumanStarts ? 0 : 1,
-            new[] { "You move first", "AI moves first" }, button) == 0;
+        int startingOrder = GUILayout.Toolbar(arena.Playtest.RandomStarts ? 2 : arena.Playtest.HumanStarts ? 0 : 1,
+            new[] { "You first", "AI first", "Random first" }, new GUIStyle(button) { fontSize = 14 });
+        arena.Playtest.RandomStarts = startingOrder == 2;
+        if (!arena.Playtest.RandomStarts) arena.Playtest.HumanStarts = startingOrder == 0;
         GUI.enabled = arena.Playtest.Available && !arena.Playtest.Busy;
         if (GUILayout.Button("Play against " + arena.Playtest.Difficulty + " AI", button)) arena.Playtest.Start(arena);
         GUI.enabled = true;
@@ -316,7 +318,7 @@ public sealed class TrainingOverlay
         if (!string.IsNullOrEmpty(arena.Playtest.FrozenCheckpoint))
             GUILayout.Label("Frozen version: " + arena.Playtest.FrozenCheckpoint, small);
         if (!arena.Playtest.Available && !arena.Playtest.Busy)
-            GUILayout.Label("Requires a standalone run with a saved checkpoint.", small);
+            GUILayout.Label(arena.Playtest.UnavailableReason, small);
         if (!string.IsNullOrEmpty(arena.Playtest.Message)) GUILayout.Label(arena.Playtest.Message, small);
     }
 
