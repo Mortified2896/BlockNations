@@ -83,6 +83,9 @@
                 </ui:VisualElement>
             </ui:VisualElement>
 
+            <ui:VisualElement class="multiplayer-feedback-row">
+                <ui:Button name="MultiplayerFeedbackButton" text="Feedback" class="menu-button multiplayer-action-button" />
+            </ui:VisualElement>
             <ui:VisualElement class="multiplayer-action-bar">
                 <ui:Button name="CreateButton" text="Create" class="menu-button multiplayer-action-button" />
                 <ui:Button name="JoinButton" text="Join" class="menu-button multiplayer-action-button" />

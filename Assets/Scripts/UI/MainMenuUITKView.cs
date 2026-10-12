@@ -123,6 +123,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Button createButton;
     private Button joinButton;
     private Button multiplayerBackButton;
+    private Button multiplayerFeedbackButton;
     private Button debugNotificationButton;
     private Button createSuccessCopyButton;
     private Button createSuccessCloseButton;
@@ -560,6 +561,7 @@ public class MainMenuUITKView : MonoBehaviour
         createButton = root.Q<Button>("CreateButton");
         joinButton = root.Q<Button>("JoinButton");
         multiplayerBackButton = root.Q<Button>("MultiplayerBackButton");
+        multiplayerFeedbackButton = root.Q<Button>("MultiplayerFeedbackButton");
         EnsureDebugNotificationButton();
         debugNotificationButton = root.Q<Button>("DebugNotificationButton");
         createSuccessCopyButton = root.Q<Button>("CreateSuccessCopyButton");
@@ -1078,6 +1080,10 @@ public class MainMenuUITKView : MonoBehaviour
         {
             multiplayerBackButton.clicked += HandleMultiplayerBackClicked;
         }
+        if (multiplayerFeedbackButton != null)
+        {
+            multiplayerFeedbackButton.clicked += HandleMultiplayerFeedbackClicked;
+        }
 
         if (debugNotificationButton != null)
         {
@@ -1455,6 +1461,10 @@ public class MainMenuUITKView : MonoBehaviour
         if (multiplayerBackButton != null)
         {
             multiplayerBackButton.clicked -= HandleMultiplayerBackClicked;
+        }
+        if (multiplayerFeedbackButton != null)
+        {
+            multiplayerFeedbackButton.clicked -= HandleMultiplayerFeedbackClicked;
         }
 
         if (debugNotificationButton != null)
@@ -4357,6 +4367,11 @@ public class MainMenuUITKView : MonoBehaviour
         return $"{prefix}...{suffix}";
     }
 
+    private void HandleMultiplayerFeedbackClicked()
+    {
+        feedback?.Open();
+    }
+
     private string FeedbackScreen()
     {
         if (generalSettingsPanel != null && generalSettingsPanel.style.display == DisplayStyle.Flex) return "Menu/Settings";
@@ -4848,6 +4863,7 @@ public class MainMenuUITKView : MonoBehaviour
         createButton = null;
         joinButton = null;
         multiplayerBackButton = null;
+        multiplayerFeedbackButton = null;
         createSuccessCopyButton = null;
         createSuccessCloseButton = null;
         generalSettingsMapSmallButton = null;

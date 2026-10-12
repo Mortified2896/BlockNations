@@ -622,6 +622,14 @@
     justify-content: space-between;
 }
 
+#MultiplayerPanel .multiplayer-feedback-row {
+    width: 100%;
+    flex-direction: row;
+    justify-content: center;
+    flex-shrink: 0;
+    padding-top: 8px;
+}
+
 #MultiplayerPanel .multiplayer-action-bar {
     width: 100%;
     flex-direction: row;
