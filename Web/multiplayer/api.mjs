@@ -32,6 +32,19 @@ async function readJSON(request) {
 export async function multiplayerAPI(request, env, user) {
   if (!env.MULTIPLAYER_STORE) return Response.json({ ok: false, error: "MULTIPLAYER_UNAVAILABLE" }, { status: 503 });
   const url = new URL(request.url), suffix = url.pathname.slice("/api/multiplayer/".length);
+  if (suffix === "live") {
+    if (request.method !== "GET" || request.headers.get("Origin") !== env.GAME_ORIGIN)
+      return Response.json({ ok: false, error: "ORIGIN_REJECTED" }, { status: 403 });
+    if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket")
+      return Response.json({ ok: false, error: "WEBSOCKET_REQUIRED" }, { status: 426 });
+    const actor = await publicPlayer(user);
+    const store = env.MULTIPLAYER_STORE.get(env.MULTIPLAYER_STORE.idFromName(env.GAME_ORIGIN));
+    return store.fetch(new Request("https://multiplayer.internal/live", {
+      // Only opaque ASCII IDs belong in upgrade headers. Google names can
+      // contain Unicode and are remembered through the ordinary JSON API.
+      headers: { Upgrade: "websocket", "X-Live-Actor": JSON.stringify({ id: actor.id, sessionId: actor.sessionId }) },
+    }));
+  }
   let operation, data = {}, directory = [];
   if (request.method === "GET") {
     if (["session", "lobby", "push-config"].includes(suffix)) operation = suffix;

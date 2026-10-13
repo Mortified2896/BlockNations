@@ -100,14 +100,22 @@ public static class WebAccountClient
         BN_WebStatus(message ?? string.Empty);
 #endif
     }
-    public static void MatchLoaded() {
+    public static void MatchLoaded(string matchId) {
 #if UNITY_WEBGL && !UNITY_EDITOR
-        BN_WebMatchLoaded();
+        BN_WebMatchLoaded(matchId);
+#endif
+    }
+    public static bool ConsumeMatchUpdate(string matchId) {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return BN_WebConsumeMatchUpdate(matchId) != 0;
+#else
+        return false;
 #endif
     }
 #if UNITY_WEBGL && !UNITY_EDITOR
     [DllImport("__Internal")] private static extern void BN_WebNavigate(string path);
     [DllImport("__Internal")] private static extern void BN_WebStatus(string message);
-    [DllImport("__Internal")] private static extern void BN_WebMatchLoaded();
+    [DllImport("__Internal")] private static extern void BN_WebMatchLoaded(string matchId);
+    [DllImport("__Internal")] private static extern int BN_WebConsumeMatchUpdate(string matchId);
 #endif
 }

@@ -3521,7 +3521,7 @@ public partial class TurnManager : MonoBehaviour
             if (!isPlayByPostWaitingForExport)
                 break;
 
-            yield return new WaitForSecondsRealtime(pollSeconds);
+            yield return WaitForPlayByPostPoll(pollSeconds);
         }
 
         playByPostPollRoutine = null;
@@ -8390,7 +8390,7 @@ private void PBpDebugSyncNow_Context()
 #endif
                 if (!localTurn)
                 {
-                    if (playByPostAutoSyncEnabled && playByPostPollRoutine == null)
+                    if (playByPostAutoSyncEnabled && playByPostPollRoutine == null && !isApplyingAcceptedWebTurn)
                     {
                         ResolveTurnTransport();
                         StartPlayByPostPolling(lastAppliedTurnNumberForPolling);

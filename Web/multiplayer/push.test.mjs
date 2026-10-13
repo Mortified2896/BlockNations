@@ -134,7 +134,7 @@ function storeFixture() {
     const rows = statement.all(...values);
     return { toArray: () => rows };
   } };
-  const ctx = { storage: { sql, transactionSync(fn) {
+  const ctx = { getWebSockets: () => [], storage: { sql, transactionSync(fn) {
     db.exec("BEGIN"); try { const result=fn(); db.exec("COMMIT"); return result; } catch(error) { db.exec("ROLLBACK"); throw error; }
   }, async getAlarm() { return alarm; }, async setAlarm(time) { alarm=time; } }, waitUntil(promise) { pending.push(promise); } };
   const env = { VAPID_PUBLIC_KEY: data.credentials.publicKey, VAPID_PRIVATE_KEY: data.credentials.privateKey,

@@ -5,6 +5,7 @@ import { storeCall } from "./store.mjs";
 import { submitFeedback, feedbackInbox, feedbackScreenshot } from "./feedback.mjs";
 import { multiplayerAPI, revokePushSession } from "../multiplayer/api.mjs";
 import { lobbyPage } from "../multiplayer/page.mjs";
+import { liveClientScript } from "../multiplayer/live-client.mjs";
 
 const REVIEW_ORIGIN = "https://feedback.moneymattersmedia.com";
 const BROKER_PATH = "/blocknations-auth/authorize";
@@ -27,6 +28,8 @@ function redirect(location) {
 }
 
 function secured(response) {
+  // Preserve the upgrade and its WebSocket across the admission Worker.
+  if (response.status === 101) return response;
   const result = new Response(response.body, response);
   // All protected bytes must pass authorization again, even after logout/revocation.
   result.headers.set("Cache-Control", "private, no-store");
@@ -231,7 +234,10 @@ async function handle(request, env) {
   }
   if (url.pathname === "/multiplayer" && (!user || user.status !== "approved")) return user ? accountPage(user, true) : loginPage(true);
   if (!user || user.status !== "approved") return json({ error: "Approved tester access required." }, 403);
-  if (url.pathname === "/multiplayer") return lobbyPage(user);
+  if (url.pathname === "/MultiplayerLive.js") return new Response(liveClientScript, {
+    headers: { "Content-Type": "text/javascript; charset=utf-8" },
+  });
+  if (url.pathname === "/multiplayer") return lobbyPage(user, env.GAME_ORIGIN);
   if (["/", "/index.html"].includes(url.pathname) && /^[a-f0-9]{32}$/.test(url.searchParams.get("match") ?? "")) {
     const matchId = url.searchParams.get("match");
     const response = await multiplayerAPI(new Request(env.GAME_ORIGIN + "/api/multiplayer/matches/" + matchId), env, user);
