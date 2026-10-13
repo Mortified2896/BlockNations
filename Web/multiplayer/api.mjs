@@ -61,9 +61,16 @@ export async function multiplayerAPI(request, env, user) {
   const actor = await publicPlayer(user);
   actor.canAdminister = user.can_administer === true;
   const store = env.MULTIPLAYER_STORE.get(env.MULTIPLAYER_STORE.idFromName(env.GAME_ORIGIN));
-  return store.fetch(new Request("https://multiplayer.internal/" + operation, {
+  const response = await store.fetch(new Request("https://multiplayer.internal/" + operation, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actor, directory, data, origin: env.GAME_ORIGIN }),
   }));
+  if (operation === "session" && response.ok) {
+    const reply = await response.json();
+    reply.canPlayPoly = user.can_administer === true && typeof env.POLY_OWNER_USER_ID === "string" &&
+      env.POLY_OWNER_USER_ID.length > 0 && user.auth_user_id === env.POLY_OWNER_USER_ID;
+    return Response.json(reply);
+  }
+  return response;
 }
 
 export async function revokePushSession(env, sid) {

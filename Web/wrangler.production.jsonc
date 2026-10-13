@@ -12,6 +12,7 @@
     { "name": "MULTIPLAYER_STORE", "class_name": "MultiplayerStore", "script_name": "blocknations-multiplayer" }
   ] },
   "vars": {
+    "POLY_OWNER_USER_ID": "Jpf64vTLlqDERszRyARXWZf5iJIWDYqo",
     "AUTH_PATH": "/blocknations-auth/authorize",
     "GAME_ORIGIN": "https://blocknations.moneymattersmedia.com",
     "GAME_ORIGINS": "[\"https://blocknations.moneymattersmedia.com\",\"https://blocknations-web-preview.johannes-gaebler.workers.dev\"]"

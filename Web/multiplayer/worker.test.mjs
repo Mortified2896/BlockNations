@@ -61,6 +61,19 @@ async function call(actor, path, body, options = {}) {
   return { status: response.status, headers: response.headers, ...(await response.json()) };
 }
 async function find(actor, seatCount = 2) { return call(actor, "find", { version: WEB_MATCH_VERSION, seatCount }); }
+test("Poly session permission requires the configured approved administrator identity", async () => {
+  const owner = await person("Poly owner"), otherAdmin = await person("Other admin"), tester = await person("Poly tester");
+  owner.user.can_administer = true; otherAdmin.user.can_administer = true;
+  const environment = { ...env, POLY_OWNER_USER_ID: owner.user.auth_user_id };
+  assert.equal((await call(owner, "session", undefined, { environment })).canPlayPoly, true);
+  assert.equal((await call(otherAdmin, "session", undefined, { environment })).canPlayPoly, false);
+  assert.equal((await call(tester, "session", undefined, { environment })).canPlayPoly, false);
+  assert.equal((await call(owner, "session")).canPlayPoly, false);
+  owner.user.can_administer = false;
+  assert.equal((await call(owner, "session", undefined, { environment })).canPlayPoly, false);
+  owner.user.status = "disabled";
+  assert.equal((await call(owner, "session", undefined, { environment })).status, 403);
+});
 async function start(actor, id) { return call(actor, "matches/" + id + "/start", {}); }
 function opening(matchId, seatCount = 2) {
   return { version: "3", protocolVersion: 5, appVersion: "1.0.4", gameId: matchId, mode: "PlayByPost",

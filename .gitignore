@@ -101,4 +101,7 @@ Tools/AdvancedMode/__pycache__/
 # Shared information-contract validation output
 /Tools/InformationTraining/bin/
 /Tools/InformationTraining/obj/
+/Tools/Poly/bin/
+/Tools/Poly/obj/
+!Tools/Poly/BlockNations.Poly.Tests.csproj
 !/Tools/InformationTraining/InformationTraining.Checks.csproj

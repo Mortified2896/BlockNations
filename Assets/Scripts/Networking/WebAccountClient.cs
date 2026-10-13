@@ -14,6 +14,7 @@ public static class WebAccountClient
     public static string PlayerId { get; private set; } = string.Empty;
     public static string DisplayName { get; private set; } = string.Empty;
     public static bool IsAdmin { get; private set; }
+    public static bool CanPlayPoly { get; private set; }
     public static MatchReply PendingMatch { get; private set; }
     public static MatchReply AcceptedMatch { get; private set; }
     public static string LastError { get; private set; }
@@ -25,7 +26,7 @@ public static class WebAccountClient
         public int seq; public int revision; public int currentTurnSeatIndex; public int seatCount = 2; public bool ready; public Player[] players;
     }
     [Serializable] public sealed class MatchReply {
-        public bool ok; public bool canAdminister; public string error; public Player player; public Match match; public string json; public int seq;
+        public bool ok; public bool canAdminister; public bool canPlayPoly; public string error; public Player player; public Match match; public string json; public int seq;
     }
     [Serializable] private sealed class SnapshotWrite {
         public string json; public int baseSeq;
@@ -48,12 +49,14 @@ public static class WebAccountClient
     public static IEnumerator Initialize(Action<bool> done)
     {
         IsAdmin = false;
+        CanPlayPoly = false;
         MatchReply reply = null;
         yield return Request("session", null, value => reply = value);
         if (reply?.ok == true && !string.IsNullOrEmpty(reply.player?.id)) {
             PlayerId = reply.player.id;
             DisplayName = reply.player.name;
             IsAdmin = reply.canAdminister;
+            CanPlayPoly = reply.canPlayPoly;
             done(true);
         } else done(false);
     }

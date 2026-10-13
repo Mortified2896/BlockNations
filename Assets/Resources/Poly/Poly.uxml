@@ -1,0 +1,31 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="Poly.uss" />
+    <ui:VisualElement name="PolyRoot" class="poly-root">
+        <ui:VisualElement class="poly-header">
+            <ui:Label text="POLY" class="poly-title" />
+            <ui:Label text="11×11 · Private playtest" class="poly-subtitle" />
+            <ui:Button name="Menu" text="Save &amp; Menu" class="poly-button" />
+        </ui:VisualElement>
+        <ui:Label name="Resources" class="resources" />
+        <ui:VisualElement class="poly-toolbar">
+            <ui:Button name="Tech" text="Technology" class="poly-button" />
+            <ui:Button name="Cities" text="Cities" class="poly-button" />
+            <ui:Button name="Help" text="How to play" class="poly-button" />
+            <ui:Button name="ZoomOut" text="−" class="poly-button zoom" />
+            <ui:Button name="ZoomIn" text="+" class="poly-button zoom" />
+        </ui:VisualElement>
+        <ui:VisualElement name="Body" class="poly-body">
+            <ui:ScrollView name="BoardScroll" mode="VerticalAndHorizontal" class="board-scroll">
+                <ui:VisualElement name="Board" class="poly-board" />
+            </ui:ScrollView>
+            <ui:ScrollView name="Details" class="poly-details" />
+        </ui:VisualElement>
+        <ui:Label name="Status" class="poly-status" />
+        <ui:VisualElement class="poly-footer">
+            <ui:Button name="Save" text="Save" class="poly-button" />
+            <ui:Button name="New" text="New match" class="poly-button" />
+            <ui:Button name="EndTurn" text="End turn" class="poly-button primary" />
+        </ui:VisualElement>
+        <ui:Label name="Saved" class="saved" />
+    </ui:VisualElement>
+</ui:UXML>

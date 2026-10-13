@@ -114,6 +114,7 @@ public class MainMenuUITKView : MonoBehaviour
     private Button playVsAiButton;
     private Button tutorialButton;
     private Button advancedPlaytestButton;
+    private Button polyPlaytestButton;
     private Button puzzleModeButton;
     private Button puzzleModeBackButton;
     private Label puzzleModeStatusLabel;
@@ -312,6 +313,7 @@ public class MainMenuUITKView : MonoBehaviour
 
         ApplySafeArea(force: false);
         SetVisible(advancedPlaytestButton, MainMenuController.CanStartAdvancedGame);
+        SetVisible(polyPlaytestButton, MainMenuController.CanStartPolyGame);
         feedback?.RefreshSafeArea();
         responsiveSizeTierController.Apply(root);
         ApplyMenuPhoneLayoutClasses();
@@ -433,6 +435,7 @@ public class MainMenuUITKView : MonoBehaviour
         RefreshVersionLabel();
         BindButtons();
         SetVisible(advancedPlaytestButton, MainMenuController.CanStartAdvancedGame);
+        SetVisible(polyPlaytestButton, MainMenuController.CanStartPolyGame);
         feedback?.Dispose();
         feedback = new FeedbackUITKController(this, root, FeedbackScreen, () => "Menu", () => 0);
         RefreshContinueButtonVisibility();
@@ -552,6 +555,7 @@ public class MainMenuUITKView : MonoBehaviour
         playVsAiButton = root.Q<Button>("PlayVsAIButton");
         tutorialButton = root.Q<Button>("TutorialButton");
         advancedPlaytestButton = root.Q<Button>("AdvancedPlaytestButton");
+        polyPlaytestButton = root.Q<Button>("PolyPlaytestButton");
         puzzleModeButton = root.Q<Button>("PuzzleModeButton");
         puzzleModeBackButton = root.Q<Button>("PuzzleModeBackButton");
         puzzleModeStatusLabel = root.Q<Label>("PuzzleModeStatusLabel");
@@ -1042,6 +1046,7 @@ public class MainMenuUITKView : MonoBehaviour
         }
         if (tutorialButton != null) tutorialButton.clicked += HandleTutorialClicked;
         if (advancedPlaytestButton != null) advancedPlaytestButton.clicked += HandleAdvancedPlaytestClicked;
+        if (polyPlaytestButton != null) polyPlaytestButton.clicked += HandlePolyPlaytestClicked;
 
         if (puzzleModeButton != null)
         {
@@ -1424,6 +1429,7 @@ public class MainMenuUITKView : MonoBehaviour
         }
         if (tutorialButton != null) tutorialButton.clicked -= HandleTutorialClicked;
         if (advancedPlaytestButton != null) advancedPlaytestButton.clicked -= HandleAdvancedPlaytestClicked;
+        if (polyPlaytestButton != null) polyPlaytestButton.clicked -= HandlePolyPlaytestClicked;
 
         if (puzzleModeButton != null)
         {
@@ -1846,6 +1852,11 @@ public class MainMenuUITKView : MonoBehaviour
     private void HandleTutorialClicked()
     {
         if (mainMenuController != null) mainMenuController.StartTutorial();
+    }
+
+    private void HandlePolyPlaytestClicked()
+    {
+        if (mainMenuController != null) mainMenuController.StartPolyGame();
     }
 
     private void HandleAdvancedPlaytestClicked()
@@ -4855,6 +4866,7 @@ public class MainMenuUITKView : MonoBehaviour
         playVsAiButton = null;
         tutorialButton = null;
         advancedPlaytestButton = null;
+        polyPlaytestButton = null;
         puzzleModeButton = null;
         puzzleModeBackButton = null;
         puzzleModeStatusLabel = null;

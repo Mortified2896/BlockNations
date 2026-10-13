@@ -7,6 +7,7 @@
             <ui:Label name="TitleLabel" text="Block Nations" class="title" />
             <ui:Button name="TutorialButton" text="Learn to play" class="menu-button" />
             <ui:Button name="PlayVsAIButton" text="Play vs AI" class="menu-button" />
+            <ui:Button name="PolyPlaytestButton" text="Poly 11×11" tooltip="Your private land strategy playtest. Continue your separate Poly save." class="menu-button" />
             <ui:Button name="AdvancedPlaytestButton" text="Advanced 7×7" tooltip="Experimental single player with population, food, housing and upkeep. Matches reset when you leave or refresh." class="menu-button" />
             <ui:Button name="PuzzleModeButton" text="Puzzle Mode" class="menu-button" style="display: none;" />
             <ui:Button name="ContinueButton" text="Continue" class="menu-button" />

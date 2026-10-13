@@ -13,6 +13,7 @@
   ] },
   "routes": [{ "pattern": "feedback.moneymattersmedia.com/blocknations-auth-preview/*", "zone_name": "moneymattersmedia.com" }],
   "vars": {
+    "POLY_OWNER_USER_ID": "Jpf64vTLlqDERszRyARXWZf5iJIWDYqo",
     "AUTH_PATH": "/blocknations-auth-preview/authorize",
     "GAME_ORIGIN": "https://blocknations-web-preview.johannes-gaebler.workers.dev",
     "GAME_ORIGINS": "[\"https://blocknations.moneymattersmedia.com\",\"https://blocknations-web-preview.johannes-gaebler.workers.dev\"]"
