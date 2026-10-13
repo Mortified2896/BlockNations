@@ -6,6 +6,7 @@ import { submitFeedback, feedbackInbox, feedbackScreenshot } from "./feedback.mj
 import { multiplayerAPI, revokePushSession } from "../multiplayer/api.mjs";
 import { lobbyPage } from "../multiplayer/page.mjs";
 import { liveClientScript } from "../multiplayer/live-client.mjs";
+import { gameAssetResponse, isVersionedGameAsset } from "./game-assets.mjs";
 
 const REVIEW_ORIGIN = "https://feedback.moneymattersmedia.com";
 const BROKER_PATH = "/blocknations-auth/authorize";
@@ -27,18 +28,24 @@ function redirect(location) {
   return new Response(null, { status: 303, headers: { Location: location } });
 }
 
-function secured(response) {
-  // Preserve the upgrade and its WebSocket across the admission Worker.
+function secured(response, head = false, pathname = "") {
+  // Preserve the live-multiplayer WebSocket upgrade unchanged.
   if (response.status === 101) return response;
-  const result = new Response(response.body, response);
-  // All protected bytes must pass authorization again, even after logout/revocation.
-  result.headers.set("Cache-Control", "private, no-store");
+  const result = new Response(head ? null : response.body, {
+    status: response.status, statusText: response.statusText, headers: response.headers,
+    encodeBody: response.headers.has("Content-Encoding") ? "manual" : "automatic",
+  });
+  // Hashed static files may be retained privately, but every reuse MUST pass
+  // authorization and origin revalidation. Never serve a stale/offline copy.
+  // Errors, game HTML, account data, APIs and saves remain no-store.
+  const revalidate = isVersionedGameAsset(pathname) && [200, 304].includes(response.status);
+  result.headers.set("Cache-Control", revalidate ? "private, no-cache, must-revalidate" : "private, no-store");
   result.headers.set("Vary", "Cookie");
   // Chrome sends Origin: null on form POSTs from no-referrer documents.
   // Keep same-origin form origins usable without leaking referrers off-site.
   result.headers.set("Referrer-Policy", "same-origin");
   result.headers.set("X-Content-Type-Options", "nosniff");
-  result.headers.set("X-Frame-Options", "DENY");
+  result.headers.set("X-Frame-Options", pathname === "/multiplayer" && response.headers.get("X-Frame-Options") === "SAMEORIGIN" ? "SAMEORIGIN" : "DENY");
   result.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
   result.headers.set("Strict-Transport-Security", "max-age=31536000");
   return result;
@@ -170,7 +177,7 @@ async function handle(request, env) {
   const url = new URL(request.url);
   if (url.origin === REVIEW_ORIGIN) return authorize(request, env);
   if (url.origin !== env.GAME_ORIGIN || !gameOrigins(env).includes(url.origin)) return json({ error: "Not found." }, 404);
-  if (["/sw.js", "/PWA.js", "/manifest.webmanifest", "/icons/app-192.png", "/icons/app-512.png"].includes(url.pathname) && ["GET", "HEAD"].includes(request.method)) {
+  if (["/sw.js", "/PWA.js", "/Navigation.js", "/manifest.webmanifest", "/icons/app-192.png", "/icons/app-512.png"].includes(url.pathname) && ["GET", "HEAD"].includes(request.method)) {
     const response = await env.ASSETS.fetch(request);
     if (url.pathname === "/sw.js") {
       const script = new Response(response.body, response);
@@ -237,7 +244,7 @@ async function handle(request, env) {
   if (url.pathname === "/MultiplayerLive.js") return new Response(liveClientScript, {
     headers: { "Content-Type": "text/javascript; charset=utf-8" },
   });
-  if (url.pathname === "/multiplayer") return lobbyPage(user, env.GAME_ORIGIN);
+  if (url.pathname === "/multiplayer") return lobbyPage(user, env.GAME_ORIGIN, { embedded: url.searchParams.get("embedded") === "1" });
   if (["/", "/index.html"].includes(url.pathname) && /^[a-f0-9]{32}$/.test(url.searchParams.get("match") ?? "")) {
     const matchId = url.searchParams.get("match");
     const response = await multiplayerAPI(new Request(env.GAME_ORIGIN + "/api/multiplayer/matches/" + matchId), env, user);
@@ -247,7 +254,7 @@ async function handle(request, env) {
     }
   }
   // No game HTML, loader, data, Wasm, metadata or alternate asset route is public.
-  return env.ASSETS.fetch(request);
+  return gameAssetResponse(request, await env.ASSETS.fetch(request));
 }
 
 export default {
@@ -259,7 +266,6 @@ export default {
       // Never log cookies, provider data, handoff envelopes or private profiles.
       response = page("Playtest temporarily unavailable", '<p>Please try again shortly. If this persists, contact Jo.</p>', { status: 503 });
     }
-    response = secured(response);
-    return request.method === "HEAD" ? new Response(null, response) : response;
+    return secured(response, request.method === "HEAD", new URL(request.url).pathname);
   },
 };

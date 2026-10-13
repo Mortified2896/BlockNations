@@ -4,7 +4,7 @@ import { lobbyStyle } from "./style.mjs";
 import { matchListScript } from "./match-list.mjs";
 import { liveClientScript } from "./live-client.mjs";
 
-export function lobbyPage(user, origin) {
+export function lobbyPage(user, origin, { embedded = false } = {}) {
   return htmlPage("Multiplayer", `<main><header class="lobby-header"><a class="back" href="/">Back to game</a><a class="account" href="/access" aria-label="Account">${escape(Array.from(user.display_name || 'Account')[0].toUpperCase())}</a><div class="game-title"><p>Block Nations</p><h1>Multiplayer</h1></div><button id="new-game" type="button">+ New game</button><p class="identity">Playing as <strong>${escape(user.display_name)}</strong></p></header>
 <nav class="lobby-tabs" role="tablist" aria-label="Multiplayer menu"><button id="tab-matches" role="tab" aria-selected="true" aria-controls="matches-panel" tabindex="0">Matches<span id="matches-badge" class="badge" aria-hidden="true" hidden></span></button><button id="tab-friends" role="tab" aria-selected="false" aria-controls="friends-panel" tabindex="-1">Friends<span id="friends-badge" class="badge" aria-hidden="true" hidden></span></button><button id="tab-notifications" role="tab" aria-selected="false" aria-controls="notifications" tabindex="-1">Notifications</button></nav>
 <p id="notice" role="status" aria-live="polite"></p><p id="error" role="alert"></p>
@@ -20,8 +20,12 @@ export function lobbyPage(user, origin) {
     style: lobbyStyle,
     moduleScript: "/PWA.js",
     connectOrigins: "'self'" + (origin ? " " + new URL(origin).origin.replace(/^https:/, "wss:").replace(/^http:/, "ws:") : ""),
+    allowSameOriginFrame: embedded,
     script: `${liveClientScript}
 const VERSION=${JSON.stringify(WEB_MATCH_VERSION)};
+const EMBEDDED=${JSON.stringify(embedded)} && parent!==window;
+function navigateToMatch(id){if(EMBEDDED)parent.postMessage({type:'bn-open-match',matchId:id},location.origin);else location.href='/?match='+id}
+if(EMBEDDED){document.querySelector('.account').target='_blank';document.querySelector('.account').rel='noopener';document.addEventListener('click',event=>{const link=event.target.closest('a[href]');if(!link||link.target==='_blank'||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;const url=new URL(link.href);if(url.origin!==location.origin||url.pathname!=='/')return;const id=url.searchParams.get('match');event.preventDefault();if(id)navigateToMatch(id);else parent.postMessage({type:'bn-lobby-close'},location.origin)})}
 const $=id=>document.getElementById(id);let lobby=null,busy=false,searchPlayers=[],searchComplete=false,knownIncomingInvites=new Set();
 let refreshPending=false,refreshTimer;
 function queueRefresh(){refreshPending=true;flushRefresh()}

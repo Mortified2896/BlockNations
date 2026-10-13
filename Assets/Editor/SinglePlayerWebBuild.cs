@@ -37,11 +37,12 @@ public static class SinglePlayerWebBuild
         if (string.IsNullOrWhiteSpace(output)) throw new InvalidOperationException("Missing BLOCKNATIONS_WEB_OUTPUT.");
         Directory.CreateDirectory(output);
         PlayerSettings.WebGL.template = "PROJECT:SinglePlayer";
-        PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Gzip;
-        // Unity decodes .unityweb files, without relying on Content-Encoding at the host.
-        PlayerSettings.WebGL.decompressionFallback = true;
-        // Protected game bytes must be authorized on each visit, including
-        // after logout. The notification worker never caches game resources.
+        PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Brotli;
+        // The access Worker supplies Content-Encoding and MIME types. Native
+        // decompression allows Wasm compilation to overlap the download.
+        PlayerSettings.WebGL.decompressionFallback = false;
+        // Disable Unity's automatic data cache. The delivery worker retains
+        // hashed files only with fresh online authorization on every reuse.
         PlayerSettings.WebGL.dataCaching = false;
         PlayerSettings.WebGL.nameFilesAsHashes = true;
         PlayerSettings.WebGL.debugSymbolMode = WebGLDebugSymbolMode.Off;
@@ -53,7 +54,7 @@ public static class SinglePlayerWebBuild
         EditorUserBuildSettings.development = false;
         EditorUserBuildSettings.allowDebugging = false;
 #if UNITY_WEBGL
-        UnityEditor.WebGL.UserBuildSettings.codeOptimization = UnityEditor.WebGL.WasmCodeOptimization.RuntimeSpeed;
+        UnityEditor.WebGL.UserBuildSettings.codeOptimization = UnityEditor.WebGL.WasmCodeOptimization.DiskSize;
 #endif
         PlayerSettings.runInBackground = false;
 

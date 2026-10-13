@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "test": "node --test access/*.test.mjs multiplayer/*.test.mjs",
+    "test": "node --test access/*.test.mjs multiplayer/*.test.mjs pwa/*.test.mjs",
     "preview": "wrangler dev --config wrangler.jsonc --local",
     "deploy:access": "wrangler deploy --config wrangler.access.jsonc",
     "deploy:multiplayer": "wrangler deploy --config wrangler.multiplayer.jsonc",

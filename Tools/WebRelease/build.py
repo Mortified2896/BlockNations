@@ -111,6 +111,7 @@ def main():
     shutil.copyfile(SOURCE/"Web/_headers", output/"_headers")
     shutil.copyfile(SOURCE/"Web/pwa/sw.js", output/"sw.js")
     shutil.copyfile(SOURCE/"Web/pwa/client.mjs", output/"PWA.js")
+    shutil.copyfile(SOURCE/"Web/pwa/navigation.mjs", output/"Navigation.js")
     shutil.copyfile(SOURCE/"Web/pwa/manifest.webmanifest", output/"manifest.webmanifest")
     shutil.copytree(SOURCE/"Web/pwa/icons", output/"icons", dirs_exist_ok=True)
     if source_digest() != prepared_hash:

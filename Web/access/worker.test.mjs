@@ -6,11 +6,12 @@ import worker from "./worker.mjs";
 import advancedWorker from "../advanced/worker.mjs";
 import { open, seal, fingerprint, SESSION_COOKIE, ATTEMPT_COOKIE } from "./tokens.mjs";
 import { storeCall } from "./store.mjs";
+import { gzipSync, gunzipSync, brotliCompressSync, brotliDecompressSync } from "node:zlib";
 
 const GAME = "https://blocknations.moneymattersmedia.com";
 const PREVIEW = "https://blocknations-web-preview.johannes-gaebler.workers.dev";
 const REVIEW = "https://feedback.moneymattersmedia.com";
-const protectedPaths = ["/index.html", "/Build/game.loader.js", "/Build/game.framework.js.unityweb", "/Build/game.data.unityweb", "/Build/game.wasm.unityweb", "/release.json", "/not-found"];
+const protectedPaths = ["/index.html", "/Build/game.loader.js", "/Build/game.framework.js.unityweb", "/Build/game.data.unityweb", "/Build/game.wasm.unityweb", "/Build/game.framework.js.gz", "/Build/game.data.gz", "/Build/game.wasm.gz", "/Build/0123456789abcdef0123456789abcdef.wasm.gz", "/Build/0123456789abcdef0123456789abcdef.wasm.br", "/release.json", "/not-found"];
 let mf, env;
 let assetsRead = 0;
 const reviewCalls = [];
@@ -56,6 +57,106 @@ before(async () => {
   };
 });
 after(async () => { await mf?.dispose(); });
+
+test("only the approved embedded lobby allows same-origin framing", async () => {
+  const session = await signIn(await identity("embedded-lobby", "approved"));
+  const embedded = await request("/multiplayer?embedded=1", { session: session.cookie });
+  assert.equal(embedded.status, 200);
+  assert.equal(embedded.headers.get("X-Frame-Options"), "SAMEORIGIN");
+  assert.match(embedded.headers.get("Content-Security-Policy"), /frame-ancestors 'self'/);
+  assert.equal(embedded.headers.get("Cache-Control"), "private, no-store");
+  const html = await embedded.text();
+  assert.match(html, /const EMBEDDED=true/);
+  assert.match(html, /bn-open-match/);
+  const script = html.match(/<script nonce="[^"]+">([\s\S]*?)<\/script>/)[1];
+  assert.doesNotThrow(() => new Function(script));
+  for (const path of ["/multiplayer", "/access", "/"]) {
+    assert.equal((await request(path, { session: session.cookie })).headers.get("X-Frame-Options"), "DENY");
+  }
+  const anonymous = await request("/multiplayer?embedded=1");
+  assert.equal(anonymous.headers.get("X-Frame-Options"), "DENY");
+  assert.match(anonymous.headers.get("Content-Security-Policy"), /frame-ancestors 'none'/);
+});
+
+test("approved compressed game assets use native decoding and Wasm MIME while staying private", async () => {
+  const session = await signIn(await identity("native-game-decoding", "approved"));
+  const payload = gzipSync(Buffer.from("synthetic game payload"));
+  const environment = { ...env, ASSETS: { fetch: async () => new Response(payload) } };
+  for (const extension of ["br", "gz", "unityweb"]) {
+    const encoded = extension === "br" ? brotliCompressSync(Buffer.from("synthetic game payload")) : payload;
+    const encoding = extension === "br" ? "br" : "gzip";
+    const environment = { ...env, ASSETS: { fetch: async () => new Response(encoded) } };
+    for (const [type, mime] of [["wasm", "application/wasm"], ["data", "application/octet-stream"], ["framework.js", "application/javascript"]]) {
+      const path = `/Build/game.${type}.${extension}`;
+      const response = await request(path, { session: session.cookie, environment });
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("Content-Encoding"), encoding);
+      assert.equal(response.headers.get("Content-Type"), mime);
+      assert.equal(response.headers.get("Cache-Control"), "private, no-store");
+      assert.equal((extension === "br" ? brotliDecompressSync : gunzipSync)(Buffer.from(await response.arrayBuffer())).toString(), "synthetic game payload");
+      const head = await request(path, { session: session.cookie, environment, method: "HEAD" });
+      assert.equal(head.headers.get("Content-Encoding"), encoding);
+      assert.equal((await head.arrayBuffer()).byteLength, 0);
+    }
+  }
+  const missing = await request("/Build/missing.wasm.gz", {
+    session: session.cookie, environment: { ...env, ASSETS: { fetch: async () => new Response("missing", { status: 404 }) } },
+  });
+  assert.equal(missing.status, 404);
+  assert.equal(missing.headers.get("Content-Encoding"), null);
+  assert.equal(await missing.text(), "missing");
+  const denied = await request("/Build/game.wasm.gz", { environment });
+  assert.equal(denied.status, 403);
+  assert.equal(denied.headers.get("Content-Encoding"), null);
+});
+
+test("versioned assets revalidate only after admission; HTML, missing assets and denials never cache", async () => {
+  const person = await identity("private-static-cache", "approved");
+  const session = await signIn(person);
+  let reads = 0;
+  const environment = { ...env, ASSETS: { fetch: async request => {
+    reads++;
+    return new Response(request.headers.has("If-None-Match") ? null : "synthetic static bytes", {
+      status: request.headers.has("If-None-Match") ? 304 : 200, headers: { ETag: '"synthetic-version"' },
+    });
+  } } };
+  for (const suffix of ["loader.js", "wasm.br", "data.br", "framework.js.br", "wasm.gz", "data.gz", "framework.js.gz", "wasm.unityweb"]) {
+    const path = "/Build/0123456789abcdef0123456789abcdef." + suffix;
+    const first = await request(path, { session: session.cookie, environment });
+    assert.equal(first.status, 200);
+    assert.equal(first.headers.get("Cache-Control"), "private, no-cache, must-revalidate");
+    assert.equal(first.headers.get("Vary"), "Cookie");
+    const headers = { "If-None-Match": first.headers.get("ETag") };
+    const cached = await request(path, { session: session.cookie, environment, headers });
+    assert.equal(cached.status, 304);
+    assert.equal(cached.headers.get("Cache-Control"), "private, no-cache, must-revalidate");
+    if (suffix !== "loader.js") {
+      assert.equal(cached.headers.get("Content-Type"), first.headers.get("Content-Type"));
+      assert.equal(cached.headers.get("Content-Encoding"), suffix.endsWith(".br") ? "br" : "gzip");
+    }
+    assert.equal((await cached.arrayBuffer()).byteLength, 0);
+    const before = reads;
+    const denied = await request(path, { environment, headers });
+    assert.equal(denied.status, 403);
+    assert.equal(denied.headers.get("Cache-Control"), "private, no-store");
+    assert.equal(reads, before, "An ETag must never bypass admission.");
+    const missing = await request(path, { session: session.cookie, environment: { ...env,
+      ASSETS: { fetch: async () => new Response("missing", { status: 404 }) },
+    } });
+    assert.equal(missing.headers.get("Cache-Control"), "private, no-store");
+  }
+  for (const path of ["/", "/index.html", "/release.json", "/Build/not-versioned.loader.js"]) {
+    assert.equal((await request(path, { session: session.cookie, environment })).headers.get("Cache-Control"), "private, no-store");
+  }
+  await env.REVIEW_DB.prepare("DELETE FROM auth_session WHERE id=?").bind(person.sid).run();
+  const before = reads;
+  const revoked = await request("/Build/0123456789abcdef0123456789abcdef.wasm.gz", {
+    session: session.cookie, environment, headers: { "If-None-Match": '"synthetic-version"' },
+  });
+  assert.equal(revoked.status, 403);
+  assert.equal(revoked.headers.get("Cache-Control"), "private, no-store");
+  assert.equal(reads, before, "A cached build must still be rejected after session revocation.");
+});
 
 async function identity(name, status = "pending", role = "reviewer") {
   const uid = "synthetic-" + name; const sid = "session-" + name;

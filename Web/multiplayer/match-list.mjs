@@ -61,7 +61,7 @@ function renderMatches(){
   if(!lobby.matches.length)empty(container,'No matches yet. Choose New game to find a match or invite friends.');
 }
 let finishedMatchesOpen=false;
-async function startMatch(match){const result=await api('matches/'+match.id+'/start',{});location.href='/?match='+result.match.id}
+async function startMatch(match){const result=await api('matches/'+match.id+'/start',{});navigateToMatch(result.match.id)}
 function inviteToLobby(match){selectedMatch=match.id;$('match-dialog').close();selectTab('friends');$('notice').textContent='Choose a friend or search for a player, then invite them to this lobby.'}
 function openMatchDetails(id){
   const match=lobby.matches.find(item=>item.id===id);if(!match)return;

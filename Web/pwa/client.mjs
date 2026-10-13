@@ -2,17 +2,33 @@
 // module. Keep it independent of the Worker bundle's generated helper names.
 export function startWebApp() {
   const get = id => document.getElementById(id);
-  let installPrompt;
-  window.addEventListener("beforeinstallprompt", event => {
-    event.preventDefault(); installPrompt = event;
-    if (get("install-app")) get("install-app").hidden = false;
-  });
+  // Installation belongs to the top-level document. Share its captured prompt
+  // with the same-origin lobby so opening it in a frame preserves installation.
+  let installHost = window;
+  try {
+    if (parent !== window && parent.location.origin === location.origin) installHost = parent;
+  } catch { /* A standalone/cross-origin document owns its own prompt. */ }
+  if (!installHost.blockNationsInstall) {
+    const state = installHost.blockNationsInstall = { prompt: null };
+    installHost.addEventListener("beforeinstallprompt", event => {
+      event.preventDefault(); state.prompt = event;
+      installHost.dispatchEvent(new Event("blocknations-install-change"));
+    });
+  }
+  const syncInstall = () => { if (get("install-app")) get("install-app").hidden = !installHost.blockNationsInstall.prompt; };
+  installHost.addEventListener("blocknations-install-change", syncInstall);
+  window.addEventListener("pagehide", () => installHost.removeEventListener("blocknations-install-change", syncInstall), { once: true });
+  syncInstall();
   get("install-app")?.addEventListener("click", async () => {
-    if (!installPrompt) return;
-    await installPrompt.prompt(); installPrompt = null; get("install-app").hidden = true;
+    const state = installHost.blockNationsInstall;
+    if (!state.prompt) return;
+    const prompt = state.prompt; state.prompt = null;
+    installHost.dispatchEvent(new Event("blocknations-install-change"));
+    await prompt.prompt();
   });
   if (!("serviceWorker" in navigator)) return;
-  const registration = navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" });
+  const registration = window.blockNationsServiceWorkerRegistration ??
+    navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" });
   const enable = get("enable-push"), disable = get("disable-push"), test = get("test-push"), status = get("push-status");
   if (!enable || !status) { registration.catch(() => {}); return; }
   async function api(path, data) {

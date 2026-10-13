@@ -19,6 +19,7 @@ public static class WebAccountClient
     public static MatchReply AcceptedMatch { get; private set; }
     public static string LastError { get; private set; }
     private static bool launchConsumed;
+    private static bool returnToLobby;
 
     [Serializable] public sealed class Player { public string id; public string name; public int seat; }
     [Serializable] public sealed class Match {
@@ -62,6 +63,25 @@ public static class WebAccountClient
     }
     public static void PrepareMatch(MatchReply reply) {
         PendingMatch = reply; AcceptedMatch = reply; launchConsumed = true;
+    }
+    public static string ConsumeLaunchMatchId() {
+        string matchId = LaunchMatchId;
+        if (!string.IsNullOrEmpty(matchId)) launchConsumed = true;
+        return matchId;
+    }
+    public static void QueueLobbyReturn() { returnToLobby = true; }
+    public static bool ConsumeLobbyReturn() {
+        bool pending = returnToLobby; returnToLobby = false; return pending;
+    }
+    public static void RegisterMenuReceiver(string objectName) {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        BN_WebRegisterMenu(objectName);
+#endif
+    }
+    public static void RegisterExitReceiver(string objectName) {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        BN_WebRegisterExit(objectName);
+#endif
     }
     public static MatchReply ConsumePendingMatch() {
         MatchReply reply = PendingMatch; PendingMatch = null; return reply;
@@ -114,6 +134,8 @@ public static class WebAccountClient
     }
 #if UNITY_WEBGL && !UNITY_EDITOR
     [DllImport("__Internal")] private static extern void BN_WebNavigate(string path);
+    [DllImport("__Internal")] private static extern void BN_WebRegisterMenu(string objectName);
+    [DllImport("__Internal")] private static extern void BN_WebRegisterExit(string objectName);
     [DllImport("__Internal")] private static extern void BN_WebStatus(string message);
     [DllImport("__Internal")] private static extern void BN_WebMatchLoaded(string matchId);
     [DllImport("__Internal")] private static extern int BN_WebConsumeMatchUpdate(string matchId);
