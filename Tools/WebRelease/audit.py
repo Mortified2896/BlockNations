@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Inspect exported bytes, including gzip payloads, without ever printing credentials."""
+"""Inspect exported bytes, including gzip/Brotli payloads, without printing credentials."""
 import argparse
 import gzip
 import json
 from pathlib import Path
 import re
 import struct
+import subprocess
 
 SOURCE = Path(__file__).resolve().parents[2]
 MAX_ASSET = 25 * 1024 * 1024
@@ -79,6 +80,17 @@ def inspect(directory):
             failures.append(f"Private material path: {relative}")
         data = path.read_bytes()
         if data.startswith(b"\x1f\x8b"): data = gzip.decompress(data)
+        elif path.suffix == ".br":
+            # Node is already required by the web release workflow. Its built-in
+            # decoder avoids a separate Python compression dependency.
+            try:
+                decoded = subprocess.run(["node", "-e",
+                    "const b=[];process.stdin.on('data',x=>b.push(x)).on('end',()=>{try{process.stdout.write(require('node:zlib').brotliDecompressSync(Buffer.concat(b)))}catch{process.exitCode=1}})"],
+                    input=data, capture_output=True)
+            except FileNotFoundError:
+                raise ValueError("Node.js is required to audit Brotli release files") from None
+            if decoded.returncode != 0: raise ValueError(f"Invalid Brotli release file: {relative}")
+            data = decoded.stdout
         if any(value in data or value.decode(errors="ignore").encode("utf-16-le") in data for value in secrets):
             failures.append(f"Known credential in exported bytes: {relative}")
         if any(pattern.search(part) for part in signature_buffers(data) for pattern in KEY_PATTERNS):

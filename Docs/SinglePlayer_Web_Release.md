@@ -30,10 +30,14 @@ The transport cannot resolve a PBp URL or credential in that build.
 The HTML fits the browser viewport; Unity renders at a maximum device pixel ratio of two.
 `autoSyncPersistentDataPath: true` persists local saves to the browser's IndexedDB storage across page reloads.
 Saves belong to that browser and hostname; clearing site data or switching browsers does not transfer them.
-Gzip with Unity decompression fallback produces `.unityweb` files without requiring special server Content-Encoding configuration.
+Release builds use Brotli with Unity decompression fallback disabled, and size-focused Wasm optimization (`DiskSize`). The access Worker supplies `Content-Encoding: br` for `.data.br`, `.framework.js.br`, and `.wasm.br`, with `application/wasm` for code so the browser can compile it during download. It also supports older gzip `.gz` and `.unityweb` exports. Compressed bodies use Workers' `encodeBody: "manual"` to prevent double compression. These headers apply only to successful, authorized game-file responses; denial and missing-file responses keep their normal encoding.
+
+Unity's automatic IndexedDB data caching stays disabled. Content-hashed files under `/Build/` use `private, no-cache, must-revalidate`. The delivery service worker retains only these static files in a bounded cache (at most eight files, enough for two complete releases), because browser HTTP caches can skip large Wasm/data files. Every retained-file use first makes a fresh, uncached HEAD request through the admission Worker and compares its ETag. Offline/error checks fail without a cached fallback; denied or changed versions discard that retained entry. Unavailable browser storage falls back to ordinary online downloads. The template installs/activates the worker before large first-visit downloads, with a bounded wait so unavailable service workers do not stall startup. Existing push behavior is preserved.
+
+Static game bytes can remain in that browser's local cache. Game HTML, account pages, APIs, release metadata and saves are not cached and remain `private, no-store`. As with any already downloaded game, a running client cannot have its in-memory code recalled by logging out; fresh loads and cached-file access still require server admission. A plain static-file server needs equivalent encoding/MIME headers to run the new export; opening it from disk or using an unconfigured Python HTTP server will fail.
 
 Only the generated `Build/WebRelease` directory is uploaded.
-The audit reads exported bytes, decompresses gzip payloads, checks known PBp credentials and common private/API key signatures, rejects private-file paths, and enforces Cloudflare's 25 MiB per-asset limit.
+The audit reads exported bytes, decompresses gzip/Brotli payloads (Brotli auditing uses the Node.js runtime required for web deployment), checks known PBp credentials and common private/API key signatures, rejects private-file paths, and enforces Cloudflare's 25 MiB per-asset limit.
 Credential values are never printed by the audit.
 The Content Security Policy permits network connections only to the game's own origin.
 
@@ -79,9 +83,9 @@ Review-only approval grants automatic game access; removing it removes inherited
 
 Protected responses use `Referrer-Policy: same-origin`. Chrome can send `Origin: null` for form POSTs from `no-referrer` documents, which conflicts with the exact-origin check on tester decisions, logout and account switching. The same-origin policy preserves those form submissions while withholding referrers from other sites; missing, null and foreign mutation origins remain rejected. The 2026-10-12 fix passed all 58 web tests and a live Chrome tester approval that persisted after reload.
 
-`Web/access/worker.mjs` runs before **every** game asset in production and preview, including HTML, the loader, framework, data, Wasm, release metadata and alternate paths. The install manifest, two icons and push-only service-worker/client scripts are public shell assets; they contain no game data or credentials.
+`Web/access/worker.mjs` runs before **every** game asset in production and preview, including HTML, the loader, framework, data, Wasm, release metadata and alternate paths. The install manifest, two icons and delivery/navigation/push scripts are public shell assets; they contain no game data or credentials.
 Anonymous visitors see the sign-in page; other unauthorised game-file requests receive 403.
-Protected responses use `private, no-store`. Auth/storage failures return 503 and never fall back to public assets.
+Protected dynamic responses and errors use `private, no-store`; successful content-hashed build files require private server revalidation on every reuse. Auth/storage failures return 503 and never fall back to public assets or cached game responses.
 Revocation blocks subsequent requests. A client that already downloaded the game can continue running its local code until reload; website authentication cannot recall downloaded bytes.
 
 The sign-in handoff runs on `feedback.moneymattersmedia.com/blocknations-auth/*`; preview uses `/blocknations-auth-preview/*`.
@@ -99,6 +103,14 @@ Deploy it before either game Worker. Install the **same** high-entropy `SESSION_
 The initial secret is kept outside Git at `~/.config/blocknations/access.json`, directory mode 700 and file mode 600. Never print it or put it in the export.
 This integration does not require a new Google OAuth client, parent-domain cookies, Cloudflare Access configuration, or a paid-plan change.
 The local regression suite uses synthetic Review identities and real isolated Durable Object SQLite storage; it needs no live credentials.
+
+## Keeping the game loaded between modes
+
+Local modes use Unity scene transitions. The Google-account browser build also keeps the Unity instance alive when opening the existing HTML multiplayer lobby, returning to the menu, and opening another online match. The lobby is an approved same-origin frame; all other account and administration pages retain their framing restrictions. Account management opens in a separate tab.
+
+The frame can request only a validated match ID through the registered main-menu component. That component refreshes the authenticated session and retrieves the match again; membership, seats, protocol version and waiting-lobby rules remain server-controlled. A waiting lobby never leaves a pending online launch that could override a subsequent local game. Leaving an online board uses the existing local-save and main-menu scene path, and ends its live match watch.
+
+An expired or revoked session still uses top-level navigation for sign-in. Direct lobby links and a first visit to an online match retain their standalone behavior. The static delivery cache avoids repeat downloads, but a deliberate page reload still has to initialize Unity.
 
 ## Regression checks
 

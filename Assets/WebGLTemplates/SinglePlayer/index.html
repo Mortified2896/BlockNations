@@ -37,6 +37,7 @@
   <script src="Feedback.js"></script>
   <script src="/MultiplayerLive.js"></script>
   <script type="module" src="PWA.js"></script>
+  <script type="module" src="Navigation.js"></script>
   <script src="Build/{{{ LOADER_FILENAME }}}"></script>
   <script>
     const canvas = document.getElementById('unity-canvas');
@@ -58,9 +59,35 @@
         else console.warn(message);
       }
     };
-    createUnityInstance(canvas, config, p => document.getElementById('progress').value = p)
+    // Install the delivery worker before large downloads on the first visit.
+    // Unsupported/unavailable storage must never stop a normal online launch.
+    async function prepareGameDelivery() {
+      if (!('serviceWorker' in navigator)) return;
+      const registration = navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
+      window.blockNationsServiceWorkerRegistration = registration;
+      const ready = registration.then(async worker => {
+        const installing = worker.installing || worker.waiting;
+        if (installing && installing.state !== 'activated') await new Promise(resolve => {
+          installing.addEventListener('statechange', () => {
+            if (['activated', 'redundant'].includes(installing.state)) resolve();
+          });
+        });
+        await navigator.serviceWorker.ready;
+        if (!navigator.serviceWorker.controller) await new Promise(resolve =>
+          navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true }));
+      }).catch(() => {});
+      await Promise.race([ready, new Promise(resolve => setTimeout(resolve, 1500))]);
+    }
+    prepareGameDelivery().then(() => createUnityInstance(canvas, config, p => document.getElementById('progress').value = p))
       .then(instance => {
         window.blockNations = instance;
+        if (window.installGameNavigation) window.blockNationsNavigation = window.installGameNavigation(instance, {
+          game: document.getElementById('game'), canvas,
+          accountBar: document.querySelector('.account-bar'),
+          statusPanel: document.getElementById('multiplayer-state'),
+          statusMessage: document.getElementById('multiplayer-message'),
+          statusLink: document.querySelector('#multiplayer-state a')
+        });
         document.getElementById('loading').style.display = 'none';
         canvas.focus();
       }).catch(error => {

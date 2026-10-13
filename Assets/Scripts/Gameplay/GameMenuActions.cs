@@ -22,6 +22,11 @@ public class GameMenuActions : MonoBehaviour
     private static string PlayByPostGameIdKey => DevClientInstanceScope.ScopePlayerPrefsKey(PlayByPostGameIdKeyRaw);
     private static string ReturnToMultiplayerPaneKey => DevClientInstanceScope.ScopePlayerPrefsKey(ReturnToMultiplayerPaneKeyRaw);
 
+    private void OnEnable()
+    {
+        if (PublicWebBuild.UsesGoogleAccounts) WebAccountClient.RegisterExitReceiver(gameObject.name);
+    }
+
     public void SaveGame()
     {
         if (TurnManager.Instance != null && TurnManager.Instance.IsPolyMatch) { TurnManager.Instance.PolyController.SaveGame(); return; }
@@ -61,7 +66,9 @@ public class GameMenuActions : MonoBehaviour
         if (PublicWebBuild.UsesGoogleAccounts && tm != null && tm.currentMode == TurnManager.GameMode.PlayByPost)
         {
             tm.SaveToFile();
-            WebAccountClient.OpenLobby();
+            WebAccountClient.QueueLobbyReturn();
+            Time.timeScale = 1f;
+            SceneManager.LoadScene(mainMenuSceneName);
             return;
         }
         bool shouldReturnToMultiplayerPane = tm != null

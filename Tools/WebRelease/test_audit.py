@@ -2,6 +2,7 @@ import gzip
 from pathlib import Path
 import tempfile
 import struct
+import subprocess
 import unittest
 from unittest.mock import patch
 import audit
@@ -27,6 +28,21 @@ class ReleaseAuditTests(unittest.TestCase):
         (self.root/"game.data").write_bytes(credential.decode().encode("utf-16-le"))
         with patch.object(audit, "known_secrets", return_value=[credential]):
             with self.assertRaisesRegex(ValueError, "Known credential"): audit.inspect(self.root)
+
+    def test_brotli_payloads_are_scanned_and_secrets_are_not_disclosed(self):
+        credential = b"synthetic-brotli-credential"
+        compressed = subprocess.run(["node", "-e",
+            "process.stdout.write(require('node:zlib').brotliCompressSync(require('node:fs').readFileSync(0)))"],
+            input=b"asset " + credential, capture_output=True, check=True).stdout
+        (self.root/"game.data.br").write_bytes(compressed)
+        with patch.object(audit, "known_secrets", return_value=[credential]):
+            with self.assertRaises(ValueError) as caught: audit.inspect(self.root)
+        self.assertIn("Known credential", str(caught.exception))
+        self.assertNotIn(credential.decode(), str(caught.exception))
+
+    def test_corrupt_brotli_fails_closed(self):
+        (self.root/"game.wasm.br").write_bytes(b"not a brotli stream")
+        with self.assertRaisesRegex(ValueError, "Invalid Brotli release file"): audit.inspect(self.root)
 
     def test_rejects_private_files(self):
         (self.root/".env").write_text("placeholder only")
