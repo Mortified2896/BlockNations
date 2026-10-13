@@ -5,7 +5,7 @@ Poly is an owner-only Vs AI mode in the Block Nations website. Choose **Poly 11�
 ## Playing
 
 - Start on an 11×11 seeded land map with one city and a Warrior. The opponent has the same starting position resources, with one extra opening Gold when its first turn begins. Five neutral villages provide expansion through capture.
-- Tap your unit, then a yellow reachable tile or red attack target. Drag the map and pinch to zoom using the normal Block Nations camera. On an occupied city, the first tap shows the unit; repeated taps alternate unit → city → unit. Tap an empty city for recruitment or a resource for development. **Tech** opens an illustrated tree with round nodes, dependency arrows and selectable branches. Recruitment and city development use page buttons; there are no map or gameplay-panel scrollbars.
+- Tap your unit, then a yellow reachable tile or red attack target. Drag the map and pinch to zoom using the normal Block Nations camera. On an occupied city, the first tap shows the unit; repeated taps alternate unit → city → unit. Occupied cities open compact stats instead of unavailable recruitment cards; a Unit tab also returns to the stationed unit. Landscape inspection sits beside the board. Tap an empty city for recruitment or a resource for development. **Tech** opens an illustrated tree with round nodes, dependency arrows and selectable branches. Recruitment and city development use page buttons; there are no map or gameplay-panel scrollbars.
 - Spend Gold on technology, recruitment and permanent tile improvements. Food from improvements grows city population every owner turn. Population is not consumed by recruitment.
 - Each city has a permanent 3×3 territory. Capturing villages grants their existing territory. Leveling never expands borders.
 - City levels require 2, then 3, then 4, and successively more population. Surplus carries forward. Each level adds one Gold per owner turn and queues a reward choice.
@@ -29,7 +29,7 @@ Research costs `tier × (4 + owned cities)` Gold and requires its parent. The il
 | Climbing → Mining → Smithing | Mountain movement/defense; mines; Swordsmen and adjacency forges |
 | Riding → Roads → Chivalry | Riders; roads; Knights |
 
-Improvements retain their resources and terrain. Every improved tile in a city's fixed territory contributes automatically; no worker assignment or food upkeep is required. Green grain badges and Gold coin badges show numeric yields on the world board. Inspection shows current yields, improvement gains and prices. A city's growth meter shows stored Food and turns until its next population point.
+Improvements retain their resources and terrain. Every improved tile in a city's fixed territory contributes automatically; no worker assignment or food upkeep is required. Green grain badges and Gold coin badges show numeric yields on resource tiles; the city badge shows its total Gold income. Inspection shows current yields, improvement gains and prices. A city's growth meter shows stored Food and turns until its next population point.
 
 | Improvement | Build cost | Permanent yield per owner turn |
 | --- | ---: | --- |
