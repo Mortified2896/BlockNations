@@ -10,6 +10,11 @@ from power_controller import action, identity, parse_power, tick, command_for, r
 
 
 class PowerControllerTests(unittest.TestCase):
+    def test_virtualenv_launch_keeps_native_process_identity(self):
+        config = dict(command=['/venv/bin/python', '/supervisor.py', '--resume'], processExecutable='/native/Python')
+        self.assertTrue(identity('/native/Python /supervisor.py --resume', config))
+        self.assertFalse(identity('/native/Python /other.py --resume', config))
+
     def test_reboot_clears_stale_pids_but_preserves_recorded_fault(self):
         state = reconcile_boot(dict(bootIdentity='old', lastPid=12, stoppingPid=12), 'new')
         self.assertNotIn('lastPid', state)

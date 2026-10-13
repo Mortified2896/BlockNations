@@ -62,7 +62,8 @@ def identity(command, config):
     """Check executable, script and explicit run/root before signalling a PID."""
     wanted = config['command']
     if isinstance(command, str):
-        return command == ' '.join(wanted)
+        native = [config.get('processExecutable', wanted[0]), *wanted[1:]]
+        return command in (' '.join(wanted), ' '.join(native))
     if command[:2] != wanted[:2]:
         return False
     for flag in ('--root', '--run-id'):
