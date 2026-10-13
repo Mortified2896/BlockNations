@@ -64,3 +64,18 @@ The initial interface used a separate UITK board and scrollable sheets. The owne
 - Actual canvas clicks moved a Warrior, bought Organization, harvested two resources, reached city level 2, selected Workshop, recruited a second Warrior and completed two opponent turns. After Save & Menu and a full page reload, continuation restored round 3, 2 Gold, income 4, city level 2 and the same two units/positions.
 - Live production settings matched the configured owner identity and preserved every existing service, namespace, secret binding and origin variable. The active Worker contains the owner-gated session code. Anonymous production release/session requests remained 403 with `private, no-store`.
 - A real signed-in owner session on production and physical iPhone/Android or Safari gameplay remain unverified. Browser acceptance above is local Chromium with synthetic identity, separate from the successful hosted deployment.
+
+
+## Native presentation correction: 2026-10-13
+
+The owner requested the standard Block Nations presentation and removal of mobile game scrollbars. Poly now uses the existing world board, normal unit/city sprites, blue background, fog, camera and touch input. Recruitment and development have paged bottom panels; technology has branch cards and adapts to landscape without scrolling. Modal panels hide the normal header while open. The opening camera fits the 11×11 board above the controls, and drag/pinch remain available.
+
+- Feature commit: `ed67348`; merged into `main` as `cd93adc`, retaining the concurrent multiplayer match-list improvements.
+- Export source hash: `884a9bcb7170300d93eff6f1d63a706a470b1da3ab6a919bcb74bdd73b8cd374`.
+- Production Worker: `0bd70509-2171-4fa1-bfe0-2b07ec156718`, verified at 100% traffic. Preview Worker: `90eef250-7ae1-4489-84a3-2aa6a9e9e884`. Both use the reviewed Unity export.
+- All 66 focused Unity cases passed, including actual native scene movement, recruitment, income/AI handoff, the unchanged existing Poly checkpoint, fog/legality projection, additional unit sprite sizing and standard-save isolation. The standalone 12 Poly rules checks, 17 build-tool checks and final 77 web tests passed. The 31.16 MiB export passed its credential audit.
+- Chromium acceptance used the real exported game and admission/session code with synthetic identities. A checkpoint created in the old scrolling interface reopened in the new interface at round 2, Gold 2, population 1 and the same Warrior position.
+- Simulated touch taps recruited a Warrior, harvested a resource, chose the level-2 Workshop reward and completed two AI turns. Save & Menu plus a full reload restored round 4, Gold 4, income 4, city level 2 and the same two units at positions 13 and 12.
+- Native camera drag changed its position; two-finger touch events changed orthographic size from 12.9875 to 10.5275 while Gold and unit positions stayed fixed. Screenshots cover 390×844 portrait, the research/recruitment panels, and the two-column research layout at 844×390. The earlier 375×667 check exposed the header overlap corrected in this release.
+- Live production inspection verified the deployed version, the owner-gated session code, and preservation of every existing owner, origin, service, secret and Durable Object binding. Anonymous release/session requests remain protected.
+- A real owner session on the hosted release and a physical iPhone/Safari run of this correction remain separate checks. Browser gameplay evidence above is Chromium with simulated touch, not a physical-device claim.
