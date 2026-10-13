@@ -214,7 +214,7 @@ public sealed partial class PolyGameplayUITKView : MonoBehaviour
         var connection = known.improvementOwnerSeatIndex>=0 || known.roadOwnerSeatIndex>=0 ? controller.Match.KnownConnection(0,p) : controller.Match.ConstructionConnection(0,p);
         var city = controller.Match.City(connection.CityId);
         summary.text = YieldLabel(controller.Match.KnownYield(0,p));
-        if(connection.CityId>0) summary.text += $"\nCity {connection.CityId} · {connection.Distance} tiles · {connection.Efficiency*100:0.#}% yield";
+        if(connection.CityId>0) summary.text += $"\nCity {connection.CityId} · Distance {connection.Distance} · {connection.Efficiency*100:0.#}% yield";
         bool visible = controller.Match.Visibility(0)[p];
         var potential = visible ? controller.Match.DevelopmentOptions(0,p).ToArray() : new PolyAction[0];
         pageCount = (potential.Length+1)/2; page = Mathf.Clamp(page,0,Math.Max(0,pageCount-1));

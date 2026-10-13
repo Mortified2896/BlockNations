@@ -41,8 +41,8 @@ public sealed partial class PolyWorldPresentation : MonoBehaviour
             bool selected=controller.SelectedPosition==p || controller.Inspection==PolyGameController.InspectKind.City && controller.Match.CityAt(controller.SelectedPosition)?.id==link.CityId;
             line.transform.localPosition=delta*.5f;
             line.transform.localRotation=Quaternion.Euler(0,0,Mathf.Atan2(delta.y,delta.x)*Mathf.Rad2Deg);
-            line.transform.localScale=new Vector3(delta.magnitude,selected ? .055f : .025f,1);
-            line.color=new Color(1f,.76f,.3f,selected ? .85f : .35f);
+            line.transform.localScale=new Vector3(delta.magnitude,selected ? .075f : .045f,1);
+            line.color=new Color(1f,.72f,.1f,selected ? 1f : .75f);
         }
     }
     private void Awake()
@@ -58,9 +58,9 @@ public sealed partial class PolyWorldPresentation : MonoBehaviour
             terrain[p] = CreateRenderer(tile, "Poly terrain", 2, Vector3.zero, .78f);
             improvement[p] = CreateRenderer(tile, "Poly improvement", 3, Vector3.zero, .66f);
             resource[p] = CreateRenderer(tile, "Poly resource", 4, new Vector3(.26f, .26f, 0), .32f);
-            foodYield[p] = CreateRenderer(tile, "Poly food yield", 5, new Vector3(-.23f, -.32f, 0), .43f);
-            goldYield[p] = CreateRenderer(tile, "Poly Gold yield", 5, new Vector3(.23f, -.32f, 0), .43f);
-            connections[p]=CreateRenderer(tile,"Poly city connection",1,Vector3.zero,1);
+            foodYield[p] = CreateRenderer(tile, "Poly food yield", 8, new Vector3(-.23f, -.32f, 0), .43f);
+            goldYield[p] = CreateRenderer(tile, "Poly Gold yield", 8, new Vector3(.23f, -.32f, 0), .43f);
+            connections[p]=CreateRenderer(tile,"Poly city connection",6,Vector3.zero,1);
             connections[p].sprite=SpriteFor("Connection"); connections[p].enabled=false;
         }
     }

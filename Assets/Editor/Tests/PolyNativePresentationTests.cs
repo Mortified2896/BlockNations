@@ -111,7 +111,10 @@ public sealed class PolyNativePresentationTests
         Assert.That(controller.Match.HasTechnology(0,"hunting"),Is.True);
         Submit(view.Document.rootVisualElement,"Develop_hunt"); yield return null;
         Assert.That(controller.Match.Tiles[23].resource,Is.EqualTo(PolyResource.Animals));
-        Assert.That(forestTile.transform.Find("Poly city connection").GetComponent<SpriteRenderer>().enabled,Is.True);
+        var connection=forestTile.transform.Find("Poly city connection").GetComponent<SpriteRenderer>();
+        Assert.That(connection.enabled,Is.True);
+        Assert.That(connection.sortingOrder,Is.GreaterThan(forestTile.transform.Find("Poly improvement").GetComponent<SpriteRenderer>().sortingOrder));
+        Assert.That(connection.sortingOrder,Is.LessThan(forestTile.exploredRenderer.sortingOrder),"Connections stay under ordinary fog.");
         Assert.That(controller.Match.UnitState(builderId).rested,Is.True);
         Assert.That(controller.SceneUnits[builderId].GetComponentsInChildren<SpriteRenderer>().First(r=>r!=controller.SceneUnits[builderId].moveOutline).sprite.name,Is.EqualTo("Poly poly-builder"));
         Assert.That(forestTile.transform.Find("Poly food yield").GetComponent<SpriteRenderer>().sprite.name,Is.EqualTo("Poly FoodYield2"));
