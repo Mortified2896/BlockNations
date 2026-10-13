@@ -5,6 +5,7 @@ import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import worker from "../access/worker.mjs";
 import { seal, SESSION_COOKIE } from "../access/tokens.mjs";
 import { WEB_MATCH_VERSION, MultiplayerStore } from "./store.mjs";
+import { revokePushSession } from "./api.mjs";
 import { startingCities } from "./opening.mjs";
 import { DatabaseSync } from "node:sqlite";
 
@@ -14,7 +15,7 @@ let mf, env;
 const identities = new Map();
 before(async () => {
   mf = new Miniflare(convertV4MiniflareOptions({
-    modules: await Promise.all(["service.mjs", "store.mjs", "push.mjs", "opening.mjs"].map(async name => ({
+    modules: await Promise.all(["service.mjs", "store.mjs", "push.mjs", "opening.mjs", "live.mjs"].map(async name => ({
       type: "ESModule", path: new URL("./" + name, import.meta.url).pathname,
       contents: await readFile(new URL("./" + name, import.meta.url), "utf8"),
     }))), compatibilityDate: "2026-10-08",
@@ -61,6 +62,108 @@ async function call(actor, path, body, options = {}) {
   return { status: response.status, headers: response.headers, ...(await response.json()) };
 }
 async function find(actor, seatCount = 2) { return call(actor, "find", { version: WEB_MATCH_VERSION, seatCount }); }
+async function live(actor, options = {}) {
+  return worker.fetch(new Request((options.environment ?? env).GAME_ORIGIN + "/api/multiplayer/live", {
+    headers: { Cookie: actor?.cookie ?? "", Origin: options.origin ?? (options.environment ?? env).GAME_ORIGIN, Upgrade: "websocket" },
+  }), options.environment ?? env);
+}
+async function listen(t, actor, options) {
+  const response = await live(actor, options);
+  assert.equal(response.status, 101);
+  const socket = response.webSocket, events = [];
+  socket.accept();
+  socket.addEventListener("message", event => { if (event.data !== "pong") events.push(JSON.parse(event.data)); });
+  t.after(() => { try { socket.close(); } catch { } });
+  return { socket, events, async take(predicate) {
+    const end = Date.now() + 2500;
+    while (Date.now() < end) {
+      const index = events.findIndex(predicate);
+      if (index >= 0) return events.splice(index, 1)[0];
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    assert.fail("No matching live notification");
+  } };
+}
+
+test("live upgrades require current approved Google identity and the exact browser origin", async t => {
+  const allowed = await person("Live Allowed"), pending = await person("Live Pending", "pending");
+  assert.equal((await live(null)).status, 403);
+  assert.equal((await live(pending)).status, 403);
+  assert.equal((await live(allowed, { origin: "https://other.test" })).status, 403);
+  assert.equal((await call(allowed, "live")).status, 403);
+  const missingUpgrade = await worker.fetch(new Request(GAME + "/api/multiplayer/live", {
+    headers: { Cookie: allowed.cookie, Origin: GAME },
+  }), env);
+  assert.equal(missingUpgrade.status, 426);
+  await listen(t, allowed);
+  allowed.user.status = "disabled";
+  assert.equal((await live(allowed)).status, 403);
+});
+
+test("completed turns notify every member tab, omit snapshots, and do not notify outsiders", async t => {
+  const { a, b, id, initial } = await startPair(), outsider = await person("Live Outsider");
+  const aLive = await listen(t, a), bLive = await listen(t, b), secondTab = await listen(t, b), otherLive = await listen(t, outsider);
+  const state = next(JSON.parse(initial.json));
+  const saved = await submit(a, id, state, 2);
+  for (const client of [aLive, bLive, secondTab]) {
+    const event = await client.take(event => event.matchId === id);
+    assert.deepEqual(event, { type: "match", matchId: id, seq: saved.seq, revision: saved.match.revision });
+    assert.equal(Object.keys(event).length, 4);
+  }
+  assert.equal(otherLive.events.length, 0);
+  const fetched = await call(b, "matches/" + id + "/next?afterSeq=2");
+  assert.equal(fetched.seq, saved.seq);
+  assert.equal(JSON.parse(fetched.json).currentTurnSeatIndex, 1);
+  await submit(a, id, state, 2); // Idempotent retry does not emit a new commit.
+  const rejected = await submit(a, id, next(state), 2);
+  assert.equal(rejected.status, 409);
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.equal(bLive.events.length, 0);
+});
+
+test("lobby joins, host start, cancellation, invitations, and friend answers update other menus", async t => {
+  const a = await person("Live Menu Host"), b = await person("Live Menu Guest");
+  await call(a, "session"); await call(b, "session");
+  const host = await listen(t, a), guest = await listen(t, b);
+  const created = await call(a, "create", { version: WEB_MATCH_VERSION, seatCount: 4 });
+  const id = created.match.id;
+  await host.take(event => event.matchId === id);
+  const invited = await call(a, "invite", { playerId: (await call(b, "session")).player.id, matchId: id });
+  await guest.take(event => event.type === "lobby");
+  await call(b, "invite-answer", { id: invited.inviteId, action: "accept" });
+  await host.take(event => event.matchId === id);
+  assert.equal((await call(a, "lobby")).matches.find(match => match.id === id).players.length, 2);
+  await start(a, id);
+  await guest.take(event => event.matchId === id);
+  assert.equal((await call(b, "lobby")).matches.find(match => match.id === id).status, "active");
+  host.events.length = guest.events.length = 0;
+  const friend = await call(a, "friend-request", { playerId: (await call(b, "session")).player.id });
+  await guest.take(event => event.type === "lobby");
+  host.events.length = 0;
+  await call(b, "friend-answer", { id: friend.friendshipId, action: "accept" });
+  await host.take(event => event.type === "lobby");
+  assert.equal((await call(a, "lobby")).friendships.find(link => link.id === friend.friendshipId).status, "accepted");
+  const waiting = await call(a, "create", { version: WEB_MATCH_VERSION });
+  const invitation = await call(a, "invite", { playerId: (await call(b, "session")).player.id, matchId: waiting.match.id });
+  await call(b, "invite-answer", { id: invitation.inviteId, action: "accept" });
+  await guest.take(event => event.matchId === waiting.match.id);
+  guest.events.length = 0;
+  await call(a, "matches/" + waiting.match.id + "/cancel", {});
+  await guest.take(event => event.matchId === waiting.match.id);
+  assert.equal((await call(b, "lobby")).matches.some(match => match.id === waiting.match.id), false);
+});
+
+test("live disconnect recovery fetches missed turns and logout closes that session", async t => {
+  const { a, b, id, initial } = await startPair();
+  const client = await listen(t, b);
+  client.socket.close();
+  const saved = await submit(a, id, next(JSON.parse(initial.json)), 2);
+  const recovered = await listen(t, b);
+  assert.equal((await call(b, "matches/" + id + "/next?afterSeq=2")).seq, saved.seq);
+  const closed = new Promise(resolve => recovered.socket.addEventListener("close", resolve, { once: true }));
+  await revokePushSession(env, b.sid);
+  await closed;
+});
 test("Poly session permission requires the configured approved administrator identity", async () => {
   const owner = await person("Poly owner"), otherAdmin = await person("Other admin"), tester = await person("Poly tester");
   owner.user.can_administer = true; otherAdmin.user.can_administer = true;

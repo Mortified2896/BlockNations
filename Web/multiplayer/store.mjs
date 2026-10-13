@@ -1,5 +1,6 @@
 import { validSubscription, sendPush } from "./push.mjs";
 import { startingCities, nextEligibleSequence } from "./opening.mjs";
+import { acceptLive, publishLive, revokeLive } from "./live.mjs";
 
 // A private, origin-scoped SQLite Durable Object. Identity is supplied only by
 // the Google admission Worker, never by a browser's request body.
@@ -21,6 +22,9 @@ export class MultiplayerStore {
     this.ctx = ctx;
     this.env = env;
     this.sql = ctx.storage.sql;
+    this.liveChanges = new Map();
+    if (ctx.setWebSocketAutoResponse)
+      ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
     this.sql.exec(`CREATE TABLE IF NOT EXISTS players (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, updated INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS matches (
@@ -52,6 +56,15 @@ export class MultiplayerStore {
   }
 
   one(query, ...args) { return this.sql.exec(query, ...args).toArray()[0] ?? null; }
+  changed(playerIds, matchId = null) {
+    const match = matchId ? this.one("SELECT seq,revision FROM matches WHERE id=?", matchId) : null;
+    const event = match ? { type: "match", matchId, seq: match.seq, revision: match.revision } : { type: "lobby" };
+    for (const id of playerIds) {
+      if (!this.liveChanges.has(id)) this.liveChanges.set(id, new Map());
+      this.liveChanges.get(id).set(matchId ?? "lobby", event);
+    }
+  }
+  matchChanged(id) { this.changed(this.members(id).map(player => player.id), id); }
   all(query, ...args) { return this.sql.exec(query, ...args).toArray(); }
   socialPlayer(id) { return this.one("SELECT id,name,email FROM players WHERE id=?", id); }
   player(id) { return this.one("SELECT id,name FROM players WHERE id=?", id); }
@@ -108,6 +121,7 @@ export class MultiplayerStore {
     this.sql.exec("INSERT INTO match_capacity VALUES(?,?)", id, seatCount);
     this.sql.exec("INSERT INTO seats VALUES(?,0,?)", id, actor);
     if (opponent) this.sql.exec("INSERT INTO seats VALUES(?,1,?)", id, opponent);
+    this.matchChanged(id);
     return this.match(id, actor);
   }
   join(match, actor, origin) {
@@ -119,6 +133,7 @@ export class MultiplayerStore {
     this.sql.exec("INSERT INTO seats VALUES(?,?,?)", match.id, seat, actor);
     const full = members.length + 1 === count;
     this.sql.exec("UPDATE matches SET revision=revision+1,updated=? WHERE id=?", Date.now(), match.id);
+    this.matchChanged(match.id);
     if (full) for (const member of [...members, {id: actor}]) this.notify(member.id, "joined:" + match.id,
       "Your online lobby is full. The host can start the game.", "/multiplayer?lobby=" + match.id, origin);
   }
@@ -273,6 +288,8 @@ export class MultiplayerStore {
         this.sql.exec("UPDATE matches SET seq=? WHERE id=?", count, match.id);
       } else require(count === this.capacity(match.id), "LOBBY_NOT_FULL", 409);
       this.sql.exec("UPDATE matches SET status='active',revision=revision+1,updated=? WHERE id=?", Date.now(), match.id);
+      this.matchChanged(match.id);
+      this.changed(this.all("SELECT recipient FROM invitations WHERE match_id=? AND status='pending'", match.id).map(invite => invite.recipient));
       this.sql.exec("UPDATE invitations SET status='declined' WHERE match_id=? AND status='pending'", match.id);
       for (const member of this.members(match.id)) this.notify(member.id, "started:" + match.id,
         "The host started your match. Open it to play.", "/?match=" + match.id, input.origin);
@@ -282,6 +299,8 @@ export class MultiplayerStore {
       const match = this.match(data.matchId, actor);
       require(match.status === "waiting" && match.seat === 0, "MATCH_ALREADY_STARTED", 409);
       this.sql.exec("UPDATE matches SET status='cancelled',updated=? WHERE id=?", Date.now(), match.id);
+      this.matchChanged(match.id);
+      this.changed(this.all("SELECT recipient FROM invitations WHERE match_id=? AND status='pending'", match.id).map(invite => invite.recipient));
       return { cancelled: true };
     }
     if (operation === "initialize" || operation === "turn") {
@@ -300,6 +319,7 @@ export class MultiplayerStore {
               snapshot.cities.some(city => city.ownerSeatIndex === start.ownerSeatIndex && city.x === start.x && city.y === start.y)) &&
             snapshot.seatGold.every((gold, seat) => gold === (seat === 0 ? 3 : 2)), "INVALID_OPENING");
           this.sql.exec("UPDATE matches SET snapshot=?,revision=revision+1,updated=? WHERE id=?", data.json, Date.now(), match.id);
+          this.matchChanged(match.id);
         }
       } else {
         require(Number.isSafeInteger(data.baseSeq), "INVALID_SEQUENCE");
@@ -318,6 +338,7 @@ export class MultiplayerStore {
           }
           this.sql.exec(`UPDATE matches SET snapshot=?,seq=?,revision=revision+1,status=?,updated=?,last_actor=?,last_base=?,last_payload=? WHERE id=?`,
             data.json, snapshot.transportSeq, snapshot.gameOver ? "finished" : match.status, Date.now(), actor, data.baseSeq, data.json, match.id);
+          this.matchChanged(match.id);
           const recipients = this.members(match.id).filter(player => snapshot.gameOver ? player.id !== actor : player.seat === snapshot.currentTurnSeatIndex);
           for (const recipient of recipients) this.notify(recipient.id, "turn:" + match.id + ":" + snapshot.transportSeq,
             snapshot.gameOver ? "Your match has finished. Open it to see the result." : "It's your turn in Block Nations.", "/?match=" + match.id, input.origin);
@@ -337,6 +358,7 @@ export class MultiplayerStore {
         const id = existing?.id ?? freshId();
         this.sql.exec(`INSERT INTO friendships VALUES(?,?,?,?,'pending',?) ON CONFLICT(a,b) DO UPDATE SET
           requester=excluded.requester,status='pending',updated=excluded.updated`, id, a, b, actor, Date.now());
+        this.changed([actor, target]);
         this.notify(target, "friend:" + id + ":" + Date.now(), "You received a friend request.", "/multiplayer", input.origin);
         return { friendshipId: id };
       }
@@ -352,6 +374,7 @@ export class MultiplayerStore {
       require(this.one("SELECT COUNT(*) count FROM invitations WHERE sender=? AND status='pending'", actor).count < 20, "TOO_MANY_INVITES", 409);
       const id = freshId();
       this.sql.exec("INSERT INTO invitations VALUES(?,?,?,'pending',?,?)", id, actor, target, lobby?.id ?? null, Date.now());
+      this.changed([actor, target]);
       this.notify(target, "invite:" + id, "You received an invitation to a 7×7 match.", "/multiplayer", input.origin);
       return { inviteId: id };
     }
@@ -361,6 +384,7 @@ export class MultiplayerStore {
       require(link, "REQUEST_NOT_FOUND", 404);
       if (data.action !== "remove") require(link.status === "pending" && link.requester !== actor, "NOT_RECIPIENT", 403);
       this.sql.exec("UPDATE friendships SET status=?,updated=? WHERE id=?", data.action === "accept" ? "accepted" : "declined", Date.now(), link.id);
+      this.changed([link.a, link.b]);
       return { saved: true };
     }
     if (operation === "invite-answer") {
@@ -383,6 +407,7 @@ export class MultiplayerStore {
         } else match = this.create(invite.sender, invite.recipient);
       }
       this.sql.exec("UPDATE invitations SET status=?,match_id=? WHERE id=?", match ? "accepted" : "declined", match?.id ?? null, invite.id);
+      this.changed([invite.sender, invite.recipient]);
       if (match) this.notify(invite.sender, "accepted:" + invite.id, "Your match invitation was accepted. Open the lobby to start when ready.", "/multiplayer?lobby=" + match.id, input.origin);
       return match ? { match: this.summary(match, actor) } : { saved: true };
     }
@@ -390,10 +415,22 @@ export class MultiplayerStore {
   }
 
   async fetch(request) {
-    if (request.method !== "POST") return new Response(null, { status: 405 });
     try {
+      if (new URL(request.url).pathname === "/live" && request.method === "GET") {
+        require(request.headers.get("Upgrade")?.toLowerCase() === "websocket", "WEBSOCKET_REQUIRED", 426);
+        const actor = JSON.parse(request.headers.get("X-Live-Actor") ?? "null");
+        this.remember(actor);
+        require(typeof actor.sessionId === "string" && /^[\w-]{43}$/.test(actor.sessionId), "INVALID_SESSION", 403);
+        this.limit(actor.id, "live-connect", 30);
+        return acceptLive(this.ctx, actor);
+      }
+      if (request.method !== "POST") return new Response(null, { status: 405 });
       const input = await request.json();
-      const result = this.ctx.storage.transactionSync(() => this.operate(new URL(request.url).pathname.slice(1), input));
+      const operation = new URL(request.url).pathname.slice(1);
+      this.liveChanges = new Map();
+      const result = this.ctx.storage.transactionSync(() => this.operate(operation, input));
+      publishLive(this.ctx, this.liveChanges);
+      if (operation === "push-session-revoke") revokeLive(this.ctx, input.sessionId);
       this.ctx.waitUntil(this.scheduleNotifications());
       return Response.json({ ok: true, ...result });
     } catch (error) {
@@ -401,4 +438,13 @@ export class MultiplayerStore {
       return Response.json({ ok: false, error: "STORAGE_UNAVAILABLE" }, { status: 503 });
     }
   }
+  webSocketMessage(socket, message) {
+    if (socket.deserializeAttachment()?.expires <= Date.now()) socket.close(4001, "Renew session");
+    else if (message === "ping") socket.send("pong");
+    else socket.close(1008, "Notifications only");
+  }
+  webSocketClose(socket, code, reason) {
+    try { socket.close(code === 1005 ? 1000 : code, reason); } catch { }
+  }
+  webSocketError(socket) { try { socket.close(1011, "Connection ended"); } catch { } }
 }

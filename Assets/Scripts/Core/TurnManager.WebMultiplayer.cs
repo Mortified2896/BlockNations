@@ -1,4 +1,5 @@
 using System.Collections;
+using UnityEngine;
 
 public partial class TurnManager
 {
@@ -33,7 +34,20 @@ public partial class TurnManager
         }
         pbpCreatorFirstRemoteSubmitPending = false;
         WebAccountClient.ShowStatus(null);
-        WebAccountClient.MatchLoaded();
+        WebAccountClient.MatchLoaded(currentGameId);
+    }
+
+    private IEnumerator WaitForPlayByPostPoll(float seconds)
+    {
+        if (!PublicWebBuild.UsesGoogleAccounts) {
+            yield return new WaitForSecondsRealtime(seconds);
+            yield break;
+        }
+        float deadline = Time.realtimeSinceStartup + seconds;
+        while (isPlayByPostWaitingForExport && Time.realtimeSinceStartup < deadline) {
+            if (WebAccountClient.ConsumeMatchUpdate(currentGameId)) yield break;
+            yield return null;
+        }
     }
 
     private bool ApplyAcceptedWebTurn()

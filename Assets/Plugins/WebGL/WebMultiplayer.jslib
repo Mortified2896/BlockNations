@@ -4,6 +4,7 @@ mergeInto(LibraryManager.library, {
     window.blockNationsScene = scene;
     var accountBar = document.querySelector('.account-bar');
     if (accountBar) accountBar.hidden = scene !== 'MainMenu';
+    if (scene !== 'SampleScene' && window.BlockNationsLive) window.BlockNationsLive.unwatchMatch();
   },
   BN_WebNavigate: function(path) { window.location.assign(UTF8ToString(path)); },
   BN_WebStatus: function(message) {
@@ -12,7 +13,11 @@ mergeInto(LibraryManager.library, {
     document.getElementById('multiplayer-message').textContent = value;
     panel.hidden = !value;
   },
-  BN_WebMatchLoaded: function() {
+  BN_WebMatchLoaded: function(matchId) {
+    if (window.BlockNationsLive) window.BlockNationsLive.watchMatch(UTF8ToString(matchId));
     window.history.replaceState(null, '', '/');
+  },
+  BN_WebConsumeMatchUpdate: function(matchId) {
+    return window.BlockNationsLive && window.BlockNationsLive.consumeMatchUpdate(UTF8ToString(matchId)) ? 1 : 0;
   }
 });

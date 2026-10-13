@@ -3519,7 +3519,7 @@ public partial class TurnManager : MonoBehaviour
             if (!isPlayByPostWaitingForExport)
                 break;
 
-            yield return new WaitForSecondsRealtime(pollSeconds);
+            yield return WaitForPlayByPostPoll(pollSeconds);
         }
 
         playByPostPollRoutine = null;
