@@ -38,7 +38,9 @@ export function startWebApp() {
     if (!response.ok || !result.ok) throw new Error("Please sign in again, or try notification setup later.");
     return result;
   }
-  const supported = "PushManager" in window && "Notification" in window;
+  // Keep permission requests in the same top-level app as installation.
+  const notifications = installHost.Notification;
+  const supported = "PushManager" in installHost && !!notifications;
   if (!supported) {
     status.textContent = "On iPhone, add this site to your Home Screen, open it from its icon, then return here to enable notifications. This browser may not support web push.";
     registration.catch(() => {}); return;
@@ -56,17 +58,17 @@ export function startWebApp() {
     [ready, config] = values; player = values[2].player;
     if (!config.enabled) { status.textContent = "Notification delivery is temporarily unavailable. You can still check your turns in the lobby."; return; }
     subscription = await ready.pushManager.getSubscription();
-    const active = subscription && Notification.permission === "granted" && localStorage.getItem(mark) === player.id;
+    const active = subscription && notifications.permission === "granted" && localStorage.getItem(mark) === player.id;
     if (active) await api("push-subscribe", { subscription: subscription.toJSON() });
     controls(Boolean(active));
     status.textContent = active ? "Notifications are enabled on this device for your Google account." :
-      Notification.permission === "denied" ? "Notifications are blocked. Allow them in this browser or device's site settings, then reload." :
+      notifications.permission === "denied" ? "Notifications are blocked. Allow them in this browser or device's site settings, then reload." :
       "Enable notifications for your turn, friend requests, and match invitations. Delivery depends on your browser and phone settings.";
   }).catch(() => { status.textContent = "Notification setup could not load. Please try again after reloading."; });
   enable.addEventListener("click", async () => {
     if (!ready || !config?.enabled) return;
     // Permission starts directly in the click handler; never on page load.
-    const permission = Notification.requestPermission();
+    const permission = notifications.requestPermission();
     enable.disabled = true;
     try {
       if (await permission !== "granted") { status.textContent = "Notifications weren't allowed. You can enable them later in device settings."; return; }
