@@ -3,6 +3,7 @@ using UnityEngine;
 
 public partial class TurnManager
 {
+    private bool isApplyingAcceptedWebTurn;
     private IEnumerator StartWebAccountMatch(WebAccountClient.MatchReply launch)
     {
         SetGameMode(GameMode.PlayByPost);
@@ -54,6 +55,11 @@ public partial class TurnManager
     {
         var reply = WebAccountClient.AcceptedMatch;
         if (reply?.match?.id != currentGameId || string.IsNullOrWhiteSpace(reply.json)) return false;
-        return LoadFromJsonString(reply.json);
+        // The submit coroutine starts polling after it saves the accepted echo.
+        // Starting it during this load would launch a fetch that the submit
+        // coroutine immediately cancels, leaving the fetch-busy flag set.
+        isApplyingAcceptedWebTurn = true;
+        try { return LoadFromJsonString(reply.json); }
+        finally { isApplyingAcceptedWebTurn = false; }
     }
 }

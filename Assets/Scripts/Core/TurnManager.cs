@@ -8390,7 +8390,7 @@ private void PBpDebugSyncNow_Context()
 #endif
                 if (!localTurn)
                 {
-                    if (playByPostAutoSyncEnabled && playByPostPollRoutine == null)
+                    if (playByPostAutoSyncEnabled && playByPostPollRoutine == null && !isApplyingAcceptedWebTurn)
                     {
                         ResolveTurnTransport();
                         StartPlayByPostPolling(lastAppliedTurnNumberForPolling);
