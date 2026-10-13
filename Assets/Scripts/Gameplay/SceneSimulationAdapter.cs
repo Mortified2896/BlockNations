@@ -16,6 +16,13 @@ public sealed class SceneSimulationAdapter
     public SceneSimulationAdapter(TurnManager manager)
     {
         this.manager = manager ?? throw new ArgumentNullException(nameof(manager));
+        if (manager.IsPolyMatch && manager.PolyController.IsReady)
+        {
+            State = manager.PolyController.Match.Board;
+            foreach (var pair in manager.PolyController.SceneUnits) Units.Add(pair.Key, pair.Value);
+            foreach (var pair in manager.PolyController.SceneCities) Cities.Add(pair.Key, pair.Value);
+            return;
+        }
         if (manager.IsAdvancedMatch && manager.AdvancedController.IsReady)
         {
             State = manager.AdvancedController.Match.Board;
@@ -89,9 +96,9 @@ public sealed class SceneSimulationAdapter
             State.RecruitType(command.RecruitType)?.RecruitCost ?? 0);
     }
 
-    public int UnitId(Unit unit) => unit == null ? 0 : manager.IsAdvancedMatch
+    public int UnitId(Unit unit) => unit == null ? 0 : manager.IsPolyMatch ? manager.PolyController.UnitId(unit) : manager.IsAdvancedMatch
         ? manager.AdvancedController.UnitId(unit) : unit.GetInstanceID();
-    public int CityId(City city) => city == null ? 0 : manager.IsAdvancedMatch
+    public int CityId(City city) => city == null ? 0 : manager.IsPolyMatch ? manager.PolyController.CityId(city) : manager.IsAdvancedMatch
         ? manager.AdvancedController.CityId(city) : city.GetInstanceID();
 
     public MatchCommand Command(LegalTurnAction action) => new MatchCommand((MatchActionKind)action.ActionType, action.SeatIndex,
@@ -101,6 +108,7 @@ public sealed class SceneSimulationAdapter
 
     public bool TryApply(LegalTurnAction action)
     {
+        if (manager.IsPolyMatch) return manager.PolyController.TryApply(action);
         if (manager.IsAdvancedMatch) return manager.AdvancedController.TryApply(action);
         if (action.ActionType == LegalActionType.EndTurn || !manager.IsTurnOwnedBySeat(action.SeatIndex)) return false;
         GameObject recruitPrefab = action.ActionType == LegalActionType.CityRecruit ? manager.GetUnitPrefabForType(action.RecruitUnitTypeId) : null;
@@ -129,12 +137,14 @@ public sealed class SceneSimulationAdapter
 
     public void BeginTurn(int seat)
     {
+        if (manager.IsPolyMatch) throw new InvalidOperationException("Poly turn settlement belongs to PolyMatch.");
         if (manager.IsAdvancedMatch && manager.AdvancedController.IsReady) throw new InvalidOperationException("Advanced turn settlement belongs to AdvancedMatch.");
         MatchEngine.BeginTurn(State, seat);
         ProjectResourcesAndPieces(0);
     }
     public void CollectIncome(int seat)
     {
+        if (manager.IsPolyMatch) throw new InvalidOperationException("Poly income belongs to PolyMatch.");
         if (manager.IsAdvancedMatch && manager.AdvancedController.IsReady) throw new InvalidOperationException("Advanced income belongs to AdvancedMatch.");
         MatchEngine.CollectIncome(State, seat);
         manager.ApplySimulationGold(State);

@@ -65,6 +65,7 @@ public partial class TurnManager
 
     public bool TryAdvanceExternalMatchTurn(int completedSeat)
     {
+        if (IsPolyMatch) return polyController.TryEndTurn(completedSeat);
         if (IsAdvancedMatch) return advancedMatchController.TryEndTurn(completedSeat);
         if (!externallyDrivenMatch || !ExternalMatchReady || gameOver || !IsTurnOwnedBySeat(completedSeat)) return false;
         var recordedState = HasSimulationCommandObservers ? new SceneSimulationAdapter(this).State : null;

@@ -24,6 +24,7 @@ public class GameMenuActions : MonoBehaviour
 
     public void SaveGame()
     {
+        if (TurnManager.Instance != null && TurnManager.Instance.IsPolyMatch) { TurnManager.Instance.PolyController.SaveGame(); return; }
         if (TurnManager.Instance != null)
         {
             TurnManager.Instance.SaveToFile();
@@ -32,6 +33,7 @@ public class GameMenuActions : MonoBehaviour
 
     public void LoadGame()
     {
+        if (TurnManager.Instance != null && TurnManager.Instance.IsPolyMatch) return;
         if (TurnManager.Instance != null)
         {
             TurnManager.Instance.LoadFromFile();
@@ -53,6 +55,7 @@ public class GameMenuActions : MonoBehaviour
 
     private void DoQuitToMainMenu()
     {
+        if (TurnManager.Instance != null && TurnManager.Instance.IsPolyMatch) { TurnManager.Instance.PolyController.Leave(); return; }
         if (useAlternateExit) { alternateExit.Invoke(); return; }
         TurnManager tm = TurnManager.Instance;
         if (PublicWebBuild.UsesGoogleAccounts && tm != null && tm.currentMode == TurnManager.GameMode.PlayByPost)

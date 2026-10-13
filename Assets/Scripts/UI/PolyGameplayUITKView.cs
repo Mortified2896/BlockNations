@@ -1,0 +1,242 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using BlockNations.Simulation.Poly;
+using UnityEngine;
+using UnityEngine.UIElements;
+
+// Compact sheets over the normal board. Every list is paged; no ScrollView is used.
+public sealed partial class PolyGameplayUITKView : MonoBehaviour
+{
+    [SerializeField] private PolyGameController controller;
+    [SerializeField] private UIDocument document;
+    [SerializeField] private UIDocument feedbackDocument;
+    [SerializeField] private PolyWorldPresentation world;
+    [SerializeField] private Camera boardCamera;
+    private VisualElement root, hud, sheet, choices, tabs, overlay, overlayChoices, overlayTabs, overlayPages;
+    private PanelSettings runtimePanel;
+    private Label title, summary, hint, pageLabel, overlayTitle, overlaySummary, overlayHint;
+    private Button endTurn, previous, following;
+    private int page, pageCount, cityTab, branch, lastRevision = -1, lastPosition = -2;
+    private PolyGameController.InspectKind lastInspection;
+    private string screen = "";
+    private bool ready;
+    public UIDocument Document => document;
+    private void Awake()
+    {
+        if (controller == null || document == null || feedbackDocument == null || world == null || boardCamera == null || document.panelSettings == null)
+            throw new InvalidOperationException("Poly gameplay view needs its serialized scene references.");
+        runtimePanel = Instantiate(document.panelSettings); document.panelSettings = runtimePanel;
+    }
+    private void Start()
+    {
+        root = document.rootVisualElement; root.StretchToParentSize(); root.pickingMode = PickingMode.Ignore;
+        hud = root.Q("PolyHudRoot"); sheet = root.Q("Sheet"); choices = root.Q("Choices"); tabs = root.Q("SheetTabs");
+        title = root.Q<Label>("SheetTitle"); summary = root.Q<Label>("Summary"); hint = root.Q<Label>("Hint"); pageLabel = root.Q<Label>("PageLabel");
+        overlay = root.Q("Overlay"); overlayChoices = root.Q("OverlayChoices"); overlayTabs = root.Q("OverlayTabs"); overlayPages = root.Q("OverlayPages");
+        overlayTitle = root.Q<Label>("OverlayTitle"); overlaySummary = root.Q<Label>("OverlaySummary"); overlayHint = root.Q<Label>("OverlayHint");
+        root.Q<Button>("Menu").clicked += () => ShowScreen("menu");
+        root.Q<Button>("Tech").clicked += () => ShowScreen("tech");
+        endTurn = root.Q<Button>("EndTurn"); endTurn.clicked += () => controller.TryEndTurn(0);
+        root.Q<Button>("CloseSheet").clicked += controller.CloseInspection;
+        root.Q<Button>("CloseOverlay").clicked += () => ShowScreen("");
+        previous = root.Q<Button>("Previous"); following = root.Q<Button>("Following");
+        previous.clicked += () => { page = Math.Max(0, page - 1); Refresh(); };
+        following.clicked += () => { page = Math.Min(pageCount - 1, page + 1); Refresh(); };
+        ready = true; Refresh();
+    }
+    private void ShowScreen(string next)
+    {
+        screen = next; controller.IsMenuOpen = next.Length > 0; Refresh();
+    }
+    private void LateUpdate()
+    {
+        if (!ready) return;
+        hud.style.display = controller.IsFeedbackOpen ? DisplayStyle.None : DisplayStyle.Flex;
+        var nativeHud = feedbackDocument.rootVisualElement;
+        bool showNativeHeader = screen.Length == 0 || controller.IsFeedbackOpen;
+        var nativeBar = nativeHud.Q("TopBar");
+        if (nativeBar != null) nativeBar.style.display = showNativeHeader ? DisplayStyle.Flex : DisplayStyle.None;
+        var nativeFeedback = nativeHud.Q<Button>("FeedbackButton");
+        if (nativeFeedback != null) nativeFeedback.style.display = showNativeHeader ? DisplayStyle.Flex : DisplayStyle.None;
+        Layout();
+        if (lastRevision != controller.Revision) {
+            if (lastPosition != controller.SelectedPosition || lastInspection != controller.Inspection) page = cityTab = 0;
+            lastPosition = controller.SelectedPosition; lastInspection = controller.Inspection;
+            Refresh(); lastRevision = controller.Revision;
+        }
+        PublishBrowserState();
+    }
+    private static Label Text(string value, string css = null)
+    {
+        var l = new Label(value) { pickingMode = PickingMode.Ignore }; if (css != null) l.AddToClassList(css); return l;
+    }
+    private Button Button(VisualElement parent, string name, string text, Action clicked, string css = "menu-button", bool enabled = true)
+    {
+        var button = new Button(clicked) { name = name, text = text }; button.AddToClassList(css); button.SetEnabled(enabled); parent.Add(button); return button;
+    }
+    private void Card(VisualElement parent, string name, string label, string detail, Action clicked, bool enabled, Sprite icon = null)
+    {
+        var button = Button(parent, name, "", clicked, "choice", enabled);
+        if (icon != null) { var image = new Image { sprite = icon, pickingMode = PickingMode.Ignore }; image.AddToClassList("unit-icon"); button.Add(image); }
+        button.Add(Text(label)); button.Add(Text(detail, "price"));
+    }
+    private bool CanAct => controller.IsReady && controller.Match.IsTurnOwnedBySeat(0) && !controller.IsOpponentRunning;
+    private List<PolyAction> Actions => controller.IsReady ? controller.Match.LegalActions(0) : new List<PolyAction>();
+    private void Refresh()
+    {
+        if (!ready) return;
+        choices.Clear(); tabs.Clear(); overlayChoices.Clear(); overlayTabs.Clear(); overlayPages.Clear();
+        overlayChoices.EnableInClassList("tech-choices", screen == "tech");
+        sheet.style.display = DisplayStyle.None; overlay.style.display = DisplayStyle.None;
+        root.Q("Pages").style.display = DisplayStyle.None;
+        title.text = summary.text = hint.text = overlayTitle.text = overlaySummary.text = overlayHint.text = "";
+        endTurn.SetEnabled(CanAct && Actions.Any(a => a.Kind == PolyActionKind.EndTurn));
+        endTurn.text = controller.IsOpponentRunning ? "AI turn…" : "End turn";
+        if (!controller.IsReady) {
+            if (controller.Status != "Opening Poly…") {
+                overlay.style.display = DisplayStyle.Flex; overlayTitle.text = "Poly"; overlaySummary.text = controller.Status;
+                Button(overlayChoices,"BackToMenu","Main menu",controller.Leave);
+                Button(overlayChoices,"NewAfterInvalidSave","New match",()=>ShowScreen("confirm"));
+            }
+            return;
+        }
+        if (screen.Length > 0) { DrawOverlay(); return; }
+        if (controller.Match.Board.GameOver) { screen = "result"; DrawOverlay(); return; }
+        var rewards = Actions.Where(a => a.Kind == PolyActionKind.Reward).ToArray();
+        if (rewards.Length > 0) { DrawRewards(rewards); return; }
+        int p = controller.SelectedPosition;
+        if (p < 0 || controller.Inspection == PolyGameController.InspectKind.None) return;
+        sheet.style.display = DisplayStyle.Flex;
+        if (controller.Inspection == PolyGameController.InspectKind.Unit) DrawUnit(p);
+        else if (controller.Inspection == PolyGameController.InspectKind.City) DrawCity(p);
+        else DrawTile(p);
+    }
+    private void DrawUnit(int p)
+    {
+        var unit = controller.Match.Board.UnitAt(p); if (unit == null) { sheet.style.display = DisplayStyle.None; return; }
+        var d = unit.Definition; title.text = d.DisplayName;
+        summary.text = $"HP {unit.Health / 10f:0.#}/{d.MaxHealthUnits / 10}   ATK {d.AttackUnits / 10}   DEF {d.DefenseUnits / 10}";
+        hint.text = PolyRules.UnitAbility(d.TypeId);
+        foreach (var action in Actions.Where(a => a.ActorId == unit.Id && (a.Kind == PolyActionKind.Heal || a.Kind == PolyActionKind.Capture))) {
+            var a = action; Card(choices,a.Kind.ToString(),a.Kind == PolyActionKind.Heal ? "Heal" : "Capture",a.Kind == PolyActionKind.Heal ? "Rest this turn" : "Claim this city",()=>controller.Act(a),CanAct);
+        }
+        var city = controller.Match.CityAt(p);
+        if (city?.ownerSeatIndex == 0) Card(choices,"OpenCity","City " + city.id,"Level " + city.level,()=>controller.OpenCity(city.id),true);
+        if (choices.childCount == 0) choices.style.display = DisplayStyle.None; else choices.style.display = DisplayStyle.Flex;
+    }
+    private void DrawCity(int p)
+    {
+        choices.style.display = DisplayStyle.Flex;
+        var city = controller.Match.CityAt(p); title.text = $"City {city.id} · Level {city.level}";
+        summary.text = $"Population {city.population}/{city.PopulationNeeded}   +{city.Income} Gold/turn";
+        var recruitTab = Button(tabs,"RecruitTab","Recruit",()=>{cityTab=0;page=0;Refresh();},"tab"); recruitTab.EnableInClassList("selected",cityTab==0);
+        var developTab = Button(tabs,"DevelopTab","Develop",()=>{cityTab=1;page=0;Refresh();},"tab"); developTab.EnableInClassList("selected",cityTab==1);
+        if (cityTab == 0) {
+            string[] roster = { "poly-warrior", "poly-rider", "poly-archer", "poly-defender", "poly-swordsman", "poly-knight", "poly-catapult" };
+            pageCount = 3; page = Mathf.Clamp(page,0,pageCount-1);
+            foreach (var id in roster.Skip(page*3).Take(3)) {
+                var d = PolyRules.Definition(id); var action = Actions.FirstOrDefault(a=>a.Kind==PolyActionKind.Recruit && a.ActorId==city.id && a.Choice==id);
+                bool unlocked = controller.Match.HasTechnology(0,PolyRules.UnitTechnology(id));
+                Card(choices,"Recruit_"+id,d.DisplayName,unlocked ? d.RecruitCost+" Gold" : "Needs "+PolyRules.Technology(PolyRules.UnitTechnology(id)).Name,
+                    ()=>controller.Act(action),CanAct && action!=null,world.Icon(id));
+            }
+            int supported = controller.Match.Board.Units.Count(u=>u.Seat==0 && controller.Match.UnitState(u.Id).homeCityId==city.id);
+            hint.text = controller.Match.Board.UnitAt(p)!=null ? "Move the stationed unit to recruit." : city.recruited ? "Recruitment is available next turn." : $"Units {supported}/{city.level+2} · New recruits are ready next turn.";
+            ShowPages();
+        } else {
+            var tiles = Enumerable.Range(0,121).Where(n=>controller.Match.KnownTile(0,n)?.cityId==city.id && n!=p).ToArray();
+            pageCount = (tiles.Length+2)/3; page = Mathf.Clamp(page,0,Math.Max(0,pageCount-1));
+            foreach(var n in tiles.Skip(page*3).Take(3)) {
+                int position=n; var tile = controller.Match.KnownTile(0,n);
+                Card(choices,"InspectTile"+n,TileName(tile),$"{n%11+1}, {n/11+1}",()=>InspectTile(position),true);
+            }
+            hint.text = "Choose a tile to develop within this city's fixed territory."; ShowPages();
+        }
+    }
+    private void InspectTile(int p)
+    {
+        controller.Manager.gridManager.TryGetTile(p%11,p/11,out var tile);
+        controller.HandleBoardTap(tile.GetComponent<TileHighlighter>(),null,null);
+    }
+    private static string TileName(PolyTile tile) => tile.improvement != PolyImprovement.None ? tile.improvement.ToString() : tile.resource != PolyResource.None ? tile.resource.ToString() : tile.terrain.ToString();
+    private void DrawTile(int p)
+    {
+        choices.style.display = DisplayStyle.Flex;
+        var known = controller.Match.KnownTile(0,p); title.text = TileName(known);
+        var city = controller.Match.City(known.cityId);
+        summary.text = city?.ownerSeatIndex==0 ? $"City {city.id} · Population {city.population}/{city.PopulationNeeded}" : known.terrain.ToString();
+        bool visible = controller.Match.Visibility(0)[p];
+        var options = Actions.Where(a=>a.Kind==PolyActionKind.Develop && a.Destination==p).ToArray();
+        var potential = city?.ownerSeatIndex == 0 && visible ? controller.Match.DevelopActions(0,p).ToArray() : new PolyAction[0];
+        foreach(var option in potential.Take(3)) {
+            var action=option; Card(choices,"Develop_"+action.Choice,action.Label,$"{action.Cost} Gold · +{action.Population} population",()=>controller.Act(action),CanAct && options.Any(a=>a.Same(action)));
+        }
+        if (potential.Length==0) {
+            string tech = known.resource == PolyResource.Fruit ? "Organization" : known.resource == PolyResource.Animals ? "Hunting" : known.resource == PolyResource.Crops ? "Farming" :
+                known.resource == PolyResource.Ore ? "Mining" : known.terrain == PolyTerrain.Forest ? "Forestry" : "Construction";
+            hint.text = !visible ? "Remembered terrain. Bring a unit closer to develop it." : city?.ownerSeatIndex==0 ? $"Research {tech} to unlock development." : "Capture a nearby village to claim its tiles.";
+            Card(choices,"OpenTechnology","Technology","Buy research with Gold",()=>ShowScreen("tech"),true);
+        }
+        if (city?.ownerSeatIndex==0) Button(tabs,"InspectCity","City "+city.id,()=>controller.OpenCity(city.id),"tab");
+        var unit = visible ? controller.Match.Board.UnitAt(p) : null;
+        if (unit!=null && unit.Seat!=0) hint.text = $"{unit.Definition.DisplayName} · HP {unit.Health/10f:0.#}/{unit.Definition.MaxHealthUnits/10}";
+    }
+    private void DrawRewards(PolyAction[] rewards)
+    {
+        sheet.style.display = DisplayStyle.Flex; choices.style.display = DisplayStyle.Flex;
+        var city=controller.Match.City(rewards[0].ActorId); title.text=$"City {city.id} · Level {city.level-city.pendingRewards+1}";
+        summary.text=$"Income increased to +{city.Income} Gold/turn. Choose a reward.";
+        foreach(var reward in rewards) { var a=reward; Card(choices,"Reward_"+a.Choice,a.Choice=="workshop" ? "Workshop" : a.Choice=="walls" ? "Fortifications" : a.Choice=="giant" ? "Giant" : a.Choice=="population" ? "Population" : "Gold",a.Label.Split(':').Last().Trim(),()=>controller.Act(a),CanAct); }
+    }
+    private void ShowPages()
+    {
+        root.Q("Pages").style.display=pageCount>1 ? DisplayStyle.Flex : DisplayStyle.None;
+        previous.SetEnabled(page>0); following.SetEnabled(page+1<pageCount); pageLabel.text=$"{page+1} / {pageCount}";
+    }
+    private void DrawOverlay()
+    {
+        overlay.style.display=DisplayStyle.Flex;
+        switch(screen) {
+            case "tech": DrawTechnology(); break;
+            case "confirm":
+                overlayTitle.text="New Poly match?"; overlaySummary.text="This replaces your current Poly continuation slot.";
+                Button(overlayChoices,"ConfirmNew","Start new 11×11 match",()=>{controller.NewMatch();ShowScreen("");});
+                Button(overlayChoices,"CancelNew","Keep current match",()=>ShowScreen("menu")); break;
+            case "result":
+                overlayTitle.text=controller.Match.Board.WinnerSeat==0 ? "Victory" : "Defeat"; overlaySummary.text=controller.Status;
+                Button(overlayChoices,"PlayAgain","New match",()=>ShowScreen("confirm")); Button(overlayChoices,"ResultMenu","Main menu",controller.Leave); break;
+            case "help":
+                overlayTitle.text="How to play"; overlaySummary.text="Drag to move the map. Pinch to zoom. Tap a unit, then a yellow tile or red target.";
+                overlayHint.text="Buy technology with Gold. Tap resources to grow cities, earn more Gold and choose level rewards. Cities keep their 3×3 territory.\n\nEnter a village or enemy city, then Capture on your following turn. Take every AI city to win. Rest units to heal. Riders retreat after attacking; Knights attack again after kills.\n\nYour Poly match saves automatically in this browser.";
+                Button(overlayChoices,"HelpBack","Back to game",()=>ShowScreen("")); break;
+            default:
+                overlayTitle.text="Poly"; overlaySummary.text=controller.SaveStatus;
+                Button(overlayChoices,"Resume","Back to game",()=>ShowScreen(""));
+                Button(overlayChoices,"Save","Save",()=>{controller.SaveGame();Refresh();});
+                Button(overlayChoices,"Help","How to play",()=>ShowScreen("help"));
+                Button(overlayChoices,"Feedback","Feedback",()=>{ShowScreen("");controller.OpenFeedback();});
+                Button(overlayChoices,"New","New match",()=>ShowScreen("confirm"),enabled:!controller.IsOpponentRunning);
+                Button(overlayChoices,"SaveMenu","Save & main menu",controller.Leave); break;
+        }
+    }
+    private void DrawTechnology()
+    {
+        overlayTitle.text="Technology"; overlaySummary.text=$"Gold {controller.Match.Board.GoldForSeat(0)} · Choose a branch";
+        string[] names={"Food","Forest","Mines","Riding"};
+        string[][] branches={new[]{"organization","farming","construction","shields"},new[]{"hunting","archery","forestry","mathematics"},new[]{"climbing","mining","smithing"},new[]{"riding","roads","chivalry"}};
+        for(int i=0;i<4;i++) { int next=i; var button=Button(overlayTabs,"Branch"+i,names[i],()=>{branch=next;Refresh();},"tab");button.EnableInClassList("selected",branch==i); }
+        foreach(var id in branches[branch]) {
+            var tech=PolyRules.Technology(id); bool owned=controller.Match.HasTechnology(0,id);
+            var action=Actions.FirstOrDefault(a=>a.Kind==PolyActionKind.Research && a.Choice==id);
+            var button=Button(overlayChoices,"Research_"+id,"",()=>controller.Act(action),"choice",CanAct && action!=null);
+            button.AddToClassList("tech-tier-" + tech.Tier);
+            button.Add(Text((owned ? "✓ " : "")+tech.Name+ (owned ? " · Unlocked" : " · "+controller.Match.ResearchCost(0,id)+" Gold")));
+            button.Add(Text(tech.Description,"price"));
+            if(!owned && tech.Parent!=null) button.Add(Text("Requires "+PolyRules.Technology(tech.Parent).Name,"price"));
+        }
+        overlayHint.text="Research, improvements and recruitment share your Gold.";
+    }
+    private void OnDestroy() { if(runtimePanel!=null) Destroy(runtimePanel); }
+    public void RefocusBoard() => boardCamera.GetComponent<CameraController>().RefocusBoard();
+}

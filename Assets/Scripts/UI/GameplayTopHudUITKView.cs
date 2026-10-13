@@ -228,8 +228,8 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         }
         SetNonInteractive(root);
         feedback?.Dispose();
-        feedback = new FeedbackUITKController(this, root, () => tutorial != null ? tutorial.FeedbackScreen : turnManager != null && turnManager.IsAdvancedMatch ? "Advanced 7×7" : "Gameplay",
-            () => tutorial != null ? "Tutorial" : turnManager != null && turnManager.IsAdvancedMatch ? "Advanced" : turnManager != null ? turnManager.currentMode.ToString() : "None",
+        feedback = new FeedbackUITKController(this, root, () => tutorial != null ? tutorial.FeedbackScreen : turnManager != null && turnManager.IsPolyMatch ? "Poly" : turnManager != null && turnManager.IsAdvancedMatch ? "Advanced 7×7" : "Gameplay",
+            () => tutorial != null ? "Tutorial" : turnManager != null && turnManager.IsPolyMatch ? "Poly" : turnManager != null && turnManager.IsAdvancedMatch ? "Advanced" : turnManager != null ? turnManager.currentMode.ToString() : "None",
             () => turnManager != null ? turnManager.turnNumber : 0);
         ApplySafeArea(force: true);
         responsiveSizeTierController.Apply(root);
@@ -283,6 +283,11 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
         bool hasVisibleGold = turnManager.TryGetDisplayedGoldForUi(out int visibleGold);
         goldLabel.text = hasVisibleGold ? $"Gold {visibleGold}" : string.Empty;
+        if (turnManager.IsPolyMatch && turnManager.PolyController.IsReady)
+        {
+            goldLabel.text += $"  (+{turnManager.PolyController.Match.Income(0)}/turn)";
+            goldLabel.style.width = Length.Percent(92);
+        }
         goldLabel.style.display = hasVisibleGold ? DisplayStyle.Flex : DisplayStyle.None;
 
         if (statusLabel == null)
@@ -426,6 +431,12 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
     private void RefreshOpeningSeatLabel()
     {
         if (openingSeatLabel == null) return;
+        if (turnManager.IsPolyMatch)
+        {
+            openingSeatLabel.text = "Poly";
+            openingSeatLabel.style.display = DisplayStyle.Flex;
+            return;
+        }
         bool visible = turnManager.TryGetLocalOpeningSeatForUi(out int seat, out int firstSeat, out int seatCount);
         openingSeatLabel.text = visible ? MatchOpeningLabels.ForSeat(seat, firstSeat, seatCount,
             showColour: turnManager.currentMode == TurnManager.GameMode.VsAI) : string.Empty;

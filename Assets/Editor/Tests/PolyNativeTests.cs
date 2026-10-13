@@ -38,9 +38,14 @@ public sealed class PolyNativeTests
         var scene = EditorSceneManager.OpenScene("Assets/Scenes/Poly.unity",OpenSceneMode.Additive);
         try {
             var controller = scene.GetRootGameObjects().SelectMany(g=>g.GetComponentsInChildren<PolyGameController>()).Single();
-            var serialized = new SerializedObject(controller); var doc = serialized.FindProperty("document").objectReferenceValue as UIDocument;
+            var view = controller.GetComponent<PolyGameplayUITKView>();
+            var serialized = new SerializedObject(view); var doc = serialized.FindProperty("document").objectReferenceValue as UIDocument;
             Assert.That(doc,Is.Not.Null); Assert.That(doc.panelSettings,Is.Not.Null); Assert.That(doc.visualTreeAsset,Is.Not.Null);
-            var tree = doc.visualTreeAsset.CloneTree(); Assert.That(tree.Q<Button>("EndTurn"),Is.Not.Null); Assert.That(tree.Q<ScrollView>("BoardScroll"),Is.Not.Null);
+            var tree = doc.visualTreeAsset.CloneTree(); Assert.That(tree.Q<Button>("EndTurn"),Is.Not.Null); Assert.That(tree.Query<ScrollView>().ToList(), Is.Empty);
+            var manager = scene.GetRootGameObjects().SelectMany(g=>g.GetComponentsInChildren<TurnManager>()).Single();
+            Assert.That(manager.PolyController, Is.SameAs(controller));
+            Assert.That(manager.gridManager.width, Is.EqualTo(11));
+            Assert.That(scene.GetRootGameObjects().SelectMany(g=>g.GetComponentsInChildren<CameraController>()).Single().enabled, Is.True);
             Assert.That(EditorBuildSettings.scenes.Any(s=>s.enabled && s.path=="Assets/Scenes/Poly.unity"),Is.True);
             Assert.That(scene.GetRootGameObjects().SelectMany(g=>g.GetComponentsInChildren<UnityEngine.InputSystem.UI.InputSystemUIInputModule>()).Any(),Is.True);
         } finally { EditorSceneManager.CloseScene(scene,true); }

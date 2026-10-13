@@ -79,6 +79,13 @@ public class CameraController : MonoBehaviour
         StartCoroutine(ApplyInitialFocusWhenReady());
     }
 
+    public void RefocusBoard()
+    {
+        initialFocusApplied = false;
+        manualCameraInputObservedBeforeInitialFocus = false;
+        TryApplyInitialFocus();
+    }
+
     private void LateUpdate()
     {
         if (!initialFocusApplied)
@@ -209,6 +216,8 @@ public class CameraController : MonoBehaviour
             GameModeSelection.TryPeek(out TurnManager.GameMode pendingMode) &&
             pendingMode == TurnManager.GameMode.VsAI;
 
+        if (turnManager.IsPolyMatch && !turnManager.PolyController.IsReady) return false;
+
         if (!pendingRestoreState.hasPendingState &&
             manualCameraInputObservedBeforeInitialFocus &&
             (turnManager.currentMode == TurnManager.GameMode.VsAI || allowPendingVsAiFocus) &&
@@ -239,7 +248,7 @@ public class CameraController : MonoBehaviour
         }
 
         if ((turnManager.currentMode == TurnManager.GameMode.VsAI || allowPendingVsAiFocus) &&
-            turnManager.gridManager.width == 7 && turnManager.gridManager.height == 7 && cam.orthographic &&
+            ((turnManager.gridManager.width == 7 && turnManager.gridManager.height == 7) || turnManager.IsPolyMatch) && cam.orthographic &&
             TryGetBoardBounds(turnManager.gridManager, out Rect compactBounds))
         {
             // Compact games can show the full board. Reserve the upper/lower
@@ -248,7 +257,10 @@ public class CameraController : MonoBehaviour
             float fitHeight = (compactBounds.height * 0.5f + margin) / CompactBoardVisibleHeightFraction;
             float fitWidth = (compactBounds.width * 0.5f + margin) / Mathf.Max(0.0001f, cam.aspect);
             cam.orthographicSize = Mathf.Max(minOrthoSize, Mathf.Max(fitHeight, fitWidth));
-            SetCameraWorldPosition(GetBoardCenter(turnManager.gridManager));
+            Vector3 center = GetBoardCenter(turnManager.gridManager);
+            if (turnManager.IsPolyMatch && Screen.height > Screen.width)
+                center.y -= GetGridTileSize(turnManager.gridManager) * 3f;
+            SetCameraWorldPosition(center);
             initialFocusApplied = true;
             return true;
         }

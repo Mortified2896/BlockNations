@@ -1,31 +1,40 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
     <Style src="Poly.uss" />
-    <ui:VisualElement name="PolyRoot" class="poly-root">
-        <ui:VisualElement class="poly-header">
-            <ui:Label text="POLY" class="poly-title" />
-            <ui:Label text="11×11 · Private playtest" class="poly-subtitle" />
-            <ui:Button name="Menu" text="Save &amp; Menu" class="poly-button" />
+    <ui:VisualElement name="PolyHudRoot" class="poly-hud" picking-mode="Ignore">
+        <ui:VisualElement name="Bottom" class="poly-bottom" picking-mode="Ignore">
+            <ui:VisualElement name="Sheet" class="poly-sheet" style="display: none;">
+                <ui:VisualElement class="sheet-heading">
+                    <ui:Label name="SheetTitle" class="sheet-title" picking-mode="Ignore" />
+                    <ui:Button name="CloseSheet" text="×" class="close-button" />
+                </ui:VisualElement>
+                <ui:Label name="Summary" class="summary" picking-mode="Ignore" />
+                <ui:VisualElement name="SheetTabs" class="button-row" />
+                <ui:VisualElement name="Choices" class="choices" />
+                <ui:VisualElement name="Pages" class="pages">
+                    <ui:Button name="Previous" text="‹" class="page-button" />
+                    <ui:Label name="PageLabel" picking-mode="Ignore" />
+                    <ui:Button name="Following" text="›" class="page-button" />
+                </ui:VisualElement>
+                <ui:Label name="Hint" class="hint" picking-mode="Ignore" />
+            </ui:VisualElement>
+            <ui:VisualElement name="Toolbar" class="toolbar">
+                <ui:Button name="Menu" text="Menu" class="toolbar-button" />
+                <ui:Button name="Tech" text="Tech" class="toolbar-button" />
+                <ui:Button name="EndTurn" text="End turn" class="toolbar-button" />
+            </ui:VisualElement>
         </ui:VisualElement>
-        <ui:Label name="Resources" class="resources" />
-        <ui:VisualElement class="poly-toolbar">
-            <ui:Button name="Tech" text="Technology" class="poly-button" />
-            <ui:Button name="Cities" text="Cities" class="poly-button" />
-            <ui:Button name="Help" text="How to play" class="poly-button" />
-            <ui:Button name="ZoomOut" text="−" class="poly-button zoom" />
-            <ui:Button name="ZoomIn" text="+" class="poly-button zoom" />
+        <ui:VisualElement name="Overlay" class="overlay" style="display: none;">
+            <ui:VisualElement name="OverlayCard" class="overlay-card">
+                <ui:VisualElement class="sheet-heading">
+                    <ui:Label name="OverlayTitle" class="sheet-title" picking-mode="Ignore" />
+                    <ui:Button name="CloseOverlay" text="×" class="close-button" />
+                </ui:VisualElement>
+                <ui:Label name="OverlaySummary" class="summary" picking-mode="Ignore" />
+                <ui:VisualElement name="OverlayTabs" class="button-row" />
+                <ui:VisualElement name="OverlayChoices" class="overlay-choices" />
+                <ui:VisualElement name="OverlayPages" class="pages" />
+                <ui:Label name="OverlayHint" class="hint" picking-mode="Ignore" />
+            </ui:VisualElement>
         </ui:VisualElement>
-        <ui:VisualElement name="Body" class="poly-body">
-            <ui:ScrollView name="BoardScroll" mode="VerticalAndHorizontal" class="board-scroll">
-                <ui:VisualElement name="Board" class="poly-board" />
-            </ui:ScrollView>
-            <ui:ScrollView name="Details" class="poly-details" />
-        </ui:VisualElement>
-        <ui:Label name="Status" class="poly-status" />
-        <ui:VisualElement class="poly-footer">
-            <ui:Button name="Save" text="Save" class="poly-button" />
-            <ui:Button name="New" text="New match" class="poly-button" />
-            <ui:Button name="EndTurn" text="End turn" class="poly-button primary" />
-        </ui:VisualElement>
-        <ui:Label name="Saved" class="saved" />
     </ui:VisualElement>
 </ui:UXML>
