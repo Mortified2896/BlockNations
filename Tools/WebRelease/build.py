@@ -119,7 +119,7 @@ def main():
         "unity":version, "sourceHash":prepared_hash, "boardSize":7,
         "ai":["Learned"] if args.learned_ai else ["Normal", "Rider Focus", "Hard"] if args.multiplayer else ["Easy", "Medium", "Hard"]}
     release["advanced"] = {"scene": "Advanced", "boardSize": 7, "opponent": "scripted", "temporaryMatches": True, "access":"admin"}
-    release["poly"] = {"scene": "Poly", "rules": "poly-land-v2", "boardSize": 11, "opponent": "heuristic", "access": "owner",
+    release["poly"] = {"scene": "Poly", "rules": "poly-land-v3", "boardSize": 11, "opponent": "heuristic", "access": "owner",
         "save": "separate-account-slot", "terrain": ["plains", "forest", "mountain"], "territory": "fixed-3x3",
         "units": ["Warrior", "Archer", "Rider", "Defender", "Swordsman", "Knight", "Catapult", "Giant"]}
     if args.multiplayer: release["multiplayer"] = {"version":"web-pbp-2-core3", "seats":[2,3,4], "turns":"asynchronous", "start":"host"}

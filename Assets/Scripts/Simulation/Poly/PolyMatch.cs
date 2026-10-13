@@ -18,7 +18,7 @@ namespace BlockNations.Simulation.Poly
         public int currentTurnSeatIndex => Board.CurrentTurnSeat;
         public bool IsTurnOwnedBySeat(int seatIndex) => Board.IsTurnOwnedBySeat(seatIndex);
         public bool HasTechnology(int seatIndex, string id) => seatIndex >= 0 && seatIndex < 2 && (id == null || technologies[seatIndex].Contains(id));
-        public int Income(int seatIndex) => Cities.Where(c => c.ownerSeatIndex == seatIndex).Sum(c => CityIncome(c.id));
+        public decimal Income(int seatIndex) => Cities.Where(c => c.ownerSeatIndex == seatIndex).Sum(c => CityIncome(c.id));
         public PolyCity City(int id) => Cities.FirstOrDefault(c => c.id == id);
         public PolyCity CityAt(int position) => Cities.FirstOrDefault(c => c.position == position);
         public PolyUnitSave UnitState(int id) => unitState.TryGetValue(id, out var value) ? value : null;
@@ -95,17 +95,19 @@ namespace BlockNations.Simulation.Poly
             foreach (SimulationUnit unit in Board.Units.Where(u => u.Seat == seatIndex).OrderBy(u => u.Id)) {
                 var info = UnitState(unit.Id); if (info.rested) continue;
                 foreach (int destination in Paths(unit, visible).Keys.OrderBy(p => p)) actions.Add(new PolyAction(PolyActionKind.Move, seatIndex, unit.Id, destination));
-                if (!info.attacked && (unit.Definition.CanAttackAfterMoving || !info.moved)) {
+                if (unit.Definition.AttackUnits > 0 && !info.attacked && (unit.Definition.CanAttackAfterMoving || !info.moved)) {
                     foreach (SimulationUnit target in Board.Units.Where(u => Board.Relationships.IsHostile(seatIndex, u.Seat) && visible[u.Position]).OrderBy(u => u.Id))
                         if (Distance(unit.Position, target.Position) <= unit.Definition.AttackRange) {
                             int damage = Damage(unit, target);
                             actions.Add(new PolyAction(PolyActionKind.Attack, seatIndex, unit.Id, target.Position) {
-                                Damage = Math.Min(target.Health, damage), Retaliation = target.Health <= damage || target.Definition.TypeId == "poly-catapult" || Distance(unit.Position, target.Position) > target.Definition.AttackRange ? 0 : Damage(target, unit, target.Health - damage) });
+                                Damage = Math.Min(target.Health, damage), Retaliation = target.Health <= damage || target.Definition.AttackUnits == 0 || target.Definition.TypeId == "poly-catapult" || Distance(unit.Position, target.Position) > target.Definition.AttackRange ? 0 : Damage(target, unit, target.Health - damage) });
                         }
                 }
                 if (!info.moved && !info.attackStarted && !info.attacked) {
                     var city = CityAt(unit.Position);
-                    if (city != null && city.ownerSeatIndex != seatIndex) actions.Add(new PolyAction(PolyActionKind.Capture, seatIndex, unit.Id));
+                    if (unit.Definition.TypeId != "poly-builder" && city != null && city.ownerSeatIndex != seatIndex) actions.Add(new PolyAction(PolyActionKind.Capture, seatIndex, unit.Id));
+                    if (Tiles[unit.Position].improvementOwnerSeatIndex >= 0 && Board.Relationships.IsHostile(seatIndex, Tiles[unit.Position].improvementOwnerSeatIndex) && CityAt(unit.Position) == null)
+                        actions.Add(new PolyAction(PolyActionKind.ClaimImprovement, seatIndex, unit.Id, unit.Position));
                     if (unit.Health < unit.Definition.MaxHealthUnits) actions.Add(new PolyAction(PolyActionKind.Heal, seatIndex, unit.Id));
                 }
             }
@@ -114,8 +116,7 @@ namespace BlockNations.Simulation.Poly
                     foreach (var unit in PolyRules.Units.Where(u => u.TypeId != "poly-giant" && HasTechnology(seatIndex, PolyRules.UnitTechnology(u.TypeId)) && u.RecruitCost <= gold))
                         actions.Add(new PolyAction(PolyActionKind.Recruit, seatIndex, city.id, choice: unit.TypeId) { Cost = unit.RecruitCost, Label = unit.DisplayName });
             }
-            for (int p = 0; p < 121; p++) if (visible[p] && City(Tiles[p].cityId)?.ownerSeatIndex == seatIndex && CityAt(p) == null &&
-                (Board.UnitAt(p) == null || Board.UnitAt(p).Seat == seatIndex)) {
+            for (int p = 0; p < 121; p++) if (ReadyBuilder(seatIndex, p) != null) {
                 foreach (PolyAction action in DevelopmentOptions(seatIndex, p)) if (action.Cost <= gold) actions.Add(action);
             }
             foreach (var tech in PolyRules.Technologies) if (!HasTechnology(seatIndex, tech.Id) && HasTechnology(seatIndex, tech.Parent) && ResearchCost(seatIndex, tech.Id) <= gold)
@@ -136,32 +137,36 @@ namespace BlockNations.Simulation.Poly
                     foreach (var u in Board.Units.Where(u => u.Seat == next)) { var s = UnitState(u.Id); s.moved = s.attacked = s.rested = s.retreatUsed = s.attackStarted = false; }
                     foreach (var c in Cities.Where(c => c.ownerSeatIndex == next)) c.recruited = false;
                     GrowCities(next);
-                    Board.SetGold(next, checked(Board.GoldForSeat(next) + Income(next))); message = next == 0 ? "Your turn." : "Opponent's turn."; break;
+                    CollectGold(next); message = next == 0 ? "Your turn." : "Opponent's turn."; break;
                 case PolyActionKind.Research:
                     Pay(seat, action.Cost); technologies[seat].Add(action.Choice); message = action.Label + " researched."; break;
                 case PolyActionKind.Develop:
                 case PolyActionKind.ResearchAndDevelop:
                     Pay(seat, action.Cost);
                     foreach (var id in action.Technologies) technologies[seat].Add(id);
-                    Develop(action); message = action.Label + $": +{action.Food} Food/turn, +{action.GoldYield} Gold/turn."; break;
+                    Develop(action); message = action.Label + $": +{action.Food:0.##} Food/turn, +{action.GoldYield:0.##} Gold/turn."; break;
                 case PolyActionKind.Recruit:
                     var city = City(action.ActorId); Pay(seat, action.Cost); Spawn(seat, city.position, action.Choice, city.id); city.recruited = true;
                     message = action.Label + " recruited. Ready next turn."; break;
                 case PolyActionKind.Reward:
                     Reward(action); message = action.Label + " chosen."; break;
                 case PolyActionKind.Move:
-                    Move(action); message = "Moved. Capture a village or enemy city at the start of your next turn."; break;
+                    Move(action); message = Board.GetUnit(action.ActorId).Definition.TypeId == "poly-builder" ? "Moved. Choose Build here to construct on this tile." : "Moved. Capture a village or enemy city at the start of your next turn."; break;
                 case PolyActionKind.Attack:
                     Attack(action); message = "Attack: " + (action.Damage / 10f).ToString("0.#") + " damage."; break;
                 case PolyActionKind.Heal:
                     var heal = Board.GetUnit(action.ActorId); heal.Health = Math.Min(heal.Definition.MaxHealthUnits, heal.Health + (City(Tiles[heal.Position].cityId)?.ownerSeatIndex == seat ? 40 : 20));
                     UnitState(heal.Id).rested = true; message = "Rested and recovered health."; break;
+                case PolyActionKind.ClaimImprovement:
+                    var claimed = Tiles[action.Destination]; claimed.improvementOwnerSeatIndex = seat;
+                    if (claimed.road) claimed.roadOwnerSeatIndex = seat;
+                    UnitState(action.ActorId).rested = true; message = "Improvement captured and connected to your nearest city."; break;
                 case PolyActionKind.Capture:
                     var captor = Board.GetUnit(action.ActorId); var captured = CityAt(captor.Position); captured.ownerSeatIndex = seat; captured.recruited = true;
                     var kernelCity = Board.GetCity(captured.id); if (kernelCity == null) Board.AddCity(new SimulationCity(captured.id, seat, captured.position)); else kernelCity.Seat = seat;
                     UnitState(captor.Id).rested = true;
                     if (!Cities.Any(c => c.ownerSeatIndex == 1 - seat)) Board.RestoreOutcome(true, seat);
-                    message = Board.GameOver ? (seat == 0 ? "Victory! Every opposing city is yours." : "Defeat. Your last city was captured.") : "City captured. Its fixed territory and income are now yours."; break;
+                    message = Board.GameOver ? (seat == 0 ? "Victory! Every opposing city is yours." : "Defeat. Your last city was captured.") : "City captured. Your improvements reconnect to their nearest city."; break;
             }
             UpdateMemory(); return true;
         }

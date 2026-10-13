@@ -21,6 +21,30 @@ public sealed partial class PolyWorldPresentation : MonoBehaviour
         renderer.sprite = SpriteFor(type);
         unit.GetComponent<UnitPresentationClamp>()?.ApplyClamp();
     }
+    private readonly SpriteRenderer[] connections = new SpriteRenderer[121];
+    private int connectionRevision = -1;
+    private void LateUpdate()
+    {
+        if (!controller.IsReady || connectionRevision == controller.Revision || connections[0] == null) return;
+        connectionRevision = controller.Revision; RefreshConnections();
+    }
+    private void RefreshConnections()
+    {
+        for(int p=0;p<121;p++) {
+            var known=controller.Match.KnownTile(0,p);
+            var link=controller.Match.KnownConnection(0,p);
+            bool owned=known!=null && (known.improvementOwnerSeatIndex==0 || known.improvement==PolyImprovement.None && known.roadOwnerSeatIndex==0);
+            var line=connections[p]; line.enabled=owned && link.CityId>0;
+            if(!line.enabled) continue;
+            var city=controller.SceneCities[link.CityId];
+            Vector3 delta=line.transform.parent.InverseTransformPoint(city.transform.position); delta.z=0;
+            bool selected=controller.SelectedPosition==p || controller.Inspection==PolyGameController.InspectKind.City && controller.Match.CityAt(controller.SelectedPosition)?.id==link.CityId;
+            line.transform.localPosition=delta*.5f;
+            line.transform.localRotation=Quaternion.Euler(0,0,Mathf.Atan2(delta.y,delta.x)*Mathf.Rad2Deg);
+            line.transform.localScale=new Vector3(delta.magnitude,selected ? .055f : .025f,1);
+            line.color=new Color(1f,.76f,.3f,selected ? .85f : .35f);
+        }
+    }
     private void Awake()
     {
         if (controller == null || warriorPrefab == null || riderPrefab == null || archerPrefab == null || warriorSprite == null || riderSprite == null || archerSprite == null)
@@ -36,6 +60,8 @@ public sealed partial class PolyWorldPresentation : MonoBehaviour
             resource[p] = CreateRenderer(tile, "Poly resource", 4, new Vector3(.26f, .26f, 0), .32f);
             foodYield[p] = CreateRenderer(tile, "Poly food yield", 5, new Vector3(-.23f, -.32f, 0), .43f);
             goldYield[p] = CreateRenderer(tile, "Poly Gold yield", 5, new Vector3(.23f, -.32f, 0), .43f);
+            connections[p]=CreateRenderer(tile,"Poly city connection",1,Vector3.zero,1);
+            connections[p].sprite=SpriteFor("Connection"); connections[p].enabled=false;
         }
     }
     private static SpriteRenderer CreateRenderer(TileVisibility tile, string name, int sortingOrder, Vector3 offset, float scale)
@@ -75,6 +101,8 @@ public sealed partial class PolyWorldPresentation : MonoBehaviour
         if (sprites.TryGetValue(key, out var value)) return value;
         string[] pixels;
         switch (key) {
+            case "Connection": pixels = Enumerable.Repeat("################",16).ToArray(); break;
+            case "poly-builder": pixels = new[] {"...##......##...","..####....####..","...##......##...","....##....##....",".....######.....","......####......",".....######.....","....########....","....##.##.##....",".......##.......","......####......",".....##..##.....","....##....##...."}; break;
             case "Forest": pixels = new[] {"....#...........","...###.....#....","..#####...###...",".#######.#####..","...###..#######.","..#####...###...",".#######.#####..","###############.","....#......#....","....#......#...."}; break;
             case "LumberHut": pixels = new[] {"...#........#...","..###......###..",".#####....#####.","...#....#####...","......#########.",".....###########","......#..##..#..","......#..##..#..","......########..",".####.########..",".####..........."}; break;
             case "HuntingHut": pixels = new[] {"...#.........#..","..###.......###.",".#####..#..#####","...#...###...#..","......#####.....",".....#######....","....#########...",".....#.....#....",".....#..#..#....",".....#..#..#....",".....#######...."}; break;

@@ -31,7 +31,7 @@ namespace BlockNations.Simulation.Poly
         {
             if (seat < 0 || seat > 1 || p < 0 || p >= 121) yield break;
             var tile = Tiles[p];
-            if (City(tile.cityId)?.ownerSeatIndex != seat || CityAt(p) != null || !Visibility(seat)[p] ||
+            if (!Cities.Any(c => c.ownerSeatIndex == seat) || CityAt(p) != null || !Visibility(seat)[p] ||
                 Board.UnitAt(p) != null && Board.UnitAt(p).Seat != seat) yield break;
             foreach (var d in Developments) {
                 if (d.Choice == "road") { if (tile.road) continue; }
@@ -42,18 +42,19 @@ namespace BlockNations.Simulation.Poly
                         d.Choice == "farm" ? tile.resource == PolyResource.Crops :
                         d.Choice == "mine" ? tile.resource == PolyResource.Ore :
                         d.Choice == "lumber" ? tile.terrain == PolyTerrain.Forest :
-                        tile.terrain == PolyTerrain.Plains && !HasBuilding(tile.cityId, d.Improvement);
+                        tile.terrain == PolyTerrain.Plains && !HasBuilding(ConstructionConnection(seat, p).CityId, d.Improvement);
                     if (!suitable) continue;
                 }
                 var nextTile = tile.Copy();
-                if (d.Choice == "road") nextTile.road = true; else nextTile.improvement = d.Improvement;
+                if (d.Choice == "road") { nextTile.road = true; nextTile.roadOwnerSeatIndex = seat; }
+                else { nextTile.improvement = d.Improvement; nextTile.improvementOwnerSeatIndex = seat; }
                 var nextMap = (PolyTile[])Tiles.Clone(); nextMap[p] = nextTile;
-                var before = CityTileYield(tile.cityId, Tiles); var after = CityTileYield(tile.cityId, nextMap);
-                int food = after.Food - before.Food, gold = after.Gold - before.Gold;
+                var before = SeatTileYield(seat, Tiles); var after = SeatTileYield(seat, nextMap);
+                decimal food = after.Food - before.Food, gold = after.Gold - before.Gold;
                 if (food == 0 && gold == 0 && d.Choice != "road") continue;
                 var missing = MissingTechnologies(seat, d.Technology);
                 int technologyCost = missing.Sum(id => ResearchCost(seat, id));
-                yield return new PolyAction(missing.Length == 0 ? PolyActionKind.Develop : PolyActionKind.ResearchAndDevelop, seat, tile.cityId, p, d.Choice) {
+                yield return new PolyAction(missing.Length == 0 ? PolyActionKind.Develop : PolyActionKind.ResearchAndDevelop, seat, ReadyBuilder(seat, p)?.Id ?? 0, p, d.Choice) {
                     Cost = d.Cost + technologyCost, BuildCost = d.Cost, TechnologyCost = technologyCost,
                     Technologies = missing, Food = food, GoldYield = gold, Label = d.Label
                 };
@@ -69,12 +70,20 @@ namespace BlockNations.Simulation.Poly
             }
             result.Reverse(); return result.ToArray();
         }
-        private bool HasBuilding(int cityId, PolyImprovement type) => Tiles.Any(t => t.cityId == cityId && t.improvement == type);
+        private bool HasBuilding(int cityId, PolyImprovement type) => Enumerable.Range(0, 121).Any(p => Connection(p).CityId == cityId && Tiles[p].improvement == type);
+        public SimulationUnit ReadyBuilder(int seat, int p)
+        {
+            var builder = Board.UnitAt(p);
+            if (builder?.Seat != seat || builder.Definition.TypeId != "poly-builder" || CityAt(p) != null) return null;
+            var state = UnitState(builder.Id);
+            return state.rested || state.attacked ? null : builder;
+        }
         private void Develop(PolyAction action)
         {
             var d = Developments.First(x => x.Choice == action.Choice);
-            if (action.Choice == "road") Tiles[action.Destination].road = true;
-            else Tiles[action.Destination].improvement = d.Improvement;
+            if (action.Choice == "road") { Tiles[action.Destination].road = true; Tiles[action.Destination].roadOwnerSeatIndex = action.SeatIndex; }
+            else { Tiles[action.Destination].improvement = d.Improvement; Tiles[action.Destination].improvementOwnerSeatIndex = action.SeatIndex; }
+            UnitState(action.ActorId).rested = true;
         }
         private void AddPopulation(PolyCity city, int amount)
         {

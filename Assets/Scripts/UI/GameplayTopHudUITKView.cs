@@ -285,7 +285,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
         goldLabel.text = hasVisibleGold ? $"Gold {visibleGold}" : string.Empty;
         if (turnManager.IsPolyMatch && turnManager.PolyController.IsReady)
         {
-            goldLabel.text += $"  (+{turnManager.PolyController.Match.Income(0)}/turn)";
+            goldLabel.text += $"  (+{turnManager.PolyController.Match.Income(0):0.##}/turn)";
             goldLabel.style.width = Length.Percent(92);
         }
         goldLabel.style.display = hasVisibleGold ? DisplayStyle.Flex : DisplayStyle.None;

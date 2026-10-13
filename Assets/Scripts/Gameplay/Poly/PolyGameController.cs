@@ -75,7 +75,7 @@ public sealed partial class PolyGameController : MonoBehaviour
     {
         if (IsOpponentRunning || feedbackHud.IsFeedbackOpen) return;
         Match = new PolyMatch(unchecked((int)DateTime.UtcNow.Ticks));
-        CloseInspection(); IsMenuOpen = false; Status = "Tap a unit to move, or a resource to develop your city.";
+        CloseInspection(); IsMenuOpen = false; Status = "Recruit a Builder to develop tiles. Tap a unit to move.";
         PrepareWorld(); Project(); view.RefocusBoard(); SaveGame();
     }
     public void CloseInspection()
@@ -90,6 +90,11 @@ public sealed partial class PolyGameController : MonoBehaviour
         CloseInspection();
         if (Match.City(id).ownerSeatIndex == 0) cityUI.OnCityClicked(city);
         SelectedPosition = Match.City(id).position; Inspection = InspectKind.City; Revision++;
+    }
+    public void OpenTile(int position)
+    {
+        if (!IsReady || Match.KnownTile(0, position) == null) return;
+        CloseInspection(); SelectedPosition = position; Inspection = InspectKind.Tile; Revision++;
     }
     // Called by the established world tap handler after its UI/drag/pinch gates.
     public void HandleBoardTap(TileHighlighter tile, Unit hitUnit, City hitCity)

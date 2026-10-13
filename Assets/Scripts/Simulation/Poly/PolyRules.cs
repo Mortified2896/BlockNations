@@ -6,7 +6,7 @@ namespace BlockNations.Simulation.Poly
     public enum PolyTerrain { Plains, Forest, Mountain }
     public enum PolyResource { None, Fruit, Animals, Crops, Ore }
     public enum PolyImprovement { None, Farm, LumberHut, Mine, Windmill, Sawmill, Forge, Orchard, HuntingHut }
-    public enum PolyActionKind { Move, Attack, Heal, Capture, Recruit, Develop, Research, Reward, EndTurn, ResearchAndDevelop }
+    public enum PolyActionKind { Move, Attack, Heal, Capture, Recruit, Develop, Research, Reward, EndTurn, ResearchAndDevelop, ClaimImprovement }
 
     public sealed class PolyTechnology
     {
@@ -19,7 +19,10 @@ namespace BlockNations.Simulation.Poly
     public static class PolyRules
     {
         public const string LegacyVersion = "poly-land-v1";
-        public const string Version = "poly-land-v2";
+        public const string PreviousVersion = "poly-land-v2";
+        public const string Version = "poly-land-v3";
+        // All distances on an 11x11 map divide this scale exactly. No distant yield is rounded away.
+        public const int YieldScale = 2520;
         public const int Size = 11;
         public static readonly PolyTechnology[] Technologies = {
             new PolyTechnology("organization", "Organization", null, 1, "Orchards supply 1 Food each turn."),
@@ -45,7 +48,8 @@ namespace BlockNations.Simulation.Poly
             Unit("swordsman", "Swordsman", 5, 15, 3, 3, 1, 1),
             Unit("knight", "Knight", 8, 10, 4, 1, 3, 1),
             Unit("catapult", "Catapult", 8, 10, 4, 0, 1, 3),
-            Unit("giant", "Giant", 0, 30, 5, 4, 1, 1)
+            Unit("giant", "Giant", 0, 30, 5, 4, 1, 1),
+            new UnitDefinition("poly-builder", "Builder", 3, 1, "warrior", 100, 0, 1, false, 10, 2, 0)
         };
         private static UnitDefinition Unit(string id, string name, int cost, int hp, int attack, int defense, int movement, int range) =>
             new UnitDefinition("poly-" + id, name, cost, id == "archer" ? 2 : 1, id, hp * 10, attack * 10, range, id != "catapult", defense * 10, movement, 1);
@@ -69,6 +73,7 @@ namespace BlockNations.Simulation.Poly
                 case "poly-defender": return "High defense; strong retaliation.";
                 case "poly-giant": return "City level reward. Powerful melee unit.";
                 case "poly-archer": return "Range 2. Attacks only currently visible targets.";
+                case "poly-builder": return "Build on the tile you occupy, even after moving. Construction ends this turn. Reusable; cannot attack or capture cities.";
                 default: return "Move then attack. Rest to recover health.";
             }
         }
@@ -80,15 +85,17 @@ namespace BlockNations.Simulation.Poly
         public PolyImprovement improvement;
         public int cityId;
         public bool road;
+        public int improvementOwnerSeatIndex = -1, roadOwnerSeatIndex = -1;
         public PolyTile Copy() => (PolyTile)MemberwiseClone();
     }
     [Serializable] public sealed class PolyCity
     {
-        public int id, position, ownerSeatIndex = -1, level = 1, population, workshops, walls, pendingRewards, food;
+        public int id, position, ownerSeatIndex = -1, level = 1, population, workshops, walls, pendingRewards, food, foodRemainder;
         public bool recruited;
         public int Income => ownerSeatIndex < 0 ? 0 : level + 1 + workshops;
         public int PopulationNeeded => level + 1;
         public int FoodNeeded => 4 + level * 2;
+        public decimal StoredFood => food + foodRemainder / (decimal)PolyRules.YieldScale;
     }
     [Serializable] public sealed class PolyUnitSave
     {
@@ -98,7 +105,7 @@ namespace BlockNations.Simulation.Poly
     }
     [Serializable] public sealed class PolySeatSave
     {
-        public int gold;
+        public int gold, goldRemainder;
         public string[] technologies;
         public PolyTile[] memory;
         public bool[] explored;
@@ -119,7 +126,8 @@ namespace BlockNations.Simulation.Poly
         public PolyActionKind Kind;
         public int SeatIndex, ActorId, Destination = -1;
         public string Choice;
-        public int Cost, Population, Damage, Retaliation, Food, GoldYield, BuildCost, TechnologyCost;
+        public int Cost, Population, Damage, Retaliation, BuildCost, TechnologyCost;
+        public decimal Food, GoldYield;
         public string[] Technologies = new string[0];
         public string Label;
         public PolyAction(PolyActionKind kind, int seat, int actor = 0, int destination = -1, string choice = null)
@@ -128,7 +136,17 @@ namespace BlockNations.Simulation.Poly
     }
     public readonly struct PolyYield
     {
-        public readonly int Food, Gold;
-        public PolyYield(int food, int gold) { Food = food; Gold = gold; }
+        public readonly int FoodUnits, GoldUnits;
+        public decimal Food => FoodUnits / (decimal)PolyRules.YieldScale;
+        public decimal Gold => GoldUnits / (decimal)PolyRules.YieldScale;
+        public PolyYield(int food, int gold) { FoodUnits = food * PolyRules.YieldScale; GoldUnits = gold * PolyRules.YieldScale; }
+        private PolyYield(int food, int gold, bool scaled) { FoodUnits = food; GoldUnits = gold; }
+        public static PolyYield FromUnits(int food, int gold) => new PolyYield(food, gold, true);
+    }
+    public readonly struct PolyConnection
+    {
+        public readonly int CityId, Distance;
+        public decimal Efficiency => CityId == 0 ? 0 : 1m / System.Math.Max(1, Distance);
+        public PolyConnection(int cityId, int distance) { CityId = cityId; Distance = distance; }
     }
 }

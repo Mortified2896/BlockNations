@@ -69,7 +69,7 @@ public sealed partial class PolyGameController
     }
     public bool CanAttack(Unit unit)
     {
-        if (!IsReady || unit == null || !Match.IsTurnOwnedBySeat(unit.ownerSeatIndex)) return false;
+        if (!IsReady || unit == null || unit.UnitTypeId == "poly-builder" || !Match.IsTurnOwnedBySeat(unit.ownerSeatIndex)) return false;
         var s = Match.UnitState(UnitId(unit));
         return s != null && !s.rested && !s.attacked && (unit.CanAttackAfterMoving || !s.moved);
     }

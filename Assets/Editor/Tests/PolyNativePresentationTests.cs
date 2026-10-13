@@ -35,7 +35,7 @@ public sealed class PolyNativePresentationTests
         var original=new PolyMatch(31); original.Board.SetGold(0,100);
         Assert.That(original.TryApply(new PolyAction(PolyActionKind.Research,0,choice:"organization"),out _),Is.True);
         Assert.That(original.TryApply(new PolyAction(PolyActionKind.Research,0,choice:"farming"),out _),Is.True);
-        Assert.That(original.TryApply(new PolyAction(PolyActionKind.Develop,0,1,11,"farm"),out _),Is.True);
+        original.Tiles[11].improvement=PolyImprovement.Farm; original.Tiles[11].improvementOwnerSeatIndex=0;
         var legacy = original.CreateSave(); legacy.rulesVersion=PolyRules.LegacyVersion;
         legacy.cities[0].level=2; legacy.cities[0].workshops=1;
         legacy.tiles[11].resource=PolyResource.None; legacy.seats[0].memory[11].resource=PolyResource.None;
@@ -82,14 +82,7 @@ public sealed class PolyNativePresentationTests
         Assert.That(graph.Q<Button>("Tech_farming"),Is.Not.Null);
         Submit(view.Document.rootVisualElement,"CloseOverlay");
         yield return null;
-        controller.CloseInspection(); manager.gridManager.TryGetTile(1,2,out var forestTile);
-        controller.HandleBoardTap(forestTile.GetComponent<TileHighlighter>(),null,null); yield return null;
-        Submit(view.Document.rootVisualElement,"TileResearch_hunting"); yield return null;
-        Assert.That(controller.Inspection,Is.EqualTo(PolyGameController.InspectKind.Tile));
-        Assert.That(controller.Match.HasTechnology(0,"hunting"),Is.True);
-        Submit(view.Document.rootVisualElement,"Develop_hunt"); yield return null;
-        Assert.That(controller.Match.Tiles[23].resource,Is.EqualTo(PolyResource.Animals));
-        Assert.That(forestTile.transform.Find("Poly food yield").GetComponent<SpriteRenderer>().sprite.name,Is.EqualTo("Poly FoodYield2"));
+        controller.CloseInspection();
         var selection=UnitSelectionManager.Instance; selection.SelectUnit(live);
         var legal=LegalActionService.GetLegalActionsForUnit(manager,live,0);
         Assert.That(legal.Where(a=>a.ActionType==LegalActionType.UnitMove).Select(a=>a.TargetTile.gridY*11+a.TargetTile.gridX).OrderBy(p=>p),
@@ -101,13 +94,28 @@ public sealed class PolyNativePresentationTests
         Assert.That(controller.Match.UnitState(1).moved,Is.True);
         controller.OpenCity(1); yield return null;
         Assert.That(view.Document.rootVisualElement.Q<Button>("Recruit_poly-rider"),Is.Not.Null);
-        Assert.That(controller.Act(new PolyAction(PolyActionKind.Recruit,0,1,choice:"poly-warrior")),Is.True);
+        Assert.That(controller.Act(new PolyAction(PolyActionKind.Recruit,0,1,choice:"poly-builder")),Is.True);
         Assert.That(controller.SceneUnits.Count(u=>u.Value.ownerSeatIndex==0),Is.EqualTo(2));
         Assert.That(controller.TryEndTurn(0),Is.True);
         for(int frame=0;frame<800 && controller.IsOpponentRunning;frame++) yield return null;
         Assert.That(controller.IsOpponentRunning,Is.False); Assert.That(controller.Match.currentTurnSeatIndex,Is.EqualTo(0));
         Assert.That(manager.turnNumber,Is.EqualTo(2));
-        Assert.That(controller.Act(new PolyAction(PolyActionKind.Move,0,3,11)),Is.True);
+        int builderId=controller.Match.Board.Units.Single(u=>u.Seat==0 && u.Definition.TypeId=="poly-builder").Id;
+        Assert.That(controller.Act(new PolyAction(PolyActionKind.Move,0,builderId,23)),Is.True);
+        controller.CloseInspection(); manager.gridManager.TryGetTile(1,2,out var forestTile);
+        controller.HandleBoardTap(forestTile.GetComponent<TileHighlighter>(),controller.SceneUnits[builderId],null); yield return null;
+        Assert.That(controller.Inspection,Is.EqualTo(PolyGameController.InspectKind.Unit));
+        Submit(view.Document.rootVisualElement,"BuildHere"); yield return null;
+        Submit(view.Document.rootVisualElement,"TileResearch_hunting"); yield return null;
+        Assert.That(controller.Inspection,Is.EqualTo(PolyGameController.InspectKind.Tile));
+        Assert.That(controller.Match.HasTechnology(0,"hunting"),Is.True);
+        Submit(view.Document.rootVisualElement,"Develop_hunt"); yield return null;
+        Assert.That(controller.Match.Tiles[23].resource,Is.EqualTo(PolyResource.Animals));
+        Assert.That(forestTile.transform.Find("Poly city connection").GetComponent<SpriteRenderer>().enabled,Is.True);
+        Assert.That(controller.Match.UnitState(builderId).rested,Is.True);
+        Assert.That(controller.SceneUnits[builderId].GetComponentsInChildren<SpriteRenderer>().First(r=>r!=controller.SceneUnits[builderId].moveOutline).sprite.name,Is.EqualTo("Poly poly-builder"));
+        Assert.That(forestTile.transform.Find("Poly food yield").GetComponent<SpriteRenderer>().sprite.name,Is.EqualTo("Poly FoodYield2"));
+
         Assert.That(controller.Act(new PolyAction(PolyActionKind.Research,0,choice:"shields")),Is.True);
         Assert.That(controller.Act(new PolyAction(PolyActionKind.Recruit,0,1,choice:"poly-defender")),Is.True);
         var defender=controller.SceneUnits.Values.Single(u=>u.UnitTypeId=="poly-defender");

@@ -14,17 +14,18 @@ public sealed partial class PolyWorldPresentation
         if (yield.Food > 0) foodYield[p].sprite = YieldSprite(yield.Food, true);
         if (yield.Gold > 0) goldYield[p].sprite = YieldSprite(yield.Gold, false);
     }
-    private Sprite YieldSprite(int amount, bool food)
+    private Sprite YieldSprite(decimal amount, bool food)
     {
         string key = (food ? "FoodYield" : "GoldYield") + amount;
         if (sprites.TryGetValue(key, out var value)) return value;
-        string number = amount.ToString(); int width = 10 + number.Length * 4, height = 9;
+        string number = amount.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture); int width = 10 + number.Length * 4, height = 9;
         var pixels = new Color32[width * height];
         for (int i = 0; i < pixels.Length; i++) pixels[i] = new Color32(22, 40, 49, 240);
         string[] icon = food ? new[] { "..#.#..", ".####..", "..###..", ".####..", "...#..." } : new[] { "..###..", ".#####.", ".##.##.", ".#####.", "..###.." };
         var color = food ? new Color32(175, 222, 116, 255) : new Color32(255, 207, 91, 255);
         for (int y = 0; y < 5; y++) for (int x = 0; x < 7; x++) if (icon[y][x] == '#') pixels[(height - 3 - y) * width + 1 + x] = color;
         for (int digit = 0; digit < number.Length; digit++) {
+            if(number[digit]=='.') { pixels[(height-7)*width+9+digit*4+1]=new Color32(255,255,255,255); continue; }
             string glyph = Digits[number[digit] - '0'];
             for (int y = 0; y < 5; y++) for (int x = 0; x < 3; x++) if (glyph[y * 3 + x] == '1')
                 pixels[(height - 3 - y) * width + 9 + digit * 4 + x] = new Color32(255, 255, 255, 255);

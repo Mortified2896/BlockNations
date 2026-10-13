@@ -10,12 +10,18 @@ public sealed class PolyRulesTests
     {
         Assert.That(m.TryApply(new PolyAction(kind, m.currentTurnSeatIndex, actor, destination, choice), out var reason), Is.True, reason);
     }
+    private static PolyMatch BuilderAt(PolyMatch match, int position)
+    {
+        var save = match.CreateSave();
+        save.units = save.units.Where(u => u.id != 99).Concat(new[] { new PolyUnitSave { id = 99, ownerSeatIndex = 0, position = position, health = 100, homeCityId = 1, type = "poly-builder" } }).ToArray();
+        return PolyMatch.Restore(save);
+    }
     [Test] public void MapHasFixedTerritoriesAndSeparateCatalog()
     {
         var m = new PolyMatch(8);
         Assert.That(m.Board.Width, Is.EqualTo(11)); Assert.That(m.Cities.Count, Is.EqualTo(7));
         foreach (var c in m.Cities) Assert.That(m.Tiles.Count(t => t.cityId == c.id), Is.EqualTo(9));
-        Assert.That(m.Board.Roster.Count, Is.EqualTo(8));
+        Assert.That(m.Board.Roster.Count, Is.EqualTo(9));
         Assert.That(m.Board.RecruitType("poly-archer").VisionRange, Is.EqualTo(2));
         Assert.That(UnitRegistry.AllDefinitions.Any(u => u.TypeId.StartsWith("poly-")), Is.False);
     }
@@ -31,7 +37,7 @@ public sealed class PolyRulesTests
     [Test] public void DevelopmentLevelsCityAndRequiresRewardWithoutExpansion()
     {
         var m = new PolyMatch(3); m.Board.SetGold(0, 100); Apply(m, PolyActionKind.Research, choice: "organization");
-        Apply(m, PolyActionKind.Research, choice: "farming"); Apply(m, PolyActionKind.Develop, 1, 11, "farm");
+        Apply(m, PolyActionKind.Research, choice: "farming"); m = BuilderAt(m, 11); Apply(m, PolyActionKind.Develop, 99, 11, "farm");
         Assert.That(m.City(1).level, Is.EqualTo(1), "Food improvements grow on owner turns, not on construction.");
         for (int i = 0; i < 4; i++) { Apply(m, PolyActionKind.EndTurn); Apply(m, PolyActionKind.EndTurn); }
         Assert.That(m.City(1).level, Is.EqualTo(2)); Assert.That(m.Income(0), Is.EqualTo(3));
@@ -43,7 +49,7 @@ public sealed class PolyRulesTests
     [Test] public void HuntingHutKeepsAnimalsAndFeedsCityEveryOwnerTurn()
     {
         var m = new PolyMatch(3); m.Board.SetGold(0, 50);
-        Apply(m, PolyActionKind.ResearchAndDevelop, 1, 23, "hunt");
+        m = BuilderAt(m, 23); Apply(m, PolyActionKind.ResearchAndDevelop, 99, 23, "hunt");
         Assert.That(m.Tiles[23].resource, Is.EqualTo(PolyResource.Animals));
         Assert.That(m.Tiles[23].improvement, Is.EqualTo(PolyImprovement.HuntingHut));
         Assert.That(m.KnownYield(0, 23).Food, Is.EqualTo(2));
@@ -55,7 +61,7 @@ public sealed class PolyRulesTests
     }
     [Test] public void MinePermanentlyAddsGoldAndResearchAndBuildIsAtomic()
     {
-        var m = new PolyMatch(3); m.Board.SetGold(0, 19);
+        var m = BuilderAt(new PolyMatch(3), 1); m.Board.SetGold(0, 19);
         var option = m.DevelopmentOptions(0, 1).Single(a => a.Choice == "mine");
         Assert.That(option.Technologies, Is.EqualTo(new[] { "climbing", "mining" }));
         Assert.That(option.Cost, Is.EqualTo(20)); Assert.That(option.GoldYield, Is.EqualTo(2));
@@ -76,7 +82,7 @@ public sealed class PolyRulesTests
         var farm = m.DevelopmentOptions(0, 11).Single(a => a.Choice == "farm");
         Assert.That(farm.TechnologyCost, Is.EqualTo(10)); Assert.That(farm.Cost, Is.EqualTo(15));
         Assert.That(farm.Technologies, Is.EqualTo(new[] { "farming" }));
-        var save = m.CreateSave(); save.units[1].position = 11; var occupied = PolyMatch.Restore(save);
+        var save = m.CreateSave(); save.units = save.units.Where(u=>u.id!=99).ToArray(); save.units[1].position = 11; var occupied = PolyMatch.Restore(save);
         Assert.That(occupied.DevelopmentOptions(0, 11), Is.Empty);
         Assert.That(occupied.TryApply(farm, out _), Is.False);
         farm.SeatIndex = 1; Assert.That(m.TryApply(farm, out _), Is.False);
@@ -84,8 +90,8 @@ public sealed class PolyRulesTests
     [Test] public void WindmillYieldAndPreviewIncludeAdjacentFarms()
     {
         var m = new PolyMatch(3); m.Board.SetGold(0, 100);
-        Apply(m, PolyActionKind.ResearchAndDevelop, 1, 11, "farm");
-        m.Tiles[0].terrain = PolyTerrain.Plains;
+        m = BuilderAt(m, 11); Apply(m, PolyActionKind.ResearchAndDevelop, 99, 11, "farm");
+        m.Tiles[0].terrain = PolyTerrain.Plains; m = BuilderAt(m, 0);
         var mill = m.DevelopmentOptions(0, 0).Single(a => a.Choice == "windmill");
         Assert.That(mill.Food, Is.EqualTo(2)); Assert.That(mill.TechnologyCost, Is.EqualTo(15));
         Assert.That(m.TryApply(mill, out _), Is.True);
@@ -183,4 +189,115 @@ public sealed class PolyRulesTests
             Assert.That(actions, Is.LessThan(200)); Assert.That(m.IsTurnOwnedBySeat(1), Is.False);
         }
     }
+    [Test] public void RecruitmentAndBuilderMovementAllowOneConstructionPerTurn()
+    {
+        var m = new PolyMatch(3); m.Board.SetGold(0, 50);
+        Apply(m, PolyActionKind.Move, 1, 13); Apply(m, PolyActionKind.Recruit, 1, choice: "poly-builder");
+        var builder = m.Board.Units.Single(u=>u.Definition.TypeId=="poly-builder");
+        Assert.That(m.TryApply(new PolyAction(PolyActionKind.Develop,0,builder.Id,11,"farm"),out _),Is.False);
+        Apply(m,PolyActionKind.EndTurn); Apply(m,PolyActionKind.EndTurn);
+        Apply(m,PolyActionKind.Move,builder.Id,11);
+        Apply(m,PolyActionKind.ResearchAndDevelop,builder.Id,11,"farm");
+        Assert.That(m.ReadyBuilder(0,11),Is.Null); Assert.That(m.Paths(builder),Is.Empty);
+        Assert.That(m.Board.GetUnit(builder.Id),Is.Not.Null,"Builders are reusable.");
+        Assert.That(m.LegalActions(0).Any(a=>a.ActorId==builder.Id && a.Kind==PolyActionKind.Attack),Is.False);
+    }
+    [Test] public void RemoteConstructionNeedsAnOwnBuilderAndConnectsAcrossTerritory()
+    {
+        var m = BuilderAt(new PolyMatch(3), 15); m.Board.SetGold(0, 100);
+        m.Tiles[15].resource = PolyResource.Fruit; m.Tiles[15].terrain = PolyTerrain.Plains;
+        Apply(m,PolyActionKind.ResearchAndDevelop,99,15,"fruit");
+        Assert.That(m.Tiles[15].cityId,Is.EqualTo(4),"The tile is in an unclaimed village's territory.");
+        Assert.That(m.Connection(15).CityId,Is.EqualTo(1)); Assert.That(m.Connection(15).Distance,Is.EqualTo(3));
+        Assert.That(m.CityFood(1),Is.EqualTo(1m/3m));
+        Assert.That(m.TryApply(new PolyAction(PolyActionKind.Develop,0,1,14,"fruit"),out _),Is.False);
+        Assert.That(m.TryApply(new PolyAction(PolyActionKind.Develop,1,99,15,"fruit"),out _),Is.False);
+        for(int i=0;i<3;i++) { Apply(m,PolyActionKind.EndTurn); Apply(m,PolyActionKind.EndTurn); }
+        Assert.That(m.City(1).StoredFood,Is.EqualTo(1));
+    }
+    [Test] public void FractionalGoldAndFoodSurviveReloadWithoutCollectingAgain()
+    {
+        var m=BuilderAt(new PolyMatch(3),14); m.Board.SetGold(0,100);
+        m.Tiles[14].resource=PolyResource.Ore; m.Tiles[14].terrain=PolyTerrain.Mountain;
+        Apply(m,PolyActionKind.ResearchAndDevelop,99,14,"mine");
+        // Distance two: a lumber hut's one Gold becomes exactly half a Gold.
+        m.Tiles[14].improvement=PolyImprovement.LumberHut;
+        int start=m.Board.GoldForSeat(0);
+        Apply(m,PolyActionKind.EndTurn); Apply(m,PolyActionKind.EndTurn);
+        Assert.That(m.Board.GoldForSeat(0),Is.EqualTo(start+2));
+        Assert.That(m.CreateSave().seats[0].goldRemainder,Is.EqualTo(PolyRules.YieldScale/2));
+        m.Tiles[14].improvement=PolyImprovement.Orchard;
+        Apply(m,PolyActionKind.EndTurn); Apply(m,PolyActionKind.EndTurn);
+        Assert.That(m.City(1).StoredFood,Is.EqualTo(.5m));
+        var save=m.CreateSave(); var n=PolyMatch.Restore(save);
+        Assert.That(n.City(1).StoredFood,Is.EqualTo(.5m));
+        // Resume Gold production after checking the Food checkpoint.
+        n.Tiles[14].improvement=PolyImprovement.LumberHut;
+        Assert.That(n.Board.GoldForSeat(0),Is.EqualTo(m.Board.GoldForSeat(0)));
+        Assert.That(n.CreateSave().seats[0].goldRemainder,Is.EqualTo(save.seats[0].goldRemainder));
+        Apply(n,PolyActionKind.EndTurn); Apply(n,PolyActionKind.EndTurn);
+        Assert.That(n.Board.GoldForSeat(0),Is.EqualTo(start+7));
+    }
+    [Test] public void CapturedCitiesRerouteExistingRemoteImprovementsWithStableTies()
+    {
+        var m=BuilderAt(new PolyMatch(3),14); m.Board.SetGold(0,100);
+        m.Tiles[14].resource=PolyResource.Fruit; m.Tiles[14].terrain=PolyTerrain.Plains;
+        Apply(m,PolyActionKind.ResearchAndDevelop,99,14,"fruit");
+        Assert.That(m.Connection(14).CityId,Is.EqualTo(1));
+        var save=m.CreateSave(); save.units[0].position=16; m=PolyMatch.Restore(save);
+        Apply(m,PolyActionKind.Capture,1);
+        Assert.That(m.Connection(14).CityId,Is.EqualTo(1),"Equal distances choose the smaller city ID.");
+        save=m.CreateSave(); save.cities[0].ownerSeatIndex=1; m=PolyMatch.Restore(save);
+        Assert.That(m.Connection(14).CityId,Is.EqualTo(4));
+        Assert.That(m.Tiles[14].improvementOwnerSeatIndex,Is.Zero);
+    }
+    [Test] public void EnemyOccupationBlocksYieldAndClaimWaitsUntilNextTurn()
+    {
+        var m=BuilderAt(new PolyMatch(3),14); m.Board.SetGold(0,100);
+        m.Tiles[14].resource=PolyResource.Fruit; m.Tiles[14].terrain=PolyTerrain.Plains;
+        Apply(m,PolyActionKind.ResearchAndDevelop,99,14,"fruit");
+        var save=m.CreateSave(); save.units=save.units.Where(u=>u.id!=99).ToArray(); save.units[1].position=15;
+        m=PolyMatch.Restore(save); Apply(m,PolyActionKind.EndTurn);
+        Apply(m,PolyActionKind.Move,2,14);
+        Assert.That(m.CityFood(1),Is.Zero);
+        Assert.That(m.TryApply(new PolyAction(PolyActionKind.ClaimImprovement,1,2,14),out _),Is.False);
+        Apply(m,PolyActionKind.EndTurn); Apply(m,PolyActionKind.EndTurn);
+        Apply(m,PolyActionKind.ClaimImprovement,2,14);
+        Assert.That(m.Tiles[14].improvementOwnerSeatIndex,Is.EqualTo(1)); Assert.That(m.Connection(14).CityId,Is.EqualTo(2));
+    }
+    [Test] public void BuilderCannotCaptureCitiesOrRetaliate()
+    {
+        var m=BuilderAt(new PolyMatch(3),55); var save=m.CreateSave(); save.units.Single(u=>u.id==99).position=56;
+        save.units[1].position=57; m=PolyMatch.Restore(save);
+        Assert.That(m.LegalActions(0).Any(a=>a.ActorId==99 && (a.Kind==PolyActionKind.Capture || a.Kind==PolyActionKind.Attack)),Is.False);
+        Apply(m,PolyActionKind.EndTurn);
+        var attack=m.LegalActions(1).Single(a=>a.Kind==PolyActionKind.Attack && a.Destination==56);
+        Assert.That(attack.Retaliation,Is.Zero);
+    }
+    [Test] public void V2MigrationKeepsEconomyAndDoesNotRevealHiddenOwnershipChanges()
+    {
+        var m=new PolyMatch(3); var save=m.CreateSave(); save.rulesVersion=PolyRules.PreviousVersion;
+        save.tiles[13].improvement=PolyImprovement.Orchard; save.cities[0].food=3;
+        var n=PolyMatch.Restore(save);
+        Assert.That(n.Tiles[13].improvementOwnerSeatIndex,Is.Zero); Assert.That(n.CityFood(1),Is.EqualTo(1));
+        Assert.That(n.City(1).StoredFood,Is.EqualTo(3)); Assert.That(n.Board.GoldForSeat(0),Is.EqualTo(7));
+        Assert.That(n.CreateSave().rulesVersion,Is.EqualTo(PolyRules.Version));
+        var baseline=n.KnownConnection(0,13);
+        n.Tiles[13].improvementOwnerSeatIndex=1;
+        Assert.That(n.KnownConnection(0,13).CityId,Is.EqualTo(baseline.CityId),"Unobserved ownership changes stay in terrain memory.");
+    }
+
+    [Test] public void HeuristicRecruitsBuildersAndConstructsImprovements()
+    {
+        var m=new PolyMatch(2);
+        for(int turn=0;turn<6 && !m.Board.GameOver;turn++) {
+            Apply(m,PolyActionKind.EndTurn); int count=0;
+            while(m.IsTurnOwnedBySeat(1) && count++<200)
+                Assert.That(m.TryApply(PolyOpponent.Choose(PolyObservation.ForSeat(m,1)),out var reason),Is.True,reason);
+            Assert.That(count,Is.LessThan(200));
+        }
+        Assert.That(m.Tiles.Any(t=>t.improvementOwnerSeatIndex==1 && t.improvement!=PolyImprovement.None),Is.True);
+        Assert.That(m.Board.Units.Any(u=>u.Seat==1 && u.Definition.TypeId=="poly-builder"),Is.True);
+    }
+
 }

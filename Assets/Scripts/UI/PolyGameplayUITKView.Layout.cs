@@ -30,7 +30,7 @@ public sealed partial class PolyGameplayUITKView
         if (!controller.IsReady || Time.unscaledTime - lastPublish < .2f || root.worldBound.width <= 0) return;
         lastPublish = Time.unscaledTime;
         var match = controller.Match; var bounds = root.worldBound;
-        var state = new BrowserState { round = match.Board.Round, currentTurnSeatIndex = match.currentTurnSeatIndex, gold = match.Board.GoldForSeat(0), income = match.Income(0),
+        var state = new BrowserState { round = match.Board.Round, currentTurnSeatIndex = match.currentTurnSeatIndex, gold = match.Board.GoldForSeat(0), income = (float)match.Income(0),
             gameOver = match.Board.GameOver, saved = controller.SaveStatus, status = controller.Status, screen = screen, inspection = controller.Inspection.ToString(), cameraX = boardCamera.transform.position.x, cameraY = boardCamera.transform.position.y,
             zoom = boardCamera.orthographicSize, selected = controller.SelectedPosition, selectedUnit = controller.SceneUnits.FirstOrDefault(p=>p.Value==UnitSelectionManager.Instance.SelectedUnit).Key };
         foreach (Button button in root.Query<Button>().ToList()) {
@@ -43,11 +43,11 @@ public sealed partial class PolyGameplayUITKView
             Vector3 p = boardCamera.WorldToScreenPoint(tile.transform.position);
             state.tiles.Add(new BrowserPoint { position=tile.gridY*11+tile.gridX, x=p.x/Screen.width, y=1-p.y/Screen.height });
         }
-        foreach (var c in match.Cities.Where(c=>c.ownerSeatIndex==0)) state.cities.Add(new BrowserCity { id=c.id,level=c.level,population=c.population,pendingRewards=c.pendingRewards,food=c.food,foodNeeded=c.FoodNeeded,foodPerTurn=match.CityFood(c.id) });
+        foreach (var c in match.Cities.Where(c=>c.ownerSeatIndex==0)) state.cities.Add(new BrowserCity { id=c.id,level=c.level,population=c.population,pendingRewards=c.pendingRewards,food=(float)c.StoredFood,foodNeeded=c.FoodNeeded,foodPerTurn=(float)match.CityFood(c.id) });
         for(int p=0;p<121;p++) {
             var known=match.KnownTile(0,p); if(known==null) continue;
             var yield=match.KnownYield(0,p);
-            state.knownTiles.Add(new BrowserPlot { position=p,terrain=known.terrain.ToString(),resource=known.resource.ToString(),improvement=known.improvement.ToString(),food=yield.Food,gold=yield.Gold });
+            state.knownTiles.Add(new BrowserPlot { position=p,terrain=known.terrain.ToString(),resource=known.resource.ToString(),improvement=known.improvement.ToString(),food=(float)yield.Food,gold=(float)yield.Gold,owner=known.improvementOwnerSeatIndex,cityId=match.KnownConnection(0,p).CityId,distance=match.KnownConnection(0,p).Distance });
         }
         state.technologies.AddRange(BlockNations.Simulation.Poly.PolyRules.Technologies.Where(t=>match.HasTechnology(0,t.Id)).Select(t=>t.Id));
         foreach (var u in BlockNations.Simulation.Poly.PolyObservation.ForSeat(match,0).Units) state.units.Add(new BrowserUnit { id=u.Id,seat=u.Seat,position=u.Position,health=u.Health,type=u.Definition.TypeId });
@@ -57,7 +57,8 @@ public sealed partial class PolyGameplayUITKView
     [Serializable] private sealed class BrowserState
     {
         public string mode="Poly", presentation="native", saved,status,screen,inspection;
-        public int round,currentTurnSeatIndex,gold,income,selected,selectedUnit;
+        public int round,currentTurnSeatIndex,gold,selected,selectedUnit;
+        public float income;
         public float cameraX,cameraY,zoom;
         public bool gameOver;
         public List<BrowserControl> controls=new List<BrowserControl>();
@@ -69,8 +70,8 @@ public sealed partial class PolyGameplayUITKView
     }
     [Serializable] private sealed class BrowserControl { public string name; public bool enabled; public float x,y; }
     [Serializable] private sealed class BrowserPoint { public int position; public float x,y; }
-    [Serializable] private sealed class BrowserCity { public int id,level,population,pendingRewards,food,foodNeeded,foodPerTurn; }
-    [Serializable] private sealed class BrowserPlot { public int position,food,gold; public string terrain,resource,improvement; }
+    [Serializable] private sealed class BrowserCity { public int id,level,population,pendingRewards,foodNeeded; public float food,foodPerTurn; }
+    [Serializable] private sealed class BrowserPlot { public int position,owner,cityId,distance; public float food,gold; public string terrain,resource,improvement; }
     [Serializable] private sealed class BrowserUnit { public int id,seat,position,health; public string type; }
 #if UNITY_WEBGL && !UNITY_EDITOR
     [DllImport("__Internal")] private static extern float BN_PolyPixelRatio();
