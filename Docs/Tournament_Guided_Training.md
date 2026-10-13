@@ -84,3 +84,33 @@ without waiting for another two million decisions. Existing process locks,
 pause/power cancellation, 20 GB shared storage, save reserve, legal seat observations
 and saved-game/PBp formats remain in force. Changes install through a saved
 supervisor restart; there are no shipping scene, prefab or layout changes.
+
+## Installation and verification, 2026-10-13
+
+Implementation was merged into `main` at `c03f7a4`. The existing learner saved
+successfully before installation and resumed through the power controller, with
+the V2 model, eight arenas and one Torch thread. Run manifest, trainer recipe and
+original opponent recipe hashes were preserved. The native arm64 training player
+was rebuilt as `Build/TrainingTournamentGuided-20261013.app` and installed in the
+controller's resume command; the previous app remains available.
+
+The first repaired job completed both full 1,280-game packs. Its frozen step
+126,249,979 scored **572/704** external-reference wins on the primary pack and
+**569/704** on confirmation. Re-evaluating the selected champion reproduced
+**659/704** on the primary pack. The job retained the champion, published the fresh
+strength scores, and recorded one substantial regression without triggering the
+three-evaluation review hold. Training feedback reached its both-role sample
+threshold and activated nonuniform bounded weights. At acceptance all twelve
+retained Adam counters had advanced by at least 4,896 updates, and live training
+reported zero rejected actions and no failure.
+
+Validation passed 43 graphics-enabled Unity checks, the Python suites (including
+112 checks in the broad run, with two optional PPO integrations skipped), focused
+final guard rechecks, and a separate real adaptive-PPO save/resume integration.
+Current-source C# worker checks passed. An earlier information-telemetry check
+against the older installed worker failed because it lacks those newer counters;
+the original worker was preserved, and actual live evaluations passed against its
+pinned identity. Native build/connection passed; OS window capture was unavailable,
+so there is no rendered-window screenshot acceptance receipt. Detailed ignored
+artifacts are in `Logs/Validation/TournamentGuidedTraining-install/` and the
+implementation worktree's `Logs/Validation/TournamentGuidedTraining/`.
