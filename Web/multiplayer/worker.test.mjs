@@ -86,7 +86,7 @@ async function listen(t, actor, options) {
 }
 
 test("live upgrades require current approved Google identity and the exact browser origin", async t => {
-  const allowed = await person("Live Allowed"), pending = await person("Live Pending", "pending");
+  const allowed = await person("Live 一心（小金魚）🚀"), pending = await person("Live Pending", "pending");
   assert.equal((await live(null)).status, 403);
   assert.equal((await live(pending)).status, 403);
   assert.equal((await live(allowed, { origin: "https://other.test" })).status, 403);

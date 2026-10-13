@@ -419,7 +419,7 @@ export class MultiplayerStore {
       if (new URL(request.url).pathname === "/live" && request.method === "GET") {
         require(request.headers.get("Upgrade")?.toLowerCase() === "websocket", "WEBSOCKET_REQUIRED", 426);
         const actor = JSON.parse(request.headers.get("X-Live-Actor") ?? "null");
-        this.remember(actor);
+        require(ID.test(actor?.id ?? ""), "INVALID_IDENTITY", 403);
         require(typeof actor.sessionId === "string" && /^[\w-]{43}$/.test(actor.sessionId), "INVALID_SESSION", 403);
         this.limit(actor.id, "live-connect", 30);
         return acceptLive(this.ctx, actor);

@@ -40,7 +40,9 @@ export async function multiplayerAPI(request, env, user) {
     const actor = await publicPlayer(user);
     const store = env.MULTIPLAYER_STORE.get(env.MULTIPLAYER_STORE.idFromName(env.GAME_ORIGIN));
     return store.fetch(new Request("https://multiplayer.internal/live", {
-      headers: { Upgrade: "websocket", "X-Live-Actor": JSON.stringify(actor) },
+      // Only opaque ASCII IDs belong in upgrade headers. Google names can
+      // contain Unicode and are remembered through the ordinary JSON API.
+      headers: { Upgrade: "websocket", "X-Live-Actor": JSON.stringify({ id: actor.id, sessionId: actor.sessionId }) },
     }));
   }
   let operation, data = {}, directory = [];
