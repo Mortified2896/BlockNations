@@ -11,7 +11,7 @@ public sealed partial class PolyWorldPresentation : MonoBehaviour
     [SerializeField] private GameObject warriorPrefab, riderPrefab, archerPrefab;
     [SerializeField] private Sprite warriorSprite, riderSprite, archerSprite;
     private readonly Dictionary<string, Sprite> sprites = new Dictionary<string, Sprite>();
-    private readonly SpriteRenderer[] terrain = new SpriteRenderer[121], resource = new SpriteRenderer[121];
+    private readonly SpriteRenderer[] terrain = new SpriteRenderer[121], resource = new SpriteRenderer[121], improvement = new SpriteRenderer[121];
     public GameObject Prefab(string type) => type == "poly-rider" || type == "poly-knight" ? riderPrefab : type == "poly-archer" || type == "poly-catapult" ? archerPrefab : warriorPrefab;
     public Sprite Icon(string type) => type == "poly-warrior" ? warriorSprite : type == "poly-rider" ? riderSprite : type == "poly-archer" ? archerSprite : SpriteFor(type);
     public void ApplyUnitSprite(Unit unit, string type)
@@ -32,9 +32,10 @@ public sealed partial class PolyWorldPresentation : MonoBehaviour
             if (terrain[p] != null) continue;
             controller.Manager.gridManager.TryGetTile(p % 11, p / 11, out var tile);
             terrain[p] = CreateRenderer(tile, "Poly terrain", 2, Vector3.zero, .78f);
-            resource[p] = CreateRenderer(tile, "Poly resource", 3, new Vector3(.26f, .26f, 0), .32f);
-            foodYield[p] = CreateRenderer(tile, "Poly food yield", 4, new Vector3(-.23f, -.32f, 0), .43f);
-            goldYield[p] = CreateRenderer(tile, "Poly Gold yield", 4, new Vector3(.23f, -.32f, 0), .43f);
+            improvement[p] = CreateRenderer(tile, "Poly improvement", 3, Vector3.zero, .66f);
+            resource[p] = CreateRenderer(tile, "Poly resource", 4, new Vector3(.26f, .26f, 0), .32f);
+            foodYield[p] = CreateRenderer(tile, "Poly food yield", 5, new Vector3(-.23f, -.32f, 0), .43f);
+            goldYield[p] = CreateRenderer(tile, "Poly Gold yield", 5, new Vector3(.23f, -.32f, 0), .43f);
         }
     }
     private static SpriteRenderer CreateRenderer(TileVisibility tile, string name, int sortingOrder, Vector3 offset, float scale)
@@ -50,11 +51,14 @@ public sealed partial class PolyWorldPresentation : MonoBehaviour
         for (int p = 0; p < 121; p++) {
             var known = controller.Match.KnownTile(0, p);
             terrain[p].enabled = known != null; resource[p].enabled = known != null;
+            improvement[p].enabled = known != null && known.improvement != PolyImprovement.None;
             RefreshYields(p, known != null);
             if (known == null) continue;
-            string landscape = known.improvement != PolyImprovement.None ? known.improvement.ToString() : known.terrain != PolyTerrain.Plains ? known.terrain.ToString() : known.road ? "Road" : null;
+            string landscape = known.terrain != PolyTerrain.Plains ? known.terrain.ToString() : known.road ? "Road" : null;
             terrain[p].sprite = landscape == null ? null : SpriteFor(landscape);
-            terrain[p].color = known.improvement != PolyImprovement.None ? new Color(.45f,.32f,.15f) : known.terrain == PolyTerrain.Forest ? new Color(.12f,.43f,.22f) : new Color(.38f,.41f,.44f);
+            terrain[p].color = known.terrain == PolyTerrain.Forest ? new Color(.12f,.43f,.22f) : new Color(.38f,.41f,.44f);
+            improvement[p].sprite = known.improvement == PolyImprovement.None ? null : SpriteFor(known.improvement.ToString());
+            improvement[p].color = new Color(.45f,.32f,.15f);
             resource[p].sprite = known.resource == PolyResource.None || controller.Match.CityAt(p) != null ? null : SpriteFor(known.resource.ToString());
             resource[p].color = known.resource == PolyResource.Ore ? new Color(.59f,.46f,.16f) : new Color(.77f,.50f,.10f);
         }

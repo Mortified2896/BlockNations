@@ -73,7 +73,7 @@
 .landscape-short .tree-position-0 { left: 12%; top: 56%; }
 .landscape-short .tree-position-1 { left: 49%; top: 30%; }
 .landscape-short .tree-position-2 { left: 85%; top: 30%; }
-.landscape-short .tree-position-3 { left: 49%; top: 82%; }
+.landscape-short .tree-position-3 { left: 49%; top: 72%; }
 .landscape-short .technology-tree.linear .tree-position-1 { left: 49%; top: 56%; }
 .landscape-short .technology-tree.linear .tree-position-2 { left: 85%; top: 56%; }
 .landscape-short .technology-detail { flex-direction: row; align-items: center; padding: 5px 8px; }
