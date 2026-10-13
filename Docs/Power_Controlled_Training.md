@@ -29,8 +29,9 @@ Local configuration and state are outside Git:
 ~/Library/LaunchAgents/com.blocknations.training-power.plist
 ```
 
-The configuration pins the exact resume argument array, including the native
-Python executable (macOS framework launchers can rewrite argv[0]), run id, root,
+The configuration pins the exact resume argument array, including the training
+virtualenv Python launcher and its expected native process executable (macOS
+framework launchers rewrite argv[0]), run id, root,
 worker, eight arenas, one Torch thread, continuous duration and 20 GB budget.
 Process identity is checked before signalling. Another supervisor is left alone.
 Manual stops, unexpected exits, failed saves and unavailable power readings latch
@@ -44,7 +45,7 @@ This leaves an already-running learner alone. To unload the login job:
 launchctl bootout "gui/$(id -u)/com.blocknations.training-power"
 ```
 
-The six focused Python tests cover real `pmset` formats, threshold hysteresis,
+The focused Python tests cover real `pmset` formats, threshold hysteresis,
 process identity, reboot recovery, manual-stop/failure protection and duplicate prevention. A real
 isolated subprocess test exercises SIGTERM, successful save acknowledgement and
 resume with paths containing spaces. Installation acceptance confirmed launchd
