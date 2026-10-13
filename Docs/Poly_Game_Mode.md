@@ -52,3 +52,13 @@ The Poly scene explicitly wires its UIDocument, UI asset and New Input System ev
 Run `dotnet test Tools/Poly/BlockNations.Poly.Tests.csproj` for rules, fog, transitions, heuristic visibility and save-state checks. Run Unity EditMode fixtures `PolyRulesTests|PolyNativeTests` with graphics for the actual Unity JSON codec, account-scoped save isolation, explicit scene/input/UI wiring and build registration. Run `npm test --prefix Web` for identity-gated session permission and existing web regressions.
 
 The ordinary release builder includes Poly alongside existing scenes and records it in `release.json`. Prepare/build an owned isolated snapshot with `Tools/WebRelease/build.py --multiplayer --learned-ai`; audit the export, check browser gameplay and reload/continue, then deploy the same reviewed bytes. Physical phone behavior is a separate acceptance check.
+
+## Release acceptance: 2026-10-13
+
+- Feature commit: `1d92721`, merged and pushed to `main`. Export source hash: `f0a732911761c2ffaacefb1e14799d4d41e98b1d5f3b4917a31a0d05faca8f53`.
+- Production Worker version: `bffa6836-a350-4a27-b2dc-21ec0b788a55`, serving 100% of production traffic. Preview version: `00d41eda-8b3f-4a41-9111-2a3a13d76baa`. Both use the same reviewed export.
+- All 15 Unity Poly checks, 12 standalone Poly checks, 43 existing Advanced rules checks, 71 web checks and 17 release-tool checks passed. The 31.17 MiB export passed the credential audit; the staged patch and decompressed release also contained zero matches against two local authentication values.
+- Chromium acceptance used synthetic accounts with the actual admission Worker, session API and exported Unity game. The owner menu launched Poly; the tester session received `canPlayPoly: false` and its rendered menu hid the entry. Desktop and 390×844 portrait checks covered the board, city sheet, scrollable unit cards and map focus after resizing.
+- Actual canvas clicks moved a Warrior, bought Organization, harvested two resources, reached city level 2, selected Workshop, recruited a second Warrior and completed two opponent turns. After Save & Menu and a full page reload, continuation restored round 3, 2 Gold, income 4, city level 2 and the same two units/positions.
+- Live production settings matched the configured owner identity and preserved every existing service, namespace, secret binding and origin variable. The active Worker contains the owner-gated session code. Anonymous production release/session requests remained 403 with `private, no-store`.
+- A real signed-in owner session on production and physical iPhone/Android or Safari gameplay remain unverified. Browser acceptance above is local Chromium with synthetic identity, separate from the successful hosted deployment.
