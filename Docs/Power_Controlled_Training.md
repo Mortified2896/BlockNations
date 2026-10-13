@@ -21,6 +21,15 @@ force. After reboot, login discards stale process identities and resumes the las
 checkpoint when the power thresholds allow it. Recorded faults still need review.
 This job does not wake a sleeping/closed laptop or run after logout.
 
+The October 14 overnight restart exposed intermittent five-second `pmset`
+timeouts even while fresh interactive probes reported AC at 80%. The controller
+now retries one failed or malformed probe, with a five-second bound on each
+attempt. A valid battery/low-charge reading is acted on immediately. Both failed
+attempts still request the existing graceful stop and latch a fault; no cached
+AC reading substitutes for unknown power. A transient failure can therefore add
+up to five seconds to detection. The original successful save and fault receipts
+were preserved before the reviewed restart.
+
 Local configuration and state are outside Git:
 
 ```text
