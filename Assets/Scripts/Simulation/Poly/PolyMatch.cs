@@ -18,7 +18,7 @@ namespace BlockNations.Simulation.Poly
         public int currentTurnSeatIndex => Board.CurrentTurnSeat;
         public bool IsTurnOwnedBySeat(int seatIndex) => Board.IsTurnOwnedBySeat(seatIndex);
         public bool HasTechnology(int seatIndex, string id) => seatIndex >= 0 && seatIndex < 2 && (id == null || technologies[seatIndex].Contains(id));
-        public int Income(int seatIndex) => Cities.Where(c => c.ownerSeatIndex == seatIndex).Sum(c => c.Income);
+        public int Income(int seatIndex) => Cities.Where(c => c.ownerSeatIndex == seatIndex).Sum(c => CityIncome(c.id));
         public PolyCity City(int id) => Cities.FirstOrDefault(c => c.id == id);
         public PolyCity CityAt(int position) => Cities.FirstOrDefault(c => c.position == position);
         public PolyUnitSave UnitState(int id) => unitState.TryGetValue(id, out var value) ? value : null;
@@ -116,7 +116,7 @@ namespace BlockNations.Simulation.Poly
             }
             for (int p = 0; p < 121; p++) if (visible[p] && City(Tiles[p].cityId)?.ownerSeatIndex == seatIndex && CityAt(p) == null &&
                 (Board.UnitAt(p) == null || Board.UnitAt(p).Seat == seatIndex)) {
-                foreach (PolyAction action in DevelopActions(seatIndex, p)) if (action.Cost <= gold) actions.Add(action);
+                foreach (PolyAction action in DevelopmentOptions(seatIndex, p)) if (action.Cost <= gold) actions.Add(action);
             }
             foreach (var tech in PolyRules.Technologies) if (!HasTechnology(seatIndex, tech.Id) && HasTechnology(seatIndex, tech.Parent) && ResearchCost(seatIndex, tech.Id) <= gold)
                 actions.Add(new PolyAction(PolyActionKind.Research, seatIndex, choice: tech.Id) { Cost = ResearchCost(seatIndex, tech.Id), Label = tech.Name });
@@ -135,11 +135,15 @@ namespace BlockNations.Simulation.Poly
                     int next = 1 - seat; Board.CurrentTurnSeat = next; if (next == 0) Board.Round++;
                     foreach (var u in Board.Units.Where(u => u.Seat == next)) { var s = UnitState(u.Id); s.moved = s.attacked = s.rested = s.retreatUsed = s.attackStarted = false; }
                     foreach (var c in Cities.Where(c => c.ownerSeatIndex == next)) c.recruited = false;
+                    GrowCities(next);
                     Board.SetGold(next, checked(Board.GoldForSeat(next) + Income(next))); message = next == 0 ? "Your turn." : "Opponent's turn."; break;
                 case PolyActionKind.Research:
                     Pay(seat, action.Cost); technologies[seat].Add(action.Choice); message = action.Label + " researched."; break;
                 case PolyActionKind.Develop:
-                    Pay(seat, action.Cost); Develop(action); message = action.Label + ": +" + action.Population + " population."; break;
+                case PolyActionKind.ResearchAndDevelop:
+                    Pay(seat, action.Cost);
+                    foreach (var id in action.Technologies) technologies[seat].Add(id);
+                    Develop(action); message = action.Label + $": +{action.Food} Food/turn, +{action.GoldYield} Gold/turn."; break;
                 case PolyActionKind.Recruit:
                     var city = City(action.ActorId); Pay(seat, action.Cost); Spawn(seat, city.position, action.Choice, city.id); city.recruited = true;
                     message = action.Label + " recruited. Ready next turn."; break;

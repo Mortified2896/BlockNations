@@ -18,6 +18,7 @@ public sealed partial class PolyGameplayUITKView : MonoBehaviour
     private Label title, summary, hint, pageLabel, overlayTitle, overlaySummary, overlayHint;
     private Button endTurn, previous, following;
     private int page, pageCount, cityTab, branch, lastRevision = -1, lastPosition = -2;
+    private string selectedTechnology = "organization";
     private PolyGameController.InspectKind lastInspection;
     private string screen = "";
     private bool ready;
@@ -87,7 +88,10 @@ public sealed partial class PolyGameplayUITKView : MonoBehaviour
     {
         if (!ready) return;
         choices.Clear(); tabs.Clear(); overlayChoices.Clear(); overlayTabs.Clear(); overlayPages.Clear();
+        choices.RemoveFromClassList("tile-choices");
+        root.Q("Growth").style.display = DisplayStyle.None;
         overlayChoices.EnableInClassList("tech-choices", screen == "tech");
+        root.Q("OverlayCard").EnableInClassList("technology-card", screen == "tech");
         sheet.style.display = DisplayStyle.None; overlay.style.display = DisplayStyle.None;
         root.Q("Pages").style.display = DisplayStyle.None;
         title.text = summary.text = hint.text = overlayTitle.text = overlaySummary.text = overlayHint.text = "";
@@ -116,20 +120,24 @@ public sealed partial class PolyGameplayUITKView : MonoBehaviour
     {
         var unit = controller.Match.Board.UnitAt(p); if (unit == null) { sheet.style.display = DisplayStyle.None; return; }
         var d = unit.Definition; title.text = d.DisplayName;
-        summary.text = $"HP {unit.Health / 10f:0.#}/{d.MaxHealthUnits / 10}   ATK {d.AttackUnits / 10}   DEF {d.DefenseUnits / 10}";
+        summary.text = $"HP {unit.Health / 10f:0.#}/{d.MaxHealthUnits / 10}   ATK {d.AttackUnits / 10}   DEF {d.DefenseUnits / 10}\nMove {d.MaxMovesPerTurn} · Range {d.AttackRange}";
         hint.text = PolyRules.UnitAbility(d.TypeId);
         foreach (var action in Actions.Where(a => a.ActorId == unit.Id && (a.Kind == PolyActionKind.Heal || a.Kind == PolyActionKind.Capture))) {
             var a = action; Card(choices,a.Kind.ToString(),a.Kind == PolyActionKind.Heal ? "Heal" : "Capture",a.Kind == PolyActionKind.Heal ? "Rest this turn" : "Claim this city",()=>controller.Act(a),CanAct);
         }
         var city = controller.Match.CityAt(p);
-        if (city?.ownerSeatIndex == 0) Card(choices,"OpenCity","City " + city.id,"Level " + city.level,()=>controller.OpenCity(city.id),true);
+        if (city?.ownerSeatIndex == 0) hint.text += " Tap this unit again to inspect the city.";
         if (choices.childCount == 0) choices.style.display = DisplayStyle.None; else choices.style.display = DisplayStyle.Flex;
     }
     private void DrawCity(int p)
     {
         choices.style.display = DisplayStyle.Flex;
         var city = controller.Match.CityAt(p); title.text = $"City {city.id} · Level {city.level}";
-        summary.text = $"Population {city.population}/{city.PopulationNeeded}   +{city.Income} Gold/turn";
+        int food = controller.Match.CityFood(city.id);
+        summary.text = $"Population {city.population}/{city.PopulationNeeded} · +{food} Food/turn · +{controller.Match.CityIncome(city.id)} Gold/turn";
+        root.Q("Growth").style.display = DisplayStyle.Flex;
+        root.Q<Label>("GrowthLabel").text = $"Food {city.food}/{city.FoodNeeded} · " + (food == 0 ? "Build food improvements to grow" : $"Next population in {(city.FoodNeeded-city.food+food-1)/food} turn(s)");
+        root.Q("GrowthFill").style.width = Length.Percent(100f * city.food / city.FoodNeeded);
         var recruitTab = Button(tabs,"RecruitTab","Recruit",()=>{cityTab=0;page=0;Refresh();},"tab"); recruitTab.EnableInClassList("selected",cityTab==0);
         var developTab = Button(tabs,"DevelopTab","Develop",()=>{cityTab=1;page=0;Refresh();},"tab"); developTab.EnableInClassList("selected",cityTab==1);
         if (cityTab == 0) {
@@ -149,7 +157,7 @@ public sealed partial class PolyGameplayUITKView : MonoBehaviour
             pageCount = (tiles.Length+2)/3; page = Mathf.Clamp(page,0,Math.Max(0,pageCount-1));
             foreach(var n in tiles.Skip(page*3).Take(3)) {
                 int position=n; var tile = controller.Match.KnownTile(0,n);
-                Card(choices,"InspectTile"+n,TileName(tile),$"{n%11+1}, {n/11+1}",()=>InspectTile(position),true);
+                Card(choices,"InspectTile"+n,TileName(tile),YieldLabel(controller.Match.KnownYield(0,n)),()=>InspectTile(position),true,world.Icon(TileIcon(tile)));
             }
             hint.text = "Choose a tile to develop within this city's fixed territory."; ShowPages();
         }
@@ -159,34 +167,58 @@ public sealed partial class PolyGameplayUITKView : MonoBehaviour
         controller.Manager.gridManager.TryGetTile(p%11,p/11,out var tile);
         controller.HandleBoardTap(tile.GetComponent<TileHighlighter>(),null,null);
     }
-    private static string TileName(PolyTile tile) => tile.improvement != PolyImprovement.None ? tile.improvement.ToString() : tile.resource != PolyResource.None ? tile.resource.ToString() : tile.terrain.ToString();
+    private static string TileName(PolyTile tile)
+    {
+        if (tile.improvement == PolyImprovement.HuntingHut) return "Hunting hut";
+        if (tile.improvement == PolyImprovement.LumberHut) return "Lumber hut";
+        return tile.improvement != PolyImprovement.None ? tile.improvement.ToString() : tile.resource != PolyResource.None ? tile.resource.ToString() : tile.terrain.ToString();
+    }
+    private static string TileIcon(PolyTile tile) => tile.improvement != PolyImprovement.None ? tile.improvement.ToString() : tile.resource != PolyResource.None ? tile.resource.ToString() : tile.terrain.ToString();
+    private static string YieldLabel(PolyYield yield) => $"{yield.Food} Food · {yield.Gold} Gold/turn";
     private void DrawTile(int p)
     {
         choices.style.display = DisplayStyle.Flex;
+        choices.AddToClassList("tile-choices");
         var known = controller.Match.KnownTile(0,p); title.text = TileName(known);
         var city = controller.Match.City(known.cityId);
-        summary.text = city?.ownerSeatIndex==0 ? $"City {city.id} · Population {city.population}/{city.PopulationNeeded}" : known.terrain.ToString();
+        summary.text = YieldLabel(controller.Match.KnownYield(0,p));
         bool visible = controller.Match.Visibility(0)[p];
-        var options = Actions.Where(a=>a.Kind==PolyActionKind.Develop && a.Destination==p).ToArray();
-        var potential = city?.ownerSeatIndex == 0 && visible ? controller.Match.DevelopActions(0,p).ToArray() : new PolyAction[0];
-        foreach(var option in potential.Take(3)) {
-            var action=option; Card(choices,"Develop_"+action.Choice,action.Label,$"{action.Cost} Gold · +{action.Population} population",()=>controller.Act(action),CanAct && options.Any(a=>a.Same(action)));
+        var potential = city?.ownerSeatIndex == 0 && visible ? controller.Match.DevelopmentOptions(0,p).ToArray() : new PolyAction[0];
+        pageCount = (potential.Length+1)/2; page = Mathf.Clamp(page,0,Math.Max(0,pageCount-1));
+        foreach(var option in potential.Skip(page*2).Take(2)) {
+            var action=option;
+            string label = action.Technologies.Length==0 ? action.Label : "Research + " + action.Label.Substring(6);
+            string detail = $"+{action.Food} Food · +{action.GoldYield} Gold/turn\n{action.Cost} Gold";
+            if(action.Technologies.Length>0) detail += $" ({action.TechnologyCost} tech + {action.BuildCost} build)\n" + string.Join(" → ",action.Technologies.Select(id=>PolyRules.Technology(id).Name));
+            Card(choices,"Develop_"+action.Choice,label,detail,()=>controller.Act(action),CanAct && Actions.Any(a=>a.Same(action)),world.Icon(DevelopmentIcon(action.Choice)));
         }
         if (potential.Length==0) {
-            string tech = known.resource == PolyResource.Fruit ? "Organization" : known.resource == PolyResource.Animals ? "Hunting" : known.resource == PolyResource.Crops ? "Farming" :
-                known.resource == PolyResource.Ore ? "Mining" : known.terrain == PolyTerrain.Forest ? "Forestry" : "Construction";
-            hint.text = !visible ? "Remembered terrain. Bring a unit closer to develop it." : city?.ownerSeatIndex==0 ? $"Research {tech} to unlock development." : "Capture a nearby village to claim its tiles.";
-            Card(choices,"OpenTechnology","Technology","Buy research with Gold",()=>ShowScreen("tech"),true);
+            choices.style.display = DisplayStyle.None;
+            hint.text = !visible ? "Remembered terrain and yields. Bring a unit closer to develop it." : city?.ownerSeatIndex!=0 ? "Capture a nearby village to claim its tiles." :
+                known.improvement!=PolyImprovement.None ? "This permanent improvement supplies its city every turn." : "Development is blocked while an enemy occupies this tile.";
+        } else {
+            var locked = potential.FirstOrDefault(a=>a.Technologies.Length>0);
+            hint.text = locked!=null ? "Research + build includes every missing prerequisite. You can also buy research here first." : "Food grows city population. Gold is collected at the start of each turn.";
+            if(locked!=null) {
+                string id=locked.Technologies[0];
+                var research=Actions.FirstOrDefault(a=>a.Kind==PolyActionKind.Research && a.Choice==id);
+                Button(tabs,"TileResearch_"+id,$"Research {PolyRules.Technology(id).Name}\n{controller.Match.ResearchCost(0,id)} Gold",()=>controller.Act(research),"tile-research",CanAct && research!=null);
+            }
         }
         if (city?.ownerSeatIndex==0) Button(tabs,"InspectCity","City "+city.id,()=>controller.OpenCity(city.id),"tab");
+        ShowPages();
         var unit = visible ? controller.Match.Board.UnitAt(p) : null;
         if (unit!=null && unit.Seat!=0) hint.text = $"{unit.Definition.DisplayName} · HP {unit.Health/10f:0.#}/{unit.Definition.MaxHealthUnits/10}";
+    }
+    private static string DevelopmentIcon(string choice)
+    {
+        switch(choice) { case "fruit": return "Orchard"; case "hunt": return "HuntingHut"; case "lumber": return "LumberHut"; default: return char.ToUpperInvariant(choice[0])+choice.Substring(1); }
     }
     private void DrawRewards(PolyAction[] rewards)
     {
         sheet.style.display = DisplayStyle.Flex; choices.style.display = DisplayStyle.Flex;
         var city=controller.Match.City(rewards[0].ActorId); title.text=$"City {city.id} · Level {city.level-city.pendingRewards+1}";
-        summary.text=$"Income increased to +{city.Income} Gold/turn. Choose a reward.";
+        summary.text=$"Income increased to +{controller.Match.CityIncome(city.id)} Gold/turn. Choose a reward.";
         foreach(var reward in rewards) { var a=reward; Card(choices,"Reward_"+a.Choice,a.Choice=="workshop" ? "Workshop" : a.Choice=="walls" ? "Fortifications" : a.Choice=="giant" ? "Giant" : a.Choice=="population" ? "Population" : "Gold",a.Label.Split(':').Last().Trim(),()=>controller.Act(a),CanAct); }
     }
     private void ShowPages()
@@ -208,7 +240,7 @@ public sealed partial class PolyGameplayUITKView : MonoBehaviour
                 Button(overlayChoices,"PlayAgain","New match",()=>ShowScreen("confirm")); Button(overlayChoices,"ResultMenu","Main menu",controller.Leave); break;
             case "help":
                 overlayTitle.text="How to play"; overlaySummary.text="Drag to move the map. Pinch to zoom. Tap a unit, then a yellow tile or red target.";
-                overlayHint.text="Buy technology with Gold. Tap resources to grow cities, earn more Gold and choose level rewards. Cities keep their 3×3 territory.\n\nEnter a village or enemy city, then Capture on your following turn. Take every AI city to win. Rest units to heal. Riders retreat after attacking; Knights attack again after kills.\n\nYour Poly match saves automatically in this browser.";
+                overlayHint.text="Tap a stationed unit again to switch to its city. Build permanent improvements: Food grows population each turn and Gold increases income. Tile badges show their yields. You can research and build directly on a tile. Cities keep their 3×3 territory.\n\nEnter a village or enemy city, then Capture on your following turn. Take every AI city to win. Rest units to heal. Riders retreat after attacking; Knights attack again after kills.\n\nYour Poly match saves automatically in this browser.";
                 Button(overlayChoices,"HelpBack","Back to game",()=>ShowScreen("")); break;
             default:
                 overlayTitle.text="Poly"; overlaySummary.text=controller.SaveStatus;
@@ -219,23 +251,6 @@ public sealed partial class PolyGameplayUITKView : MonoBehaviour
                 Button(overlayChoices,"New","New match",()=>ShowScreen("confirm"),enabled:!controller.IsOpponentRunning);
                 Button(overlayChoices,"SaveMenu","Save & main menu",controller.Leave); break;
         }
-    }
-    private void DrawTechnology()
-    {
-        overlayTitle.text="Technology"; overlaySummary.text=$"Gold {controller.Match.Board.GoldForSeat(0)} · Choose a branch";
-        string[] names={"Food","Forest","Mines","Riding"};
-        string[][] branches={new[]{"organization","farming","construction","shields"},new[]{"hunting","archery","forestry","mathematics"},new[]{"climbing","mining","smithing"},new[]{"riding","roads","chivalry"}};
-        for(int i=0;i<4;i++) { int next=i; var button=Button(overlayTabs,"Branch"+i,names[i],()=>{branch=next;Refresh();},"tab");button.EnableInClassList("selected",branch==i); }
-        foreach(var id in branches[branch]) {
-            var tech=PolyRules.Technology(id); bool owned=controller.Match.HasTechnology(0,id);
-            var action=Actions.FirstOrDefault(a=>a.Kind==PolyActionKind.Research && a.Choice==id);
-            var button=Button(overlayChoices,"Research_"+id,"",()=>controller.Act(action),"choice",CanAct && action!=null);
-            button.AddToClassList("tech-tier-" + tech.Tier);
-            button.Add(Text((owned ? "✓ " : "")+tech.Name+ (owned ? " · Unlocked" : " · "+controller.Match.ResearchCost(0,id)+" Gold")));
-            button.Add(Text(tech.Description,"price"));
-            if(!owned && tech.Parent!=null) button.Add(Text("Requires "+PolyRules.Technology(tech.Parent).Name,"price"));
-        }
-        overlayHint.text="Research, improvements and recruitment share your Gold.";
     }
     private void OnDestroy() { if(runtimePanel!=null) Destroy(runtimePanel); }
     public void RefocusBoard() => boardCamera.GetComponent<CameraController>().RefocusBoard();

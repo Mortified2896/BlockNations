@@ -6,55 +6,81 @@ namespace BlockNations.Simulation.Poly
 {
     public sealed partial class PolyMatch
     {
-        private static int BasePopulation(string choice) => choice == "farm" || choice == "mine" ? 2 : choice == "road" ? 0 : 1;
-        public IEnumerable<PolyAction> DevelopActions(int seat, int p)
+        private sealed class Development
         {
+            public readonly string Choice, Label, Technology;
+            public readonly int Cost;
+            public readonly PolyImprovement Improvement;
+            public Development(string choice, string label, string technology, int cost, PolyImprovement improvement)
+            { Choice = choice; Label = label; Technology = technology; Cost = cost; Improvement = improvement; }
+        }
+        private static readonly Development[] Developments = {
+            new Development("fruit", "Build orchard", "organization", 2, PolyImprovement.Orchard),
+            new Development("hunt", "Build hunting hut", "hunting", 2, PolyImprovement.HuntingHut),
+            new Development("farm", "Build farm", "farming", 5, PolyImprovement.Farm),
+            new Development("mine", "Build mine", "mining", 5, PolyImprovement.Mine),
+            new Development("lumber", "Build lumber hut", "forestry", 3, PolyImprovement.LumberHut),
+            new Development("windmill", "Build windmill", "construction", 5, PolyImprovement.Windmill),
+            new Development("sawmill", "Build sawmill", "mathematics", 5, PolyImprovement.Sawmill),
+            new Development("forge", "Build forge", "smithing", 5, PolyImprovement.Forge),
+            new Development("road", "Build road", "roads", 2, PolyImprovement.None)
+        };
+        // Includes locked development and its complete prerequisite bill. The legal
+        // action is atomic, so an unaffordable or stale request cannot partially spend Gold.
+        public IEnumerable<PolyAction> DevelopmentOptions(int seat, int p)
+        {
+            if (seat < 0 || seat > 1 || p < 0 || p >= 121) yield break;
             var tile = Tiles[p];
-            if (City(tile.cityId)?.ownerSeatIndex != seat || CityAt(p) != null) yield break;
-            var choices = new List<Tuple<string, string, int>>();
-            if (tile.improvement == PolyImprovement.None) {
-                if (tile.resource == PolyResource.Fruit && HasTechnology(seat, "organization")) choices.Add(Tuple.Create("fruit", "Harvest fruit", 2));
-                if (tile.resource == PolyResource.Animals && HasTechnology(seat, "hunting")) choices.Add(Tuple.Create("hunt", "Hunt animals", 2));
-                if (tile.resource == PolyResource.Crops && HasTechnology(seat, "farming")) choices.Add(Tuple.Create("farm", "Build farm", 5));
-                if (tile.resource == PolyResource.Ore && HasTechnology(seat, "mining")) choices.Add(Tuple.Create("mine", "Build mine", 5));
-                if (tile.terrain == PolyTerrain.Forest && HasTechnology(seat, "forestry")) choices.Add(Tuple.Create("lumber", "Build lumber hut", 3));
-                if (tile.terrain == PolyTerrain.Plains && tile.resource == PolyResource.None) {
-                    if (HasTechnology(seat, "construction") && !HasBuilding(tile.cityId, PolyImprovement.Windmill)) choices.Add(Tuple.Create("windmill", "Build windmill", 5));
-                    if (HasTechnology(seat, "mathematics") && !HasBuilding(tile.cityId, PolyImprovement.Sawmill)) choices.Add(Tuple.Create("sawmill", "Build sawmill", 5));
-                    if (HasTechnology(seat, "smithing") && !HasBuilding(tile.cityId, PolyImprovement.Forge)) choices.Add(Tuple.Create("forge", "Build forge", 5));
+            if (City(tile.cityId)?.ownerSeatIndex != seat || CityAt(p) != null || !Visibility(seat)[p] ||
+                Board.UnitAt(p) != null && Board.UnitAt(p).Seat != seat) yield break;
+            foreach (var d in Developments) {
+                if (d.Choice == "road") { if (tile.road) continue; }
+                else {
+                    if (tile.improvement != PolyImprovement.None) continue;
+                    bool suitable = d.Choice == "fruit" ? tile.resource == PolyResource.Fruit :
+                        d.Choice == "hunt" ? tile.resource == PolyResource.Animals :
+                        d.Choice == "farm" ? tile.resource == PolyResource.Crops :
+                        d.Choice == "mine" ? tile.resource == PolyResource.Ore :
+                        d.Choice == "lumber" ? tile.terrain == PolyTerrain.Forest :
+                        tile.terrain == PolyTerrain.Plains && !HasBuilding(tile.cityId, d.Improvement);
+                    if (!suitable) continue;
                 }
-            }
-            if (!tile.road && HasTechnology(seat, "roads")) choices.Add(Tuple.Create("road", "Build road", 2));
-            foreach (var choice in choices) {
-                int gain = choice.Item1 == "windmill" ? AdjacentCount(p, PolyImprovement.Farm) * 2 :
-                    choice.Item1 == "sawmill" ? AdjacentCount(p, PolyImprovement.LumberHut) * 2 :
-                    choice.Item1 == "forge" ? AdjacentCount(p, PolyImprovement.Mine) * 2 : BasePopulation(choice.Item1);
-                if (choice.Item1 == "farm" && AdjacentCount(p, PolyImprovement.Windmill) > 0 || choice.Item1 == "mine" && AdjacentCount(p, PolyImprovement.Forge) > 0 ||
-                    choice.Item1 == "lumber" && AdjacentCount(p, PolyImprovement.Sawmill) > 0) gain += 2;
-                if (gain > 0 || choice.Item1 == "road") yield return new PolyAction(PolyActionKind.Develop, seat, tile.cityId, p, choice.Item1) { Cost = choice.Item3, Population = gain, Label = choice.Item2 };
+                var nextTile = tile.Copy();
+                if (d.Choice == "road") nextTile.road = true; else nextTile.improvement = d.Improvement;
+                var nextMap = (PolyTile[])Tiles.Clone(); nextMap[p] = nextTile;
+                var before = CityTileYield(tile.cityId, Tiles); var after = CityTileYield(tile.cityId, nextMap);
+                int food = after.Food - before.Food, gold = after.Gold - before.Gold;
+                if (food == 0 && gold == 0 && d.Choice != "road") continue;
+                var missing = MissingTechnologies(seat, d.Technology);
+                int technologyCost = missing.Sum(id => ResearchCost(seat, id));
+                yield return new PolyAction(missing.Length == 0 ? PolyActionKind.Develop : PolyActionKind.ResearchAndDevelop, seat, tile.cityId, p, d.Choice) {
+                    Cost = d.Cost + technologyCost, BuildCost = d.Cost, TechnologyCost = technologyCost,
+                    Technologies = missing, Food = food, GoldYield = gold, Label = d.Label
+                };
             }
         }
+        public IEnumerable<PolyAction> DevelopActions(int seat, int p) => DevelopmentOptions(seat, p).Where(a => a.Kind == PolyActionKind.Develop);
+        public string[] MissingTechnologies(int seat, string id)
+        {
+            var result = new List<string>();
+            while (id != null && !HasTechnology(seat, id)) {
+                var tech = PolyRules.Technology(id); if (tech == null) break;
+                result.Add(id); id = tech.Parent;
+            }
+            result.Reverse(); return result.ToArray();
+        }
         private bool HasBuilding(int cityId, PolyImprovement type) => Tiles.Any(t => t.cityId == cityId && t.improvement == type);
-        private int AdjacentCount(int p, PolyImprovement type) => Enumerable.Range(0, 121).Count(n => n != p && Distance(n, p) == 1 && Tiles[n].cityId == Tiles[p].cityId && Tiles[n].improvement == type);
         private void Develop(PolyAction action)
         {
-            var tile = Tiles[action.Destination];
-            switch (action.Choice) {
-                case "fruit": case "hunt": tile.resource = PolyResource.None; break;
-                case "farm": tile.resource = PolyResource.None; tile.improvement = PolyImprovement.Farm; break;
-                case "mine": tile.resource = PolyResource.None; tile.improvement = PolyImprovement.Mine; break;
-                case "lumber": tile.resource = PolyResource.None; tile.improvement = PolyImprovement.LumberHut; break;
-                case "windmill": tile.improvement = PolyImprovement.Windmill; break;
-                case "sawmill": tile.improvement = PolyImprovement.Sawmill; break;
-                case "forge": tile.improvement = PolyImprovement.Forge; break;
-                case "road": tile.road = true; break;
-            }
-            AddPopulation(City(action.ActorId), action.Population);
+            var d = Developments.First(x => x.Choice == action.Choice);
+            if (action.Choice == "road") Tiles[action.Destination].road = true;
+            else Tiles[action.Destination].improvement = d.Improvement;
         }
         private void AddPopulation(PolyCity city, int amount)
         {
             city.population += amount;
-            while (city.population >= city.PopulationNeeded) { city.population -= city.PopulationNeeded; city.level++; city.pendingRewards++; }
+            while (city.level < 100 && city.population >= city.PopulationNeeded) { city.population -= city.PopulationNeeded; city.level++; city.pendingRewards++; }
+            if (city.level == 100) city.population = Math.Min(city.population, city.PopulationNeeded - 1);
         }
         private int GiantPosition(PolyCity city)
         {

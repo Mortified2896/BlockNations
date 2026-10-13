@@ -5,8 +5,8 @@ namespace BlockNations.Simulation.Poly
 {
     public enum PolyTerrain { Plains, Forest, Mountain }
     public enum PolyResource { None, Fruit, Animals, Crops, Ore }
-    public enum PolyImprovement { None, Farm, LumberHut, Mine, Windmill, Sawmill, Forge }
-    public enum PolyActionKind { Move, Attack, Heal, Capture, Recruit, Develop, Research, Reward, EndTurn }
+    public enum PolyImprovement { None, Farm, LumberHut, Mine, Windmill, Sawmill, Forge, Orchard, HuntingHut }
+    public enum PolyActionKind { Move, Attack, Heal, Capture, Recruit, Develop, Research, Reward, EndTurn, ResearchAndDevelop }
 
     public sealed class PolyTechnology
     {
@@ -18,19 +18,20 @@ namespace BlockNations.Simulation.Poly
 
     public static class PolyRules
     {
-        public const string Version = "poly-land-v1";
+        public const string LegacyVersion = "poly-land-v1";
+        public const string Version = "poly-land-v2";
         public const int Size = 11;
         public static readonly PolyTechnology[] Technologies = {
-            new PolyTechnology("organization", "Organization", null, 1, "Harvest fruit for population."),
-            new PolyTechnology("farming", "Farming", "organization", 2, "Build farms on crops: +2 population."),
-            new PolyTechnology("construction", "Construction", "farming", 3, "Windmills gain population for adjacent farms."),
+            new PolyTechnology("organization", "Organization", null, 1, "Orchards supply 1 Food each turn."),
+            new PolyTechnology("farming", "Farming", "organization", 2, "Farms supply 3 Food each turn."),
+            new PolyTechnology("construction", "Construction", "farming", 3, "Windmills supply 2 Food per adjacent farm."),
             new PolyTechnology("shields", "Shields", "organization", 2, "Recruit Defenders to hold cities."),
-            new PolyTechnology("hunting", "Hunting", null, 1, "Hunt animals for population."),
+            new PolyTechnology("hunting", "Hunting", null, 1, "Hunting huts supply 2 Food each turn; animals stay."),
             new PolyTechnology("archery", "Archery", "hunting", 2, "Recruit Archers; forest defense bonus."),
-            new PolyTechnology("forestry", "Forestry", "hunting", 2, "Build lumber huts in forests: +1 population."),
+            new PolyTechnology("forestry", "Forestry", "hunting", 2, "Lumber huts supply 1 Gold each turn."),
             new PolyTechnology("mathematics", "Mathematics", "forestry", 3, "Recruit Catapults; build sawmills beside lumber huts."),
             new PolyTechnology("climbing", "Climbing", null, 1, "Cross mountains; mountain defense bonus."),
-            new PolyTechnology("mining", "Mining", "climbing", 2, "Build mines on ore: +2 population."),
+            new PolyTechnology("mining", "Mining", "climbing", 2, "Mines supply 2 Gold each turn."),
             new PolyTechnology("smithing", "Smithing", "mining", 3, "Recruit Swordsmen; build forges beside mines."),
             new PolyTechnology("riding", "Riding", null, 1, "Recruit Riders with retreat after attacking."),
             new PolyTechnology("roads", "Roads", "riding", 2, "Connect friendly land with roads; movement costs one."),
@@ -83,10 +84,11 @@ namespace BlockNations.Simulation.Poly
     }
     [Serializable] public sealed class PolyCity
     {
-        public int id, position, ownerSeatIndex = -1, level = 1, population, workshops, walls, pendingRewards;
+        public int id, position, ownerSeatIndex = -1, level = 1, population, workshops, walls, pendingRewards, food;
         public bool recruited;
         public int Income => ownerSeatIndex < 0 ? 0 : level + 1 + workshops;
         public int PopulationNeeded => level + 1;
+        public int FoodNeeded => 4 + level * 2;
     }
     [Serializable] public sealed class PolyUnitSave
     {
@@ -117,10 +119,16 @@ namespace BlockNations.Simulation.Poly
         public PolyActionKind Kind;
         public int SeatIndex, ActorId, Destination = -1;
         public string Choice;
-        public int Cost, Population, Damage, Retaliation;
+        public int Cost, Population, Damage, Retaliation, Food, GoldYield, BuildCost, TechnologyCost;
+        public string[] Technologies = new string[0];
         public string Label;
         public PolyAction(PolyActionKind kind, int seat, int actor = 0, int destination = -1, string choice = null)
         { Kind = kind; SeatIndex = seat; ActorId = actor; Destination = destination; Choice = choice; }
         public bool Same(PolyAction b) => b != null && Kind == b.Kind && SeatIndex == b.SeatIndex && ActorId == b.ActorId && Destination == b.Destination && Choice == b.Choice;
+    }
+    public readonly struct PolyYield
+    {
+        public readonly int Food, Gold;
+        public PolyYield(int food, int gold) { Food = food; Gold = gold; }
     }
 }

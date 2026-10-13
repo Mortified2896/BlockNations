@@ -6,7 +6,7 @@ namespace BlockNations.Simulation.Poly
     public sealed partial class PolyMatch
     {
         private static PolyCity CopyCity(PolyCity c) => new PolyCity { id = c.id, position = c.position, ownerSeatIndex = c.ownerSeatIndex, level = c.level,
-            population = c.population, workshops = c.workshops, walls = c.walls, pendingRewards = c.pendingRewards, recruited = c.recruited };
+            population = c.population, food = c.food, workshops = c.workshops, walls = c.walls, pendingRewards = c.pendingRewards, recruited = c.recruited };
         public PolySave CreateSave()
         {
             return new PolySave {
@@ -22,13 +22,13 @@ namespace BlockNations.Simulation.Poly
         public static PolyMatch Restore(PolySave save)
         {
             void Check(bool condition) { if (!condition) throw new ArgumentException("Unsupported or invalid Poly save. The original file was preserved."); }
-            Check(save != null && save.mode == "Poly" && save.rulesVersion == PolyRules.Version);
+            Check(save != null && save.mode == "Poly" && (save.rulesVersion == PolyRules.Version || save.rulesVersion == PolyRules.LegacyVersion));
             Check(save.tiles?.Length == 121 && save.cities?.Length == 7 && save.units != null && save.units.Length <= 121 && save.seats?.Length == 2);
             Check(save.currentTurnSeatIndex >= 0 && save.currentTurnSeatIndex < 2 && save.round > 0 && save.round <= 100000 &&
                 (save.gameOver ? save.winnerSeatIndex >= 0 && save.winnerSeatIndex < 2 : save.winnerSeatIndex == -1));
             Check(save.cities.All(c => c != null && c.id > 0 && c.position >= 0 && c.position < 121 && c.ownerSeatIndex >= -1 && c.ownerSeatIndex < 2 &&
                 c.level >= 1 && c.level <= 100 && c.population >= 0 && c.population < c.PopulationNeeded && c.workshops >= 0 && c.workshops <= c.level &&
-                c.walls >= 0 && c.walls <= c.level && c.pendingRewards >= 0 && c.pendingRewards < c.level));
+                c.walls >= 0 && c.walls <= c.level && c.pendingRewards >= 0 && c.pendingRewards < c.level && c.food >= 0 && c.food < c.FoodNeeded));
             Check(save.cities.Select(c => c.id).Distinct().Count() == 7 && save.cities.Select(c => c.position).Distinct().Count() == 7);
             bool ValidTile(PolyTile t) => t != null && Enum.IsDefined(typeof(PolyTerrain), t.terrain) && Enum.IsDefined(typeof(PolyResource), t.resource) &&
                 Enum.IsDefined(typeof(PolyImprovement), t.improvement) && (t.cityId == 0 || save.cities.Any(c => c.id == t.cityId));
@@ -57,7 +57,29 @@ namespace BlockNations.Simulation.Poly
                 result.unitState.Add(u.id, new PolyUnitSave { id = u.id, homeCityId = u.homeCityId, kills = u.kills, moved = u.moved, attacked = u.attacked, rested = u.rested, retreatUsed = u.retreatUsed, attackStarted = u.attackStarted });
             }
             result.Board.RestoreOutcome(save.gameOver, save.winnerSeatIndex);
+            if (save.rulesVersion == PolyRules.LegacyVersion) result.MigrateLegacyImprovements();
             result.UpdateMemory(); return result;
+        }
+        private void MigrateLegacyImprovements()
+        {
+            var original = new PolyMatch(Seed).Tiles;
+            void Migrate(PolyTile tile, int p)
+            {
+                if (tile == null || CityAt(p) != null) return;
+                if (tile.improvement == PolyImprovement.None && tile.resource == PolyResource.None) {
+                    if (original[p].resource == PolyResource.Fruit) tile.improvement = PolyImprovement.Orchard;
+                    else if (original[p].resource == PolyResource.Animals) tile.improvement = PolyImprovement.HuntingHut;
+                }
+                if (tile.resource != PolyResource.None) return;
+                if (tile.improvement == PolyImprovement.Farm) tile.resource = PolyResource.Crops;
+                else if (tile.improvement == PolyImprovement.Mine) tile.resource = PolyResource.Ore;
+                else if (tile.improvement == PolyImprovement.Orchard) tile.resource = PolyResource.Fruit;
+                else if (tile.improvement == PolyImprovement.HuntingHut || tile.improvement == PolyImprovement.LumberHut) tile.resource = original[p].resource;
+            }
+            for (int p = 0; p < 121; p++) {
+                Migrate(Tiles[p], p);
+                for (int seat = 0; seat < 2; seat++) Migrate(memory[seat][p], p);
+            }
         }
     }
 }

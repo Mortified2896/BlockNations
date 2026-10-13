@@ -36,8 +36,11 @@ public sealed class PolyNativePresentationTests
         Assert.That(original.TryApply(new PolyAction(PolyActionKind.Research,0,choice:"organization"),out _),Is.True);
         Assert.That(original.TryApply(new PolyAction(PolyActionKind.Research,0,choice:"farming"),out _),Is.True);
         Assert.That(original.TryApply(new PolyAction(PolyActionKind.Develop,0,1,11,"farm"),out _),Is.True);
-        Assert.That(original.TryApply(new PolyAction(PolyActionKind.Reward,0,1,choice:"workshop"),out _),Is.True);
-        string checkpoint=JsonUtility.ToJson(original.CreateSave());
+        var legacy = original.CreateSave(); legacy.rulesVersion=PolyRules.LegacyVersion;
+        legacy.cities[0].level=2; legacy.cities[0].workshops=1;
+        legacy.tiles[11].resource=PolyResource.None; legacy.seats[0].memory[11].resource=PolyResource.None;
+        string checkpoint=JsonUtility.ToJson(legacy);
+        string migratedCheckpoint=JsonUtility.ToJson(PolyMatch.Restore(legacy).CreateSave());
         string path=PolySaveStore.PathFor(root,WebAccountClient.PlayerId);
         File.WriteAllText(path,checkpoint);
         string standard=Path.Combine(root,"save_sp.json"); File.WriteAllText(standard,"synthetic-standard-save");
@@ -52,7 +55,8 @@ public sealed class PolyNativePresentationTests
         Assert.That(manager.gridManager.GetAllTiles().Count(),Is.EqualTo(121));
         Assert.That(controller.SceneCities.Count,Is.EqualTo(7));
         Assert.That(controller.Match.City(1).level,Is.EqualTo(2)); Assert.That(controller.Match.Income(0),Is.EqualTo(4));
-        Assert.That(JsonUtility.ToJson(controller.Match.CreateSave()),Is.EqualTo(checkpoint),"Loading the replacement presentation must preserve the complete existing checkpoint.");
+        Assert.That(JsonUtility.ToJson(controller.Match.CreateSave()),Is.EqualTo(migratedCheckpoint));
+        Assert.That(File.ReadAllText(path),Is.EqualTo(checkpoint),"Migration preserves the original checkpoint until an action saves it.");
         Assert.That(new SceneSimulationAdapter(manager).State,Is.SameAs(controller.Match.Board));
         Assert.That(UnitSelectionManager.Instance.HasLegalAttackTargetNow(null),Is.False);
         var live=controller.SceneUnits[1]; Assert.That(live.UnitTypeId,Is.EqualTo("poly-warrior"));
@@ -61,6 +65,27 @@ public sealed class PolyNativePresentationTests
             Is.SameAs(prefab.GetComponentsInChildren<SpriteRenderer>().First(r=>r!=prefab.GetComponent<Unit>().moveOutline).sprite));
         var view=Object.FindAnyObjectByType<PolyGameplayUITKView>();
         Assert.That(view.Document.rootVisualElement.Query<ScrollView>().ToList(),Is.Empty);
+        manager.gridManager.TryGetTile(1,1,out var capitalTile);
+        for(int tap=0;tap<3;tap++) {
+            controller.HandleBoardTap(capitalTile.GetComponent<TileHighlighter>(),live,controller.SceneCities[1]); yield return null;
+            Assert.That(controller.Inspection,Is.EqualTo(tap==1 ? PolyGameController.InspectKind.City : PolyGameController.InspectKind.Unit));
+        }
+        Assert.That(view.Document.rootVisualElement.Q<Button>("OpenCity"),Is.Null);
+        Submit(view.Document.rootVisualElement,"Tech");
+        yield return null;
+        var graph=view.Document.rootVisualElement.Q("TechnologyTree");
+        Assert.That(graph,Is.Not.Null); Assert.That(graph.Query<Image>().ToList().Count,Is.EqualTo(4));
+        Assert.That(graph.Q<Button>("Tech_farming"),Is.Not.Null);
+        Submit(view.Document.rootVisualElement,"CloseOverlay");
+        yield return null;
+        controller.CloseInspection(); manager.gridManager.TryGetTile(1,2,out var forestTile);
+        controller.HandleBoardTap(forestTile.GetComponent<TileHighlighter>(),null,null); yield return null;
+        Submit(view.Document.rootVisualElement,"TileResearch_hunting"); yield return null;
+        Assert.That(controller.Inspection,Is.EqualTo(PolyGameController.InspectKind.Tile));
+        Assert.That(controller.Match.HasTechnology(0,"hunting"),Is.True);
+        Submit(view.Document.rootVisualElement,"Develop_hunt"); yield return null;
+        Assert.That(controller.Match.Tiles[23].resource,Is.EqualTo(PolyResource.Animals));
+        Assert.That(forestTile.transform.Find("Poly food yield").GetComponent<SpriteRenderer>().sprite.name,Is.EqualTo("Poly FoodYield2"));
         var selection=UnitSelectionManager.Instance; selection.SelectUnit(live);
         var legal=LegalActionService.GetLegalActionsForUnit(manager,live,0);
         Assert.That(legal.Where(a=>a.ActionType==LegalActionType.UnitMove).Select(a=>a.TargetTile.gridY*11+a.TargetTile.gridX).OrderBy(p=>p),
@@ -88,5 +113,10 @@ public sealed class PolyNativePresentationTests
         manager.SaveToFile(standard); Assert.That(File.ReadAllText(standard),Is.EqualTo("synthetic-standard-save"));
         Assert.That(manager.LoadFromFile(standard),Is.False);
         Assert.That(PolySaveStore.Load(path).Board.Round,Is.EqualTo(2));
+    }
+    private static void Submit(VisualElement root,string name)
+    {
+        var button=root.Q<Button>(name); Assert.That(button,Is.Not.Null,name); Assert.That(button.enabledInHierarchy,Is.True,name);
+        using var submit=NavigationSubmitEvent.GetPooled(); submit.target=button; button.SendEvent(submit);
     }
 }

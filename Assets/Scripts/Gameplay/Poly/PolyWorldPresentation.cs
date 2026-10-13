@@ -5,7 +5,7 @@ using BlockNations.Simulation.Poly;
 using UnityEngine;
 
 // Normal SpriteRenderers, white tile prefab and fog layers; no UI grid or alternate camera.
-public sealed class PolyWorldPresentation : MonoBehaviour
+public sealed partial class PolyWorldPresentation : MonoBehaviour
 {
     [SerializeField] private PolyGameController controller;
     [SerializeField] private GameObject warriorPrefab, riderPrefab, archerPrefab;
@@ -33,6 +33,8 @@ public sealed class PolyWorldPresentation : MonoBehaviour
             controller.Manager.gridManager.TryGetTile(p % 11, p / 11, out var tile);
             terrain[p] = CreateRenderer(tile, "Poly terrain", 2, Vector3.zero, .78f);
             resource[p] = CreateRenderer(tile, "Poly resource", 3, new Vector3(.26f, .26f, 0), .32f);
+            foodYield[p] = CreateRenderer(tile, "Poly food yield", 4, new Vector3(-.23f, -.32f, 0), .43f);
+            goldYield[p] = CreateRenderer(tile, "Poly Gold yield", 4, new Vector3(.23f, -.32f, 0), .43f);
         }
     }
     private static SpriteRenderer CreateRenderer(TileVisibility tile, string name, int sortingOrder, Vector3 offset, float scale)
@@ -48,6 +50,7 @@ public sealed class PolyWorldPresentation : MonoBehaviour
         for (int p = 0; p < 121; p++) {
             var known = controller.Match.KnownTile(0, p);
             terrain[p].enabled = known != null; resource[p].enabled = known != null;
+            RefreshYields(p, known != null);
             if (known == null) continue;
             string landscape = known.improvement != PolyImprovement.None ? known.improvement.ToString() : known.terrain != PolyTerrain.Plains ? known.terrain.ToString() : known.road ? "Road" : null;
             terrain[p].sprite = landscape == null ? null : SpriteFor(landscape);
@@ -68,8 +71,12 @@ public sealed class PolyWorldPresentation : MonoBehaviour
         if (sprites.TryGetValue(key, out var value)) return value;
         string[] pixels;
         switch (key) {
-            case "Forest": case "LumberHut": pixels = new[] {"....#...........","...###.....#....","..#####...###...",".#######.#####..","...###..#######.","..#####...###...",".#######.#####..","###############.","....#......#....","....#......#...."}; break;
-            case "Mountain": case "Mine": case "Ore": pixels = new[] {".......#........","......###.......",".....#...#......","....#.....#.....","...#...#...#....","..#...###...#...",".#...#####...#..","################"}; break;
+            case "Forest": pixels = new[] {"....#...........","...###.....#....","..#####...###...",".#######.#####..","...###..#######.","..#####...###...",".#######.#####..","###############.","....#......#....","....#......#...."}; break;
+            case "LumberHut": pixels = new[] {"...#........#...","..###......###..",".#####....#####.","...#....#####...","......#########.",".....###########","......#..##..#..","......#..##..#..","......########..",".####.########..",".####..........."}; break;
+            case "HuntingHut": pixels = new[] {"...#.........#..","..###.......###.",".#####..#..#####","...#...###...#..","......#####.....",".....#######....","....#########...",".....#.....#....",".....#..#..#....",".....#..#..#....",".....#######...."}; break;
+            case "Orchard": pixels = new[] {"...####..####...","..############..",".##############.",".####.####.####.","..############..","...####..####...","......####......",".......##.......",".......##.......",".....######....."}; break;
+            case "Mountain": case "Ore": pixels = new[] {".......#........","......###.......",".....#...#......","....#.....#.....","...#...#...#....","..#...###...#...",".#...#####...#..","################"}; break;
+            case "Mine": pixels = new[] {".......#........","......###.......",".....#####......","....#######.....","...#########....","..###.....###...",".####.....####..","#####.....#####.","#####.....#####.","################"}; break;
             case "Farm": case "Crops": pixels = new[] {".#..#..#..#..#..","###.###.###.###.",".#..#..#..#..#..",".#..#..#..#..#..","................",".#..#..#..#..#..","###.###.###.###.",".#..#..#..#..#.."}; break;
             case "Windmill": pixels = new[] {"##..........##..",".##........##...","..##......##....","...##....##.....","....######......","....######......","...##....##.....","..##.####.##....",".##..####..##...","##...####...##..",".....####.......","....######......"}; break;
             case "Sawmill": case "Forge": pixels = new[] {"...######.......","..########......",".##########.....","###......###....","..#..##..#......","..#..##..#......","..#......#......","..########......","..########......"}; break;

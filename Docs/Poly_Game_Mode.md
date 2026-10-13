@@ -5,8 +5,8 @@ Poly is an owner-only Vs AI mode in the Block Nations website. Choose **Poly 11�
 ## Playing
 
 - Start on an 11×11 seeded land map with one city and a Warrior. The opponent has the same starting position resources, with one extra opening Gold when its first turn begins. Five neutral villages provide expansion through capture.
-- Tap your unit, then a yellow reachable tile or red attack target. Drag the map and pinch to zoom using the normal Block Nations camera. Tap a city for recruitment or a resource for development. **Tech** opens a branch selector with research cards. Recruitment and city development use page buttons; there are no map or gameplay-panel scrollbars.
-- Spend Gold on technology, recruitment, resource harvesting and improvements. City population is progression from development, not a pool consumed by recruitment.
+- Tap your unit, then a yellow reachable tile or red attack target. Drag the map and pinch to zoom using the normal Block Nations camera. On an occupied city, the first tap shows the unit; repeated taps alternate unit → city → unit. Tap an empty city for recruitment or a resource for development. **Tech** opens an illustrated tree with round nodes, dependency arrows and selectable branches. Recruitment and city development use page buttons; there are no map or gameplay-panel scrollbars.
+- Spend Gold on technology, recruitment and permanent tile improvements. Food from improvements grows city population every owner turn. Population is not consumed by recruitment.
 - Each city has a permanent 3×3 territory. Capturing villages grants their existing territory. Leveling never expands borders.
 - City levels require 2, then 3, then 4, and successively more population. Surplus carries forward. Each level adds one Gold per owner turn and queues a reward choice.
 - Level 2 offers Workshop (+1 Gold/turn) or Fortifications (city defense). Level 3 offers 5 immediate Gold or 2 population. Level 4 offers another Workshop or Fortifications. Level 5 onward offers a Giant or 10 Gold. A Giant appears on an empty city/territory tile; if there is no room, the economic reward remains available.
@@ -18,20 +18,33 @@ The unit roster is Warrior, Archer, Rider, Defender, Swordsman, Knight, Catapult
 
 ## Economy and technology
 
-Research costs `tier × (4 + owned cities)` Gold and requires its parent. The technology list displays the current price and unlocks even when unaffordable.
+Research costs `tier × (4 + owned cities)` Gold and requires its parent. The illustrated technology tree shows prices, unlocks and prerequisites, including unaffordable nodes. Selecting a locked tile also offers a research-only button for its next prerequisite and a combined research-and-build purchase. The latter includes all missing parents, itemizes research and building costs, and spends nothing unless the complete action is legal and affordable.
 
 | Branch | Unlocks |
 | --- | --- |
-| Organization → Farming → Construction | Fruit harvest; farms; adjacency windmills |
+| Organization → Farming → Construction | Orchards; farms; adjacency windmills |
 | Organization → Shields | Defenders |
-| Hunting → Archery | Animal harvest; Archers and forest defense |
+| Hunting → Archery | Hunting huts; Archers and forest defense |
 | Hunting → Forestry → Mathematics | Lumber huts; Catapults and adjacency sawmills |
 | Climbing → Mining → Smithing | Mountain movement/defense; mines; Swordsmen and adjacency forges |
 | Riding → Roads → Chivalry | Riders; roads; Knights |
 
-Fruit/animal harvest costs 2 Gold and gives 1 population. Farms/mines cost 5 and give 2; lumber huts cost 3 and give 1. Each city supports one windmill, sawmill and forge, each costing 5 Gold and contributing 2 population per adjacent matching improvement in that same territory. Later matching improvements also contribute the adjacency bonus. Roads cost 2, add no population and remove rough-terrain movement costs. Mountains require Climbing; forests/mountains cost two movement points, with an adjacent passable tile always reachable using a unit's one movement action.
+Improvements retain their resources and terrain. Every improved tile in a city's fixed territory contributes automatically; no worker assignment or food upkeep is required. Green grain badges and Gold coin badges show numeric yields on the world board. Inspection shows current yields, improvement gains and prices. A city's growth meter shows stored Food and turns until its next population point.
 
-Income is `city level + 1 + workshops`, collected once at the start of its owner's turn. Opening Gold is 7 for the human and 8 for the opponent including its first income. No food, unit upkeep or demographic model applies to Poly.
+| Improvement | Build cost | Permanent yield per owner turn |
+| --- | ---: | --- |
+| Orchard on fruit | 2 Gold | 1 Food |
+| Hunting hut on animals | 2 Gold | 2 Food |
+| Farm on crops | 5 Gold | 3 Food |
+| Lumber hut in forest | 3 Gold | 1 Gold |
+| Mine on ore | 5 Gold | 2 Gold |
+| Windmill | 5 Gold | 2 Food per adjacent farm |
+| Sawmill | 5 Gold | 1 Gold per adjacent lumber hut |
+| Forge | 5 Gold | 2 Gold per adjacent mine |
+
+A tile supports one improvement plus a road. A city supports one of each windmill, sawmill and forge; these can use an unimproved plains tile when their matching neighbours exist. Adjacency includes the eight surrounding cells in the same city territory. Building another matching improvement immediately increases the hub's yield; the tile purchase preview includes that gain.
+
+At the start of each owner turn, Food is collected once. Each `4 + 2 × city level` Food produces one population point, with surplus retained. Population thresholds for levels remain 2, 3, 4 and so on; level rewards remain unchanged. Gold income is `city level + 1 + workshops + tile Gold yields`, collected once after growth. Opening Gold remains 7 for the human and 8 for the opponent including its first income. Roads cost 2 Gold, have no economic yield, and remove rough-terrain movement costs. Mountains require Climbing; forests/mountains cost two movement points, with an adjacent passable tile always reachable using a unit's one movement action.
 
 ## Fog and heuristic opponent
 
@@ -41,11 +54,11 @@ Poly uses `MatchEngine.Visibility` from ordinary gameplay. Visibility is live, c
 
 ## Save and compatibility boundary
 
-`poly-land-v1` is an explicit save/rules identity. `save_poly_v1_<account scope>.json` is distinct from standard single-player saves and PBp snapshots. It contains the map, city progression, resources, researched technology, live unit/action budgets, per-seat fog memory, current turn and outcome. The codec validates before writing; unsupported/corrupt saves remain available for inspection. The previous checkpoint is retained separately. Browser writes explicitly flush IndexedDB before the saved indicator confirms success or Save & Menu leaves.
+`poly-land-v2` adds persistent city Food. The loader also supports `poly-land-v1`: levels, population progress, treasury, turn budgets and fog remain intact; old harvested fruit/animals become orchards/hunting huts, and existing farms/mines/lumber huts gain recurring yields. Migration uses the original map seed and only converts already remembered tiles in fog memory. Loading does not settle Food or income, and the old checkpoint is preserved until the next action saves it. `save_poly_v1_<account scope>.json` is distinct from standard single-player saves and PBp snapshots. It contains the map, city progression, resources, researched technology, live unit/action budgets, per-seat fog memory, current turn and outcome. The codec validates before writing; unsupported/corrupt saves remain available for inspection. The previous checkpoint is retained separately. Browser writes explicitly flush IndexedDB before the saved indicator confirms success or Save & Menu leaves.
 
 Continuation is local to the same browser/device and account. It is not a cloud save or synchronization between devices.
 
-The Poly scene explicitly wires the normal GridManager, CameraController, TileHoverManager, UnitSelectionManager, top HUD, city/unit state managers, tile/city/unit prefabs and New Input System event module. Poly projects its authoritative state into native sprites, world coordinates and fog overlays. The standard Warrior, Rider and Archer sprites are reused; additional units and terrain have small pixel graphics rendered on the same white tiles. PolyGameplayUITKView adds compact bottom sheets and a paged roster, with branch-based research in a modal. It contains no ScrollView or UI grid. LegalActionService and SceneSimulationAdapter dispatch only explicitly wired Poly scenes to the Poly rules. The standard unit registry, learned policy catalog, normal save format and PBp protocol remain compatible. Existing poly-land-v1 checkpoints keep the same filename, codec and turn state.
+The Poly scene explicitly wires the normal GridManager, CameraController, TileHoverManager, UnitSelectionManager, top HUD, city/unit state managers, tile/city/unit prefabs and New Input System event module. Poly projects its authoritative state into native sprites, world coordinates and fog overlays. The standard Warrior, Rider and Archer sprites are reused; additional units and terrain have small pixel graphics rendered on the same white tiles. PolyGameplayUITKView adds compact bottom sheets and a paged roster, with branch-based research in a modal. It contains no ScrollView or UI grid. LegalActionService and SceneSimulationAdapter dispatch only explicitly wired Poly scenes to the Poly rules. The standard unit registry, learned policy catalog, normal save format and PBp protocol remain compatible. Existing poly-land-v1 checkpoints keep the same account-scoped filename and migrate into the new economy without advancing a turn.
 
 ## Validation
 

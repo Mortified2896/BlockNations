@@ -104,7 +104,15 @@ public sealed partial class PolyGameController : MonoBehaviour
             Revision++; return;
         }
         if (hitUnit != null && hitUnit.ownerSeatIndex == 0) {
-            cityUI.ClosePanel(); unitSelection.SelectUnit(hitUnit);
+            // The occupied city has two inspectable objects. A repeat tap alternates
+            // between them instead of using SelectUnit's normal deselection toggle.
+            var city = Match.CityAt(p);
+            if (Inspection == InspectKind.Unit && SelectedPosition == p && city?.ownerSeatIndex == 0) {
+                OpenCity(city.id); return;
+            }
+            cityUI.ClosePanel();
+            if (unitSelection.SelectedUnit != hitUnit) unitSelection.SelectUnit(hitUnit);
+            else if (city?.ownerSeatIndex != 0) unitSelection.SelectUnit(hitUnit);
             Inspection = unitSelection.SelectedUnit != null ? InspectKind.Unit : InspectKind.None;
             SelectedPosition = Inspection == InspectKind.None ? -1 : p; Revision++; return;
         }

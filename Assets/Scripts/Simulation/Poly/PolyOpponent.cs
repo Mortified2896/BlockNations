@@ -21,7 +21,7 @@ namespace BlockNations.Simulation.Poly
                 KnownCityOwners = Enumerable.Range(0, 121).Select(p => match.KnownCityOwner(seatIndex, p)).ToArray(),
                 Units = match.Board.Units.Where(u => u.Seat == seatIndex || visible[u.Position]).Select(u => u.Copy()).OrderBy(u => u.Id).ToArray(),
                 OwnCities = match.Cities.Where(c => c.ownerSeatIndex == seatIndex).Select(c => new PolyCity { id = c.id, position = c.position, ownerSeatIndex = seatIndex,
-                    level = c.level, population = c.population, workshops = c.workshops, walls = c.walls, pendingRewards = c.pendingRewards }).ToArray(), Actions = match.LegalActions(seatIndex) };
+                    level = c.level, population = c.population, food = c.food, workshops = c.workshops, walls = c.walls, pendingRewards = c.pendingRewards }).ToArray(), Actions = match.LegalActions(seatIndex) };
         }
     }
     public static class PolyOpponent
@@ -41,7 +41,8 @@ namespace BlockNations.Simulation.Poly
                     var target = o.Units.First(u => u.Position == a.Destination);
                     return 30 + a.Damage * 0.7 - a.Retaliation * 0.8 + (a.Damage >= target.Health ? 80 : 0) - (a.Retaliation >= actor.Health ? 80 : 0);
                 case PolyActionKind.Heal: return actor.Health < actor.Definition.MaxHealthUnits * 0.6 ? 70 : 4;
-                case PolyActionKind.Develop: return a.Population == 0 ? -1 : 35 + a.Population * 12 - a.Cost;
+                case PolyActionKind.Develop:
+                case PolyActionKind.ResearchAndDevelop: return a.Food == 0 && a.GoldYield == 0 ? -1 : 35 + a.Food * 6 + a.GoldYield * 12 - a.Cost;
                 case PolyActionKind.Recruit:
                     int wanted = Math.Min(14, o.OwnCities.Length * 2 + o.Round / 5);
                     if (own.Length >= wanted) return -2;

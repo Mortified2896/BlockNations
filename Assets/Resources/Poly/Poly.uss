@@ -18,6 +18,13 @@
 .choice Label { font-size: 13px; -unity-text-align: middle-center; white-space: normal; }
 .choice .price { font-size: 12px; margin-top: 3px; color: rgb(235,235,235); }
 .choice .unit-icon { width: 32px; height: 32px; margin-bottom: 4px; }
+.tile-choices .choice { height: 146px; padding: 6px; }
+.tile-research { color: white; background-color: rgba(0,0,0,.62); border-width: 0; border-radius: 6px; min-height: 44px; flex-grow: 1; flex-basis: 0; margin: 0 3px; font-size: 12px; white-space: normal; }
+.tile-research:disabled { opacity: .45; }
+.growth { margin-bottom: 8px; }
+.growth-label { color: rgb(193,227,192); font-size: 12px; margin: 0 0 4px; white-space: normal; }
+.growth-track { height: 5px; background-color: rgba(255,255,255,.18); border-radius: 3px; }
+.growth-fill { height: 5px; background-color: rgb(146,199,117); border-radius: 3px; }
 .hint { white-space: normal; font-size: 12px; color: rgb(225,235,244); margin: 7px 0 0; }
 .pages { flex-direction: row; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 4px; }
 .page-button { width: 44px; height: 34px; font-size: 24px; margin: 0; }
@@ -29,14 +36,58 @@
 .overlay-choices .choice Label { -unity-text-align: middle-left; }
 .menu-button { width: 100%; height: 46px; margin: 5px 0; font-size: 16px; }
 .compact-short .choice { height: 76px; }
+.compact-short .tile-choices .choice { height: 126px; }
 .compact-short .choice .unit-icon { width: 24px; height: 24px; }
 .compact-short .poly-sheet { padding-top: 5px; padding-bottom: 7px; }
 .compact-short .overlay-choices .choice { height: auto; min-height: 48px; padding: 5px 10px; }
 .compact-short .summary, .compact-short .hint { font-size: 12px; }
 .compact-short .sheet-title { font-size: 17px; }
-.tech-tier-2 { margin-left: 12px; }
-.tech-tier-3 { margin-left: 24px; }
+.technology-tree { height: 350px; position: relative; flex-shrink: 0; margin: 8px 0; }
+.technology-tree.linear .tree-position-1, .technology-tree.linear .tree-position-2 { left: 50%; }
+.technology-node { position: absolute; width: 112px; height: 100px; margin: 0; padding: 0; background-color: rgba(0,0,0,0); border-width: 0; align-items: center; justify-content: flex-start; translate: -50% -50%; }
+.technology-bubble { width: 62px; height: 62px; border-radius: 31px; border-width: 2px; border-color: rgb(111,159,190); background-color: rgb(27,77,105); align-items: center; justify-content: center; }
+.technology-icon { width: 38px; height: 38px; -unity-background-image-tint-color: rgb(238,209,139); }
+.technology-name { color: white; font-size: 13px; -unity-text-align: middle-center; white-space: normal; margin: 3px 0 0; }
+.technology-name, .technology-cost { background-color: rgb(16,57,84); padding-left: 3px; padding-right: 3px; }
+.technology-cost { color: rgb(238,209,139); font-size: 11px; margin: 1px 0 0; }
+.technology-node.locked .technology-bubble { border-color: rgb(73,106,129); background-color: rgb(26,61,83); }
+.technology-node.locked .technology-icon { opacity: .6; }
+.technology-node.owned .technology-bubble { border-color: rgb(119,204,170); background-color: rgb(37,94,83); }
+.technology-node.owned .technology-cost { color: rgb(151,220,195); }
+.technology-node.selected .technology-bubble { border-width: 3px; border-color: white; }
+.tree-position-0 { left: 50%; top: 15%; }
+.tree-position-1 { left: 30%; top: 50%; }
+.tree-position-2 { left: 30%; top: 85%; }
+.tree-position-3 { left: 75%; top: 50%; }
+.technology-detail { flex-direction: column; padding: 8px 10px; border-radius: 6px; background-color: rgba(0,0,0,.25); }
+.technology-copy { flex-grow: 1; }
+.technology-description { font-size: 13px; color: white; white-space: normal; margin: 0; }
+.research-button { color: white; background-color: rgba(0,0,0,.62); border-width: 0; border-radius: 6px; height: 44px; margin: 8px 0 0; font-size: 14px; white-space: normal; }
+.research-button:disabled { opacity: .55; }
+.compact-short .technology-tree { height: 280px; }
+.landscape-short .technology-tree { height: 165px; margin: 2px 0; }
+.landscape-short .tech-choices { flex-direction: column; flex-wrap: nowrap; }
+.landscape-short .technology-node { width: 106px; height: 88px; }
+.landscape-short .technology-bubble { width: 48px; height: 48px; border-radius: 24px; }
+.landscape-short .technology-icon { width: 30px; height: 30px; }
+.landscape-short .tree-position-0 { left: 12%; top: 56%; }
+.landscape-short .tree-position-1 { left: 49%; top: 30%; }
+.landscape-short .tree-position-2 { left: 85%; top: 30%; }
+.landscape-short .tree-position-3 { left: 49%; top: 82%; }
+.landscape-short .technology-tree.linear .tree-position-1 { left: 49%; top: 56%; }
+.landscape-short .technology-tree.linear .tree-position-2 { left: 85%; top: 56%; }
+.landscape-short .technology-detail { flex-direction: row; align-items: center; padding: 5px 8px; }
+.landscape-short .technology-copy { width: 60%; }
+.landscape-short .research-button { width: 38%; margin: 0 0 0 6px; }
+.landscape-short .technology-card .hint { display: none; }
 .landscape-short .overlay-card { max-width: 700px; padding: 8px 14px; }
-.landscape-short .tech-choices { flex-direction: row; flex-wrap: wrap; }
-.landscape-short .tech-choices .choice { width: 48%; flex-basis: 48%; max-width: 48%; margin: 3px 1%; min-height: 80px; padding: 7px 10px; }
 .landscape-short .menu-button { height: 36px; margin: 3px 0; }
+.landscape-short .poly-sheet { max-width: 700px; padding: 4px 10px 6px; }
+.landscape-short .poly-sheet .close-button { height: 34px; }
+.landscape-short .poly-sheet .summary { margin-bottom: 4px; }
+.landscape-short .poly-sheet .tab { height: 32px; }
+.landscape-short .poly-sheet .choice { height: 70px; }
+.landscape-short .poly-sheet .tile-choices .choice { height: 116px; }
+.landscape-short .poly-sheet .tile-research { min-height: 38px; }
+.landscape-short .poly-sheet .hint { margin-top: 4px; font-size: 11px; }
+.landscape-short .growth { margin-bottom: 4px; }

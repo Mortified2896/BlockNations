@@ -8,6 +8,12 @@
                     <ui:Button name="CloseSheet" text="×" class="close-button" />
                 </ui:VisualElement>
                 <ui:Label name="Summary" class="summary" picking-mode="Ignore" />
+                <ui:VisualElement name="Growth" class="growth" picking-mode="Ignore" style="display: none;">
+                    <ui:Label name="GrowthLabel" class="growth-label" picking-mode="Ignore" />
+                    <ui:VisualElement class="growth-track" picking-mode="Ignore">
+                        <ui:VisualElement name="GrowthFill" class="growth-fill" picking-mode="Ignore" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
                 <ui:VisualElement name="SheetTabs" class="button-row" />
                 <ui:VisualElement name="Choices" class="choices" />
                 <ui:VisualElement name="Pages" class="pages">
