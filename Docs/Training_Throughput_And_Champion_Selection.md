@@ -1,6 +1,6 @@
 # Training throughput and evaluated playtest selection
 
-Implemented on 2026-10-12 for the owner's request to accelerate and improve the current local training workflow. The changes affect development tooling and checkpoint selection. Match rules, observations/actions, gameplay scenes, save/PBp formats and the published frozen opponent retain their existing contracts.
+Implemented on 2026-10-12 for the owner's request to accelerate and improve the current local training workflow. The changes affect development tooling and checkpoint selection. Match rules, observations/actions, gameplay scenes, save/PBp formats and the published frozen opponent retain their existing contracts. The approved [tournament-guided continuation](Tournament_Guided_Training.md), added on 2026-10-13, refreshes benchmark baselines automatically and optionally replaces the strict cell gate below with repeated seed packs and bounded regression margins. It also feeds actual training weaknesses into the challenger mix and requests saved stops after repeated measured regressions.
 
 ## Frozen AI selection
 

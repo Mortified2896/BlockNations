@@ -4,6 +4,20 @@ using UnityEngine;
 public sealed class TrainingProgressHistoryTests
 {
     [Test]
+    public void EvaluationFailuresAndReviewAreVisibleInsteadOfAProgressClaim()
+    {
+        var value = new TrainingEvaluationStatus { owner = "BlockNations.AutomaticEvaluation.v1", runId = "run", updatedUnix = 1,
+            state = "waiting", lastOutcome = "failed" };
+        Assert.That(value.IsValid("run"), Is.True);
+        Assert.That(value.IsValid("another"), Is.False);
+        Assert.That(value.Summary, Does.Contain("failed"));
+        value.reviewRequired = true;
+        Assert.That(value.Summary, Does.Contain("paused"));
+        value.reviewRequired = false; value.state = "evaluating"; value.stage = "refreshing_baseline";
+        Assert.That(value.Summary, Does.Contain("Refreshing"));
+    }
+
+    [Test]
     public void FixedReferenceScoreRejectsOtherRunsRulesAndInconsistentRoles()
     {
         var status = JsonUtility.FromJson<TrainingReferenceScore>(

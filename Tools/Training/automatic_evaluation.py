@@ -52,6 +52,11 @@ def settings(run):
             any(p.is_symlink() for p in (suite, *suite.parents) if p.is_relative_to(root)) or
             read_json(root / '.blocknations-training-root.json').get('owner') != 'BlockNations.LocalTraining.v1'):
         raise ValueError('Automatic evaluation requires an owned 7x7 run and fixed suite inside its training root.')
+    if type(config.get('replicatedPromotion', False)) is not bool:
+        raise ValueError('Replicated promotion must be explicitly enabled or disabled.')
+    if config.get('replicatedPromotion', False):
+        from tournament_selection import policy
+        policy(config.get('promotionMargins'))
     return config
 
 
@@ -100,13 +105,25 @@ def perform_job(run, worker, job_path):
         resolve_champion(run)
         _, _, _, definition = prepare(run / incumbent['candidateManifest'], Path(config['suite']))
         if definition['suiteId'] != incumbent['suiteId']:
-            raise ValueError('Benchmark identity changed; re-evaluate both candidates before promotion.')
+            from tournament_selection import baseline, refresh
+            job.update(state='refreshing_baseline', reason='Re-evaluating the same champion with the current benchmark.')
+            atomic_json(job_path, job)
+            receipt = baseline(run, run/incumbent['candidateManifest'], Path(config['suite']), worker)
+            incumbent = refresh(run, receipt)
         for retry in range(3):
             try:
                 source = latest_checkpoint(run)
                 step = int(source.stem.rsplit('-', 1)[1])
-                manifest = freeze(run, source, step, (run / 'trainer.yaml').read_bytes(),
-                                  hashlib.sha256((run / 'training-opponents.json').read_bytes()).hexdigest())
+                existing = run/'frozen-evaluations'/('milestone-'+str(step))/'manifest.json'
+                if existing.exists():
+                    from evaluate_suite import frozen_actor
+                    actor, _ = frozen_actor(existing, read_json(run/'run.json')['rulesVersion'])
+                    if actor.sha256 != hashlib.sha256(source.read_bytes()).hexdigest():
+                        raise ValueError('Existing frozen checkpoint differs from the selected numbered pair.')
+                    manifest = existing
+                else:
+                    manifest = freeze(run, source, step, (run / 'trainer.yaml').read_bytes(),
+                                      hashlib.sha256((run / 'training-opponents.json').read_bytes()).hexdigest())
                 break
             except FileNotFoundError:
                 if retry == 2:
@@ -116,8 +133,21 @@ def perform_job(run, worker, job_path):
         atomic_json(job_path, job)
         result = evaluate(manifest, Path(config['suite']), worker, job_path.parent / 'results')
         job.update(games=sum(r['games'] for r in result['results']), suiteId=result['suiteId'])
+        confirmation = None
+        if config.get('replicatedPromotion', False):
+            from tournament_selection import baseline, confirmation_suite, review
+            repeat_suite = job_path.parent/'confirmation-suite.json'
+            atomic_json(repeat_suite, confirmation_suite(read_json(Path(config['suite']))))
+            job.update(state='confirming', reason='Comparing both actors on a separate seed pack.')
+            atomic_json(job_path, job)
+            old_repeat_path = baseline(run, run/incumbent['candidateManifest'], repeat_suite, worker)
+            new_repeat = evaluate(manifest, repeat_suite, worker, job_path.parent/'confirmation-results')
+            confirmation = dict(incumbent=old_repeat_path, candidate=job_path.parent/'confirmation-results/suite.json')
+            job['review'] = review(run, read_json(run/incumbent['evaluation']), result,
+                                   read_json(old_repeat_path), new_repeat, step, config.get('promotionMargins'))
         try:
-            selected = select(run, manifest, job_path.parent / 'results/suite.json')
+            kwargs = dict(confirmation=confirmation, margins=config.get('promotionMargins')) if confirmation else {}
+            selected = select(run, manifest, job_path.parent / 'results/suite.json', **kwargs)
             job.update(state='promoted', champion=selected['checkpoint'], reason='Passed the fixed-reference promotion gate.')
         except ValueError as error:
             if not str(error).startswith(('Candidate increased', 'Candidate regressed', 'Candidate did not improve')):
@@ -138,6 +168,8 @@ def retire(run):
     base = run / 'evaluations/automatic'
     champion = read_json(run / 'playtest-champion.json').get('candidateManifest')
     selected = (run / champion).parent if champion else None
+    protected_evidence = [read_json(run/'playtest-champion.json')]
+    protected_evidence += [read_json(p) for p in (run/'champion-history').glob('*.json')]
     jobs = sorted(base.glob('*/job.json'), key=lambda p: p.stat().st_mtime, reverse=True)
     for path in jobs[3:]:
         job = read_json(path)
@@ -145,7 +177,11 @@ def retire(run):
             continue
         model = run / job.get('candidateManifest', 'missing')
         folder = model.parent
-        if selected == folder:
+        if any(any((run/relative).is_relative_to(path.parent) for relative in
+                   [item.get('evaluation', 'missing'), *item.get('confirmation', {}).values()])
+               for item in protected_evidence):
+            continue
+        if selected == folder or any((run/item.get('candidateManifest', 'missing')).parent == folder for item in protected_evidence):
             continue
         if (folder.is_relative_to(run / 'frozen-evaluations') and not folder.is_symlink() and
                 read_json(folder / 'automatic-owner.json') == dict(owner=OWNER, runId=run.name)):
@@ -180,6 +216,7 @@ class Scheduler:
                 stop_process(self.process)
                 cancelled = True
             if self.process.poll() is None:
+                self.state['stage'] = read_json(self.job_path).get('state', 'evaluating')
                 self.publish()
                 return
             job = read_json(self.job_path)
@@ -191,23 +228,33 @@ class Scheduler:
             self.state.update(state='waiting', lastOutcome=job.get('state', 'failed'),
                               lastReason=job.get('reason', 'Evaluation process stopped before reporting a result.'),
                               lastCandidateStep=job.get('candidateStep', self.state['candidateStep']))
+            self.state['reviewRequired'] = job.get('review', {}).get('state') == 'review_required'
+            self.state['stage'] = ''
             self.process = None
             self.log.close()
             self.log = None
             retire(self.run)
+        review = read_json(self.run/'training-review.json')
+        if review.get('owner') == 'BlockNations.TrainingReview.v1' and review.get('runId') == self.run.name and review.get('state') == 'review_required':
+            self.state.update(state='review_required', reason=review['reason'])
+            self.publish()
+            return
         if not running:
             self.state.update(state='waiting', reason='Waiting for active training and storage headroom.')
             self.publish()
             return
         count = decisions(self.run)
         threshold = self.state.get('lastEvaluatedDecisions', 0) + config['intervalDecisions']
+        request = self.run/'automatic-evaluation.request'
+        requested = request.is_file()
         self.state.update(currentDecisions=count, nextAtDecisions=threshold)
-        if count < threshold:
+        if count < threshold and not requested:
+            self.state['reason'] = 'Waiting for the next benchmark milestone.'
             self.publish()
             return
         source = latest_checkpoint(self.run, allow_pending=True)
         step = int(source.stem.rsplit('-', 1)[1]) if source else 0
-        if step <= self.state.get('lastCandidateStep', 0):
+        if step <= self.state.get('lastCandidateStep', 0) and not requested:
             self.publish()
             return
         # A scheduler crash can leave its isolated job finishing independently.
@@ -229,6 +276,7 @@ class Scheduler:
             command = ['/usr/bin/nice', '-n', '10'] + command
         self.log = (folder / 'evaluation.log').open('wb')
         self.process = subprocess.Popen(command, stdout=self.log, stderr=subprocess.STDOUT, start_new_session=True)
+        request.unlink(missing_ok=True)
         self.state.update(state='evaluating', candidateStep=step, lastEvaluatedDecisions=count,
                           startedUnix=time.time(), job=str(self.job_path.relative_to(self.run)),
                           nextAtDecisions=count + config['intervalDecisions'])

@@ -41,6 +41,8 @@ class WholeMatchGhostTrainer(GhostTrainer):
         self.snapshot_ids = {}
         recipe = load_recipe(self.run, self.rules_version)
         self.challenger_ids = challenger_ids(recipe)
+        from training_feedback import Feedback
+        self.training_feedback = Feedback(self.run, self.rules_version, self.session)
         super().__init__(*args, **kwargs)
         # Never inherit the inflated legacy trajectory Elo.
         self.policy_elos = [self.rating.data['elo']] * len(self.policy_elos)
@@ -102,7 +104,11 @@ class WholeMatchGhostTrainer(GhostTrainer):
                 ids = tuple(event['currentIds']) if event.get('currentIds') else None
             elif self.rating.data['pending'] and self.rating.data['pending']['context']:
                 ids = self.identities(self.rating.data['pending']['context']['learningSeat'])
-            self.rating.accept(event, context, ids)
+            if self.rating.accept(event, context, ids):
+                self.training_feedback.observe(event)
+        self.training_feedback.publish()
+        if self.training_feedback.config:
+            self.challenger_ids = self.training_feedback.identities
 
     def advance(self):
         self.drain_results()

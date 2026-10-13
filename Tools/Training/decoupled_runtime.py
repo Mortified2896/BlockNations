@@ -71,6 +71,10 @@ def configure(args, run, environment):
     if recipe:
         record['trainingOpponentRecipe'] = recipe
         record['trainingChallengerId'] = recipe_id(recipe)
+    from training_feedback import enabled
+    feedback = enabled(run)
+    if feedback:
+        record['trainingFeedbackConfig'] = feedback
     (run / 'execution-settings.json.tmp').write_text(json.dumps(record) + '\n')
     (run / 'execution-settings.json.tmp').replace(run / 'execution-settings.json')
 

@@ -12,6 +12,7 @@ public sealed class TrainingOverlay
     private bool showRunFolder, showPoolElo;
     private double nextReferencePoll;
     private TrainingReferenceScore referenceScore;
+    private TrainingEvaluationStatus evaluationStatus;
     private string referenceRun;
     private double nextHumanLearningRefresh;
     private string humanLearningDirectory;
@@ -283,10 +284,17 @@ public sealed class TrainingOverlay
             nextReferencePoll = Time.realtimeSinceStartupAsDouble + 5;
             referenceRun = arena.TrainingRunDirectory;
             referenceScore = null;
+            evaluationStatus = null;
             try
             {
                 if (!string.IsNullOrEmpty(referenceRun))
                 {
+                    string evaluationPath = System.IO.Path.Combine(referenceRun, "automatic-evaluation-status.json");
+                    if (System.IO.File.Exists(evaluationPath) && new System.IO.FileInfo(evaluationPath).Length < 64000)
+                    {
+                        var value = JsonUtility.FromJson<TrainingEvaluationStatus>(System.IO.File.ReadAllText(evaluationPath));
+                        if (value != null && value.IsValid(new System.IO.DirectoryInfo(referenceRun).Name)) evaluationStatus = value;
+                    }
                     string path = System.IO.Path.Combine(referenceRun, "fixed-reference-status.json");
                     if (System.IO.File.Exists(path) && new System.IO.FileInfo(path).Length < 64000)
                     {
@@ -300,6 +308,14 @@ public sealed class TrainingOverlay
             catch (ArgumentException) { }
         }
         GUILayout.Label("Strength against fixed opponents", title);
+        if (evaluationStatus != null)
+        {
+            GUILayout.Label(evaluationStatus.Summary, small);
+            if (evaluationStatus.lastOutcome == "failed" || evaluationStatus.state == "error")
+                GUILayout.Label(evaluationStatus.lastReason ?? evaluationStatus.reason, small);
+            if (DateTimeOffset.UtcNow.ToUnixTimeSeconds() - evaluationStatus.updatedUnix > 90)
+                GUILayout.Label("Evaluator status is stale; these are the last reported results.", small);
+        }
         if (referenceScore == null) GUILayout.Label("Awaiting a verified benchmark. Training Elo is diagnostic only.", small);
         else
         {
@@ -308,6 +324,8 @@ public sealed class TrainingOverlay
             GUILayout.Label($"Latest evaluated: {latest.Percent:F1}% · {latest.wins:N0}/{latest.games:N0} wins", label);
             GUILayout.Label($"Retained champion: {champion.Percent:F1}% · {champion.wins:N0}/{champion.games:N0} wins", small);
             GUILayout.Label($"Latest checkpoint: {latest.checkpoint}", small);
+            if (referenceScore.updatedUnix > 0 && referenceScore.updatedUnix < 253402300799)
+                GUILayout.Label($"Benchmark updated: {DateTimeOffset.FromUnixTimeSeconds((long)referenceScore.updatedUnix).ToLocalTime():g}", small);
             GUILayout.Label($"Latest first: {latest.firstWins}/{latest.firstGames} · second: {latest.secondWins}/{latest.secondGames}", small);
             GUILayout.Label($"Difference from champion: {latest.Percent - champion.Percent:+0.0;-0.0;0.0} percentage points", small);
             GUILayout.Label("Same fixed references · human difficulty remains unproven", small);

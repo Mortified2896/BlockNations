@@ -30,5 +30,7 @@ def publish(run, candidate_manifest, candidate_results):
     status = dict(version=1, source='verified-fixed-reference-v1', runId=run.name,
                   boardSize=baseline['boardSize'], rulesVersion=baseline['rulesVersion'], suiteId=baseline['suiteId'],
                   updatedUnix=time.time(), champion=score(baseline, champion), latest=score(recent, candidate))
+    selection = read_json(run/'playtest-champion.json')
+    status['promotionEvidence'] = selection.get('promotionEvidence')
     atomic_json(run / 'fixed-reference-status.json', status)
     return status

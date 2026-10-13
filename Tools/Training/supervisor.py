@@ -372,6 +372,9 @@ def main() -> int:
         raise ValueError("Use at least 2048 training steps and a positive checkpoint interval.")
     root = args.root.absolute()
     prepare_root(root)
+    review = read_json(root/'runs'/args.run_id/'training-review.json')
+    if review.get('owner') == 'BlockNations.TrainingReview.v1' and review.get('runId') == args.run_id and review.get('state') == 'review_required':
+        raise ValueError('Training awaits recipe review after repeated benchmark regressions.')
     lock = root / "supervisor.lock"
     # Exclusively owned process lock; a crash leaves a stale pid which may be reclaimed.
     if lock.exists():
@@ -534,7 +537,10 @@ def main() -> int:
             # A paused resume cannot produce its first whole-match rating. Give
             # each active interval its own grace period before checking the protocol.
             rating_wait_started = rating_wait_start(arena, rating_wait_started, time.monotonic())
-            if stop_requested or stop_path.exists():
+            review = read_json(run/'training-review.json')
+            if review.get('owner') == 'BlockNations.TrainingReview.v1' and review.get('runId') == run.name and review.get('state') == 'review_required':
+                reason = 'benchmark_review'
+            elif stop_requested or stop_path.exists():
                 reason = "user_stop"
             elif limit_reason := limits.stop_reason(elapsed, used, free):
                 reason = limit_reason

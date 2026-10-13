@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import shutil
 import unittest
 from unittest.mock import Mock, patch
 
@@ -130,6 +131,37 @@ class PlaytestChampionTests(unittest.TestCase):
         saved = pointer.with_suffix('.saved'); pointer.rename(saved); pointer.symlink_to(saved)
         with self.assertRaisesRegex(ValueError, 'linked'):
             preferred_checkpoint(self.run)
+
+    def test_source_refresh_keeps_exact_actor_and_original_receipt(self):
+        from tournament_selection import refresh
+        checkpoint, manifest, evaluation = self.candidate(100, 2)
+        select(self.run, manifest, evaluation, initialize=True)
+        original = (self.run/POINTER).read_bytes()
+        target = evaluation.parent.with_name('new-baseline')
+        shutil.copytree(evaluation.parent, target)
+        receipt = json.loads((target/'suite.json').read_text());receipt['suiteId'] = 'b'*64
+        self.write(target/'suite.json', receipt)
+        refresh(self.run, target/'suite.json')
+        self.assertEqual(preferred_checkpoint(self.run)[0], checkpoint)
+        self.assertEqual(next((self.run/'champion-history').glob('*.json')).read_text().strip(), json.dumps(json.loads(original), indent=2))
+        self.assertTrue(evaluation.exists())
+
+    def test_replicated_promotion_checks_actual_records_for_both_actors(self):
+        old, old_manifest, old_results = self.candidate(100, 2)
+        new, new_manifest, new_results = self.candidate(200, 3)
+        select(self.run, old_manifest, old_results, initialize=True)
+        confirmations = []
+        for primary in (old_results, new_results):
+            target = primary.parent.with_name(primary.parent.name+'-repeat')
+            shutil.copytree(primary.parent, target)
+            receipt = json.loads((target/'suite.json').read_text())
+            receipt['suiteId'] = 'c'*64;receipt['cases'][0]['seed'] += 1000003;receipt['results'][0]['seed'] += 1000003
+            full = json.loads((target/'fixed/evaluation.json').read_text());full['seed'] += 1000003
+            self.write(target/'fixed/evaluation.json', full);self.write(target/'suite.json', receipt)
+            confirmations.append(target/'suite.json')
+        select(self.run, new_manifest, new_results, confirmation=dict(incumbent=confirmations[0], candidate=confirmations[1]))
+        self.assertEqual(preferred_checkpoint(self.run)[0], new)
+        self.assertTrue(json.loads((self.run/POINTER).read_text())['promotionEvidence']['accepted'])
 
 
 if __name__ == '__main__':

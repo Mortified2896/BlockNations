@@ -130,7 +130,7 @@ def preferred_checkpoint(run, source='Champion'):
     return latest_checkpoint(run), 'latest completed checkpoint'
 
 
-def select(run, manifest, evaluation, *, initialize=False):
+def select(run, manifest, evaluation, *, initialize=False, confirmation=None, margins=None):
     run = Path(run).absolute()
     owned = json.loads((run/'run.json').read_text())
     if owned.get('owner') != 'BlockNations.LocalTraining.v1' or owned.get('schema') != 2:
@@ -141,6 +141,8 @@ def select(run, manifest, evaluation, *, initialize=False):
     frozen_actor(manifest, run_rules_version(run))
     previous = resolve_champion(run)
     if previous is None:
+        if confirmation is not None:
+            raise ValueError('Initialize an evaluated champion before replicated promotion.')
         if not initialize:
             raise ValueError('Initialize an explicitly selected evaluated champion first.')
     else:
@@ -150,8 +152,21 @@ def select(run, manifest, evaluation, *, initialize=False):
         incumbent = json.loads(owned_path(run, selection['evaluation']).read_text())
         if candidate['suiteId'] != incumbent['suiteId'] or candidate['cases'] != incumbent['cases']:
             raise ValueError('Promotion requires identical benchmark opponents, seeds, sampling and implementation.')
-        improved = False
+        if confirmation is not None:
+            from tournament_selection import assess
+            old_checkpoint, old_repeat = checked_evaluation(run, run/selection['candidateManifest'], confirmation['incumbent'])
+            new_checkpoint, new_repeat = checked_evaluation(run, manifest, confirmation['candidate'])
+            if old_checkpoint != previous or new_checkpoint != checkpoint:
+                raise ValueError('Confirmation must evaluate the exact compared actors.')
+            evidence = assess(incumbent, candidate, old_repeat, new_repeat, margins)
+            if not evidence['accepted']:
+                raise ValueError('Candidate did not improve replicated benchmarks: ' + '; '.join(evidence['reasons']))
+        else:
+            evidence = None
+        improved = confirmation is not None
         for case, new, old in zip(candidate['cases'], candidate['results'], incumbent['results']):
+            if confirmation is not None:
+                break  # The replicated gate includes outcome/role/interruption checks.
             if case['reference']['kind'] == 'self':
                 continue  # Self-play is a balance diagnostic, not strength against a fixed opponent.
             if new['interruptions'] > old['interruptions']:
@@ -170,7 +185,14 @@ def select(run, manifest, evaluation, *, initialize=False):
                      evaluationSha256=digest(Path(evaluation)), suiteId=candidate['suiteId'],
                      checkpoint=checkpoint.name, checkpointSha256=digest(checkpoint), selectedUnix=time.time(),
                      strengthStatus='best selected evaluated candidate; human strength and balance remain unproven')
+    if confirmation is not None:
+        selection['confirmation'] = {key: str(Path(value).relative_to(run)) for key, value in confirmation.items()}
+        selection['promotionEvidence'] = evidence
     from playtest import atomic_json
+    if previous is not None:
+        history = run/'champion-history'
+        history.mkdir(exist_ok=True)
+        atomic_json(history/(str(time.time_ns())+'.json'), json.loads((run/POINTER).read_text()))
     atomic_json(run/POINTER, selection)
     return selection
 

@@ -62,7 +62,8 @@ def identity(command, config):
     """Check executable, script and explicit run/root before signalling a PID."""
     wanted = config['command']
     if isinstance(command, str):
-        return command == ' '.join(wanted)
+        native = [config.get('processExecutable', wanted[0]), *wanted[1:]]
+        return command in (' '.join(wanted), ' '.join(native))
     if command[:2] != wanted[:2]:
         return False
     for flag in ('--root', '--run-id'):
@@ -97,6 +98,9 @@ def tick(config, state, ac, percent, now, inspect=command_for,
     if state.get('fault'):
         state['state'] = 'fault'
         return state
+    review = read(root/'runs'/config['runId']/'training-review.json')
+    review_required = (review.get('owner') == 'BlockNations.TrainingReview.v1' and
+                       review.get('runId') == config['runId'] and review.get('state') == 'review_required')
     lock = root / 'supervisor.lock'
     pid = int(lock.read_text()) if lock.exists() else 0
     observed = inspect(pid) if pid else []
@@ -120,23 +124,29 @@ def tick(config, state, ac, percent, now, inspect=command_for,
         state.pop('lastPid', None)
         state.pop('launchPid', None)
     elif not running and (state.get('lastPid') or state.get('launchPid')):
-        state.update(state='fault', fault='Supervisor exited outside a power stop; review before rearming')
-        return state
+        if review_required:
+            state.pop('lastPid', None)
+            state.pop('launchPid', None)
+        else:
+            state.update(state='fault', fault='Supervisor exited outside a power stop; review before rearming')
+            return state
     if running:
         state['lastPid'] = pid
         state.pop('launchPid', None)
     decision = action(running, ac, percent, start, stop)
+    if review_required:
+        decision = 'stop' if running else 'review'
     if decision == 'stop':
         # Recheck identity immediately before signalling, never kill a process tree.
         if not identity(inspect(pid), config):
             raise RuntimeError('Supervisor identity changed before power stop')
         state.update(state='saving', stoppingPid=pid,
-                     stopReason='unplugged' if not ac else 'battery_at_stop_threshold')
+                     stopReason='benchmark_review' if review_required else 'unplugged' if not ac else 'battery_at_stop_threshold')
         send(pid)
     elif decision == 'start':
         state.update(state='starting', launchPid=launch(command), startedUnix=now)
     else:
-        state['state'] = 'running' if running else 'waiting_for_power'
+        state['state'] = 'benchmark_review_required' if decision == 'review' else 'running' if running else 'waiting_for_power'
     return state
 
 
@@ -154,7 +164,7 @@ def main():
         path = directory / 'power-controller-status.json'
         state = read(path)
         try:
-            boot = subprocess.check_output(['/usr/sbin/sysctl', '-n', 'kern.boottime'], text=True, timeout=5).strip()
+            boot = subprocess.check_output(['/usr/sbin/sysctl', '-n', 'kern.bootsessionuuid'], text=True, timeout=5).strip()
             state = reconcile_boot(state, boot)
             try:
                 output = subprocess.check_output(['/usr/bin/pmset', '-g', 'batt'], text=True, timeout=5)

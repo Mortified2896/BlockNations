@@ -10,6 +10,17 @@ from power_controller import action, identity, parse_power, tick, command_for, r
 
 
 class PowerControllerTests(unittest.TestCase):
+    def test_benchmark_review_blocks_power_restart(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder);run = root/'runs/example';run.mkdir(parents=True)
+            (run/'training-review.json').write_text(json.dumps(dict(owner='BlockNations.TrainingReview.v1', runId='example', state='review_required')))
+            config = dict(root=folder, runId='example', enabled=True,
+                          command=['python', '/supervisor.py', '--root', folder, '--run-id', 'example', '--resume'])
+            launches = []
+            state = tick(config, {'lastPid': 12}, True, 80, 100, lambda pid: [], launch=launches.append)
+            self.assertEqual(state['state'], 'benchmark_review_required')
+            self.assertFalse(launches)
+
     def test_reboot_clears_stale_pids_but_preserves_recorded_fault(self):
         state = reconcile_boot(dict(bootIdentity='old', lastPid=12, stoppingPid=12), 'new')
         self.assertNotIn('lastPid', state)

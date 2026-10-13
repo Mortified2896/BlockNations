@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import re
+import time
 from pathlib import Path
 
 from training_contract import (RULES_VERSION, OPENING_ECONOMY_VERSION, checkpoint_step,
@@ -134,7 +135,8 @@ class TrainingOpponents:
     def __init__(self, run, seed, rules_version=RULES_VERSION):
         self.run = Path(run)
         self.rules_version = validate_rules_version(rules_version)
-        self.recipe = load_recipe(run, self.rules_version)
+        from training_feedback import effective_recipe
+        self.recipe = effective_recipe(run, self.rules_version)
         self.entries = entries(self.recipe) if self.recipe else []
         self.seed = seed
         self.assignments = {}
@@ -142,12 +144,18 @@ class TrainingOpponents:
         self.actors = {}
         self.decisions = 0
         self.decisions_by_policy = {}
+        self.next_recipe_poll = 0
 
     @property
     def identifier(self):
         return recipe_id(self.recipe) if self.recipe else None
 
     def selected(self, stats, policy):
+        if time.monotonic() >= self.next_recipe_poll:
+            self.next_recipe_poll = time.monotonic()+5
+            from training_feedback import effective_recipe
+            self.recipe = effective_recipe(self.run, self.rules_version)
+            self.entries = entries(self.recipe) if self.recipe else []
         if not self.recipe or not policy:
             return []
         selected = []
@@ -163,7 +171,7 @@ class TrainingOpponents:
                     for index,entry in enumerate(self.entries):
                         draw -= entry.get('weight',1)
                         if draw < 0:break
-                previous = (key, index)
+                previous = (key, index, self.entries[index] if index >= 0 else None)
                 self.assignments[stat['worker']] = previous
                 if index >= 0 and self.entries[index]['kind'] == 'frozen-policy':
                     import numpy as np
@@ -180,8 +188,11 @@ class TrainingOpponents:
         opponent_seat = 1-policy['learningSeat']
         agents = [agent for agent in actions if agent//2 in selected and agent%2 == opponent_seat]
         replaced = dict(actions)
-        for index, entry in enumerate(self.entries):
-            group = [agent for agent in agents if self.assignments[agent//2][1] == index]
+        # Keep each match's chosen actor fixed across runtime league refreshes.
+        active = {entry_id(self.assignments[worker][2], self.rules_version): self.assignments[worker][2] for worker in selected}
+        self.actors = {key: value for key, value in self.actors.items() if key in active}
+        for identifier, entry in active.items():
+            group = [agent for agent in agents if entry_id(self.assignments[agent//2][2], self.rules_version) == identifier]
             if not group:continue
             if entry['kind'] == 'fair-tactician':
                 options = dict(work_budget=entry['workBudget'], agents=group)
@@ -193,16 +204,16 @@ class TrainingOpponents:
             else:
                 from frozen_policy import FrozenPolicy, evaluation_weights
                 name = env.names[opponent_seat] if hasattr(env, 'names') else 'BlockNationsSeatV2?team='+str(opponent_seat)
-                if index not in self.actors:
+                if identifier not in self.actors:
                     config_path = owned_frozen_path(self.run,entry['trainerConfig'])
                     plan = json.loads(checked_contents(config_path,entry['configSha256'],256_000))
-                    self.actors[index] = FrozenPolicy(owned_frozen_path(self.run,entry['checkpoint']),
+                    self.actors[identifier] = FrozenPolicy(owned_frozen_path(self.run,entry['checkpoint']),
                         plan['behaviors']['BlockNationsSeatV2']['network_settings'], __import__('model_contract').spec(2),
                         entry['checkpointSha256'],entry['actorId'])
                 decisions,_ = env.get_steps(name)
                 rows = [decisions.agent_id_to_index[agent] for agent in group]
                 mask = decisions.action_mask[0][rows]
-                weights = evaluation_weights(self.actors[index].probabilities(decisions.obs[0][rows, :3120],mask),entry['sampling'])
+                weights = evaluation_weights(self.actors[identifier].probabilities(decisions.obs[0][rows, :3120],mask),entry['sampling'])
                 advice = {agent:int(self.randoms[agent//2].choice(weights.shape[1],p=weights[row])) for row,agent in enumerate(group)}
                 if any(mask[row,advice[agent]] for row,agent in enumerate(group)):
                     raise ValueError('Retained opponent produced an illegal choice.')
@@ -212,6 +223,6 @@ class TrainingOpponents:
             self.decisions += len(advice)
             identifier = entry_id(entry, self.rules_version)
             self.decisions_by_policy[identifier] = self.decisions_by_policy.get(identifier,0)+len(advice)
-        assignments = [dict(policy, opponent=entry_id(self.entries[self.assignments[worker][1]], self.rules_version))
+        assignments = [dict(policy, opponent=entry_id(self.assignments[worker][2], self.rules_version))
                        if worker in selected else policy for worker in range(env.workers)]
         return replaced, assignments

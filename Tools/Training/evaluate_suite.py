@@ -109,7 +109,8 @@ def prepare(candidate_manifest, suite_path, *, candidate_transfer=None):
                      packages={name: version(name) for name in ('mlagents', 'torch', 'numpy')},
                      evaluatorSources={name: digest(Path(__file__).with_name(name))
                                        for name in ('evaluate_suite.py', 'evaluate_policy.py', 'frozen_policy.py', 'playtest_sampling.py',
-                                                    'training_contract.py', 'model_contract.py', 'dotnet_environment.py', 'training_opponents.py')})
+                                                    'training_contract.py', 'model_contract.py', 'dotnet_environment.py', 'training_opponents.py',
+                                                    'training_feedback.py', 'weakness_sampling.py')})
     suite_id = hashlib.sha256(json.dumps(canonical, sort_keys=True).encode()).hexdigest()
     return candidate, identity, prepared, dict(canonical, suiteId=suite_id)
 

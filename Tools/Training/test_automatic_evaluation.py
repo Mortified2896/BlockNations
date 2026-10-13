@@ -152,7 +152,7 @@ class AutomaticEvaluationTests(unittest.TestCase):
 
     def test_complete_job_uses_existing_promotion_gate_and_preserves_rejected_champion(self):
         source = self.root / 'BlockNationsSeatV2-77.pt';source.write_bytes(b'fixture')
-        folder = self.run / 'frozen-evaluations/milestone-77';folder.mkdir(parents=True)
+        folder = self.run / 'frozen-evaluations/fixture-77';folder.mkdir(parents=True)
         manifest = folder / 'manifest.json';self.write(manifest, {})
         self.write(self.run / 'trainer.yaml', {})
         self.write(self.run / 'training-opponents.json', {})
@@ -174,7 +174,7 @@ class AutomaticEvaluationTests(unittest.TestCase):
         self.assertEqual(result['games'], 64)
         self.assertEqual((self.run / 'playtest-champion.json').read_bytes(), before)
 
-    def test_incompatible_benchmark_never_evaluates_or_promotes(self):
+    def test_failed_baseline_refresh_preserves_champion(self):
         self.write(self.run / 'playtest-champion.json', dict(candidateManifest='old.json', suiteId='old'))
         job_path = self.run / 'job.json';self.write(job_path, dict(owner=OWNER, runId='saved'))
         with patch('playtest_champion.resolve_champion'), \
@@ -183,6 +183,44 @@ class AutomaticEvaluationTests(unittest.TestCase):
             result = perform_job(self.run, self.worker, job_path)
         evaluate.assert_not_called();select.assert_not_called()
         self.assertEqual(result['state'], 'failed')
+
+    def test_source_change_refreshes_same_champion_before_candidate_evaluation(self):
+        source = self.root/'BlockNationsSeatV2-77.pt';source.write_bytes(b'fixture')
+        folder = self.run/'frozen-evaluations/fixture-77';folder.mkdir(parents=True)
+        manifest = folder/'manifest.json';self.write(manifest, {})
+        self.write(self.run/'trainer.yaml', {});self.write(self.run/'training-opponents.json', {})
+        old = dict(candidateManifest='frozen-evaluations/incumbent/manifest.json', suiteId='old', checkpoint='old')
+        self.write(self.run/'playtest-champion.json', old)
+        job_dir = self.run/'evaluations/automatic/77';job_dir.mkdir(parents=True)
+        job_path = job_dir/'job.json';self.write(job_path, dict(owner=OWNER, runId='saved'))
+        receipt = self.run/'evaluations/new-baseline/suite.json'
+        with patch('playtest_champion.resolve_champion'), \
+                patch('evaluate_suite.prepare', return_value=(None, None, None, dict(suiteId='new'))), \
+                patch('tournament_selection.baseline', return_value=receipt) as baseline, \
+                patch('tournament_selection.refresh', return_value=dict(old, suiteId='new')) as refresh, \
+                patch('automatic_evaluation.latest_checkpoint', return_value=source), \
+                patch('evaluate_milestone.freeze', return_value=manifest), \
+                patch('evaluate_suite.run', return_value=dict(results=[dict(games=64)], suiteId='new')) as evaluate, \
+                patch('reference_score.publish'), \
+                patch('playtest_champion.select', side_effect=ValueError('Candidate did not improve fixed-reference results')):
+            result = perform_job(self.run, self.worker, job_path)
+        baseline.assert_called_once();refresh.assert_called_once_with(self.run, receipt)
+        evaluate.assert_called_once()
+        self.assertEqual(result['state'], 'retained')
+
+    @patch('automatic_evaluation.subprocess.Popen')
+    @patch('automatic_evaluation.latest_checkpoint')
+    @patch('automatic_evaluation.ready', return_value=True)
+    def test_explicit_request_runs_before_next_interval_once(self, ready_mock, latest, launch):
+        latest.return_value = self.root/'BlockNationsSeatV2-77.pt'
+        process = Mock();process.poll.return_value = None;launch.return_value = process
+        scheduler = Scheduler(self.run, self.worker)
+        scheduler.state.update(lastEvaluatedDecisions=90000000, lastCandidateStep=77)
+        request = self.run/'automatic-evaluation.request';request.touch()
+        scheduler.tick();scheduler.tick()
+        launch.assert_called_once()
+        self.assertFalse(request.exists())
+        scheduler.close()
 
     @patch('automatic_evaluation.subprocess.Popen')
     @patch('automatic_evaluation.latest_checkpoint')
