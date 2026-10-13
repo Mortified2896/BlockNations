@@ -73,6 +73,43 @@ test("the Cloudflare runtime encrypts and signs push messages that independent l
     assert.equal(verify("sha256", Buffer.from(header+"."+body), { key, dsaEncoding: "ieee-p1363" }, Buffer.from(signature, "base64url")), true);
   } finally { await mf.dispose(); }
 });
+test("the Cloudflare runtime sends Apple push through native fetch and returns provider status", async () => {
+  const data = fixture("https://web.push.apple.com/synthetic"), payload = { body: "It's your turn." };
+  const deliveries = [];
+  let providerStatus = 201;
+  const mf = new Miniflare(convertV4MiniflareOptions({
+    modules: [
+      { type: "ESModule", path: new URL("./push-send-runtime-fixture.mjs", import.meta.url).pathname,
+        contents: `import { sendPush } from "./push.mjs";
+        export default { async fetch(request,env) {
+          return Response.json({ status: await sendPush(JSON.parse(env.SUBSCRIPTION),JSON.parse(env.PAYLOAD),env) });
+        }};` },
+      { type: "ESModule", path: new URL("./push.mjs", import.meta.url).pathname,
+        contents: await readFile(new URL("./push.mjs", import.meta.url), "utf8") },
+    ], compatibilityDate: "2026-10-08", bindings: {
+      SUBSCRIPTION: JSON.stringify(data.subscription), PAYLOAD: JSON.stringify(payload),
+      VAPID_PUBLIC_KEY: data.credentials.publicKey, VAPID_PRIVATE_KEY: data.credentials.privateKey,
+    },
+    outboundService: async request => {
+      assert.equal(request.url, data.subscription.endpoint);
+      assert.equal(request.method, "POST");
+      assert.equal(request.headers.get("Content-Encoding"), "aes128gcm");
+      deliveries.push(JSON.parse(ece.decrypt(Buffer.from(await request.arrayBuffer()), {
+        version: "aes128gcm", privateKey: data.receiver, authSecret: data.auth.toString("base64url"),
+      }).toString()));
+      return new Response(null, { status: providerStatus });
+    },
+  }));
+  try {
+    for (const status of [201, 410, 503]) {
+      providerStatus = status;
+      const response = await mf.dispatchFetch("https://synthetic.test/");
+      assert.equal(response.status, 200);
+      assert.equal((await response.json()).status, status);
+    }
+    assert.deepEqual(deliveries, [payload, payload, payload]);
+  } finally { await mf.dispose(); }
+});
 test("push subscriptions reject arbitrary servers, private addresses, credentials and invalid key shapes", async () => {
   const data = fixture();
   assert.equal(validSubscription(data.subscription), true);

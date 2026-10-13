@@ -67,6 +67,9 @@ export async function sendPush(subscription, payload, env) {
     publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY,
     subject: "https://blocknations.moneymattersmedia.com",
   });
-  const response = await (env.PUSH_TEST ?? { fetch }).fetch(new Request(request, { signal: AbortSignal.timeout(10000) }));
+  const outbound = new Request(request, { signal: AbortSignal.timeout(10000) });
+  // Workers' native fetch requires the global receiver; wrapping it in an
+  // object and calling object.fetch throws before contacting the provider.
+  const response = await (env.PUSH_TEST ? env.PUSH_TEST.fetch(outbound) : fetch(outbound));
   return response.status;
 }
