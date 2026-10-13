@@ -5,11 +5,40 @@ import unittest
 import subprocess
 import time
 import os
+from unittest.mock import patch
 
-from power_controller import action, identity, parse_power, tick, command_for, reconcile_boot
+from power_controller import action, identity, parse_power, read_power, tick, command_for, reconcile_boot
 
 
 class PowerControllerTests(unittest.TestCase):
+    def test_transient_timeout_uses_fresh_retry_instead_of_stopping(self):
+        timeout = subprocess.TimeoutExpired(['/usr/bin/pmset', '-g', 'batt'], 5)
+        ac = "Now drawing from 'AC Power'\n -InternalBattery-0 80%; AC attached"
+        with patch('power_controller.subprocess.check_output', side_effect=[timeout, ac]) as probe:
+            self.assertEqual(read_power(), (True, 80))
+        self.assertEqual(probe.call_count, 2)
+        self.assertTrue(all(call.kwargs['timeout'] == 5 for call in probe.call_args_list))
+
+    def test_fresh_battery_read_is_not_retried_or_replaced_with_ac(self):
+        battery = "Now drawing from 'Battery Power'\n -InternalBattery-0 80%; discharging"
+        with patch('power_controller.subprocess.check_output', return_value=battery) as probe:
+            ac, percent = read_power()
+        self.assertEqual(action(True, ac, percent), 'stop')
+        self.assertEqual(probe.call_count, 1)
+
+    def test_failed_retry_preserves_unknown_power_failure(self):
+        timeout = subprocess.TimeoutExpired(['/usr/bin/pmset', '-g', 'batt'], 5)
+        with patch('power_controller.subprocess.check_output', side_effect=[timeout, timeout]) as probe:
+            with self.assertRaises(subprocess.TimeoutExpired):
+                read_power()
+        self.assertEqual(probe.call_count, 2)
+
+    def test_malformed_retry_does_not_assume_plugged_in(self):
+        with patch('power_controller.subprocess.check_output', return_value='battery unavailable') as probe:
+            with self.assertRaises(ValueError):
+                read_power()
+        self.assertEqual(probe.call_count, 2)
+
     def test_benchmark_review_blocks_power_restart(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder);run = root/'runs/example';run.mkdir(parents=True)

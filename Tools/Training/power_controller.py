@@ -35,6 +35,18 @@ def parse_power(output):
     return source[1] == 'AC Power', percent
 
 
+def read_power():
+    """Retry one transient probe failure; never substitute cached power state."""
+    for attempt in range(2):
+        try:
+            output = subprocess.check_output(['/usr/bin/pmset', '-g', 'batt'],
+                                             text=True, timeout=5)
+            return parse_power(output)
+        except (subprocess.SubprocessError, ValueError):
+            if attempt == 1:
+                raise
+
+
 def action(running, ac, percent, start=80, stop=75):
     if running:
         return 'stop' if not ac or percent <= stop else 'keep'
@@ -167,8 +179,7 @@ def main():
             boot = subprocess.check_output(['/usr/sbin/sysctl', '-n', 'kern.bootsessionuuid'], text=True, timeout=5).strip()
             state = reconcile_boot(state, boot)
             try:
-                output = subprocess.check_output(['/usr/bin/pmset', '-g', 'batt'], text=True, timeout=5)
-                ac, percent = parse_power(output)
+                ac, percent = read_power()
             except (subprocess.SubprocessError, ValueError) as error:
                 # Unknown power must not leave an owned learner draining battery.
                 state = tick(config, state, False, 0, time.time())
