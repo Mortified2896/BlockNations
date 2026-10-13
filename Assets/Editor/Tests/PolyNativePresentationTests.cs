@@ -69,6 +69,10 @@ public sealed class PolyNativePresentationTests
         for(int tap=0;tap<3;tap++) {
             controller.HandleBoardTap(capitalTile.GetComponent<TileHighlighter>(),live,controller.SceneCities[1]); yield return null;
             Assert.That(controller.Inspection,Is.EqualTo(tap==1 ? PolyGameController.InspectKind.City : PolyGameController.InspectKind.Unit));
+            if(tap==1) {
+                Assert.That(view.Document.rootVisualElement.Q<Button>("Recruit_poly-warrior"),Is.Null,"Occupied cities keep the unit accessible instead of filling the sheet with unavailable recruits.");
+                Assert.That(view.Document.rootVisualElement.Q<Button>("InspectUnit"),Is.Not.Null);
+            }
         }
         Assert.That(view.Document.rootVisualElement.Q<Button>("OpenCity"),Is.Null);
         Submit(view.Document.rootVisualElement,"Tech");

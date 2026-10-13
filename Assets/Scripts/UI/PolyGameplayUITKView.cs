@@ -56,10 +56,11 @@ public sealed partial class PolyGameplayUITKView : MonoBehaviour
         hud.style.display = controller.IsFeedbackOpen ? DisplayStyle.None : DisplayStyle.Flex;
         var nativeHud = feedbackDocument.rootVisualElement;
         bool showNativeHeader = screen.Length == 0 || controller.IsFeedbackOpen;
+        bool landscapeSheet = Screen.width > Screen.height && Screen.height / runtimePanel.scale < 500 && screen.Length == 0 && sheet.resolvedStyle.display != DisplayStyle.None;
         var nativeBar = nativeHud.Q("TopBar");
-        if (nativeBar != null) nativeBar.style.display = showNativeHeader ? DisplayStyle.Flex : DisplayStyle.None;
+        if (nativeBar != null) { nativeBar.style.display = showNativeHeader ? DisplayStyle.Flex : DisplayStyle.None; nativeBar.style.width = Length.Percent(landscapeSheet ? 48 : 100); }
         var nativeFeedback = nativeHud.Q<Button>("FeedbackButton");
-        if (nativeFeedback != null) nativeFeedback.style.display = showNativeHeader ? DisplayStyle.Flex : DisplayStyle.None;
+        if (nativeFeedback != null) nativeFeedback.style.display = showNativeHeader && !landscapeSheet ? DisplayStyle.Flex : DisplayStyle.None;
         Layout();
         if (lastRevision != controller.Revision) {
             if (lastPosition != controller.SelectedPosition || lastInspection != controller.Inspection) page = cityTab = 0;
@@ -126,21 +127,40 @@ public sealed partial class PolyGameplayUITKView : MonoBehaviour
             var a = action; Card(choices,a.Kind.ToString(),a.Kind == PolyActionKind.Heal ? "Heal" : "Capture",a.Kind == PolyActionKind.Heal ? "Rest this turn" : "Claim this city",()=>controller.Act(a),CanAct);
         }
         var city = controller.Match.CityAt(p);
-        if (city?.ownerSeatIndex == 0) hint.text += " Tap this unit again to inspect the city.";
+        if (city != null) hint.text += " Tap this unit again to inspect the city.";
         if (choices.childCount == 0) choices.style.display = DisplayStyle.None; else choices.style.display = DisplayStyle.Flex;
     }
     private void DrawCity(int p)
     {
         choices.style.display = DisplayStyle.Flex;
-        var city = controller.Match.CityAt(p); title.text = $"City {city.id} · Level {city.level}";
+        var city = controller.Match.CityAt(p); var stationed = controller.Match.Board.UnitAt(p);
+        title.text = $"City {city.id} · Level {city.level}";
+        if (city.ownerSeatIndex != 0) {
+            title.text = city.ownerSeatIndex < 0 ? "Village" : "AI city · Level " + controller.Match.KnownCityLevel(0,p);
+            summary.text = "Fixed 3×3 territory · " + (city.ownerSeatIndex < 0 ? "Unclaimed" : "Opponent controlled");
+            if (stationed?.Seat == 0) {
+                Button(tabs,"InspectUnit","Unit",()=>InspectStationedUnit(p),"tab",CanAct);
+                var capture=Actions.FirstOrDefault(a=>a.Kind==PolyActionKind.Capture && a.ActorId==stationed.Id);
+                if(capture!=null) Card(choices,"Capture","Capture","Claim this city",()=>controller.Act(capture),CanAct);
+                hint.text=capture!=null ? "Claim this city and its territory." : "Your unit can capture at the start of its next turn.";
+            }
+            return;
+        }
         int food = controller.Match.CityFood(city.id);
         summary.text = $"Population {city.population}/{city.PopulationNeeded} · +{food} Food/turn · +{controller.Match.CityIncome(city.id)} Gold/turn";
         root.Q("Growth").style.display = DisplayStyle.Flex;
-        root.Q<Label>("GrowthLabel").text = $"Food {city.food}/{city.FoodNeeded} · " + (food == 0 ? "Build food improvements to grow" : $"Next population in {(city.FoodNeeded-city.food+food-1)/food} turn(s)");
+        int turns=food==0 ? 0 : (city.FoodNeeded-city.food+food-1)/food;
+        root.Q<Label>("GrowthLabel").text = $"Food {city.food}/{city.FoodNeeded} · " + (food == 0 ? "Build food improvements to grow" : $"Next population in {turns} " + (turns==1 ? "turn" : "turns"));
         root.Q("GrowthFill").style.width = Length.Percent(100f * city.food / city.FoodNeeded);
         var recruitTab = Button(tabs,"RecruitTab","Recruit",()=>{cityTab=0;page=0;Refresh();},"tab"); recruitTab.EnableInClassList("selected",cityTab==0);
         var developTab = Button(tabs,"DevelopTab","Develop",()=>{cityTab=1;page=0;Refresh();},"tab"); developTab.EnableInClassList("selected",cityTab==1);
+        if (stationed?.Seat == 0) Button(tabs,"InspectUnit","Unit",()=>InspectStationedUnit(p),"tab",CanAct);
         if (cityTab == 0) {
+            if(stationed!=null) {
+                choices.style.display=DisplayStyle.None;
+                hint.text=stationed.Seat==0 ? stationed.Definition.DisplayName+" stationed · Tap it again to inspect the unit. Move it to recruit." : "Defeat the enemy occupying this city to recruit.";
+                return;
+            }
             string[] roster = { "poly-warrior", "poly-rider", "poly-archer", "poly-defender", "poly-swordsman", "poly-knight", "poly-catapult" };
             pageCount = 3; page = Mathf.Clamp(page,0,pageCount-1);
             foreach (var id in roster.Skip(page*3).Take(3)) {
@@ -161,6 +181,12 @@ public sealed partial class PolyGameplayUITKView : MonoBehaviour
             }
             hint.text = "Choose a tile to develop within this city's fixed territory."; ShowPages();
         }
+    }
+    private void InspectStationedUnit(int p)
+    {
+        var unit=controller.Match.Board.UnitAt(p); if(unit?.Seat!=0) return;
+        controller.Manager.gridManager.TryGetTile(p%11,p/11,out var tile);
+        controller.HandleBoardTap(tile.GetComponent<TileHighlighter>(),controller.SceneUnits[unit.Id],controller.SceneCities[controller.Match.CityAt(p).id]);
     }
     private void InspectTile(int p)
     {

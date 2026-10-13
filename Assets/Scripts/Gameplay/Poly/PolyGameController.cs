@@ -86,8 +86,10 @@ public sealed partial class PolyGameController : MonoBehaviour
     }
     public void OpenCity(int id)
     {
-        if (!IsReady || !sceneCities.TryGetValue(id, out City city) || Match.City(id).ownerSeatIndex != 0) return;
-        CloseInspection(); cityUI.OnCityClicked(city); SelectedPosition = Match.City(id).position; Inspection = InspectKind.City; Revision++;
+        if (!IsReady || !sceneCities.TryGetValue(id, out City city) || !Match.Visibility(0)[Match.City(id).position]) return;
+        CloseInspection();
+        if (Match.City(id).ownerSeatIndex == 0) cityUI.OnCityClicked(city);
+        SelectedPosition = Match.City(id).position; Inspection = InspectKind.City; Revision++;
     }
     // Called by the established world tap handler after its UI/drag/pinch gates.
     public void HandleBoardTap(TileHighlighter tile, Unit hitUnit, City hitCity)
@@ -107,12 +109,12 @@ public sealed partial class PolyGameController : MonoBehaviour
             // The occupied city has two inspectable objects. A repeat tap alternates
             // between them instead of using SelectUnit's normal deselection toggle.
             var city = Match.CityAt(p);
-            if (Inspection == InspectKind.Unit && SelectedPosition == p && city?.ownerSeatIndex == 0) {
+            if (Inspection == InspectKind.Unit && SelectedPosition == p && city != null) {
                 OpenCity(city.id); return;
             }
             cityUI.ClosePanel();
             if (unitSelection.SelectedUnit != hitUnit) unitSelection.SelectUnit(hitUnit);
-            else if (city?.ownerSeatIndex != 0) unitSelection.SelectUnit(hitUnit);
+            else if (city == null) unitSelection.SelectUnit(hitUnit);
             Inspection = unitSelection.SelectedUnit != null ? InspectKind.Unit : InspectKind.None;
             SelectedPosition = Inspection == InspectKind.None ? -1 : p; Revision++; return;
         }
