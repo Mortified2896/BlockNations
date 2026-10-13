@@ -11,6 +11,7 @@ Start with the current state, then use the relevant implementation/setup referen
 | [Roadmap](roadmap.md) | Phase 1, phase 2 AI direction, hosted playtesting, future capacity/teams. |
 | [Experimental Hard AI](Hard_AI_Design.md) | Fair local tactical policy, generic evaluator/replies, deterministic work, decision records, inspector, and watched comparisons. |
 | [Local ML Training MVP](ML_Training_MVP.md) | Mac self-play controls, storage/sleep limits, saved/resumed checkpoints, local model playtesting, schema and validation limits. |
+| [First ML Training Result](ML_First_Training_Result.md) | Successful technical proof of concept, reconciled raw/Hard regression diagnosis, frozen comparisons and monitored overnight continuation decision. |
 | [General AI Training Direction](AI_Training_Direction.md) | Proposed shared simulation, adaptable policy representation, fair memory, reproducible experiments, and local phone inference. |
 | [Controlled Information Training](AI_Information_Training.md) | Isolated v2/v3/history studies, reachable pre-loss starts, bounded weakness sampling, decision audits and unchanged release selection. |
 | [Replicated History Experiment](AI_History_Experiment.md) | Three paired V3/V4 training seeds, legitimate sighting memory, full confirmation benchmarks and power-safe resume. |
