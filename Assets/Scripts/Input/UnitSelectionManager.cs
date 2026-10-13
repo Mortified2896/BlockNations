@@ -37,6 +37,17 @@ public class UnitSelectionManager : MonoBehaviour
         if (unit == null)
             return;
 
+        if (turnManager != null && turnManager.IsPolyMatch)
+        {
+            foreach (var action in LegalActionService.GetLegalActionsForUnit(turnManager, unit, unit.ownerSeatIndex))
+            {
+                var highlighter = action.TargetTile.GetComponent<TileHighlighter>();
+                if (action.ActionType == LegalActionType.UnitMove) highlighter.SetReachable(true);
+                else if (action.ActionType == LegalActionType.UnitAttack) highlighter.SetAttackable(true);
+            }
+            return;
+        }
+
         if (!TryGetUnitOriginTile(unit, out TileVisibility originTile))
         {
             return;
@@ -90,6 +101,11 @@ public class UnitSelectionManager : MonoBehaviour
 
     public Unit SelectedUnit => selectedUnit;
 
+    public void RefreshSelectedHighlights()
+    {
+        HighlightReachableTiles(selectedUnit);
+    }
+
     private void ClearReachableTiles()
     {
         TileHighlighter[] tiles = Object.FindObjectsByType<TileHighlighter>(FindObjectsSortMode.None);
@@ -110,6 +126,10 @@ public class UnitSelectionManager : MonoBehaviour
 
     private bool HasAttackableTilesInRange(Unit unit)
     {
+        if (unit == null) return false;
+        if (turnManager != null && turnManager.IsPolyMatch)
+            return LegalActionService.GetLegalActionsForUnit(turnManager, unit, unit.ownerSeatIndex)
+                .Exists(action => action.ActionType == LegalActionType.UnitAttack);
         if (unit == null || !unit.CanAttackThisTurn())
         {
             return false;
@@ -361,6 +381,7 @@ public class UnitSelectionManager : MonoBehaviour
             break;
         }
         if (!actionPerformed) { ClearSelection(); return; }
+        if (selectedUnit == null) return; // Poly retaliation can remove the acting unit.
         turnManager.RecalculatePlayerVisibility();
         if (turnManager.gameOver) return;
         selectedUnit.UpdateMoveOutline(isActiveTurnForUnit);

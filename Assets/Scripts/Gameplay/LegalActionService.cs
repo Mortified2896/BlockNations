@@ -25,6 +25,7 @@ public static class LegalActionService
     {
         var result = new List<LegalTurnAction>();
         if (manager == null || manager.gridManager == null || manager.gameOver || !manager.IsTurnOwnedBySeat(seat)) return result;
+        if (manager.IsPolyMatch) return manager.PolyController.GetSceneLegalActions(seat, unit, unitsOnly);
         if (manager.IsAdvancedMatch && !manager.AdvancedController.IsReady) return result;
         var adapter = new SceneSimulationAdapter(manager);
         bool[] mask = adapter.VisibilityMask(visible);

@@ -8,12 +8,21 @@ public partial class MainMenuController
     public void StartPolyGame()
     {
         if (!CanStartPolyGame) return;
-        if (PublicWebBuild.UsesGoogleAccounts) StartCoroutine(StartPolyForOwner()); else SceneManager.LoadScene(PolyGameController.SceneName);
+        if (PublicWebBuild.UsesGoogleAccounts) StartCoroutine(StartPolyForOwner()); else LoadPolyGame();
     }
     private IEnumerator StartPolyForOwner()
     {
         bool verified = false;
         yield return WebAccountClient.Initialize(ok => verified = ok);
-        if (verified && CanStartPolyGame) SceneManager.LoadScene(PolyGameController.SceneName);
+        if (verified && CanStartPolyGame) LoadPolyGame();
+    }
+    private void LoadPolyGame()
+    {
+        SaveLoadRequest.ClearPending();
+        CameraController.ClearPendingRestoreState();
+        GameModeSelection.TryConsume(out _);
+        MapSizeSelection.TryConsume(out _);
+        AIVsAIBatchRunController.ClearAll();
+        SceneManager.LoadScene(PolyGameController.SceneName);
     }
 }

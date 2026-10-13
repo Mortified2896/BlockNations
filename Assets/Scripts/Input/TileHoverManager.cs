@@ -152,6 +152,11 @@ public class TileHoverManager : MonoBehaviour
         // 2) CLICK: toggle selection
         if (isPrimaryClickDown)
         {
+            if (turnManager != null && turnManager.IsPolyMatch)
+            {
+                turnManager.PolyController.HandleBoardTap(newHover, clickedUnit, clickedCity);
+                return;
+            }
             // Click priority: attack enemy unit (if a friendly is selected and adjacent)
             // > move into enemy city (if a friendly is selected and in range)
             // > movable Unit on player city > player City UI > Unit > Tile

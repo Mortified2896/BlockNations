@@ -2109,6 +2109,7 @@ public partial class TurnManager : MonoBehaviour
 
     public bool CanControlUnit(Unit unit)
     {
+        if (IsPolyMatch) return polyController.IsReady && unit != null && unit.ownerSeatIndex == 0 && polyController.Match.IsTurnOwnedBySeat(0);
         if (IsAdvancedMatch) return advancedMatchController.IsReady && unit != null &&
             unit.ownerSeatIndex == AdvancedMatchController.HumanSeat && IsTurnOwnedBySeat(AdvancedMatchController.HumanSeat);
         if (unit == null || gameOver)
@@ -2127,6 +2128,7 @@ public partial class TurnManager : MonoBehaviour
 
     public bool CanControlCity(City city)
     {
+        if (IsPolyMatch) return polyController.IsReady && city != null && city.ownerSeatIndex == 0 && polyController.Match.IsTurnOwnedBySeat(0);
         if (IsAdvancedMatch) return advancedMatchController.IsReady && city != null &&
             city.ownerSeatIndex == AdvancedMatchController.HumanSeat && IsTurnOwnedBySeat(AdvancedMatchController.HumanSeat);
         if (city == null || gameOver)
@@ -7976,7 +7978,7 @@ private void PBpDebugSyncNow_Context()
 
     public bool LoadFromFile(string path = null)
     {
-        if (IsAdvancedMatch) return false;
+        if (IsAdvancedMatch || IsPolyMatch) return false;
         string targetPath = path;
         if (string.IsNullOrWhiteSpace(targetPath))
         {
@@ -8035,7 +8037,7 @@ private void PBpDebugSyncNow_Context()
 
     public bool LoadFromJsonString(string json)
     {
-        if (IsAdvancedMatch) return false;
+        if (IsAdvancedMatch || IsPolyMatch) return false;
         if (string.IsNullOrWhiteSpace(json))
         {
             Debug.LogWarning("LoadFromJsonString: json is empty.");

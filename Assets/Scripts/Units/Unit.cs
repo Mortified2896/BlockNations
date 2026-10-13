@@ -35,12 +35,16 @@ public class Unit : MonoBehaviour
 
     public int GetRemainingMoveRangeThisTurn()
     {
+        if (TurnManager.Instance != null && TurnManager.Instance.IsPolyMatch)
+            return TurnManager.Instance.PolyController.RemainingMoveRange(this);
         return BlockNations.Simulation.SimulationRules.RemainingMoves(UsesCommittedMoveActionThisTurn(), maxMovesPerTurn,
             movesUsedThisTurn, AttackEndsMovement, attacksUsedThisTurn);
     }
 
     public bool CanAttackThisTurn()
     {
+        if (TurnManager.Instance != null && TurnManager.Instance.IsPolyMatch)
+            return TurnManager.Instance.PolyController.CanAttack(this);
         return UnitActionRules.CanAttackThisTurn(
             CanAttackAfterMoving,
             maxAttacksPerTurn,

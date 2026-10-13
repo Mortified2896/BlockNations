@@ -5,7 +5,7 @@ Poly is an owner-only Vs AI mode in the Block Nations website. Choose **Poly 11�
 ## Playing
 
 - Start on an 11×11 seeded land map with one city and a Warrior. The opponent has the same starting position resources, with one extra opening Gold when its first turn begins. Five neutral villages provide expansion through capture.
-- Tap your unit, then a green reachable tile or red attack target. The map supports scrolling and zoom. Tap a city for recruitment or a tile in its territory for development. **Technology** opens the branching research list.
+- Tap your unit, then a yellow reachable tile or red attack target. Drag the map and pinch to zoom using the normal Block Nations camera. Tap a city for recruitment or a resource for development. **Tech** opens a branch selector with research cards. Recruitment and city development use page buttons; there are no map or gameplay-panel scrollbars.
 - Spend Gold on technology, recruitment, resource harvesting and improvements. City population is progression from development, not a pool consumed by recruitment.
 - Each city has a permanent 3×3 territory. Capturing villages grants their existing territory. Leveling never expands borders.
 - City levels require 2, then 3, then 4, and successively more population. Surplus carries forward. Each level adds one Gold per owner turn and queues a reward choice.
@@ -45,18 +45,20 @@ Poly uses `MatchEngine.Visibility` from ordinary gameplay. Visibility is live, c
 
 Continuation is local to the same browser/device and account. It is not a cloud save or synchronization between devices.
 
-The Poly scene explicitly wires its UIDocument, UI asset and New Input System event module. Its code-native UITK board displays terrain, improvements, cities, units and legal-action markers. The ordinary match engine, standard unit registry, learned policy catalog, normal save format and PBp protocol do not acquire Poly rules.
+The Poly scene explicitly wires the normal GridManager, CameraController, TileHoverManager, UnitSelectionManager, top HUD, city/unit state managers, tile/city/unit prefabs and New Input System event module. Poly projects its authoritative state into native sprites, world coordinates and fog overlays. The standard Warrior, Rider and Archer sprites are reused; additional units and terrain have small pixel graphics rendered on the same white tiles. PolyGameplayUITKView adds compact bottom sheets and a paged roster, with branch-based research in a modal. It contains no ScrollView or UI grid. LegalActionService and SceneSimulationAdapter dispatch only explicitly wired Poly scenes to the Poly rules. The standard unit registry, learned policy catalog, normal save format and PBp protocol remain compatible. Existing poly-land-v1 checkpoints keep the same filename, codec and turn state.
 
 ## Validation
 
-Run `dotnet test Tools/Poly/BlockNations.Poly.Tests.csproj` for rules, fog, transitions, heuristic visibility and save-state checks. Run Unity EditMode fixtures `PolyRulesTests|PolyNativeTests` with graphics for the actual Unity JSON codec, account-scoped save isolation, explicit scene/input/UI wiring and build registration. Run `npm test --prefix Web` for identity-gated session permission and existing web regressions.
+Run `dotnet test Tools/Poly/BlockNations.Poly.Tests.csproj` for rules, fog, transitions, heuristic visibility and save-state checks. Run Unity EditMode fixtures `PolyRulesTests|PolyNativeTests|PolyNativePresentationTests` with graphics for the actual Unity JSON codec, account-scoped save isolation, explicit scene/input/UI wiring and build registration. Run `npm test --prefix Web` for identity-gated session permission and existing web regressions.
 
 The ordinary release builder includes Poly alongside existing scenes and records it in `release.json`. Prepare/build an owned isolated snapshot with `Tools/WebRelease/build.py --multiplayer --learned-ai`; audit the export, check browser gameplay and reload/continue, then deploy the same reviewed bytes. Physical phone behavior is a separate acceptance check.
 
-## Release acceptance: 2026-10-13
+## Initial release evidence: 2026-10-13
+
+The initial interface used a separate UITK board and scrollable sheets. The owner rejected that presentation on iPhone because it did not match Block Nations. The following checks established functionality, not design acceptance; the native presentation correction supersedes that interface.
 
 - Feature commit: `1d92721`, merged and pushed to `main`. Export source hash: `f0a732911761c2ffaacefb1e14799d4d41e98b1d5f3b4917a31a0d05faca8f53`.
-- Production Worker version: `bffa6836-a350-4a27-b2dc-21ec0b788a55`, serving 100% of production traffic. Preview version: `00d41eda-8b3f-4a41-9111-2a3a13d76baa`. Both use the same reviewed export.
+- Initial production Worker version: `bffa6836-a350-4a27-b2dc-21ec0b788a55`. Preview version: `00d41eda-8b3f-4a41-9111-2a3a13d76baa`. Both use the same reviewed export.
 - All 15 Unity Poly checks, 12 standalone Poly checks, 43 existing Advanced rules checks, 71 web checks and 17 release-tool checks passed. The 31.17 MiB export passed the credential audit; the staged patch and decompressed release also contained zero matches against two local authentication values.
 - Chromium acceptance used synthetic accounts with the actual admission Worker, session API and exported Unity game. The owner menu launched Poly; the tester session received `canPlayPoly: false` and its rendered menu hid the entry. Desktop and 390×844 portrait checks covered the board, city sheet, scrollable unit cards and map focus after resizing.
 - Actual canvas clicks moved a Warrior, bought Organization, harvested two resources, reached city level 2, selected Workshop, recruited a second Warrior and completed two opponent turns. After Save & Menu and a full page reload, continuation restored round 3, 2 Gold, income 4, city level 2 and the same two units/positions.
