@@ -52,7 +52,7 @@ class TacticalActor:
 
 
 def evaluate(worker, directory, candidate, reference=None, *, games_per_cell=16, seed=10001,
-             reference_type='', reference_work=64, difficulty='Hard', reference_difficulty=None, rules_version=RULES_VERSION):
+             reference_type='', reference_work=64, difficulty='Hard', reference_difficulty=None, rules_version=RULES_VERSION, guard=None):
     rules_version = validate_rules_version(rules_version)
     observation_version = max(getattr(candidate, "observation_version", 2), getattr(reference, "observation_version", 2))
     if games_per_cell < 4 or games_per_cell % 4:
@@ -79,6 +79,7 @@ def evaluate(worker, directory, candidate, reference=None, *, games_per_cell=16,
             try:
                 env.reset()
                 while min(finished) < quota:
+                    if guard is not None: guard()
                     _, terminals = env.get_steps(env.names[candidate_seat])
                     for index, agent in enumerate(terminals.agent_id):
                         arena = int(agent)//2

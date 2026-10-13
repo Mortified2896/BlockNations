@@ -115,7 +115,7 @@ def prepare(candidate_manifest, suite_path, *, candidate_transfer=None):
     return candidate, identity, prepared, dict(canonical, suiteId=suite_id)
 
 
-def run(candidate_manifest, suite_path, worker, destination, *, candidate_transfer=None):
+def run(candidate_manifest, suite_path, worker, destination, *, candidate_transfer=None, guard=None):
     candidate, identity, cases, definition = prepare(candidate_manifest, suite_path, candidate_transfer=candidate_transfer)
     destination = Path(destination)
     worker_identity = worker_digest(worker)
@@ -131,10 +131,12 @@ def run(candidate_manifest, suite_path, worker, destination, *, candidate_transf
     save()
     try:
         for case, reference in cases:
+            if guard is not None: guard()
+            options = dict(guard=guard) if guard is not None else {}
             result = evaluate(worker, destination/case['name'], candidate, reference,
                               games_per_cell=case['gamesPerCell'], seed=case['seed'],
                               difficulty=case['difficulty'], reference_difficulty=case['referenceDifficulty'],
-                              rules_version=definition['rulesVersion'])
+                              rules_version=definition['rulesVersion'], **options)
             result.pop('records')  # Complete match records remain in each case's evaluation.json.
             receipt['results'].append(dict(case=case['name'], **result))
             save()

@@ -26,6 +26,7 @@ from rule_profile_study import arm_files, sha
 from supervisor import ROOT_MARKER, atomic_json, interrupt_trainer, size
 from training_contract import run_rules_version
 from weakness_sampling import apply as apply_weakness
+from information_study_runtime import PowerGuard, PowerPause, save_environment, resume_environment, evaluate_or_resume
 
 
 def migration(checkpoint, network, source, target):
@@ -104,7 +105,7 @@ def prepare_arm(root, name, parent_path, recipe_run, worker, steps, seed, schema
     return run,environment
 
 
-def run_study(root,parent,recipe_run,suite,worker,destination,name,*,treatment='observation',steps=250000,seeds=(61,62,63),hours=3,episode_starts=None,weakness=None):
+def run_study(root,parent,recipe_run,suite,worker,destination,name,*,treatment='observation',steps=250000,seeds=(61,62,63),hours=3,episode_starts=None,weakness=None,power_controlled=False,resume=False,confirmation=False):
     from mlagents.torch_utils import torch
     torch.set_num_threads(1)
     root,parent,recipe_run,suite,worker,destination=map(lambda p:Path(p).absolute(),(root,parent,recipe_run,suite,worker,destination))
@@ -125,45 +126,83 @@ def run_study(root,parent,recipe_run,suite,worker,destination,name,*,treatment='
     if control_schema != source_schema: raise ValueError('History compares from an explicitly selected frozen v3 parent.')
     frozen_actor(parent,run_rules_version(recipe_run))
     definition=json.loads(suite.read_text());definition['workerSha256']=worker_digest(worker)
-    destination.mkdir(parents=True,exist_ok=False)
-    suite_copy=destination/'fixed-suite.json';atomic_json(suite_copy,definition)
+    if not resume:destination.mkdir(parents=True,exist_ok=False)
+    suite_copy=destination/'fixed-suite.json'
+    if not resume:atomic_json(suite_copy,definition)
+    repeat_suite=destination/'confirmation-suite.json'
+    if confirmation and not resume:
+        from tournament_selection import confirmation_suite
+        atomic_json(repeat_suite,confirmation_suite(definition))
     source_files=list(Path(__file__).parent.glob('*.py'))+[Path(__file__).parents[1]/'ObservationContract/migrate_checkpoint.py',parent,suite,recipe_run/'trainer.yaml',recipe_run/'training-opponents.json']
     if episode_starts:source_files.append(Path(episode_starts))
     if weakness:source_files.append(Path(weakness))
     pins={str(p):sha(p.read_bytes()) for p in source_files}
-    receipt=dict(version=1,owner='BlockNations.InformationStudy.v1',state='running',treatment=treatment,seeds=list(seeds),stepsPerArm=steps,
+    receipt=dict(version=1,owner='BlockNations.InformationStudy.v1',state='running',name=name,hoursPerArm=hours,treatment=treatment,seeds=list(seeds),stepsPerArm=steps,powerControlled=power_controlled,confirmation=confirmation,
                  controlSchema=control_schema,treatmentSchema=target_schema,pins=pins,workerDigest=worker_digest(worker),results=[],startedUnix=time.time(),pid=os.getpid())
+    if resume:
+        previous_receipt=json.loads((destination/'study.json').read_text())
+        for key in ('owner','name','hoursPerArm','treatment','seeds','stepsPerArm','powerControlled','confirmation','controlSchema','treatmentSchema','pins','workerDigest'):
+            if previous_receipt.get(key)!=receipt[key]:raise ValueError('Resume requires the exact original study inputs and limits.')
+        if previous_receipt['state'] not in ('paused_power','running'):raise ValueError('Only a power-paused or interrupted study may resume.')
+        receipt=previous_receipt;receipt.update(state='running',pid=os.getpid(),resumedUnix=time.time())
+        receipt.pop('finishedUnix',None)
     lock=root/'information-study.lock'
+    if resume and lock.exists():
+        try:os.kill(int(lock.read_text()),0)
+        except ProcessLookupError:lock.unlink()
     descriptor=os.open(lock,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
     os.write(descriptor,str(os.getpid()).encode());os.close(descriptor)
-    stopping=False; process=None; capture=None; assertion=None
+    stopping=False; process=None; capture=None; assertion=None; started=None; current_key=None
+    power=PowerGuard(power_controlled);next_full_guard=0
     def stop(*_):
         nonlocal stopping
         stopping=True
     previous={sig:signal.signal(sig,stop) for sig in (signal.SIGINT,signal.SIGTERM)}
     def guard():
+        nonlocal next_full_guard
+        power.check()
         if stopping or (destination/'stop.request').exists():raise RuntimeError('Study stopped by request; artifacts preserved.')
+        if time.monotonic()<next_full_guard:return
+        next_full_guard=time.monotonic()+30
         if size(root)>19_488_000_000 or shutil.disk_usage(root).free<20_512_000_000:raise RuntimeError('Shared storage/free-disk reserve reached.')
         if any(sha(Path(p).read_bytes())!=h for p,h in pins.items()) or worker_digest(worker)!=receipt['workerDigest']:raise RuntimeError('Pinned study source or worker changed.')
     try:
         if sys.platform=='darwin': assertion=subprocess.Popen(['/usr/bin/caffeinate','-i','-s','-w',str(os.getpid())],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         atomic_json(destination/'study.json',receipt)
         guard()
-        baseline=evaluate(parent,suite_copy,worker,destination/'baseline')
+        baseline=evaluate_or_resume(parent,suite_copy,worker,destination/'baseline',guard)
         baseline_external=[r for c,r in zip(baseline['cases'],baseline['results']) if c['reference']['kind']!='self']
         receipt['baseline']=dict(suiteId=baseline['suiteId'],externalWins=sum(r['wins'] for r in baseline_external),
             externalGames=sum(r['games'] for r in baseline_external),interruptions=sum(r['interruptions'] for r in baseline_external))
+        if confirmation:
+            repeat=evaluate_or_resume(parent,repeat_suite,worker,destination/'baseline-confirmation',guard)
+            rows=[r for c,r in zip(repeat['cases'],repeat['results']) if c['reference']['kind']!='self']
+            receipt['baselineConfirmation']=dict(suiteId=repeat['suiteId'],externalWins=sum(r['wins'] for r in rows),externalGames=sum(r['games'] for r in rows),interruptions=sum(r['interruptions'] for r in rows))
         atomic_json(destination/'study.json',receipt)
         for seed in seeds:
             # Reverse order on alternating seeds to reduce simple time-order effects.
             arms=[('control',control_schema),('treatment',target_schema)]
             if seeds.index(seed)%2:arms.reverse()
             for arm,schema in arms:
+                if any(r['seed']==seed and r['arm']==arm for r in receipt['results']):continue
                 guard()
-                run,environment=prepare_arm(root,'info-'+name+'-'+str(seed)+'-'+arm,parent,recipe_run,worker,steps,seed,schema,
-                    episode_starts=episode_starts if arm=='treatment' else None,weakness=weakness if arm=='treatment' else None)
-                folder=destination/(str(seed)+'-'+arm);folder.mkdir()
+                run=root/'runs'/('info-'+name+'-'+str(seed)+'-'+arm)
+                current_key=str(seed)+'-'+arm
+                if not run.exists():
+                    run,environment=prepare_arm(root,run.name,parent,recipe_run,worker,steps,seed,schema,
+                        episode_starts=episode_starts if arm=='treatment' else None,weakness=weakness if arm=='treatment' else None)
+                    save_environment(run,environment)
+                    receipt.setdefault('armInputs',{})[current_key]={name:sha((run/name).read_bytes()) for name in
+                        ('run.json','trainer.yaml','training-opponents.json','study-environment.json')}
+                    atomic_json(destination/'study.json',receipt)
+                else:
+                    if not resume:raise ValueError('Existing trial was not explicitly resumed.')
+                    if any(sha((run/name).read_bytes())!=digest for name,digest in receipt['armInputs'][current_key].items()):
+                        raise ValueError('Owned trial inputs changed before resume.')
+                    environment=resume_environment(run)
+                folder=destination/current_key;folder.mkdir(exist_ok=resume)
                 started=time.monotonic();log=BoundedLog(folder/'trial.log')
+                prior_elapsed=receipt.get('armElapsedSeconds',{}).get(current_key,0)
                 process=subprocess.Popen([sys.executable,str(Path(__file__).with_name('rated_training.py')),str(run/'trainer.yaml'),
                     '--run-id',run.name,'--results-dir',str(run/'checkpoints'),'--seed',str(seed),'--torch-device','cpu','--timeout-wait','300','--resume'],
                     cwd=run,env=environment,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
@@ -176,8 +215,8 @@ def run_study(root,parent,recipe_run,suite,worker,destination,name,*,treatment='
                 atomic_json(destination/'study.json',receipt)
                 last_guard=0
                 while process.poll() is None:
-                    if time.monotonic()-last_guard>=30:guard();last_guard=time.monotonic()
-                    if stopping or (destination/'stop.request').exists() or time.monotonic()-started>hours*3600:raise RuntimeError('Owned trial stopped by request/time guard.')
+                    guard()
+                    if stopping or (destination/'stop.request').exists() or prior_elapsed+time.monotonic()-started>hours*3600:raise RuntimeError('Owned trial stopped by request/time guard.')
                     time.sleep(2)
                 capture.join(timeout=5)
                 if process.returncode!=0:raise RuntimeError('Information trainer failed; its bounded log and weights are preserved.')
@@ -190,9 +229,15 @@ def run_study(root,parent,recipe_run,suite,worker,destination,name,*,treatment='
                 if int(final.stem.rsplit('-',1)[1])<json.loads(parent.read_text())['step']+steps:raise ValueError('Matched learning-step target was not reached.')
                 arena=json.loads((run/'arena-status.json').read_text())
                 if arena.get('rejections')!=0 or arena.get('failure'):raise ValueError('Trial legality/health failed.')
-                frozen=freeze(run,final,int(final.stem.rsplit('-',1)[1]),(run/'trainer.yaml').read_bytes(),sha((run/'training-opponents.json').read_bytes()))
-                guard();pack=evaluate(frozen,suite_copy,worker,folder/'fixed-results')
+                frozen=run/'frozen-evaluations'/('milestone-'+str(int(final.stem.rsplit('-',1)[1])))/'manifest.json'
+                if not frozen.exists():frozen=freeze(run,final,int(final.stem.rsplit('-',1)[1]),(run/'trainer.yaml').read_bytes(),sha((run/'training-opponents.json').read_bytes()))
+                guard();pack=evaluate_or_resume(frozen,suite_copy,worker,folder/'fixed-results',guard)
                 external=[r for c,r in zip(pack['cases'],pack['results']) if c['reference']['kind']!='self']
+                repeated={}
+                if confirmation:
+                    repeat=evaluate_or_resume(frozen,repeat_suite,worker,folder/'confirmation-results',guard)
+                    rows=[r for c,r in zip(repeat['cases'],repeat['results']) if c['reference']['kind']!='self']
+                    repeated=dict(confirmationSuiteId=repeat['suiteId'],confirmationWins=sum(r['wins'] for r in rows),confirmationGames=sum(r['games'] for r in rows),confirmationInterruptions=sum(r['interruptions'] for r in rows))
                 from decision_audit import summarize
                 options=next(iter(json.loads((run/'trainer.yaml').read_text())['behaviors'].values()))
                 audit=summarize(json.loads((run/'decision-diagnostics.json').read_text()),options['reward_signals']['extrinsic']['gamma'],options['time_horizon'])
@@ -200,18 +245,28 @@ def run_study(root,parent,recipe_run,suite,worker,destination,name,*,treatment='
                 receipt['results'].append(dict(seed=seed,arm=arm,schema=schema,manifest=str(frozen),suiteId=pack['suiteId'],
                     externalWins=sum(r['wins'] for r in external),externalGames=sum(r['games'] for r in external),
                     interruptions=sum(r['interruptions'] for r in external),optimizerStepDeltas=deltas,rejections=arena['rejections'],
-                    elapsedSeconds=time.monotonic()-started,actualStep=int(final.stem.rsplit('-',1)[1])))
+                    elapsedSeconds=prior_elapsed+time.monotonic()-started,actualStep=int(final.stem.rsplit('-',1)[1]),**repeated))
                 atomic_json(destination/'study.json',receipt)
+                started=None;current_key=None
         receipt['state']='completed'
         receipt['comparison']={arm:dict(wins=sum(r['externalWins'] for r in receipt['results'] if r['arm']==arm),
             games=sum(r['externalGames'] for r in receipt['results'] if r['arm']==arm),
             interruptions=sum(r['interruptions'] for r in receipt['results'] if r['arm']==arm)) for arm in ('control','treatment')}
+        if confirmation:
+            receipt['confirmationComparison']={arm:dict(wins=sum(r['confirmationWins'] for r in receipt['results'] if r['arm']==arm),games=sum(r['confirmationGames'] for r in receipt['results'] if r['arm']==arm),interruptions=sum(r['confirmationInterruptions'] for r in receipt['results'] if r['arm']==arm)) for arm in ('control','treatment')}
         receipt['decision']='Review paired role/opponent results and human play before a longer continuation; no automatic promotion.'
+    except PowerPause as error:
+        receipt.update(state='paused_power',powerPauseReason=str(error))
+        events=receipt.setdefault('powerPauses',[])
+        events.append(dict(unix=time.time(),arm=current_key,reason=str(error)));del events[:-100]
     except BaseException as error:
         receipt.update(state='failed',error=str(error));raise
     finally:
         if process is not None and process.poll() is None:interrupt_trainer(process,timeout=45)
         if capture is not None:capture.join(timeout=5)
+        if started is not None and current_key is not None:
+            elapsed=receipt.setdefault('armElapsedSeconds',{})
+            elapsed[current_key]=elapsed.get(current_key,0)+time.monotonic()-started
         receipt.update(finishedUnix=time.time(),trainerPid=0);atomic_json(destination/'study.json',receipt)
         if lock.exists() and lock.read_text()==str(os.getpid()):lock.unlink()
         if assertion is not None:assertion.terminate();assertion.wait(timeout=5)
@@ -226,7 +281,10 @@ if __name__=='__main__':
     parser.add_argument('--seeds',type=int,nargs='+',default=[61,62,63]);parser.add_argument('--hours-per-arm',type=float,default=3)
     parser.add_argument('--treatment',choices=('observation','history','episode-starts','weakness'),default='observation')
     parser.add_argument('--episode-starts',type=Path);parser.add_argument('--weakness-diagnostic',type=Path)
+    parser.add_argument('--power-controlled',action='store_true');parser.add_argument('--resume',action='store_true')
+    parser.add_argument('--confirmation',action='store_true')
     args=parser.parse_args()
     result=run_study(args.root,args.parent,args.recipe_run,args.suite,args.worker,args.destination,args.name,
-        steps=args.steps,seeds=tuple(args.seeds),hours=args.hours_per_arm,treatment=args.treatment,episode_starts=args.episode_starts,weakness=args.weakness_diagnostic)
+        steps=args.steps,seeds=tuple(args.seeds),hours=args.hours_per_arm,treatment=args.treatment,episode_starts=args.episode_starts,weakness=args.weakness_diagnostic,
+        power_controlled=args.power_controlled,resume=args.resume,confirmation=args.confirmation)
     print(json.dumps(dict(state=result['state'],arms=len(result['results']))))

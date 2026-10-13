@@ -13,6 +13,7 @@ Start with the current state, then use the relevant implementation/setup referen
 | [Local ML Training MVP](ML_Training_MVP.md) | Mac self-play controls, storage/sleep limits, saved/resumed checkpoints, local model playtesting, schema and validation limits. |
 | [General AI Training Direction](AI_Training_Direction.md) | Proposed shared simulation, adaptable policy representation, fair memory, reproducible experiments, and local phone inference. |
 | [Controlled Information Training](AI_Information_Training.md) | Isolated v2/v3/history studies, reachable pre-loss starts, bounded weakness sampling, decision audits and unchanged release selection. |
+| [Replicated History Experiment](AI_History_Experiment.md) | Three paired V3/V4 training seeds, legitimate sighting memory, full confirmation benchmarks and power-safe resume. |
 | [Tournament-Guided Training](Tournament_Guided_Training.md) | Comparable champion refresh, replicated promotion, training-only weakness feedback and saved regression review stops. |
 | [Observation Contract v3](../Tools/ObservationContract/README.md) | Opt-in public role/capability inputs, preserved actor/critic/Adam initialization, synthetic parity checks and pending separate activation. |
 | [7×7 Balance Experiment](AI_Balance_Experiment.md) | Approved whole-number units, 2/3 opening, continued weights, generic opponent mix, balanced fixed evaluations and v4 model lineage. |
