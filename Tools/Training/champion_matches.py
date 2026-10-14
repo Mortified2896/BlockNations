@@ -32,12 +32,16 @@ def challenge(run, candidate_manifest, incumbent_manifest, fixed_suite, worker, 
     return evidence
 
 
-def assess(primary, confirmation, incumbent, candidate):
+def assess(primary, confirmation, incumbent, candidate, *, required_modes=('Hard', 'Policy')):
     """Balanced complete matches, both deployed and raw sampling, two seed packs.
 
     A five point win margin and non-losing role results avoid promoting on a tie.
     Deterministic openings can repeat: these are empirical gates, not IID claims.
+    Both modes are validated and reported; explicitly configured Hard selection
+    uses only Hard outcomes to decide acceptance. The legacy default requires both.
     """
+    if not isinstance(required_modes, (tuple, list)) or tuple(required_modes) not in (('Hard',), ('Hard', 'Policy')):
+        raise ValueError('Choose Hard selection or the legacy Hard-and-Policy criterion explicitly.')
     reasons, scores = [], []
     for key in ('rulesVersion', 'boardSize', 'openingEconomyVersion', 'workerSha256', 'packages', 'evaluatorSources'):
         if primary.get(key) != confirmation.get(key):
@@ -60,6 +64,8 @@ def assess(primary, confirmation, incumbent, candidate):
             win_rate = result['wins']/result['games']
             scores.append(dict(mode=case['difficulty'], seed=case['seed'], games=result['games'],
                                wins=result['wins'], winRate=win_rate, roles=roles))
+            if case['difficulty'] not in required_modes:
+                continue  # Still validate/report raw matches; they are a separate playing policy.
             if result['interruptions']:
                 reasons.append('interrupted direct matches')
             if win_rate < .55:
@@ -69,6 +75,9 @@ def assess(primary, confirmation, incumbent, candidate):
     for a, b in zip(primary['cases'], confirmation['cases']):
         if a['seed'] == b['seed'] or {k: v for k, v in a.items() if k != 'seed'} != {k: v for k, v in b.items() if k != 'seed'}:
             raise ValueError('Direct confirmation requires distinct seeds and unchanged opponents.')
-    return dict(accepted=not reasons, reasons=sorted(set(reasons)), scores=scores,
+    result = dict(accepted=not reasons, reasons=sorted(set(reasons)), scores=scores,
                 criterion='direct-incumbent-v1',
                 evidence='two seed packs, balanced colours and roles; empirical margins, not IID confidence')
+    if tuple(required_modes) == ('Hard',):
+        result.update(criterion='direct-hard-incumbent-v1', requiredModes=['Hard'], rawPolicy='diagnostic-only')
+    return result

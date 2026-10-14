@@ -59,6 +59,9 @@ def settings(run):
     if (type(config.get('populationPromotion', False)) is not bool or
             config.get('populationPromotion', False) and not config.get('headToHeadPromotion', False)):
         raise ValueError('Population promotion supplements the replicated direct-incumbent gate.')
+    mode=config.get('playtestSelectionMode','HardAndPolicy')
+    if mode not in ('Hard','HardAndPolicy') or mode == 'Hard' and not config.get('populationPromotion',False):
+        raise ValueError('Hard selection requires its replicated population and direct gates.')
     if config.get('replicatedPromotion', False):
         from tournament_selection import policy
         policy(config.get('promotionMargins'))
@@ -177,6 +180,8 @@ def perform_job(run, worker, job_path):
             kwargs = dict(confirmation=confirmation, margins=config.get('promotionMargins')) if confirmation else {}
             if head_to_head:
                 kwargs = dict(head_to_head=head_to_head)
+                if config.get('playtestSelectionMode') == 'Hard':
+                    kwargs['required_modes'] = ('Hard',)
             selected = select(run, manifest, job_path.parent / 'results/suite.json', **kwargs)
             job.update(state='promoted', champion=selected['checkpoint'], promotionEvidence=selected.get('promotionEvidence'),
                        reason='Passed replicated direct-incumbent matches.' if head_to_head else 'Passed the fixed-reference promotion gate.')

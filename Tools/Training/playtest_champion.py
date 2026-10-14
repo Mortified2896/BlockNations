@@ -139,7 +139,9 @@ def preferred_checkpoint(run, source='Champion'):
     return latest_checkpoint(run), 'latest completed checkpoint'
 
 
-def select(run, manifest, evaluation, *, initialize=False, confirmation=None, margins=None, head_to_head=None):
+def select(run, manifest, evaluation, *, initialize=False, confirmation=None, margins=None, head_to_head=None, required_modes=None):
+    if required_modes is not None and head_to_head is None:
+        raise ValueError('Explicit playing modes require replicated direct evidence.')
     run = Path(run).absolute()
     owned = json.loads((run/'run.json').read_text())
     if owned.get('owner') != 'BlockNations.LocalTraining.v1' or owned.get('schema') != 2:
@@ -167,7 +169,8 @@ def select(run, manifest, evaluation, *, initialize=False, confirmation=None, ma
             from champion_matches import assess as assess_direct
             packs = [checked_evaluation(run, manifest, head_to_head[key])[1]
                      for key in ('primary', 'confirmation')]
-            evidence = assess_direct(*packs, incumbent['candidate'], candidate['candidate'])
+            evidence = assess_direct(*packs, incumbent['candidate'], candidate['candidate'],
+                                     required_modes=('Hard', 'Policy') if required_modes is None else required_modes)
             if not evidence['accepted']:
                 raise ValueError('Candidate did not improve direct matches: ' + '; '.join(evidence['reasons']))
         elif confirmation is not None:
@@ -211,6 +214,8 @@ def select(run, manifest, evaluation, *, initialize=False, confirmation=None, ma
         selection['headToHeadSha256'] = {key: digest(Path(value)) for key, value in head_to_head.items()}
         selection['promotionEvidence'] = evidence
         selection['strengthStatus'] = 'replicated direct winner over previous champion; fixed-reference results are diagnostics'
+        if evidence.get('requiredModes') == ['Hard']:
+            selection['strengthStatus'] = 'replicated Hard winner; raw-policy sampling is a separate diagnostic'
     from playtest import atomic_json
     if previous is not None:
         history = run/'champion-history'

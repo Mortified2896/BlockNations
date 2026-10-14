@@ -37,9 +37,10 @@ An additional standard direct challenge confirmed the mode disagreement. The
 archive won 121/128 and 120/128 Hard duels, but only 62/128 and 68/128 raw Policy
 duels. It passed the new population review, with mean gains of 4.88 and 6.64
 percentage points and worst-role gains of 40.63 and 34.38 points. It failed the
-existing requirement to win the raw duels as well. Automatic selection therefore
-remains at 163.46m. For Hard play, explicitly selecting frozen checkpoint
-162,299,959 is the supported way to try the stronger tested Hard opponent.
+old requirement to win the raw duels as well. The configured Hard selector now
+requires the replicated Hard population and Hard direct results, with raw duels
+recorded separately. Checkpoint 162,299,959 is selected as the Hard champion after
+passing those checks; the learner's weights/optimizer remain at their later step.
 The different sampling settings are part of the effective playing policy;
 network weights alone do not provide a mode-independent strength ordering.
 
@@ -108,8 +109,8 @@ frozen-policy runtime.
 ## Installed training and evaluation changes
 
 The stopped main learner's permanent pool now retains the 162,299,959 Hard actor
-in place of the much older 18m Hard actor, and records the selected 163.46m actor
-in its base recipe. Eight distinct challengers remain: four tactical variants,
+in place of the much older 18m Hard actor, and retains the initial 163.46m
+selection as a second recent reference. Eight distinct challengers remain: four tactical variants,
 the two recent learned actors, and two older raw policies. Half the games remain
 learned self-play. Adaptive weighting starts with uniform coverage, then uses
 completed live training losses from both starting roles. Benchmark wins do not
@@ -136,7 +137,11 @@ may regress while the mean and weakest result improve. Ties, a gain confined to
 one pack, incomplete/unbalanced matches and mixed sampling cannot establish
 promotion. Rejected population candidates preserve the champion and skip the
 extra direct challenges. Passing the population check still requires the existing
-Hard and raw Policy direct challenges before automatic selection.
+Hard direct challenges before automatic selection. The explicit
+`playtestSelectionMode: Hard` configuration makes raw Policy duels diagnostics.
+The default `HardAndPolicy` criterion remains supported for other runs, and both
+sets of match records remain in the selected model's immutable evidence. This
+selection targets Hard play; other difficulty samplers can change the ordering.
 
 The simulator transport now gives batched tactical-reference searches a bounded
 120-second deadline while ordinary steps/status remain at 30 seconds. Errors
@@ -189,6 +194,9 @@ Under `~/Library/Application Support/BlockNations/Training/`:
 
 - `benchmarks/deep-investigation-20261014/hard-metagame/`: complete suites and raw
   match records; `hard-payoffs.csv` and `verified-evidence.json` recompute totals.
+- `runs/mac-7x7-core3-gentle-20261011/evaluations/population-investigation-20261014/`:
+  replicated population/direct reviews and `selection-review.json` preserve the
+  mode-specific acceptance and proof that the learner was not rolled back.
 - `benchmarks/deep-investigation-20261014/manual-first-hard/` and
   `manual-second-hard/`: session identities, fair decisions and complete results.
 - `benchmarks/deep-investigation-20261014/city-defense-replay-v2/`: matched replay

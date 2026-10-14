@@ -223,6 +223,9 @@ class AutomaticEvaluationTests(unittest.TestCase):
             self.config.update(populationPromotion=flag,headToHeadPromotion=direct)
             self.write(self.run/CONFIG,self.config)
             with self.assertRaises(ValueError):settings(self.run)
+        self.config.update(populationPromotion=False,headToHeadPromotion=True,playtestSelectionMode='Hard')
+        self.write(self.run/CONFIG,self.config)
+        with self.assertRaises(ValueError):settings(self.run)
 
     def test_population_rejection_preserves_champion_and_skips_the_direct_challenge(self):
         for accepted in (False,True):
@@ -232,7 +235,7 @@ class AutomaticEvaluationTests(unittest.TestCase):
                 manifest=folder/'manifest.json';self.write(manifest,{})
                 self.write(self.run/'trainer.yaml',{});self.write(self.run/'training-opponents.json',{})
                 self.write(self.run/'playtest-champion.json',dict(candidateManifest='old.json',suiteId='fixed',checkpoint='old'))
-                self.config.update(headToHeadPromotion=True,populationPromotion=True);self.write(self.run/CONFIG,self.config)
+                self.config.update(headToHeadPromotion=True,populationPromotion=True,playtestSelectionMode='Hard');self.write(self.run/CONFIG,self.config)
                 job_dir=self.run/'evaluations/automatic'/str(accepted);job_dir.mkdir(parents=True)
                 job_path=job_dir/'job.json';self.write(job_path,dict(owner=OWNER,runId='saved'))
                 evidence={label:job_dir/(label+'.json') for label in ('primary','confirmation')}
@@ -251,7 +254,8 @@ class AutomaticEvaluationTests(unittest.TestCase):
                 population.assert_called_once()
                 self.assertEqual(result['state'],'promoted' if accepted else 'retained')
                 self.assertEqual(result['games'],640 if accepted else 128)
-                if accepted:challenge.assert_called_once();select.assert_called_once()
+                if accepted:
+                    challenge.assert_called_once();select.assert_called_once_with(self.run,manifest,job_dir/'results/suite.json',head_to_head=evidence,required_modes=('Hard',))
                 else:
                     challenge.assert_not_called();select.assert_not_called()
                     self.assertEqual((self.run/'playtest-champion.json').read_bytes(),before)
