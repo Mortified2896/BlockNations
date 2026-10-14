@@ -1,17 +1,18 @@
 {
   "schema": 2,
+  "actionSchema": 2,
   "boardSize": 7,
   "observationSize": 3120,
   "actionCount": 259,
   "rulesVersion": "blocknations-simulation-v5-core3",
   "openingEconomyVersion": 2,
-  "modelVersion": "BlockNationsSeatV2-33749992",
-  "modelSha256": "c4ad1f6a1673b110157a2d9906c097c9d237d7e6b2706aafc0889e5f85a1a6c1",
-  "checkpointSha256": "5ca6ac1b0183019a882788522829112fd27f91f74c51cf8679b3dcd77b89666b",
-  "sourceOnnxSha256": "db73cb213c055344f8d8c9568570329529a16f671022cc2155d329b77ee12015",
+  "modelVersion": "BlockNationsSeatV2-163463523",
+  "modelSha256": "97ead290b05ac15097dd7b957efeb67fcec2693a561b91798184ece8b9989645",
+  "checkpointSha256": "d22081cb418f604061f3cc931c07a413ad6719e1f9b17bd4fc284949e96716ba",
+  "sourceOnnxSha256": "dbfca0dc6e4cc365901c01a1b599d54dc60f8f96cf8eeff7bde96fe00b0aab6d",
   "probabilityOutput": "policy_probabilities",
   "modelBytes": 1803075,
-  "exportedUnixSeconds": 1791700332,
+  "exportedUnixSeconds": 1791956411,
   "verification": {
     "samples": 24,
     "maximumProbabilityError": 0.0,
@@ -21,7 +22,34 @@
   "trainedRulesVersion": "blocknations-simulation-v5-core3",
   "samplingMode": "Hard",
   "checkpointActorParitySamples": 8,
-  "evaluationSuiteId": "f38eb2fc623123bb2863c3864a859326a7694ff77eaec05709791174b8945efa",
-  "evaluationReceiptSha256": "bd6087a50b58e8cf5a6e3fab96b35e88d72686998e2b31db754a4f3d70249b86",
-  "evaluatedActorId": "71a7d015420b454b89cca82d"
+  "evaluationSuiteId": "f3c029d577b737fece6c5150f3badae81d6f73ae591902fedb95595799242b84",
+  "evaluationReceiptSha256": "7215c4d7902bd99e08ef93b1570e8888fe9d87f139d97fcf02c0801f008e3f80",
+  "evaluatedActorId": "6edd9d1fafe18ecc139c937c",
+  "championSelectionCriterion": "direct-incumbent-v1",
+  "championDirectMatchResults": [
+    {
+      "mode": "Hard",
+      "seed": 610014,
+      "wins": 128,
+      "games": 128
+    },
+    {
+      "mode": "Policy",
+      "seed": 610014,
+      "wins": 84,
+      "games": 128
+    },
+    {
+      "mode": "Hard",
+      "seed": 1610017,
+      "wins": 128,
+      "games": 128
+    },
+    {
+      "mode": "Policy",
+      "seed": 1610017,
+      "wins": 88,
+      "games": 128
+    }
+  ]
 }
