@@ -20,6 +20,7 @@ Start with the current state, then use the relevant implementation/setup referen
 | [Training Investigation: Retention, Visibility and Capacity](AI_Training_Investigation_20261014.md) | Fair played games, an overlooked stronger checkpoint, a matched fog counterfactual, a broader promotion gate and the scheduled 128/256-unit comparison. |
 | [Quiet Overnight Training](Quiet_Overnight_Training.md) | Silent development players, keyboard readback, thermal/power guards, exclusive studies and the reusable capacity trial. |
 | [Paired Training Study Reports](Training_Study_Reports.md) | Raw-match verification, separate training seeds/opponent/role results and honest incomplete-study reporting. |
+| [Recorded Training Decision Diagnostics](Training_Replay_Diagnostics.md) | V2/V3/V4 replay verification, isolated full-view projections, legitimate history and retained counterplay cases. |
 | [Tournament-Guided Training](Tournament_Guided_Training.md) | Comparable champion refresh, replicated promotion, training-only weakness feedback and saved regression review stops. |
 | [Observation Contract v3](../Tools/ObservationContract/README.md) | Opt-in public role/capability inputs, preserved actor/critic/Adam initialization, synthetic parity checks and pending separate activation. |
 | [7×7 Balance Experiment](AI_Balance_Experiment.md) | Approved whole-number units, 2/3 opening, continued weights, generic opponent mix, balanced fixed evaluations and v4 model lineage. |

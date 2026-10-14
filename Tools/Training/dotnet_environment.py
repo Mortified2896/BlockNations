@@ -36,7 +36,10 @@ def atomic_json(path, data):
 
 class DotNetEnvironment(BaseEnv):
     def __init__(self, executable, run, workers, seed, size, curriculum, distance, session, policy_provider=lambda: None,
-                 opening_economy_version=OPENING_ECONOMY_VERSION, first_seat=-1, rules_version=RULES_VERSION, observation_version=2, episode_starts=None, diagnostic_full_vision_seats=0):
+                 opening_economy_version=OPENING_ECONOMY_VERSION, first_seat=-1, rules_version=RULES_VERSION, observation_version=2, episode_starts=None, diagnostic_full_vision_seats=0, diagnostic_projections=False):
+        if type(diagnostic_projections) is not bool or diagnostic_projections and (curriculum or episode_starts is not None or diagnostic_full_vision_seats):
+            raise ValueError('Read-only projections require an explicit standard fog diagnostic.')
+        self.diagnostic_projections = diagnostic_projections
         if type(diagnostic_full_vision_seats) is not int or diagnostic_full_vision_seats not in (0, 1, 2, 3):
             raise ValueError('Full-vision diagnostics need an explicit two-seat mask.')
         if diagnostic_full_vision_seats and (curriculum or episode_starts is not None):
@@ -80,6 +83,8 @@ class DotNetEnvironment(BaseEnv):
             command += ['--episode-starts', str(Path(episode_starts).absolute())]
         if diagnostic_full_vision_seats:
             command += ['--diagnostic-full-vision-seats', str(diagnostic_full_vision_seats)]
+        if diagnostic_projections:
+            command += ['--diagnostic-projections', 'true']
         self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                         text=True, bufsize=1, cwd=self.run)
         self.reader = threading.Thread(target=self._read, daemon=True)
@@ -132,6 +137,10 @@ class DotNetEnvironment(BaseEnv):
                 response.get('rulesVersion') != self.rules_version or
                 response.get('diagnosticFullVisionSeats', 0) != self.diagnostic_full_vision_seats):
             raise ValueError('C# rules/model protocol mismatch; do not train on an incompatible worker.')
+        if response.get('diagnosticProjections', False) != self.diagnostic_projections:
+            raise ValueError('Worker does not acknowledge the explicit diagnostic projection mode.')
+        if request['op'] == 'projection':
+            return self._decode_steps(response['projectionSteps'])
         self.stats = response['stats']
         self.roster = tuple(response.get('recruitTypes', ()))
         self.enabled_roster = tuple(response.get('enabledRecruitTypes', self.roster))
@@ -150,10 +159,14 @@ class DotNetEnvironment(BaseEnv):
                 if agent not in decisions.agent_id_to_index or not 0 <= choice < ACTIONS or decisions.action_mask[0][decisions.agent_id_to_index[agent], choice]:
                     raise ValueError('Reference produced a stale or masked choice.')
             return actions  # Read-only evaluation advice never advances a game.
-        self.results = {}
+        self.results = self._decode_steps(response['steps'])
+        self._publish_status()
+
+    def _decode_steps(self, steps):
+        results = {}
         for seat, name in enumerate(self.names):
-            decisions = [item for item in response['steps'] if item['seat'] == seat and not item['terminal']]
-            terminal = [item for item in response['steps'] if item['seat'] == seat and item['terminal']]
+            decisions = [item for item in steps if item['seat'] == seat and not item['terminal']]
+            terminal = [item for item in steps if item['seat'] == seat and item['terminal']]
             def observations(items):
                 values = [np.frombuffer(base64.b64decode(item['observation'], validate=True), dtype='<f4') for item in items]
                 if any(value.shape != (self.observation_size,) or not np.isfinite(value).all() for value in values):
@@ -170,13 +183,19 @@ class DotNetEnvironment(BaseEnv):
                 if not available or any(action < 0 or action >= ACTIONS for action in available):
                     raise ValueError('Invalid legal-action mask.')
                 mask[row, available] = False
-            self.results[name] = (
+            results[name] = (
                 DecisionSteps(observations(decisions), np.zeros(len(decisions), dtype=np.float32), identifiers(decisions), [mask],
                               np.zeros(len(decisions), dtype=np.int32), np.zeros(len(decisions), dtype=np.float32)),
                 TerminalSteps(observations(terminal), np.array([item['reward'] for item in terminal], dtype=np.float32),
                               np.array([item['interrupted'] for item in terminal], dtype=np.bool_), identifiers(terminal),
                               np.zeros(len(terminal), dtype=np.int32), np.zeros(len(terminal), dtype=np.float32)))
-        self._publish_status()
+        return results
+
+    def diagnostic_projection(self):
+        """Return a full-view counterfactual without replacing ordinary decisions."""
+        if not self.diagnostic_projections:
+            raise ValueError('Read-only projections are unavailable in ordinary sessions.')
+        return self._exchange(dict(op='projection'))
 
     def _publish_status(self, paused=False, force=False, failure=''):
         now = time.monotonic()

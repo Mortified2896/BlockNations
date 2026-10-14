@@ -27,8 +27,12 @@ def coord(index):return f'({index%11},{index//11})'
 
 
 def describe(index):
+    if isinstance(index, (bool, np.bool_)) or not isinstance(index, (int, np.integer)) or not 0 <= index < 259:
+        raise ValueError('Choose an encoded legal-action index.')
     if index==258:return 'end turn'
-    if index>=242:return 'recruit '+('archer','rider','scout','warrior')[index-242]
+    if index>=242:
+        slot=index-242
+        return 'recruit '+(('archer','rider','scout','warrior')[slot] if slot<4 else 'slot '+str(slot))
     return ('attack ' if index>=121 else 'select/move ')+coord(index%121)
 
 

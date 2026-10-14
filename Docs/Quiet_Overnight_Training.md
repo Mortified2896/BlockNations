@@ -208,3 +208,14 @@ the strengthened retained pool, with fair observable history and its own
 replicated controls. Do not infer that a larger network or last-seen history
 alone solves threats from genuinely unobserved units. No champion or public
 release was changed by these checks.
+
+The follow-up [recorded decision diagnostic](Training_Replay_Diagnostics.md)
+now supports V2/V3/V4 actors and read-only full-view projections on the exact
+normal-fog state. It revalidated the same city case with the previous paired
+V3/V4 pilot actors as well. The current fair-history snapshot contained only
+two visible enemy records, with no stale sighting for the additional supporting
+ranged threat. Both pilot actors still made the Hard defence error. That is a
+representation/decision diagnostic, not a full-game or human-strength gain.
+The retained runtime, source hashes and five-model receipt remain in
+`benchmarks/capacity-night-evidence-20261015/` for the morning review; the
+capacity study's original source and worker pins are unchanged.

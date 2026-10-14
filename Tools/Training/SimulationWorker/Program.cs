@@ -28,6 +28,12 @@ internal static class Program
     private static string Argument(string[] args, string name, string fallback)
     { int i = Array.IndexOf(args, name); return i >= 0 && i + 1 < args.Length ? args[i + 1] : fallback; }
 
+    private static object Packet(ArenaAgentStep step)
+    {
+        byte[] bytes = new byte[step.observation.Length * sizeof(float)]; Buffer.BlockCopy(step.observation, 0, bytes, 0, bytes.Length);
+        return new { step.agent, step.seat, observation = Convert.ToBase64String(bytes), step.available, step.terminal, step.interrupted, step.reward };
+    }
+
     private static int Main(string[] args)
     {
         try {
@@ -47,8 +53,11 @@ internal static class Program
         int fixedFirstSeat = int.Parse(Argument(args, "--first-seat", "-1"));
         int observationVersion = int.Parse(Argument(args, "--observation-version", "2"));
         int diagnosticFullVisionSeats = int.Parse(Argument(args, "--diagnostic-full-vision-seats", "0"));
+        bool diagnosticProjections = bool.Parse(Argument(args, "--diagnostic-projections", "false"));
         LearnedObservationContract.Size(observationVersion);
         string episodePath = Argument(args, "--episode-starts", "");
+        if (diagnosticProjections && (curriculum || episodePath != "" || diagnosticFullVisionSeats != 0))
+            throw new ArgumentException("Read-only projections require a standard fog diagnostic session.");
         EpisodeStartRecipe starts = null;
         if (episodePath != "")
         {
@@ -85,6 +94,7 @@ internal static class Program
             Request request = JsonSerializer.Deserialize<Request>(line, Json) ?? throw new InvalidOperationException("Missing request.");
             if (request.op == "close") break;
             var packets = new ArenaAgentStep[count][];
+            object[] projectionSteps = Array.Empty<object>();
             if (request.op == "reset")
             {
                 if (!initialReset) foreach (var arena in arenas) arena.Reset(trainerReset: true);
@@ -93,6 +103,14 @@ internal static class Program
             }
             else if (request.op == "status" || request.op == "reference")
                 for (int i = 0; i < count; i++) packets[i] = Array.Empty<ArenaAgentStep>();
+            else if (request.op == "projection")
+            {
+                if (!diagnosticProjections || request.actions != null || request.policy != null || request.policies != null)
+                    throw new InvalidOperationException("Full-view projection is an opt-in read-only diagnostic.");
+                for (int i = 0; i < count; i++) packets[i] = Array.Empty<ArenaAgentStep>();
+                projectionSteps = arenas.Where(a => a.CanDecide && !a.State.GameOver)
+                    .Select(a => Packet(a.DiagnosticFullVisionDecision())).ToArray();
+            }
             else if (request.op == "step")
             {
                 if (request.policies != null && (request.policies.Length != count || request.policies.Any(p => p == null)))
@@ -156,10 +174,7 @@ internal static class Program
                 Atomic(progressPath, progress);
                 foreach (var stat in stats) Atomic(Path.Combine(run, "workers", stat.worker.ToString(), "arena-status.json"), stat);
             }
-            var steps = packets.SelectMany(batch => batch).Select(step => {
-                byte[] bytes = new byte[step.observation.Length * sizeof(float)]; Buffer.BlockCopy(step.observation, 0, bytes, 0, bytes.Length);
-                return new { step.agent, step.seat, observation = Convert.ToBase64String(bytes), step.available, step.terminal, step.interrupted, step.reward };
-            }).ToArray();
+            var steps = packets.SelectMany(batch => batch).Select(Packet).ToArray();
             if (request.op == "reference" && (request.referenceSeat < 0 || request.referenceSeat > 1))
                 throw new ArgumentException("Invalid reference seat.");
             if (request.referenceAgents != null && request.referenceAgents.Any(agent => agent < 0 || agent >= count * 2 || agent % 2 != request.referenceSeat))
@@ -168,7 +183,7 @@ internal static class Program
                 .Where(a => request.referenceAgents == null || request.referenceAgents.Contains(a.Worker * 2 + request.referenceSeat))
                 .Select(a => new ActionRequest { agent = a.Worker * 2 + request.referenceSeat,
                     action = a.ReferenceChoice(request.recruitType, request.workBudget) }).ToArray() : Array.Empty<ActionRequest>();
-            Console.WriteLine(JsonSerializer.Serialize(new { protocol = 1, rulesVersion = rules.Version, diagnosticFullVisionSeats, behavior = LearnedObservationContract.Behavior(observationVersion),
+            Console.WriteLine(JsonSerializer.Serialize(new { protocol = 1, rulesVersion = rules.Version, diagnosticFullVisionSeats, diagnosticProjections, projectionSteps, behavior = LearnedObservationContract.Behavior(observationVersion),
                 observationSize = LearnedObservationContract.Size(observationVersion), observationVersion, actionVersion = LearnedActionSchema.Version, actionCount = LearnedActionSchema.ActionCount, steps, stats, referenceActions,
                 recruitTypes = rules.PolicyCatalog.Select(t => t.TypeId).ToArray(),
                 enabledRecruitTypes = rules.RecruitableUnits.Select(t => t.TypeId).ToArray() }, Json));

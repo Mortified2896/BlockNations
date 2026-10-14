@@ -235,6 +235,24 @@ namespace BlockNations.Training
             return observer.Observe(State, seat);
         }
 
+#if BLOCKNATIONS_TRAINING_DIAGNOSTICS
+        // A perceptual counterfactual of this exact board. Fresh observer/memory
+        // objects keep hidden pieces out of the ordinary seat's knowledge.
+        // This never applies an action, advances RNG, or changes arena counters.
+        public ArenaAgentStep DiagnosticFullVisionDecision()
+        {
+            if (!CanDecide || State.GameOver) throw new InvalidOperationException("Project a live owned decision.");
+            int seat = State.CurrentTurnSeat;
+            var context = new SimulationObservationSource().ObserveWithDiagnosticFullVision(State, seat);
+            return new ArenaAgentStep {
+                agent = Worker * 2 + seat, seat = seat,
+                observation = LearnedObservationContract.Encode(observationVersion, context.Observation,
+                    source[seat], State.FirstSeat, new FairEnemyHistory()),
+                available = LearnedActionSchema.Choices(context.Observation, source[seat]).Keys.OrderBy(i => i).ToArray()
+            };
+        }
+#endif
+
         private ArenaMatchEvent Event(string kind, PolicyAssignment policy) => new ArenaMatchEvent {
             boardSize = BoardSize, worker = Worker, match = Games + 1, firstSeat = State.FirstSeat, kind = kind,
             blueDecisions = seatDecisions[0], redDecisions = seatDecisions[1], context = policy, fullOpening = FullOpening };
