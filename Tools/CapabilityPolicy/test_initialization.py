@@ -21,6 +21,7 @@ from artifacts import checkpoint
 import initialization
 import corpus
 from distill import divergence
+from collect import teacher_distribution
 
 torch.set_num_threads(1)
 
@@ -90,6 +91,19 @@ class PreparedInitializationTests(unittest.TestCase):
 
 
 class CorpusTests(unittest.TestCase):
+    def test_deployment_teacher_preserves_legality_and_the_actual_hard_sampler(self):
+        target=np.zeros((1,259),np.float32); target[0,:3]=(.5,.36,.14)
+        allowed=target>0
+        raw=teacher_distribution(target*2,allowed,'Policy')
+        np.testing.assert_allclose(raw,target,rtol=1e-6)
+        hard=teacher_distribution(target,allowed,'Hard')
+        np.testing.assert_allclose(hard[0,:2],np.array([1,.72**4])/(1+.72**4),rtol=1e-6)
+        self.assertEqual(hard[0,2],0)
+        self.assertTrue((hard[~allowed]==0).all())
+        for mode,bad in [('Hard',np.full((1,259),np.nan)),('unknown',target)]:
+            with self.assertRaises(ValueError):teacher_distribution(bad,allowed,mode)
+        with self.assertRaises(ValueError):teacher_distribution(target,np.zeros_like(allowed),'Policy')
+
     def test_whole_match_split_and_legal_labels(self):
         data=arrays(); summary=corpus.validate(data)
         self.assertEqual(summary['trainingGroups'],6); self.assertEqual(summary['validationGroups'],2)
@@ -118,6 +132,8 @@ class CorpusTests(unittest.TestCase):
             loaded,_=corpus.load(root,manifest)
             np.testing.assert_array_equal(loaded['observations'],data['observations'])
             manifest.write_text(json.dumps(dict(record,partition='evaluation-only')))
+            with self.assertRaises(ValueError): corpus.load(root,manifest)
+            manifest.write_text(json.dumps(dict(record,teacherSampling=dict(mode='Hard',settings=[1.,0.]))))
             with self.assertRaises(ValueError): corpus.load(root,manifest)
             manifest.write_text(json.dumps(record)); path.write_bytes(path.read_bytes()+b'changed')
             with self.assertRaises(ValueError): corpus.load(root,manifest)

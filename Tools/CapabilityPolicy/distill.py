@@ -87,7 +87,9 @@ def prepare(root, corpus_manifest, destination, *, width=32, seed=209, updates=2
                 corpusManifest=str(corpus_manifest),corpusManifestSha256=hashlib.sha256(corpus_manifest.read_bytes()).hexdigest(),
                 corpusSha256=data['corpusSha256'],teacher=data['teacher'],rulesVersion=data['rulesVersion'],boardSize=data['boardSize'],
                 width=width,seed=seed,updates=updates,initialValidation=initial,history=[],sources=pins,
-                optimization=dict(learningRate=.001,batchSize=128,valueCoefficient=.1,gradientClip=1.,target='raw frozen policy probabilities and fair critic value'),startedUnix=time.time())
+                teacherSampling=data.get('teacherSampling',dict(mode='Policy',settings=None)),
+                optimization=dict(learningRate=.001,batchSize=128,valueCoefficient=.1,gradientClip=1.,
+                    target='recorded teacher sampling probabilities and fair raw-teacher critic value'),startedUnix=time.time())
     atomic_json(destination/'distillation.json',record)
     deadline=time.monotonic()+1800; next_check=0
     def guard():

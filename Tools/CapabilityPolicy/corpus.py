@@ -7,6 +7,7 @@ import zipfile
 import numpy as np
 
 from policy import OBSERVATIONS, ACTIONS, ROLE_OFFSET
+from playtest_sampling import PRESETS
 
 OWNER = 'BlockNations.CapabilityTrainingCorpus.v1'
 FIELDS = ('observations', 'allowed', 'teacherProbabilities', 'teacherValues', 'validation', 'group')
@@ -58,6 +59,10 @@ def load(root, manifest):
             record.get('partition') != 'training' or record.get('observationVersion') != 4 or
             record.get('diagnosticFullVisionSeats') != 0 or record.get('humanIngestion') != 'none'):
         raise ValueError('Held-out benchmark/replay data cannot initialize the learner.')
+    sampling = record.get('teacherSampling', dict(mode='Policy', settings=None))
+    if (not isinstance(sampling, dict) or sampling.get('mode') not in ('Policy', *PRESETS) or
+            sampling.get('settings') != (list(PRESETS[sampling['mode']]) if sampling['mode'] in PRESETS else None)):
+        raise ValueError('Teacher labels require their recorded supported deployment sampler.')
     path = Path(record['corpus']).absolute()
     if path.resolve() != path or path.parent != manifest.parent or path.stat().st_size > 400_000_000:
         raise ValueError('Corpus must remain bounded beside its own manifest.')

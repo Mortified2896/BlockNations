@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
 import shutil
 import sys
@@ -24,14 +25,31 @@ from supervisor import ROOT_MARKER, atomic_json, size
 from information_study_runtime import PowerGuard
 from train import exclusive
 from corpus import OWNER, group, validate
+from playtest_sampling import PRESETS, sampling_weights
 
 
-def collect(root, teacher, worker, destination, *, decisions=8192, seed=21501501):
+def teacher_distribution(probabilities, allowed, mode):
+    """Label and roll out the same explicitly chosen deployment policy."""
+    values = np.asarray(probabilities)
+    mask = np.asarray(allowed)
+    if (mode not in ('Policy', *PRESETS) or values.ndim != 2 or values.shape[1] != 259 or
+            mask.shape != values.shape or mask.dtype != np.bool_ or
+            not np.isfinite(values).all() or (values < 0).any() or
+            np.any(values[~mask] != 0) or np.any(values.sum(axis=1) <= 0)):
+        raise ValueError('Teacher labels require finite legal probabilities and an explicit sampler.')
+    target = values / values.sum(axis=1, keepdims=True)
+    return (target if mode == 'Policy' else sampling_weights(target, mode)).astype(np.float32)
+
+
+def collect(root, teacher, worker, destination, *, decisions=8192, seed=21501501,
+            teacher_mode='Policy', action_noise=.2):
     root, teacher, worker, destination = (Path(path).absolute() for path in (root, teacher, worker, destination))
     estimate = decisions*(4712*4+259*5+32)
     if (root.resolve() != root or json.loads((root/ROOT_MARKER).read_text()).get('owner') != 'BlockNations.LocalTraining.v1' or
             destination.resolve() != destination or not destination.is_relative_to(root/'benchmarks') or
-            destination == root/'benchmarks' or decisions not in (4096, 8192, 16384) or not 0 <= seed < 2**31):
+            destination == root/'benchmarks' or decisions not in (4096, 8192, 16384) or not 0 <= seed < 2**31 or
+            teacher_mode not in ('Policy', *PRESETS) or type(action_noise) not in (int, float) or
+            not math.isfinite(action_noise) or not 0 <= action_noise <= .2):
         raise ValueError('Use a new bounded owned corpus and an explicit recorded seed.')
     model = checked_manifest(root, teacher)
     if version('mlagents') != '1.1.0':
@@ -67,7 +85,10 @@ def collect(root, teacher, worker, destination, *, decisions=8192, seed=21501501
                   teacherManifest=str(teacher), teacherManifestSha256=hashlib.sha256(teacher.read_bytes()).hexdigest(),
                   teacher=identity, teacherObservationVersion=actor.observation_version,
                   workerSha256=worker_digest(worker), seed=seed, requestedDecisions=decisions,
-                  actionNoise=dict(kind='uniform-over-all-legal-actions', probability=.2), startedUnix=time.time())
+                  teacherSampling=dict(mode=teacher_mode,
+                      settings=list(PRESETS[teacher_mode]) if teacher_mode in PRESETS else None),
+                  valueLabels='fair critic of the unmodified teacher; approximate under changed sampling',
+                  actionNoise=dict(kind='uniform-over-all-legal-actions', probability=action_noise), startedUnix=time.time())
     record.update(sources=pins,packages={name:version(name) for name in ('mlagents','torch','numpy')})
     arrays = dict(observations=np.empty((decisions, 4712), np.float32), allowed=np.empty((decisions, 259), np.bool_),
                   teacherProbabilities=np.empty((decisions, 259), np.float32), teacherValues=np.empty(decisions, np.float32),
@@ -86,7 +107,7 @@ def collect(root, teacher, worker, destination, *, decisions=8192, seed=21501501
                 if not len(current): continue
                 allowed = ~current.action_mask[0]
                 p = actor.probabilities(current.obs[0], ~allowed)
-                p = (p/p.sum(axis=1, keepdims=True)).astype(np.float32)
+                p = teacher_distribution(p, allowed, teacher_mode)
                 with torch.no_grad():
                     labels = critic([torch.as_tensor(current.obs[0][:, :actor.observation_size])])[0]['extrinsic'].numpy()
                 choices = []
@@ -101,7 +122,7 @@ def collect(root, teacher, worker, destination, *, decisions=8192, seed=21501501
                         arrays['teacherValues'][count] = labels[i]
                         arrays['validation'][count] = held; arrays['group'][count] = key
                         count += 1
-                    choice = random.choice(np.flatnonzero(allowed[i])) if random.random() < .2 else random.choice(259, p=p[i])
+                    choice = random.choice(np.flatnonzero(allowed[i])) if random.random() < action_noise else random.choice(259, p=p[i])
                     choices.append([choice])
                 env.set_actions(name, ActionTuple(discrete=np.array(choices, dtype=np.int32)))
             env.step()
@@ -126,7 +147,11 @@ if __name__ == '__main__':
     for name in ('root', 'teacher', 'worker', 'destination'): parser.add_argument('--'+name, type=Path, required=True)
     parser.add_argument('--decisions', type=int, choices=(4096, 8192, 16384), default=8192)
     parser.add_argument('--seed', type=int, default=21501501)
+    parser.add_argument('--teacher-mode', choices=('Policy', *PRESETS), default='Policy',
+                        help='The same explicit sampler supplies both labels and rollout actions.')
+    parser.add_argument('--action-noise', type=float, default=.2)
     args = parser.parse_args(); torch.set_num_threads(1)
     with exclusive(args.root.absolute()):
-        result = collect(args.root, args.teacher, args.worker, args.destination, decisions=args.decisions, seed=args.seed)
+        result = collect(args.root, args.teacher, args.worker, args.destination, decisions=args.decisions, seed=args.seed,
+                         teacher_mode=args.teacher_mode, action_noise=args.action_noise)
     print(json.dumps({key: result[key] for key in ['state', 'decisions', 'trainingGroups', 'validationGroups', 'rejections']}))
