@@ -105,3 +105,37 @@ Keep these changes isolated and measured. Promotion requires replicated fixed
 population gains and retained strong-opponent performance under the actual Hard
 sampler, followed by human counterplay in both starting roles. Training Elo,
 purchase variety, higher step counts and throughput do not substitute for that.
+
+## Installation and validation receipt
+
+The current-source self-contained C# worker built successfully. The focused
+Python run passed 100 tests, including actual V2/V3/V4 worker observations/legal
+actions/diagnostics, network/critic/optimizer expansion parity, real SDK resume,
+power/thermal guards, exclusive scheduling, cleanup escalation and promotion
+regressions. The first attempt used an older installed worker whose diagnostics
+lacked root-selection counters; the source-built worker passed that contract.
+
+Unity's nine new audio checks passed in an isolated EditMode run. The wider run
+passed 47 of 48 existing/new checks; its remaining human-menu scene check and an
+isolated retry were interrupted by Unity Assistant's unrelated Relay WebSocket
+connection error. No gameplay assertion failed, but that wider suite is not
+reported as passed. The native player build exited successfully, and an actual
+windowed viewer emitted the pre-scene mute marker before it was closed. The
+code-only builder did not rewrite a scene; incidental importer/package/setting
+normalization was restored. Private receipts are under
+`Logs/Validation/QuietOvernight-20261015/`.
+
+The main learner acknowledged a successful save/stop (`exitCode: 0`) before the
+exclusive study started. Its resume command now uses the current-source worker
+and verified silent player; learner weights, optimizer and recipe were preserved.
+The independent selector's player configuration and Desktop inspector launcher
+also point to the silent build. Local setup/configuration backups are preserved
+under `benchmarks/quiet-night-20261015-setup/` in the shared training root.
+
+Both frozen parent packs completed with zero interruptions: primary 438/512,
+confirmation 428/512. Against the protected 162,299,959 actor the parent won only
+1/64 in each pack. These are pre-training baselines, not overnight gains or human
+win rates. The first control arm then advanced with zero rejected actions. The
+morning review is scheduled in the current chat for 09:00 Hong Kong time on
+October 15; routine hourly checks stay quiet and the heartbeat pauses after that
+report. Remaining arms and their results must be read from the live receipts.
