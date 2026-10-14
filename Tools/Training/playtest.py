@@ -64,11 +64,12 @@ def latest_checkpoint(run: Path, *, allow_pending=False) -> Path | None:
     return max(completed, key=lambda item: item[0])[1]
 
 
-def frozen_config(config: dict, checkpoint: Path) -> dict:
+def frozen_config(config: dict, checkpoint: Path, schema=2) -> dict:
     result = copy.deepcopy(config)
-    behavior = result["behaviors"][BEHAVIOR]
-    behavior.pop("self_play", None)
-    behavior["init_path"] = str(checkpoint)
+    from model_contract import behavior
+    settings = result["behaviors"][behavior(schema)]
+    settings.pop("self_play", None)
+    settings["init_path"] = str(checkpoint)
     # No graphics/learning acceleration: this arena is for a human's inputs.
     result["engine_settings"] = {"time_scale": 1, "target_frame_rate": 60}
     return result
@@ -104,7 +105,12 @@ class PlaytestSession:
             if type(first_seat) is not int or first_seat not in (0, 1):
                 raise ValueError('Choose whether you or the AI moves first.')
             from playtest_champion import preferred_checkpoint
-            if self.frozen_checkpoint is not None:
+            chosen = None
+            if request.get('modelId'):
+                from model_catalog import resolve
+                chosen = resolve(self.run.parent.parent, request['modelId'])
+                source, selection = Path(chosen['checkpoint']), chosen['selection']
+            elif self.frozen_checkpoint is not None:
                 source, selection = self.frozen_checkpoint, self.frozen_selection
             else:
                 source, selection = preferred_checkpoint(self.run, request.get('checkpointSource', 'Champion'))
@@ -119,17 +125,30 @@ class PlaytestSession:
             snapshot = scratch / "frozen.pt"
             shutil.copyfile(source, snapshot)
             digest = hashlib.sha256(snapshot.read_bytes()).hexdigest()
+            if chosen and digest != chosen['checkpointSha256']:
+                raise ValueError('Selected model changed while the frozen copy was being made.')
             manifest = read_json(self.run / "run.json")
-            rules = run_rules_version(self.run)
-            self.state.update({"checkpoint": source.stem, "sha256": digest, "boardSize": manifest["boardSize"],
+            schema = chosen['schema'] if chosen else 2
+            trained_vision = chosen['trainingVision'] if chosen else 'Fog'
+            match_vision = request.get('matchVision', trained_vision)
+            if match_vision not in ('Fog', 'FullVision'): raise ValueError('Choose normal fog or full vision for both players.')
+            rules = chosen['rulesVersion'] if chosen else run_rules_version(self.run)
+            self.state.update({"checkpoint": source.stem, "sha256": digest, "boardSize": chosen['boardSize'] if chosen else manifest["boardSize"],
                                "difficulty": difficulty, "firstSeat": first_seat, "rulesVersion": rules,
-                               "checkpointSelection": selection})
+                               "checkpointSelection": selection, "schema": schema, "trainingVision": trained_vision,
+                               "matchVision": match_vision, "modelRunId": chosen['runId'] if chosen else self.run.name,
+                               "modelId": request.get('modelId', '')})
             atomic_json(scratch / "session.json", dict(self.state, owner=OWNER, source=str(source)))
             config = scratch / "inference.yaml"
-            atomic_json(config, frozen_config(read_json(self.run / "trainer.yaml"), snapshot))
+            source_config = Path(chosen['trainerConfig']) if chosen else self.run/'trainer.yaml'
+            if chosen and hashlib.sha256(source_config.read_bytes()).hexdigest() != chosen['configSha256']:
+                raise ValueError('Selected model configuration changed before loading.')
+            atomic_json(config, frozen_config(read_json(source_config), snapshot, schema))
             with socket.socket() as reserved:
                 reserved.bind(("127.0.0.1", 0))
                 port = reserved.getsockname()[1]
+            policy_label = source.stem + ' / ' + difficulty + ' / ' + selection
+            if chosen or match_vision == 'FullVision': policy_label += ' / trained '+trained_vision+' / match '+match_vision
             command = [sys.executable, str(Path(__file__).with_name("frozen_playtest.py")), str(config),
                        "--inference", "--run-id", "human", "--results-dir", str(scratch / "results"),
                        "--seed", str(manifest["seed"]), "--base-port", str(port), "--timeout-wait", "300",
@@ -140,7 +159,10 @@ class PlaytestSession:
                        "--training-rules-version", rules,
                        "--training-seed", str(manifest["seed"]), "--training-human-seat", "0",
                        "--training-first-seat", str(first_seat),
-                       "--training-policy-version", source.stem + ' / ' + difficulty + ' / ' + selection, "--training-playtest-return", "true"]
+                       "--training-policy-version", policy_label, "--training-playtest-return", "true"]
+            if chosen or match_vision == 'FullVision':
+                command += ['--training-observation-version', str(schema), '--training-match-vision', match_vision,
+                            '--training-training-vision', trained_vision, '--training-model-run', self.state['modelRunId']]
             environment = {key: value for key, value in os.environ.items() if not key.startswith("BLOCKNATIONS_RATING_")}
             environment.update({"PYTHONUNBUFFERED": "1", "OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "2"})
             environment['BLOCKNATIONS_PLAYTEST_DIFFICULTY'] = difficulty
@@ -167,7 +189,11 @@ class PlaytestSession:
             return
         status = read_json(self.run / "playtest" / "arena-status.json")
         expected = self.state.get('rulesVersion', RULES_VERSION)
-        if status.get('trainerConnected') and status.get('simulationVersion', RULES_VERSION) != expected:
+        if status.get('trainerConnected') and (status.get('matchVision','Fog') != self.state.get('matchVision','Fog') or
+                status.get('observationVersion',2) != self.state.get('schema',2)):
+            self.state.update(state='error', message='This player does not support the selected visibility/model contract. Rebuild the matching training player.')
+            self.close()
+        elif status.get('trainerConnected') and status.get('simulationVersion', RULES_VERSION) != expected:
             self.state.update(state='error', message='Playtest player uses different rules; rebuild the matching native player.')
             self.close()
         elif status.get("failure"):

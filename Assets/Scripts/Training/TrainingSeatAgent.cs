@@ -16,12 +16,22 @@ public sealed class TrainingSeatAgent : Agent
     private float[] observations;
     private int selectedSource = -1;
     private bool awaitingDecision;
+    private int observationVersion = 2;
+    private readonly FairEnemyHistory history = new FairEnemyHistory();
+    public void ConfigureObservationVersion(int version)
+    {
+        observationVersion = version;
+        var parameters = GetComponent<Unity.MLAgents.Policies.BehaviorParameters>();
+        parameters.BehaviorName = LearnedObservationContract.Behavior(version);
+        parameters.BrainParameters.VectorObservationSize = LearnedObservationContract.Size(version);
+    }
     public int SeatIndex => seatIndex;
     public int SelectedSource => selectedSource;
 
     public override void OnEpisodeBegin()
     {
         selectedSource = -1;
+        history.Reset();
         context = null;
         simulationContext = null;
         choices = null;
@@ -46,16 +56,16 @@ public sealed class TrainingSeatAgent : Agent
     private void PrepareDecision(AIObservation snapshot)
     {
         choices = LearnedActionSchema.Choices(snapshot, selectedSource);
-        observations = LearnedActionSchema.Encode(snapshot, selectedSource);
+        observations = LearnedObservationContract.Encode(observationVersion, snapshot, selectedSource, arena.FirstSeat, history);
         awaitingDecision = true;
         RequestDecision();
     }
 
     public void PrepareTerminalObservation(AIObservation snapshot) =>
-        observations = LearnedActionSchema.Encode(snapshot, selectedSource);
+        observations = LearnedObservationContract.Encode(observationVersion, snapshot, selectedSource, arena.FirstSeat, history);
 
     public override void CollectObservations(VectorSensor sensor) =>
-        sensor.AddObservation(observations ?? new float[LearnedActionSchema.ObservationSize]);
+        sensor.AddObservation(observations ?? new float[LearnedObservationContract.Size(observationVersion)]);
 
     public override void WriteDiscreteActionMask(IDiscreteActionMask mask)
     {

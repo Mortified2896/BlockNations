@@ -23,6 +23,9 @@ public sealed class SeatAIObservationSource
         bool[] seen = new bool[adapter.State.Tiles.Length];
         foreach (TileVisibility tile in manager.gridManager.GetAllTiles()) seen[adapter.State.Position(tile.gridX, tile.gridY)] = tile.HasBeenSeenBySeat(seat);
         SimulationObservationSource.Context snapshot = source.Observe(adapter.State, seat, includeZeroDamageAttacks, excludedActions, seen);
+#if UNITY_EDITOR || UNITY_STANDALONE
+        if (manager.DiagnosticFullVision) snapshot = source.ObserveWithDiagnosticFullVision(adapter.State, seat);
+#endif
         var context = new Context { Observation = snapshot.Observation, Units = new Unit[snapshot.UnitIds.Length],
             Cities = new City[snapshot.CityIds.Length], Visible = new HashSet<TileVisibility>() };
         foreach (TileVisibility tile in manager.gridManager.GetAllTiles())

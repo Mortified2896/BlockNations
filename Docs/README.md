@@ -15,6 +15,7 @@ Start with the current state, then use the relevant implementation/setup referen
 | [General AI Training Direction](AI_Training_Direction.md) | Proposed shared simulation, adaptable policy representation, fair memory, reproducible experiments, and local phone inference. |
 | [Controlled Information Training](AI_Information_Training.md) | Isolated v2/v3/history studies, reachable pre-loss starts, bounded weakness sampling, decision audits and unchanged release selection. |
 | [Fog Training Diagnostic](Fog_Training_Diagnostic.md) | Matched frozen fog/full-vision inputs, symmetric continued learning and cross-evaluation, with diagnostic actors excluded from normal champion selection. |
+| [Private Training and Model Chooser](Training_Model_Selection.md) | Choose the run to inspect/manage and the exact saved opponent, with separate training/match fog settings and a private full-board human mode. |
 | [Replicated History Experiment](AI_History_Experiment.md) | Three paired V3/V4 training seeds, legitimate sighting memory, full confirmation benchmarks and power-safe resume. |
 | [Tournament-Guided Training](Tournament_Guided_Training.md) | Comparable champion refresh, replicated promotion, training-only weakness feedback and saved regression review stops. |
 | [Observation Contract v3](../Tools/ObservationContract/README.md) | Opt-in public role/capability inputs, preserved actor/critic/Adam initialization, synthetic parity checks and pending separate activation. |

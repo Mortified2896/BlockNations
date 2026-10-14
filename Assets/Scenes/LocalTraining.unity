@@ -229,13 +229,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::GameMenuActions
   mainMenuSceneName: MainMenu
   useAlternateExit: 1
-  alternateExitLabel: Back to training
+  alternateExitLabel: Close match
   alternateExit:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 807338924}
         m_TargetAssemblyTypeName: TrainingArena, Assembly-CSharp
-        m_MethodName: ReturnToTraining
+        m_MethodName: CloseHumanPlaytest
         m_Mode: 0
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -1011,6 +1011,7 @@ MonoBehaviour:
   boardCamera: {fileID: 519420031}
   humanPresentation: {fileID: 807338926}
   viewerMode: 0
+  feedbackView: {fileID: 1029708099}
   runDirectory:
 --- !u!1 &878665045
 GameObject:
@@ -1099,6 +1100,77 @@ Transform:
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 100, y: 100, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1029708098
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1029708101}
+  - component: {fileID: 1029708100}
+  - component: {fileID: 1029708099}
+  m_Layer: 0
+  m_Name: TrainingFeedbackUITK
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1029708099
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1029708098}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 81012c6d2a31e406d8efd21db1e13751, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::TrainingFeedbackView
+  document: {fileID: 1029708100}
+  viewer: {fileID: 807338927}
+  theme: {fileID: -4733365628477956816, guid: 2e9dccdafd704e39a597af4f293086d0, type: 3}
+--- !u!114 &1029708100
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1029708098}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
+  m_Name:
+  m_EditorClassIdentifier: UnityEngine.dll::UnityEngine.UIElements.UIDocument
+  m_PanelSettings: {fileID: 11400000, guid: 91d0d2d1ef9c468d967b273d4abc94f5, type: 2}
+  m_ParentUI: {fileID: 0}
+  sourceAsset: {fileID: 9197481963319205126, guid: e8069f47e5dc47a88acc2db14e9e01dd, type: 3}
+  m_SortingOrder: 100
+  m_Position: 0
+  m_WorldSpaceSizeMode: 1
+  m_WorldSpaceWidth: 1920
+  m_WorldSpaceHeight: 1080
+  m_PivotReferenceSize: 0
+  m_Pivot: 0
+  m_WorldSpaceCollider: {fileID: 0}
+--- !u!4 &1029708101
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1029708098}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -1621,3 +1693,4 @@ SceneRoots:
   - {fileID: 183424652}
   - {fileID: 1805156417}
   - {fileID: 807338925}
+  - {fileID: 1029708101}

@@ -51,6 +51,10 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
     private System.Random random;
     private bool ready, needsReset, ending;
     private bool humanReturnRequested;
+    private int observationVersion = 2;
+    public string MatchVision { get; private set; } = "Fog";
+    public string TrainingVision { get; private set; } = "Fog";
+    public string ModelRunId { get; private set; }
     private TrainingHumanGameRecorder humanRecorder;
     public string HumanRecordingMessage => humanRecorder == null ? "" : humanRecorder.Failure ??
         (humanRecorder.SavedPath != null ? "Human game recorded." : "Recording your game. Completed wins help train future versions.");
@@ -158,6 +162,7 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
         if (IsHumanPlaytest)
         {
             turnManager.ConfigureExternalHumanSeat(humanSeatIndex, NewHumanMatch);
+            turnManager.ConfigureDiagnosticHumanVision(MatchVision == "FullVision");
             if (humanPresentation != null) humanPresentation.SetHumanMode(true);
         }
         if (!LearnedActionSchema.SupportsBoard(boardSize) || (boardSize != 11 && useCurriculum))
@@ -168,7 +173,7 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
             turnManager.gridManager.width = turnManager.gridManager.height = boardSize;
         if (seats != null)
             foreach (TrainingSeatAgent seat in seats)
-                if (seat != null) seat.GetComponent<Unity.MLAgents.Policies.BehaviorParameters>().BehaviorName = LearnedActionSchema.BehaviorName;
+                if (seat != null) seat.ConfigureObservationVersion(observationVersion);
         // Install the SDK's public quit notification before Agent.OnEnable initializes
         // Academy. A quit response contains no decision and must never become a move.
         previousCommunicatorEnabled = CommunicatorFactory.Enabled;
@@ -208,6 +213,10 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
             else if (arguments[i] == "--training-human-seat" && int.TryParse(arguments[++i], out int humanSeat)) humanSeatIndex = humanSeat;
             else if (arguments[i] == "--training-first-seat" && int.TryParse(arguments[++i], out int starter)) humanStartingSeat = starter;
             else if (arguments[i] == "--training-policy-version") HumanPolicyVersion = arguments[++i];
+            else if (arguments[i] == "--training-observation-version") observationVersion = int.Parse(arguments[++i]);
+            else if (arguments[i] == "--training-match-vision") MatchVision = arguments[++i];
+            else if (arguments[i] == "--training-training-vision") TrainingVision = arguments[++i];
+            else if (arguments[i] == "--training-model-run") ModelRunId = arguments[++i];
             else if (arguments[i] == "--training-playtest-return" && bool.TryParse(arguments[++i], out bool canReturn)) CanReturnToTraining = canReturn;
             else if (arguments[i] == "--training-board-size" && int.TryParse(arguments[++i], out int configuredSize)) boardSize = configuredSize;
             else if (arguments[i] == "--training-opening-economy-version" && int.TryParse(arguments[++i], out int configuredEconomy)) openingEconomyVersion = configuredEconomy;
@@ -218,6 +227,10 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
             else if (arguments[i] == "--training-curriculum-distance" && int.TryParse(arguments[++i], out int configuredDistance) &&
                 configuredDistance >= 2 && configuredDistance <= 8 && configuredDistance % 2 == 0) curriculumDistance = configuredDistance;
         }
+        LearnedObservationContract.Size(observationVersion);
+        if (MatchVision != "Fog" && MatchVision != "FullVision" || TrainingVision != "Fog" && TrainingVision != "FullVision")
+            throw new InvalidOperationException("Choose fog or full vision.");
+        if (!IsHumanPlaytest && MatchVision != "Fog") throw new InvalidOperationException("Full-vision selection is human-playtest only in this player.");
     }
 
     private IEnumerator Start()
@@ -452,7 +465,8 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
             // The supervisor's temporary inference folder is replaced per playtest.
             // Keep accepted human games in the owning run's shared-budget directory.
             string run = Directory.GetParent(TrainingRunDirectory).FullName;
-            humanRecorder = new TrainingHumanGameRecorder(turnManager, Path.Combine(run, "human-games"), humanSeatIndex, HumanPolicyVersion);
+            humanRecorder = MatchVision == "FullVision" || TrainingVision == "FullVision" || !string.IsNullOrEmpty(ModelRunId) ? null :
+                new TrainingHumanGameRecorder(turnManager, Path.Combine(run, "human-games"), humanSeatIndex, HumanPolicyVersion);
         }
         if (IsTraining) Replay.Begin(Games + 1, boardSize, ActingSeat,
             CaptureFrame((ActingSeat == 0 ? "Blue" : "Red") + " moves first"));
@@ -530,6 +544,8 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
         public bool paused, trainerConnected, fullOpening, humanPlaytest, returnRequested;
         public int gold0, gold1, firstSeat, startingDistance, boardSize, schema;
         public bool humanRecording;
+        public int observationVersion;
+        public string matchVision, trainingVision, modelRunId;
         public string lastAction, failure, simulationVersion, simulationBackend, policyVersion, spectatorFailure;
     }
 
@@ -575,6 +591,7 @@ public sealed class TrainingArena : MonoBehaviour, ITrainingView
             trainerResets = TrainerResets,
             simulationVersion = SimulationVersion, simulationBackend = simulation != null ? "direct-csharp" : "scene-adapter",
             humanPlaytest = IsHumanPlaytest, policyVersion = HumanPolicyVersion, returnRequested = humanReturnRequested,
+            observationVersion = observationVersion, matchVision = MatchVision, trainingVision = TrainingVision, modelRunId = ModelRunId,
             firstSeat = firstSeat, humanRecording = humanRecorder != null && humanRecorder.SavedPath == null && humanRecorder.Failure == null,
             curriculumDistance = curriculumDistance, seed = seed, elapsedSeconds = elapsed,
             roundLimit = matchRoundLimit, fullOpening = fullOpening, startingDistance = startingDistance,

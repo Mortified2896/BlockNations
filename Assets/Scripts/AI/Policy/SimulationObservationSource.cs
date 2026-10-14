@@ -34,8 +34,8 @@ namespace BlockNations.AI
         public Context Observe(MatchState state, int seat, bool includeZeroDamageAttacks = true, ISet<string> excludedActions = null, bool[] previouslySeen = null)
             => ObserveCore(state, seat, includeZeroDamageAttacks, excludedActions, previouslySeen, false);
 
-#if BLOCKNATIONS_TRAINING_DIAGNOSTICS
-        // Compiled only by diagnostic console tools. Product AI cannot call this.
+#if BLOCKNATIONS_TRAINING_DIAGNOSTICS || UNITY_EDITOR || UNITY_STANDALONE
+        // Diagnostic console tools and guarded private Editor/standalone matches.
         public Context ObserveWithDiagnosticFullVision(MatchState state, int seat)
             => ObserveCore(state, seat, true, null, null, true);
 #endif

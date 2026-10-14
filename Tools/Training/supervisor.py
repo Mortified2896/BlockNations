@@ -451,6 +451,14 @@ def main() -> int:
                         "BLOCKNATIONS_RATING_SESSION": rating_session, "BLOCKNATIONS_RULES_VERSION": args.rules_version})
     args.curriculum, args.curriculum_distance = curriculum, curriculum_distance
     environment['BLOCKNATIONS_TORCH_THREADS'] = str(args.torch_threads)
+    contract = read_json(run / RUN_MARKER)
+    mask = contract.get('diagnosticFullVisionSeats', 0)
+    if type(mask) is not int or mask not in (0, 3) or mask and not contract.get('diagnosticOnly'):
+        lock.unlink()
+        raise ValueError('Full-vision training requires an explicit isolated diagnostic run.')
+    environment['BLOCKNATIONS_DIAGNOSTIC_FULL_VISION_SEATS'] = str(mask)
+    if contract.get('diagnosticOnly'):
+        environment['BLOCKNATIONS_HUMAN_IMITATION'] = 'disabled'
     configure_decoupled(args, run, environment)
     try:
         entrypoint = trainer_script(run, args.backend)

@@ -68,11 +68,13 @@ public sealed class SceneSimulationAdapter
     {
         var visible = new bool[State.Tiles.Length];
         foreach (TileVisibility tile in manager.gridManager.GetAllTiles()) visible[State.Position(tile.gridX, tile.gridY)] = predicate(tile);
+        if (manager.DiagnosticFullVision) Array.Fill(visible, true);
         return visible;
     }
     public HashSet<TileVisibility> VisibilityForSeat(int seat)
     {
         bool[] visible = MatchEngine.Visibility(State, seat);
+        if (manager.DiagnosticFullVision) Array.Fill(visible, true);
         var result = new HashSet<TileVisibility>();
         foreach (TileVisibility tile in manager.gridManager.GetAllTiles()) if (visible[State.Position(tile.gridX, tile.gridY)]) result.Add(tile);
         return result;
@@ -115,7 +117,12 @@ public sealed class SceneSimulationAdapter
         if (action.ActionType == LegalActionType.CityRecruit && (recruitPrefab == null || recruitPrefab.GetComponent<Unit>() == null)) return false;
         MatchCommand command = Command(action);
         manager.NotifySimulationCommandPreparing(State, command);
-        MatchTransition transition = MatchEngine.Apply(State, command);
+        MatchTransition transition;
+#if UNITY_EDITOR || UNITY_STANDALONE
+        if (manager.DiagnosticFullVision) transition = MatchEngine.ApplyWithDiagnosticFullVision(State, command);
+        else
+#endif
+            transition = MatchEngine.Apply(State, command);
         if (!transition.Applied) { manager.NotifySimulationCommandCompleted(State, command, transition); return false; }
         if (transition.RecruitedUnitId != 0)
         {

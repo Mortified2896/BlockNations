@@ -72,7 +72,7 @@ namespace BlockNations.Simulation
         public static MatchTransition Apply(MatchState state, MatchCommand command)
             => ApplyCore(state, command, false);
 
-#if BLOCKNATIONS_TRAINING_DIAGNOSTICS
+#if BLOCKNATIONS_TRAINING_DIAGNOSTICS || UNITY_EDITOR || UNITY_STANDALONE
         public static MatchTransition ApplyWithDiagnosticFullVision(MatchState state, MatchCommand command)
             => ApplyCore(state, command, true);
 #endif

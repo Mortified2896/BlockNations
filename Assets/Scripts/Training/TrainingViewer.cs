@@ -16,6 +16,7 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
     [SerializeField] private Camera boardCamera;
     [SerializeField] private TrainingHumanPresentation humanPresentation;
     [SerializeField] private bool viewerMode;
+    [SerializeField] private TrainingFeedbackView feedbackView;
     [SerializeField] private string runDirectory;
     private readonly TrainingOverlay overlay = new TrainingOverlay();
     private TrainingTraceReader traces;
@@ -48,7 +49,7 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
         catch (Exception error) when (error is IOException || error is System.ComponentModel.Win32Exception)
         { ResumeMessage = "Could not start training: " + error.Message; }
     }
-    [Serializable] private sealed class Manifest { public string owner; public int schema, boardSize; }
+    [Serializable] private sealed class Manifest { public string owner, rulesVersion; public int schema, boardSize; }
     [Serializable] private sealed class Clock { public int version, boardSize; public string runId; public double totalSeconds; public bool estimated; }
     [Serializable] private sealed class Control { public bool paused; }
     [Serializable] private sealed class RatingSession { public string session; }
@@ -121,6 +122,24 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
         nextPoll = nextRecentPoll = 0;
     }
     public void StopAndSave() { if (CanContinue) Write("stop.request", "Stop and save requested from the viewer.\n"); }
+    public void SelectRun(string directory)
+    {
+        if (Path.GetFullPath(directory) == Path.GetFullPath(runDirectory)) return;
+        string root = Directory.GetParent(runDirectory).Parent.FullName;
+        if (Directory.GetParent(directory)?.Parent?.FullName != root || (File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
+            throw new ArgumentException("Choose an owned training run from this root.");
+        Manifest manifest = Read<Manifest>(Path.Combine(directory, "run.json"));
+        if (manifest?.owner != "BlockNations.LocalTraining.v1" || manifest.boardSize != BoardSize || manifest.schema < 2 || manifest.schema > 4)
+            throw new ArgumentException("The viewer requires a compatible board and observation contract.");
+        runDirectory = directory;
+        turnManager.ConfigureExperimentalRulesForViewer(BlockNations.Simulation.MatchRuleProfile.Resolve(manifest.rulesVersion));
+        var opening = new SceneSimulationAdapter(turnManager).State;
+        traces = new TrainingTraceReader(new SimulationReplayProjector(turnManager, opening), opening.Roster, opening.RulesVersion);
+        totals = worker = null; readError = null; selectedWorker = 0;
+        Progress = new TrainingProgressHistory(); EloHistory = null; StorageStatus = null; TotalTrainingSeconds = -1;
+        Replay.BackToLive(); Replay.SetCompletedGames(Array.Empty<TrainingReplayHistory.Game>()); Replay.SetLiveFrames(null, null);
+        liveBoards = Array.Empty<TrainingLiveBoard>(); nextPoll = nextRecentPoll = 0;
+    }
 
     private void Awake()
     {
@@ -138,7 +157,7 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
             throw new InvalidOperationException("Viewer needs its authored scene references.");
         turnManager.ConfigureExperimentalRules(MatchRuleProfile.Resolve(rulesVersion));
         Manifest manifest = Read<Manifest>(Path.Combine(runDirectory, "run.json"));
-        if (manifest == null || manifest.owner != "BlockNations.LocalTraining.v1" || manifest.schema != 2 ||
+        if (manifest == null || manifest.owner != "BlockNations.LocalTraining.v1" || manifest.schema < 2 || manifest.schema > 4 ||
             !BlockNations.AI.LearnedActionSchema.SupportsBoard(manifest.boardSize)) throw new ArgumentException("Choose an owned compatible training run.");
         BoardSize = manifest.boardSize;
         turnManager.gridManager.width = turnManager.gridManager.height = BoardSize;
@@ -191,7 +210,7 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
                 Replay.BackToLive();
             }
             totals = Read<TrainingArena.ArenaStatus>(Path.Combine(runDirectory, "arena-status.json")) ?? totals;
-            if (totals != null && (totals.schema != 2 || totals.boardSize != BoardSize || totals.workerCount < 1 || totals.workerCount > 16 ||
+            if (totals != null && (totals.schema < 2 || totals.schema > 4 || totals.boardSize != BoardSize || totals.workerCount < 1 || totals.workerCount > 16 ||
                 totals.simulationBackend != "standalone-dotnet" || totals.simulationVersion != SimulationVersion))
                 throw new ArgumentException("Viewer and training backend are incompatible.");
             if (totals != null && DateTime.UtcNow - File.GetLastWriteTimeUtc(Path.Combine(runDirectory, "arena-status.json")) > TimeSpan.FromSeconds(10))
@@ -248,7 +267,11 @@ public sealed class TrainingViewer : MonoBehaviour, ITrainingSpectator
         File.WriteAllText(path + ".tmp", text);
         if (File.Exists(path)) File.Replace(path + ".tmp", path, null); else File.Move(path + ".tmp", path);
     }
-    private void OnGUI() { if (ready) overlay.Draw(this); }
+    private void OnGUI()
+    {
+        if (ready && (feedbackView == null || !feedbackView.IsFormVisible)) overlay.Draw(this);
+        feedbackView?.DrawButton();
+    }
     private void OnDestroy()
     {
         if (!viewerMode) return;

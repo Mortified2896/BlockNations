@@ -25,6 +25,7 @@ public sealed class TrainingOverlay
     }
     private readonly TrainingReplayView replayView = new TrainingReplayView();
     private readonly TrainingMultiBoardView multiBoardView = new TrainingMultiBoardView();
+    private readonly TrainingSelectorPanel selector = new TrainingSelectorPanel();
     public static float Scale => Mathf.Clamp(Screen.height / 900f, 0.8f, 2.5f);
     public static float ReservedWidth => Mathf.Min(370f * Scale, Screen.width * 0.4f);
 
@@ -52,6 +53,7 @@ public sealed class TrainingOverlay
                 replayView.Draw(arena.Replay.LatestFrame, arena.Replay.OpeningFrame, arena.BoardSize, vision, arena.SpectatorBackgroundColor, showActionMarkers: false);
             GUILayout.BeginArea(new Rect(24, 24, width - 24, Screen.height / Scale - 48));
             scroll = GUILayout.BeginScrollView(scroll, false, false);
+            selector.Draw(arena, title, label, small, button);
             if (arena.IsTraining) { DrawTrainingMatches(arena); DrawReferenceScore(arena); DrawPlaytest(arena); GUILayout.Space(12); }
             if (arena is ITrainingSpectator spectator) DrawSpectatorControls(spectator);
             if (arena.IsTraining) DrawVision();
@@ -73,6 +75,12 @@ public sealed class TrainingOverlay
                     GUILayout.Label(MatchOpeningLabels.ForSeat(arena.HumanSeat, humanOpening.FirstSeat, 2, showColour: true), label);
                 GUILayout.Label("Select your city to recruit, then select units to move or attack.", small);
                 if (!string.IsNullOrEmpty(arena.HumanPolicyVersion)) GUILayout.Label("Frozen version: " + arena.HumanPolicyVersion, small);
+                if (arena is TrainingArena identity)
+                {
+                    GUILayout.Label("Trained " + (identity.TrainingVision == "FullVision" ? "without fog" : "with fog"), label);
+                    GUILayout.Label("Match: " + (identity.MatchVision == "FullVision" ? "full board for both players" : "normal fog for both players"), label);
+                    if (!string.IsNullOrEmpty(identity.ModelRunId)) GUILayout.Label("Model run: " + identity.ModelRunId, small);
+                }
                 if (arena is TrainingArena human && !string.IsNullOrEmpty(human.HumanRecordingMessage))
                     GUILayout.Label(human.HumanRecordingMessage, small);
                 GUILayout.Label(arena.CanStartNewMatch ? "Match finished" : arena.Paused ? "Match paused" :
@@ -239,7 +247,7 @@ public sealed class TrainingOverlay
         GUILayout.Label(spectator.Playtest.TrainingActive ?
             $"{spectator.WorkerCount} parallel {(spectator.WorkerCount == 1 ? "game" : "games")} · learning runs independently" :
             "Training is stopped. Recent games remain available to inspect.", small);
-        if (!spectator.CanContinue && spectator is TrainingViewer viewer)
+        if (!selector.Available && !spectator.CanContinue && spectator is TrainingViewer viewer)
         {
             GUI.enabled = viewer.CanStartTraining;
             if (GUILayout.Button("Start training again", button)) viewer.StartTraining();
@@ -372,6 +380,7 @@ public sealed class TrainingOverlay
 
     private void DrawPlaytest(ITrainingView arena)
     {
+        if (selector.Available) return;
         GUILayout.Label("Play a frozen AI", title);
         GUI.enabled = !arena.Playtest.Busy;
         arena.Playtest.Difficulty = (BlockNations.AI.LearnedDifficulty)GUILayout.Toolbar(
@@ -428,7 +437,7 @@ public sealed class TrainingOverlay
 
     private void DrawVision()
     {
-        GUILayout.Label("Spectator vision", small);
+        GUILayout.Label("Spectator display only", small);
         vision = (TrainingVision)GUILayout.Toolbar((int)vision, new[] { "Shared", "Blue", "Red", "All" }, button);
         GUILayout.Label(vision == TrainingVision.Shared ? "Fog where neither seat sees. Cities marked at known starting locations." :
             vision == TrainingVision.All ? "All tiles and units visible." : "Current vision of " + vision + ". Hidden units concealed.", small);

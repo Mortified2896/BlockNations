@@ -31,6 +31,8 @@ public sealed class LocalTrainingWindow : EditorWindow
     [SerializeField] private string runId = "", modelPath = "";
     private string adoptedRun;
     private Vector2 scroll;
+    private readonly TrainingSelectorPanel selector = new TrainingSelectorPanel();
+    private bool advancedControls;
     public static string RootPath => EditorPrefs.GetString(RootKey,
         Application.platform == RuntimePlatform.OSXEditor
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Library/Application Support/BlockNations/Training")
@@ -83,6 +85,12 @@ public sealed class LocalTrainingWindow : EditorWindow
     private void OnGUI()
     {
         scroll = EditorGUILayout.BeginScrollView(scroll);
+        selector.DrawEditor(RootPath, EditorStyles.boldLabel, EditorStyles.wordWrappedLabel, EditorStyles.wordWrappedMiniLabel, GUI.skin.button);
+        if (selector.Available)
+        {
+            advancedControls = EditorGUILayout.Foldout(advancedControls, "Advanced original training controls");
+            if (!advancedControls) { EditorGUILayout.EndScrollView(); return; }
+        }
         AdoptRunSettings();
         bool active = IsRunActive();
         EditorGUILayout.LabelField("Local self-play", EditorStyles.boldLabel);

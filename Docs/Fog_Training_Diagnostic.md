@@ -6,7 +6,7 @@ The October 14 owner request asks whether limited visibility explains weak learn
 
 The diagnostic worker can reveal every board tile, unit and city to seat 0, seat 1 or both seats. It uses the existing observation encoding and action indices. Known enemy blockers affect the legal path mask; attacks still need their normal range, turn ownership and attack budget. Execution uses the same diagnostic visibility as legal-action generation. Roster, combat, opening economy, income, rewards, turn progression and terminal limits retain their existing values. Enemy wallets, action counters and persistent unit IDs remain excluded from policy input.
 
-The full-vision observation/execution entry points compile only when `BLOCKNATIONS_TRAINING_DIAGNOSTICS` is defined by the console worker or checks project. Ordinary Unity builds reject a nonzero diagnostic seat mask. The default worker mask is zero, and the Python adapter verifies the worker's echoed mask; an older worker cannot silently ignore a full-vision request.
+The worker's full-vision seat mask compiles only when `BLOCKNATIONS_TRAINING_DIAGNOSTICS` is defined by the console worker or checks project. Ordinary Unity self-play arenas reject a nonzero diagnostic seat mask. The default worker mask is zero, and the Python adapter verifies the worker's echoed mask; an older worker cannot silently ignore a full-vision request. Editor/standalone builds also expose the observation/execution entry points for an explicitly configured external human diagnostic match, guarded before match reset by an unpersisted flag. Ordinary gameplay, saves and PBp cannot activate it; see [private model selection](Training_Model_Selection.md).
 
 ## Frozen comparison
 
@@ -59,7 +59,7 @@ This is a continued-learning pilot, not a fresh-from-zero training comparison. A
 
 The normal learner continues independently. Studies share the existing 20 GB storage budget and checkpoint reserve. Power-controlled studies save and pause when AC/battery conditions fail; resumption requires the original command with `--resume`. A `stop.request` in the study destination stops its owned trial with a final save. No recurring launcher is installed by this diagnostic.
 
-Both study arms and their frozen manifests carry `diagnosticOnly`. Ordinary evaluation, human-playtest selection, champion promotion and release export reject these diagnostic actors; diagnostic suites are also ineligible for champion promotion. The experiment does not publish a release or change normal saves/PBp.
+Both study arms and their frozen manifests carry `diagnosticOnly`. Ordinary evaluation, default human-playtest selection, champion promotion and release export reject these diagnostic actors; diagnostic suites are also ineligible for champion promotion. The explicit private model chooser permits a diagnostic actor for a human test and records its training and match visibility. The experiment does not publish a release or change normal saves/PBp.
 
 ## October 14 pilot inputs and validation
 
@@ -89,4 +89,4 @@ Preparation verified the preserved checkpoint byte-for-byte and checked 4,800 se
 
 The ignored local `Build/ResumeFullVisionSelfPlay-20261014.command` resumes this exact study at AC/80% using its pinned inputs. It retains the shared storage and saved-stop guards. This launcher is explicit; it does not install a recurring job or replace the normal learner.
 
-Human acceptance requires a frozen full-vision-trained checkpoint, full-board visibility for **both** the human and AI, unchanged range/combat/economy, and games with each starting role. Record complete outcomes and repeated tactical mistakes before claiming human strength. This setup still needs a dedicated private diagnostic human client: the existing ordinary Unity playtest rejects diagnostic actors and uses its normal fog path. The ordinary-playtest/export/promotion guards remain in place. The human client is a later implementation step; no playable full-vision human session or human victory result is claimed by preparing the study.
+Human acceptance requires a frozen full-vision-trained checkpoint, full-board visibility for **both** the human and AI, unchanged range/combat/economy, and games with each starting role. Record complete outcomes and repeated tactical mistakes before claiming human strength. The subsequent [private model chooser](Training_Model_Selection.md) adds an explicit native diagnostic human path. Ordinary export/promotion guards remain in place. Preparing the study is not a human victory result, and a new full-vision-trained actor remains unavailable until it produces a completed checkpoint.

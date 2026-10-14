@@ -24,4 +24,11 @@ public partial class TurnManager
             throw new InvalidOperationException("Select experimental rules before preparing an external match.");
         RuleProfile = profile;
     }
+
+    public void ConfigureExperimentalRulesForViewer(MatchRuleProfile profile)
+    {
+        if (profile == null || !IsExternallyDrivenMatch || externalHumanSeatIndex >= 0)
+            throw new InvalidOperationException("Only an isolated spectator can switch its displayed rules.");
+        RuleProfile = profile;
+    }
 }

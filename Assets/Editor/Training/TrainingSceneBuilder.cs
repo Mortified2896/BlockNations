@@ -177,6 +177,21 @@ public static class TrainingSceneBuilder
         viewerSeats.arraySize = arenaSeats.arraySize;
         for (int i = 0; i < arenaSeats.arraySize; i++) viewerSeats.GetArrayElementAtIndex(i).objectReferenceValue = arenaSeats.GetArrayElementAtIndex(i).objectReferenceValue;
         viewerFields.ApplyModifiedPropertiesWithoutUndo();
+        GameObject feedbackRoot = scene.GetRootGameObjects().SingleOrDefault(root => root.name == "TrainingFeedbackUITK");
+        if (feedbackRoot == null)
+        {
+            feedbackRoot = new GameObject("TrainingFeedbackUITK");
+            var feedbackDocument = feedbackRoot.AddComponent<UnityEngine.UIElements.UIDocument>();
+            var template = documents.Single(document => document.gameObject.name == "GameplayTopHudUITK");
+            feedbackDocument.panelSettings = template.panelSettings;
+            feedbackDocument.visualTreeAsset = template.visualTreeAsset;
+            feedbackDocument.sortingOrder = 100;
+            var feedback = feedbackRoot.AddComponent<TrainingFeedbackView>();
+            Set(feedback, "document", feedbackDocument); Set(feedback, "viewer", viewer);
+        }
+        Set(feedbackRoot.GetComponent<TrainingFeedbackView>(), "theme",
+            AssetDatabase.LoadAssetAtPath<UnityEngine.UIElements.ThemeStyleSheet>("Assets/Resources/GameplayTopHud_UITK_Theme.tss"));
+        Set(viewer, "feedbackView", feedbackRoot.GetComponent<TrainingFeedbackView>());
     }
 
     public static TrainingViewer PrepareViewer(string runDirectory)
