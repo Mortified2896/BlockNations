@@ -88,6 +88,7 @@ class DecoupledRuntimeTests(unittest.TestCase):
             session=ViewerSession(run,app,True);state={'state':'running','trainerPid':123}
             session.poll({'trainerConnected':True},state)
             first=session.process.pid
+            self.assertIn('--training-silent', session.process.args)
             session.launch()
             self.assertEqual(session.process.pid,first, 'A second request must not duplicate a live viewer.')
             session.process.terminate()

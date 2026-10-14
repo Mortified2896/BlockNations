@@ -9,6 +9,18 @@ from power_study_controller import tick
 
 
 class StudyRuntimeTests(unittest.TestCase):
+    def test_exclusive_study_waits_for_the_main_checkpoint_save(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp); destination=root/'study'; destination.mkdir(); config=root/'controller.json'
+            command=['python','study.py','--root',str(root),'--destination',str(destination),'--power-controlled']
+            config.write_text(json.dumps(dict(owner='BlockNations.PowerStudy.v1',command=command,
+                destination=str(destination),processExecutable='native-python',enabled=True,exclusiveTraining=True)))
+            (root/'supervisor.lock').write_text('1234')
+            with patch('power_study_controller.command_for',return_value='main learner'), \
+                    patch('power_study_controller.subprocess.Popen') as launch:
+                tick(config);launch.assert_not_called()
+            self.assertEqual(json.loads((root/'controller-status.json').read_text())['state'],'waiting_for_training_save')
+
     def test_controller_preserves_another_live_study_in_the_shared_root(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);destination=root/'study';destination.mkdir()
@@ -25,14 +37,28 @@ class StudyRuntimeTests(unittest.TestCase):
     def test_power_hysteresis_and_unplug_pause(self):
         guard=PowerGuard(True)
         def reading(source,percent):return f"Now drawing from '{source}'\n battery {percent}%; present: true"
-        with patch('information_study_runtime.subprocess.check_output',return_value=reading('AC Power',79)):
+        with patch('information_study_runtime.read_power',return_value=(True,79)):
             with self.assertRaises(PowerPause):guard.check()
         for source,percent,allowed in [('AC Power',80,True),('AC Power',76,True),('AC Power',75,False),('Battery Power',90,False)]:
             guard.next_check=0
-            with patch('information_study_runtime.subprocess.check_output',return_value=reading(source,percent)):
+            with patch('information_study_runtime.read_power',return_value=(source=='AC Power',percent)), \
+                    patch('information_study_runtime.thermal_state',return_value=0):
                 if allowed:guard.check()
                 else:
                     with self.assertRaises(PowerPause):guard.check()
+
+    def test_study_thermal_pause_and_unknown_reading_never_continue(self):
+        guard = PowerGuard(True)
+        with patch('information_study_runtime.read_power', return_value=(True,80)):
+            for thermal, allowed in ((1,False),(0,True),(1,True),(2,False),(3,False)):
+                guard.next_check = 0
+                with patch('information_study_runtime.thermal_state', return_value=thermal):
+                    if allowed: guard.check()
+                    else:
+                        with self.assertRaises(PowerPause): guard.check()
+            guard.next_check = 0
+            with patch('information_study_runtime.thermal_state', side_effect=RuntimeError('unavailable')):
+                with self.assertRaises(PowerPause): guard.check()
 
     def test_resume_keeps_public_settings_and_creates_a_new_rating_session(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -72,11 +98,13 @@ class StudyRuntimeTests(unittest.TestCase):
             config.write_text(json.dumps(dict(owner='BlockNations.PowerStudy.v1',command=command,destination=str(destination),processExecutable='native-python',enabled=True)))
             (destination/'study.json').write_text(json.dumps(dict(state='paused_power',pid=123)))
             with patch('power_study_controller.command_for',return_value=''), \
-                    patch('power_study_controller.subprocess.check_output',return_value="Now drawing from 'AC Power'\n battery 79%;"), \
+                    patch('power_study_controller.read_power',return_value=(True,79)), \
+                    patch('power_study_controller.thermal_state',return_value=0), \
                     patch('power_study_controller.subprocess.Popen') as launch:
                 tick(config);launch.assert_not_called()
             with patch('power_study_controller.command_for',return_value=''), \
-                    patch('power_study_controller.subprocess.check_output',return_value="Now drawing from 'AC Power'\n battery 80%;"), \
+                    patch('power_study_controller.read_power',return_value=(True,80)), \
+                    patch('power_study_controller.thermal_state',return_value=0), \
                     patch('power_study_controller.subprocess.Popen',return_value=Mock(pid=456)) as launch:
                 tick(config);self.assertEqual(launch.call_args.args[0],command+['--resume'])
             with patch('power_study_controller.command_for',return_value=' '.join(command+['--resume'])),patch('power_study_controller.subprocess.Popen') as launch:

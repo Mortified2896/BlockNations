@@ -14,6 +14,8 @@ import signal
 import subprocess
 import time
 
+from host_resources import thermal_state
+
 
 def read(path):
     return json.loads(path.read_text()) if path.exists() else {}
@@ -108,7 +110,8 @@ def tick(config, state, ac, percent, now, inspect=command_for,
          launch=lambda cmd: subprocess.Popen(cmd, stdin=subprocess.DEVNULL,
                                             stdout=subprocess.DEVNULL,
                                             stderr=subprocess.DEVNULL,
-                                            start_new_session=True).pid):
+                                            start_new_session=True).pid,
+         thermal=None):
     root = Path(config['root'])
     command = config['command']
     if ('--resume' not in command or command[command.index('--root')+1] != str(root)
@@ -160,6 +163,26 @@ def tick(config, state, ac, percent, now, inspect=command_for,
         state['lastPid'] = pid
         state.pop('launchPid', None)
     decision = action(running, ac, percent, start, stop)
+    resource_reason = ''
+    if config.get('thermalGuard', False):
+        if type(thermal) is not int or thermal not in (0, 1, 2, 3):
+            raise ValueError('Require a fresh valid thermal reading before managed training.')
+        state['thermalState'] = thermal
+        if thermal >= 2 or not running and thermal > 0:
+            decision = 'stop' if running else 'cool'
+            resource_reason = 'thermal_pressure'
+    controller_path = config.get('deferToStudyController')
+    if controller_path:
+        path = Path(controller_path)
+        study = read(path)
+        destination = Path(study.get('destination', ''))
+        if (study.get('owner') != 'BlockNations.PowerStudy.v1' or not destination.is_relative_to(root/'benchmarks')
+                or destination.resolve() != destination):
+            raise ValueError('Study priority requires an owned controller below the shared benchmark root.')
+        receipt = read(destination/'study.json')
+        if study.get('enabled') is True and receipt.get('state') not in ('completed', 'failed'):
+            decision = 'stop' if running else 'study'
+            resource_reason = 'study_priority'
     if review_required:
         decision = 'stop' if running else 'review'
     if decision == 'stop':
@@ -167,12 +190,15 @@ def tick(config, state, ac, percent, now, inspect=command_for,
         if not identity(inspect(pid), config):
             raise RuntimeError('Supervisor identity changed before power stop')
         state.update(state='saving', stoppingPid=pid,
-                     stopReason='benchmark_review' if review_required else 'unplugged' if not ac else 'battery_at_stop_threshold')
+                     stopReason='benchmark_review' if review_required else resource_reason or ('unplugged' if not ac else 'battery_at_stop_threshold'))
         send(pid)
     elif decision == 'start':
         state.update(state='starting', launchPid=launch(command), startedUnix=now)
     else:
-        state['state'] = 'benchmark_review_required' if decision == 'review' else 'running' if running else 'waiting_for_power'
+        state['state'] = ('benchmark_review_required' if decision == 'review' else
+                          'waiting_for_cooling' if decision == 'cool' else
+                          'waiting_for_study' if decision == 'study' else
+                          'running' if running else 'waiting_for_power')
     return state
 
 
@@ -194,13 +220,14 @@ def main():
             state = reconcile_boot(state, boot)
             try:
                 ac, percent = read_power()
-            except (subprocess.SubprocessError, ValueError) as error:
+                thermal = thermal_state() if config.get('thermalGuard', False) else None
+            except (subprocess.SubprocessError, OSError, RuntimeError, ValueError) as error:
                 # Unknown power must not leave an owned learner draining battery.
-                state = tick(config, state, False, 0, time.time())
-                state.update(state='fault', fault='Power reading unavailable: ' + str(error))
+                state = tick(dict(config, thermalGuard=False), state, False, 0, time.time())
+                state.update(state='fault', fault='Power/thermal reading unavailable: ' + str(error))
                 write(path, state)
                 return
-            state = tick(config, state, ac, percent, time.time())
+            state = tick(config, state, ac, percent, time.time(), thermal=thermal)
         except Exception as error:
             state.update(state='fault', fault=str(error), updatedUnix=time.time())
         write(path, state)

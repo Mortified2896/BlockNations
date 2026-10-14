@@ -6,7 +6,8 @@ import subprocess
 import time
 import uuid
 
-from power_controller import parse_power
+from power_controller import read_power
+from host_resources import thermal_state
 from supervisor import atomic_json
 
 
@@ -23,11 +24,17 @@ class PowerGuard:
             return
         self.next_check = time.monotonic()+2
         try:
-            ac, percent = parse_power(subprocess.check_output(['/usr/bin/pmset', '-g', 'batt'], text=True, timeout=5))
+            ac, percent = read_power()
         except (subprocess.SubprocessError, ValueError) as error:
             raise PowerPause('Power status unavailable; saved study waits for valid power readings.') from error
         if not ac or percent <= 75 or not self.running and percent < 80:
             raise PowerPause('Study saved and paused until AC power and at least 80% battery.')
+        try:
+            thermal = thermal_state()
+        except (OSError, RuntimeError, ValueError) as error:
+            raise PowerPause('Thermal pressure unavailable; saved study waits for a valid reading.') from error
+        if thermal >= 2 or not self.running and thermal > 0:
+            raise PowerPause('Study saved and paused until macOS reports nominal thermal pressure.')
         self.running = True
 
 

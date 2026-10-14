@@ -115,6 +115,7 @@ class ViewerSession:
                 self.output_thread.join(timeout=2)
             log = BoundedLog(self.run / 'viewer.log', limit=2 * 1024 * 1024)
             command = [str(executable), '--training-viewer', 'true', '--viewer-run', str(self.run),
+                       '--training-silent', 'true',
                        '--training-rules-version', run_rules_version(self.run),
                        '-screen-width', '1400', '-screen-height', '900', '-screen-fullscreen', '0',
                        '-logFile', '-']

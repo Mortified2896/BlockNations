@@ -7,6 +7,7 @@ import time
 import unittest
 import uuid
 import queue
+import subprocess
 from unittest.mock import Mock
 
 import numpy as np
@@ -17,6 +18,18 @@ WORKER = Path(os.environ.get('BLOCKNATIONS_TEST_WORKER', Path(__file__).resolve(
 
 
 class CommunicationDeadlineTests(unittest.TestCase):
+    def test_completed_games_survive_a_worker_that_ignores_graceful_shutdown(self):
+        env = object.__new__(DotNetEnvironment)
+        env.closed = False; env.failure = ''; env.process = Mock(); env._publish_status = Mock()
+        env.process.poll.side_effect = [None, 0]
+        env.process.wait.side_effect = [subprocess.TimeoutExpired('worker',5), subprocess.TimeoutExpired('worker',5), 0]
+        env.close()
+        env.process.terminate.assert_called_once(); env.process.kill.assert_called_once()
+        env.process.stdin.write.assert_called_once_with('{"op":"close"}\n')
+        env._publish_status.assert_called_once_with(force=True, failure='')
+        env.close()  # Repeated cleanup cannot signal another process.
+        env.process.kill.assert_called_once()
+
     def test_reference_batches_have_a_bounded_deadline_and_never_retry_unknown_actions(self):
         for operation, seconds in (('reference', 120), ('step', 30), ('status', 30)):
             env = object.__new__(DotNetEnvironment)

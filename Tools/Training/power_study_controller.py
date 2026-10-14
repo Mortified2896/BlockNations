@@ -6,7 +6,8 @@ from pathlib import Path
 import subprocess
 import time
 
-from power_controller import command_for, parse_power
+from power_controller import command_for, read_power
+from host_resources import thermal_state
 from supervisor import atomic_json, read_json
 
 
@@ -36,17 +37,30 @@ def tick(config_path):
         if receipt and state not in ('paused_power','running'):
             raise ValueError('Study is not in an explicitly resumable state.')
         if '--root' in command:
-            shared_lock=Path(command[command.index('--root')+1])/'information-study.lock'
+            root=Path(command[command.index('--root')+1])
+            if config.get('exclusiveTraining', False):
+                supervisor=root/'supervisor.lock'
+                if supervisor.exists():
+                    owner=supervisor.read_text().strip()
+                    if not owner.isdigit():raise ValueError('Invalid shared supervisor lock; preserve it for inspection.')
+                    if command_for(int(owner)):
+                        status.update(state='waiting_for_training_save',updatedUnix=time.time())
+                        atomic_json(status_path,status);return
+            shared_lock=root/'information-study.lock'
             if shared_lock.exists():
                 owner=shared_lock.read_text().strip()
                 if not owner.isdigit():raise ValueError('Invalid shared study lock; preserve it for inspection.')
                 if command_for(int(owner)):
                     status.update(state='waiting_for_other_study',updatedUnix=time.time())
                     atomic_json(status_path,status);return
-        ac,percent=parse_power(subprocess.check_output(['/usr/bin/pmset','-g','batt'],text=True,timeout=5))
+        ac,percent=read_power()
+        thermal=thermal_state()
         status.update(acPower=ac,batteryPercent=percent,updatedUnix=time.time())
         if not ac or percent<80:
             status['state']='waiting_for_power';atomic_json(status_path,status);return
+        status['thermalState']=thermal
+        if thermal != 0:
+            status['state']='waiting_for_cooling';atomic_json(status_path,status);return
         launch=command+(['--resume'] if receipt else [])
         process=subprocess.Popen(launch,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL,start_new_session=True)

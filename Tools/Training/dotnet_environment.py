@@ -270,7 +270,13 @@ class DotNetEnvironment(BaseEnv):
                     self.process.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     self.process.terminate()
-                    self.process.wait(timeout=5)
+                    try:
+                        self.process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        # This is our own exhausted worker, after the last RPC.
+                        # A throttled shutdown must not invalidate complete games.
+                        self.process.kill()
+                        self.process.wait(timeout=5)
         finally:
             if self.process.poll() is None:
                 self.process.kill(); self.process.wait()

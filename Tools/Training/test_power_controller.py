@@ -12,6 +12,47 @@ from power_controller import action, identity, parse_power, read_power, tick, co
 
 
 class PowerControllerTests(unittest.TestCase):
+    def test_thermal_save_wait_and_nominal_resume(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder); run = root/'runs/example'; run.mkdir(parents=True)
+            config = dict(root=folder, runId='example', enabled=True, thermalGuard=True,
+                          command=['python', '/supervisor.py', '--root', folder, '--run-id', 'example', '--resume'])
+            (root/'supervisor.lock').write_text('12')
+            processes = {12: config['command']}; signals = []; launches = []
+            state = tick(config, {}, True, 80, 100, processes.get, signals.append, launches.append, thermal=1)
+            self.assertEqual(state['state'], 'running')
+            state = tick(config, state, True, 80, 101, processes.get, signals.append, launches.append, thermal=2)
+            self.assertEqual(signals, [12]); self.assertEqual(state['stopReason'], 'thermal_pressure')
+            processes.clear(); (root/'supervisor.lock').unlink()
+            (run/'supervisor-status.json').write_text(json.dumps(dict(state='stopped', exitCode=0)))
+            state = tick(config, state, True, 80, 102, processes.get, signals.append, launches.append, thermal=1)
+            self.assertEqual(state['state'], 'waiting_for_cooling'); self.assertFalse(launches)
+            state = tick(config, state, True, 80, 103, processes.get, signals.append, lambda c: launches.append(c) or 13, thermal=0)
+            self.assertEqual(state['state'], 'starting'); self.assertEqual(len(launches), 1)
+
+    def test_controlled_study_gets_exclusive_cpu_then_main_resumes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = str(Path(folder).resolve())
+            root = Path(folder); run = root/'runs/example'; run.mkdir(parents=True)
+            destination = root/'benchmarks/example'; destination.mkdir(parents=True)
+            controller = destination/'controller.json'
+            controller.write_text(json.dumps(dict(owner='BlockNations.PowerStudy.v1', enabled=True, destination=str(destination))))
+            config = dict(root=folder, runId='example', enabled=True, deferToStudyController=str(controller),
+                          command=['python', '/supervisor.py', '--root', folder, '--run-id', 'example', '--resume'])
+            (root/'supervisor.lock').write_text('12')
+            processes = {12: config['command']}; signals = []; launches = []
+            state = tick(config, {}, True, 80, 100, processes.get, signals.append, launches.append)
+            self.assertEqual(signals, [12]); self.assertEqual(state['stopReason'], 'study_priority')
+            processes.clear(); (root/'supervisor.lock').unlink()
+            (run/'supervisor-status.json').write_text(json.dumps(dict(state='stopped', exitCode=0)))
+            for study_state in ('running', 'paused_power'):
+                (destination/'study.json').write_text(json.dumps(dict(state=study_state)))
+                state = tick(config, state, True, 80, 101, processes.get, signals.append, launches.append)
+                self.assertEqual(state['state'], 'waiting_for_study'); self.assertFalse(launches)
+            (destination/'study.json').write_text(json.dumps(dict(state='completed')))
+            state = tick(config, state, True, 80, 102, processes.get, signals.append, lambda c: launches.append(c) or 13)
+            self.assertEqual(state['state'], 'starting'); self.assertEqual(len(launches), 1)
+
     def test_transient_timeout_uses_fresh_retry_instead_of_stopping(self):
         timeout = subprocess.TimeoutExpired(['/usr/bin/pmset', '-g', 'batt'], 5)
         ac = "Now drawing from 'AC Power'\n -InternalBattery-0 80%; AC attached"
