@@ -157,3 +157,54 @@ win rates. The first control arm then advanced with zero rejected actions. The
 morning review is scheduled in the current chat for 09:00 Hong Kong time on
 October 15; routine hourly checks stay quiet and the heartbeat pauses after that
 report. Remaining arms and their results must be read from the live receipts.
+
+## First completed control and counterplay check
+
+Seed 84's 128x2 control completed its million-step continuation at step
+164,463,559. The read-only reporter verified its exact frozen actor, all raw
+games and both balanced evaluation packs. Its actor, critic and optimizer
+contained 55 finite checkpoint tensors, all twelve retained optimizer counters
+advanced by 23,136, and the training receipt recorded zero rejected actions.
+
+| Fixed Hard pack | Frozen parent | Seed 84 control | Change |
+| --- | --- | --- | --- |
+| Primary | 438/512 | 491/512 | +10.35 percentage points |
+| Confirmation | 428/512 | 479/512 | +9.96 percentage points |
+
+The control won 51/64 primary and 39/64 confirmation matches against the
+protected 162,299,959 archive. Its first/second-role results were 23/32 and
+28/32 on primary, and 19/32 and 20/32 on confirmation. The parent won only 1/64
+against that actor on either pack. The Warrior-only reference still exposed a
+first-role weakness: 24/32 wins on both packs, compared with 32/32 when second.
+These are completed results for one continuation, not a capacity-treatment
+result or proof that the improvement repeats across training seeds. Repeated
+deterministic openings are not independent maps.
+
+A separate evaluation-only replay checked the previously recorded city-defence
+failure with the parent, protected archive and completed control. All 129
+recorded actions remained legal, normal-fog vectors exactly reproduced the
+original journal, and the diagnostic scored 22 final-round positions across
+normal fog and the full-visibility counterfactual.
+
+| Actor | Root End Turn probability under fog, raw Policy | Root End Turn probability with full visibility, raw Policy |
+| --- | --- | --- |
+| Parent 163,463,523 | 16.18% | 99.94% |
+| Protected archive 162,299,959 | 7.26% | 99.99% |
+| Seed 84 control 164,463,559 | 18.65% | 99.85% |
+
+At the two relevant fog decisions, all three Hard actors still selected the
+city defender and moved it from (3,3) to (3,4), reproducing the exposed-city
+mistake in that reachable prefix. With full visibility they instead ended the
+turn at the root. This is a matched decision diagnostic, not a new full-game
+win-rate test. Stronger aggregate benchmark results have not resolved this
+specific counterplay weakness.
+
+Private diagnostic receipts are in
+`benchmarks/capacity-night-evidence-20261015/city-defense-control84/` below the
+shared training root. Keep that journal and its positions outside training.
+Finish the capacity pairs before changing their conditions; a subsequent
+information/uncertainty experiment should use separate training situations and
+the strengthened retained pool, with fair observable history and its own
+replicated controls. Do not infer that a larger network or last-seen history
+alone solves threats from genuinely unobserved units. No champion or public
+release was changed by these checks.
