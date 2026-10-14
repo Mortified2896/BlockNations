@@ -7,7 +7,6 @@
                     <ui:Label text="Advanced 7×7" class="advanced-mode-title" />
                     <ui:Label name="AdvancedTurn" text="Round 1 · Your turn" class="muted" />
                 </ui:VisualElement>
-                <ui:Button name="AdvancedFeedback" text="Feedback" class="quiet-button" />
             </ui:VisualElement>
             <ui:VisualElement class="resource-row" picking-mode="Ignore">
                 <ui:VisualElement class="resource gold-resource" picking-mode="Ignore">
@@ -140,5 +139,6 @@
                 <ui:Button name="AdvancedExit" text="Main menu" class="toolbar-button" />
             </ui:VisualElement>
         </ui:VisualElement>
+        <ui:Button name="AdvancedFeedback" text="Feedback" class="quiet-button advanced-feedback" />
     </ui:VisualElement>
 </ui:UXML>

@@ -24,6 +24,8 @@ public sealed class FeedbackUITKController : IDisposable
 #if UNITY_WEBGL && !UNITY_EDITOR
     [DllImport("__Internal")] private static extern void BlockNations_OpenFeedback(string report, string objectName);
     [DllImport("__Internal")] private static extern void BlockNations_CloseFeedback();
+    [DllImport("__Internal")] private static extern void BlockNations_RegisterFeedback(string objectName);
+    [DllImport("__Internal")] private static extern void BlockNations_UnregisterFeedback(string objectName);
     private bool browserOpen, previousKeyboardCapture;
 #endif
     public void BrowserClosed()
@@ -95,6 +97,12 @@ public sealed class FeedbackUITKController : IDisposable
         include.RegisterValueChangedCallback(OnIncludeChanged);
         root.RegisterCallback<GeometryChangedEvent>(OnGeometryChanged);
         overlay.RegisterCallback<KeyDownEvent>(OnKeyDown);
+#if UNITY_WEBGL && !UNITY_EDITOR
+        // The browser utility stays above the lobby frame and loading/error UI.
+        // Registration uses this explicitly wired controller, including context.
+        BlockNations_RegisterFeedback(owner.gameObject.name);
+        button.style.display = DisplayStyle.None;
+#endif
         RefreshSafeArea();
     }
 
@@ -142,6 +150,8 @@ public sealed class FeedbackUITKController : IDisposable
 #endif
         }
     }
+
+    public bool IsFormVisible => IsOpen && !capturing;
 
     public void Open()
     {
@@ -360,6 +370,7 @@ public sealed class FeedbackUITKController : IDisposable
         disposed = true;
 #if UNITY_WEBGL && !UNITY_EDITOR
         if (browserOpen) { BlockNations_CloseFeedback(); BrowserClosed(); }
+        BlockNations_UnregisterFeedback(owner.gameObject.name);
 #endif
         if (routine != null && owner != null) owner.StopCoroutine(routine);
         SaveDraft();

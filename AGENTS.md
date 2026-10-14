@@ -32,6 +32,7 @@ Keep player identity, match seats/ownership, team membership/relationships, view
 
 ## UI and inspection
 
+- Keep Feedback available at the top right on every screen and in every game mode, including loading, failure and modal screens. Reuse the shared report form and current screen context; do not hide the entry point behind a pane or overlay.
 - Use explicit serialized references and inspector wiring for UI additions; do not auto-wire through hacks.
 - Use stable state rather than rendered UI strings for gameplay/flow logic.
 - For PBp display metadata, use the latest locally known snapshot/header rather than widening lightweight polling unless live freshness is required.

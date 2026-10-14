@@ -22,6 +22,7 @@ public sealed partial class PolyGameController : MonoBehaviour
     public PolyMatch Match { get; private set; }
     public bool IsReady => Match != null;
     public bool IsFeedbackOpen => feedbackHud.IsFeedbackOpen;
+    public bool IsFeedbackFormVisible => feedbackHud.IsFeedbackFormVisible;
     public void OpenFeedback() => feedbackHud.OpenFeedback();
     public bool IsMenuOpen { get; set; }
     public bool IsOpponentRunning { get; private set; }

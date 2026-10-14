@@ -72,6 +72,7 @@ public sealed class GameplayTopHudUITKView : MonoBehaviour
 
     public void OnBrowserFeedbackClosed() { feedback?.BrowserClosed(); }
     public bool IsFeedbackOpen => feedback != null && feedback.IsOpen;
+    public bool IsFeedbackFormVisible => feedback != null && feedback.IsFormVisible;
     public void OpenFeedback() { feedback?.Open(); }
 
     private void Update()

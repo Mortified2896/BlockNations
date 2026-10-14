@@ -1,6 +1,8 @@
 # Player feedback
 
-The main-menu panes display the build version at the top left. Both menu and normal gameplay have a Feedback button at the top right, inside the safe area. Gameplay does not display a version label; reports attach the version automatically.
+The main-menu panes display the build version at the top left. Feedback remains available at the top right, inside the safe area, on every screen and in every game mode. This includes menu panes, multiplayer tabs and dialogs, tutorials, standard/Advanced/Poly gameplay, and browser loading or failure screens. Gameplay does not display a version label; reports attach the version automatically.
+
+Browser builds use one native HTML utility above the Unity canvas and embedded multiplayer lobby. The active, explicitly wired Unity feedback controller supplies gameplay context and screenshots. Multiplayer's HTML lobby and pre-game loading/failure screens accept text reports without attaching an unrelated canvas screenshot. The standalone lobby loads the same form with its CSP nonce, and Feedback remains usable while match requests are in flight. Editor/native builds retain the shared UITK controls; Advanced's corner control is outside its overlays, and Poly's control stays above its sheets and menu.
 
 Tap the menu version to copy the full displayed identifier, including the PBp protocol (for example, `v1.0.3 · PbP 5`). The label shows `Copied!` for two seconds, then returns to the version. Browser builds use a native browser button to start the clipboard write directly inside the tap event, as required by iPhone Safari. They wait for clipboard confirmation; a rejected copy shows a retry message. When checking a candidate, verify the pasted text, repeat taps, label restoration, and leaving/reopening the menu. Check physical mobile browsers separately.
 
@@ -33,6 +35,8 @@ Approved Review administrators can open `/admin/feedback` from the account or te
 - Check physical iPhone Safari and Android Chrome separately before claiming device acceptance.
 
 Publishing requires updating the access service (which owns the new table), the game Worker and the reviewed Unity web artifact together. An implementation/source push does not publish the feature to Cloudflare.
+
+For the persistent corner entry released on 2026-10-14, the existing access/feedback store is sufficient; only the game Workers and reviewed Unity artifact require an update. Local Chromium validation covered 1280×900 and 390×844 layouts, standalone and embedded multiplayer, modal dialogs, failed/pending match reads, retained drafts, and a lost-acknowledgement retry that produced one SQLite report. A single browser tab exercised actual Unity menu, tutorial, VsAI, Advanced, Poly-menu and saved PlayByPost reporting, with correct mode/build context and screenshots. All 103 web checks and 14 focused graphical Unity EditMode cases passed. The isolated candidate's credential audit found zero matches and retained the existing frozen policy. Physical iPhone/Android acceptance remains a separate check.
 
 ## Validation performed on 2026-10-10
 

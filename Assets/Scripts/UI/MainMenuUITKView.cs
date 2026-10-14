@@ -303,6 +303,7 @@ public class MainMenuUITKView : MonoBehaviour
     }
 
     public void OnBrowserFeedbackClosed() { feedback?.BrowserClosed(); }
+    public void OpenFeedback() { feedback?.Open(); }
 
     private void Update()
     {

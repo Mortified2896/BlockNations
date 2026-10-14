@@ -78,6 +78,7 @@ export function installGameNavigation(instance, elements, host = window) {
     else openLobby();
   });
   return {
+    get isLobbyOpen() { return frame !== null; },
     openLobby,
     registerMenu(target) {
       menu = target;

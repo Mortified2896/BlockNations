@@ -34,6 +34,7 @@
     <div id="multiplayer-state" hidden role="status"><p id="multiplayer-message"></p><a href="/multiplayer">Return to multiplayer lobby</a></div>
   </main>
   <nav class="account-bar" aria-label="Account"><a href="/access" target="_blank" rel="noopener" aria-label="Account (opens in a new tab)">Account</a></nav>
+  <script>window.blockNationsBuildVersion = {{{ JSON.stringify(PRODUCT_VERSION) }}};</script>
   <script src="Feedback.js"></script>
   <script src="/MultiplayerLive.js"></script>
   <script type="module" src="PWA.js"></script>
@@ -89,7 +90,7 @@
           statusLink: document.querySelector('#multiplayer-state a')
         });
         document.getElementById('loading').style.display = 'none';
-        canvas.focus();
+        if (!window.BlockNationsFeedback.isOpen) canvas.focus();
       }).catch(error => {
         document.getElementById('status').textContent = 'The game could not load: ' + String(error);
         document.getElementById('progress').style.display = 'none';

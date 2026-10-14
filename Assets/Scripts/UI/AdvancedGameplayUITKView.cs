@@ -75,6 +75,9 @@ public sealed partial class AdvancedGameplayUITKView : MonoBehaviour
         Required<Button>("OpenCity").clicked += () => cityUI.OnCityClicked(controller.HumanCity);
         Required<Button>("AdvancedEndTurn").clicked += () => controller.TryEndTurn(AdvancedMatchController.HumanSeat);
         Required<Button>("AdvancedFeedback").clicked += feedbackHud.OpenFeedback;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        Required<Button>("AdvancedFeedback").style.display = DisplayStyle.None;
+#endif
         Required<Button>("AdvancedMenu").clicked += () => ShowMenu(true);
         Required<Button>("AdvancedResume").clicked += () => ShowMenu(false);
         Required<Button>("AdvancedExit").clicked += menuActions.QuitToMainMenu;

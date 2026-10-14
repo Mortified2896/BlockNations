@@ -32,6 +32,7 @@ public sealed partial class AdvancedGameplayUITKView
         economyBar.style.top = (screen.y - safe.yMax) / scale;
         bottom.style.bottom = safe.yMin / scale;
         hud.style.left = safe.xMin / scale; hud.style.right = (screen.x - safe.xMax) / scale;
+        Required<Button>("AdvancedFeedback").style.top = (screen.y - safe.yMax) / scale + 12;
         bool cityOpen = citySheet.resolvedStyle.display != DisplayStyle.None;
         bool unitOpen = unitSheet.resolvedStyle.display != DisplayStyle.None;
         Vector2 rootSize = root.worldBound.size;

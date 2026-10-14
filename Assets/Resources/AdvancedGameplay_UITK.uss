@@ -10,7 +10,8 @@ Label { margin: 0; padding: 0; white-space: normal; }
     border-bottom-width: 1px; border-bottom-color: rgba(255, 255, 255, 0.18);
 }
 .economy-heading { flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.economy-heading-copy { flex-grow: 1; }
+.economy-heading-copy { flex-grow: 1; padding-right: 100px; }
+.advanced-feedback { position: absolute; top: 12px; right: 18px; min-height: 44px; }
 .advanced-mode-title { height: 26px; flex-shrink: 0; font-size: 20px; -unity-font-style: bold; margin-bottom: 2px; }
 #AdvancedTurn { height: 20px; flex-shrink: 0; }
 .muted { color: rgb(170, 186, 208); font-size: 13px; }

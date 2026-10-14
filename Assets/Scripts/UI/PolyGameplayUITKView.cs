@@ -28,6 +28,8 @@ public sealed partial class PolyGameplayUITKView : MonoBehaviour
         if (controller == null || document == null || feedbackDocument == null || world == null || boardCamera == null || document.panelSettings == null)
             throw new InvalidOperationException("Poly gameplay view needs its serialized scene references.");
         runtimePanel = Instantiate(document.panelSettings); document.panelSettings = runtimePanel;
+        // Keep the explicitly wired feedback utility above every Poly pane.
+        runtimePanel.sortingOrder = feedbackDocument.panelSettings.sortingOrder - 1;
     }
     private void Start()
     {
@@ -53,14 +55,16 @@ public sealed partial class PolyGameplayUITKView : MonoBehaviour
     private void LateUpdate()
     {
         if (!ready) return;
-        hud.style.display = controller.IsFeedbackOpen ? DisplayStyle.None : DisplayStyle.Flex;
+        hud.style.display = controller.IsFeedbackFormVisible ? DisplayStyle.None : DisplayStyle.Flex;
         var nativeHud = feedbackDocument.rootVisualElement;
         bool showNativeHeader = screen.Length == 0 || controller.IsFeedbackOpen;
         bool landscapeSheet = Screen.width > Screen.height && Screen.height / runtimePanel.scale < 500 && screen.Length == 0 && sheet.resolvedStyle.display != DisplayStyle.None;
         var nativeBar = nativeHud.Q("TopBar");
         if (nativeBar != null) { nativeBar.style.display = showNativeHeader ? DisplayStyle.Flex : DisplayStyle.None; nativeBar.style.width = Length.Percent(landscapeSheet ? 48 : 100); }
         var nativeFeedback = nativeHud.Q<Button>("FeedbackButton");
-        if (nativeFeedback != null) nativeFeedback.style.display = showNativeHeader && !landscapeSheet ? DisplayStyle.Flex : DisplayStyle.None;
+#if !UNITY_WEBGL || UNITY_EDITOR
+        if (nativeFeedback != null) nativeFeedback.style.display = DisplayStyle.Flex;
+#endif
         Layout();
         if (lastRevision != controller.Revision) {
             if (lastPosition != controller.SelectedPosition || lastInspection != controller.Inspection) page = cityTab = 0;

@@ -55,6 +55,8 @@ The durable outbox retries transient provider failures, removes expired endpoint
 
 ## Build and deployment
 
+The production and preview game Worker configs explicitly use `keep_names: false`. The lobby and `/MultiplayerLive.js` serialize their shared browser functions; Wrangler's default name-preservation transform injects `__name` calls that otherwise depend on Worker-local helpers. That produces a browser startup error before any match request, across accounts. `Web/multiplayer/browser-bundle.test.mjs` executes the compiled scripts in a separate browser-like context to cover this release boundary in addition to the source tests.
+
 ```sh
 python3 Tools/WebRelease/build.py --multiplayer --learned-ai
 cd Web
