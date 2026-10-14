@@ -245,3 +245,32 @@ probability was 6.21%, versus control's 18.65%; this is a decision preference,
 not a full-game win rate. Its receipt is
 `benchmarks/capacity-night-evidence-20261015/city-defense-capacity84/`.
 The study, protected champion and public release retain their original roles.
+
+## Fresh fair console counterplay
+
+The completed compact seed-84 actor also played two fresh normal-fog console
+diagnostics on seeds 150501/150502. The agent-operated opponent received only
+its legitimate observation, public rules and legal-action list; no full-view
+projection or opponent wallet was consulted during either match.
+
+| Console opponent's role | Outcome against compact control | Rounds | Total recorded choices |
+| --- | --- | --- | --- |
+| First | Console opponent won | 6 | 58 |
+| Second | Console opponent won | 7 | 83 |
+
+Both games used two Archers and a Rider, coordinating ranged damage, movement
+after shooting and melee cleanup. The second game also faced a learned Archer
+and a final Warrior defender. Both completed with zero rejections and zero
+interruptions. Separate simulator replays reproduced every recorded vector,
+legal-action list, choice and final outcome. These are two agent-operated
+counterexamples, not physical human tests or a calibrated human win rate.
+They show that the compact actor's high fixed-panel score has not resolved
+ordinary coordinated counterplay in either starting role.
+
+The sources and verified replays are under
+`benchmarks/capacity-night-evidence-20261015/fair-control84-{first,second}/`
+and the corresponding `-verified/` folders. Keep them evaluation-only. The
+next learning change needs stronger experience with varied, coordinated
+opponents and uncertainty; adopting the larger network or adding last-seen
+features alone is not supported by these observations. Finish the recorded
+capacity pairs before changing their conditions.
