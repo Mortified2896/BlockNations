@@ -29,9 +29,18 @@ const EMBEDDED=${JSON.stringify(embedded)} && parent!==window;
 function navigateToMatch(id){if(EMBEDDED)parent.postMessage({type:'bn-open-match',matchId:id},location.origin);else location.href='/?match='+id}
 if(EMBEDDED){document.querySelector('.account').target='_blank';document.querySelector('.account').rel='noopener';document.addEventListener('click',event=>{const link=event.target.closest('a[href]');if(!link||link.target==='_blank'||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;const url=new URL(link.href);if(url.origin!==location.origin||url.pathname!=='/')return;const id=url.searchParams.get('match');event.preventDefault();if(id)navigateToMatch(id);else parent.postMessage({type:'bn-lobby-close'},location.origin)})}
 const $=id=>document.getElementById(id);let lobby=null,busy=false,searchPlayers=[],searchComplete=false,knownIncomingInvites=new Set();
-let refreshPending=false,refreshTimer;
+let refreshPending=false,refreshTimer,backgroundRefresh=false,refreshVersion=0,renderedLobby='',refreshError='';
 function queueRefresh(){refreshPending=true;flushRefresh()}
-function flushRefresh(){if(!refreshPending||busy||document.hidden||refreshTimer)return;refreshTimer=setTimeout(()=>{refreshTimer=null;if(busy||document.hidden)return;run(refresh)},50)}
+function flushRefresh(){
+ if(!refreshPending||busy||backgroundRefresh||document.hidden||refreshTimer)return;
+ refreshTimer=setTimeout(async()=>{
+  refreshTimer=null;if(busy||document.hidden)return;
+  // Passive updates leave the controls usable while the response is pending.
+  backgroundRefresh=true;
+  try{await refresh()}catch(error){refreshError=error.message;$('error').textContent=refreshError}
+  finally{backgroundRefresh=false;flushRefresh()}
+ },50);
+}
 let selectedMatch=new URLSearchParams(location.search).get('lobby');if(!/^[a-f0-9]{32}$/.test(selectedMatch??''))selectedMatch=null;
 const tabs=['matches','friends','notifications'];const panels={matches:'matches-panel',friends:'friends-panel',notifications:'notifications'};
 function selectTab(name,focus=false){for(const tab of tabs){const selected=tab===name,control=$('tab-'+tab);control.setAttribute('aria-selected',String(selected));control.tabIndex=selected?0:-1;$(panels[tab]).hidden=!selected;if(selected&&focus)control.focus()}}
@@ -60,10 +69,20 @@ function render(){const focused=document.activeElement?.dataset.focusKey;for(con
  const pending=lobby.invites.filter(invite=>invite.status==='pending');for(const invite of pending){const actions=entry($('invitations'),invite.player.name,(invite.incoming?'Invited you to a '+(invite.seatCount??2)+'-player 7×7 match':'Invitation sent')+' · '+invite.player.email);if(invite.incoming){button(actions,'Accept invitation',async()=>{const result=await api('invite-answer',{id:invite.id,action:'accept'});await showLobby(result.match)},false);button(actions,'Decline',async()=>{await api('invite-answer',{id:invite.id,action:'decline'});await refresh()})}else {button(actions,'Cancel invitation',async()=>{await api('invite-answer',{id:invite.id,action:'cancel'});await refresh()});shareInvite(actions,invite)}}if(!pending.length)empty($('invitations'),'No pending match invitations.');$('invitations-count').textContent=String(pending.length);$('invitations-section').hidden=!pending.length;const incoming=pending.filter(invite=>invite.incoming);if(incoming.some(invite=>!knownIncomingInvites.has(invite.id)))$('invitations-section').open=true;knownIncomingInvites=new Set(incoming.map(invite=>invite.id));badge('matches',pending.filter(invite=>invite.incoming).length+lobby.matches.filter(match=>matchState(match)==='your-turn').length);badge('friends',lobby.friendships.filter(link=>link.status==='pending'&&link.incoming).length);renderResults();if(openMatchId){const match=lobby.matches.find(item=>item.id===openMatchId);if(match)renderMatchDetails(match);else $('match-dialog').close()}if(focused)document.querySelector('[data-focus-key="'+focused+'"]')?.focus({preventScroll:true});
 }
 function findState(){const waiting=lobby?.matches.find(match=>match.kind==='public'&&match.status==='waiting'&&match.seatCount===Number($('seat-count').value));$('find').disabled=busy||Boolean(waiting);$('find').textContent=waiting?'Lobby open · Waiting for the host':'Find online match'}
-async function refresh(){refreshPending=false;const previous=lobby;lobby=await api('lobby');render();findState();if(previous?.matches.some(match=>match.id===selectedMatch&&match.status==='waiting')&&lobby.matches.some(match=>match.id===selectedMatch&&match.status==='active'))$('notice').textContent='The host started your game. Open it to play.'}
+async function refresh(){
+ refreshPending=false;const version=++refreshVersion,previous=lobby;let next;
+ try{next=await api('lobby')}catch(error){if(version!==refreshVersion){queueRefresh();return}throw error}
+ // A newer request or player action supersedes an older background response.
+ if(version!==refreshVersion){queueRefresh();return}
+ lobby=next;const snapshot=JSON.stringify([lobby,selectedMatch]);
+ // Keep focus, expanded sections and button positions on unchanged reads.
+ if(snapshot!==renderedLobby){render();renderedLobby=snapshot}
+ findState();if(refreshError&&$('error').textContent===refreshError)$('error').textContent='';refreshError='';
+ if(previous?.matches.some(match=>match.id===selectedMatch&&match.status==='waiting')&&lobby.matches.some(match=>match.id===selectedMatch&&match.status==='active'))$('notice').textContent='The host started your game. Open it to play.';
+}
 async function showLobby(match){$('new-game-dialog').close();$('social-dialog').close();selectedMatch=match.id;history.replaceState(null,'','/multiplayer?lobby='+match.id);selectTab('matches');await refresh();const current=lobby.matches.find(item=>item.id===match.id);$('notice').textContent=current?.status==='waiting'?'Lobby open. The host can start with any 2–4 joined players.':'The host started this game. Open it to play.';const card=$('match-'+match.id);if(card){card.focus({preventScroll:true});card.scrollIntoView({block:'nearest'})}}
 
-async function run(action){if(busy)return;const focused=document.activeElement?.dataset.focusKey;busy=true;$('error').textContent='';document.querySelectorAll(':is(main,#new-game-dialog,#match-dialog,#social-dialog) button:not(.bn-feedback-launcher):not([data-waiting]):not([role="tab"]):not(#enable-push):not(#disable-push):not(#test-push):not(#install-app)').forEach(button=>button.disabled=true);try{await action()}catch(error){$('error').textContent=error.message}finally{busy=false;document.querySelectorAll(':is(main,#new-game-dialog,#match-dialog,#social-dialog) button:not(.bn-feedback-launcher):not([data-waiting]):not([role="tab"]):not(#enable-push):not(#disable-push):not(#test-push):not(#install-app)').forEach(button=>button.disabled=false);findState();if(focused)document.querySelector('[data-focus-key="'+focused+'"]')?.focus({preventScroll:true});flushRefresh()}}
+async function run(action){if(busy)return;const focused=document.activeElement?.dataset.focusKey;busy=true;++refreshVersion;$('error').textContent='';document.querySelectorAll(':is(main,#new-game-dialog,#match-dialog,#social-dialog) button:not(.bn-feedback-launcher):not([data-waiting]):not([role="tab"]):not(#enable-push):not(#disable-push):not(#test-push):not(#install-app)').forEach(button=>button.disabled=true);try{await action()}catch(error){$('error').textContent=error.message}finally{busy=false;document.querySelectorAll(':is(main,#new-game-dialog,#match-dialog,#social-dialog) button:not(.bn-feedback-launcher):not([data-waiting]):not([role="tab"]):not(#enable-push):not(#disable-push):not(#test-push):not(#install-app)').forEach(button=>button.disabled=false);findState();if(focused)document.querySelector('[data-focus-key="'+focused+'"]')?.focus({preventScroll:true});flushRefresh()}}
 $('create-lobby').addEventListener('click',()=>run(async()=>{const result=await api('create',{version:VERSION,seatCount:Number($('seat-count').value)});await showLobby(result.match)}));$('seat-count').addEventListener('change',findState);$('find').addEventListener('click',()=>run(async()=>{const result=await api('find',{version:VERSION,seatCount:Number($('seat-count').value)});await showLobby(result.match)}));$('refresh').addEventListener('click',()=>run(refresh));
 $('search-form').addEventListener('submit',event=>{event.preventDefault();run(async()=>{const result=await api('search?q='+encodeURIComponent($('query').value.trim()));searchPlayers=result.players;searchComplete=true;renderResults()})});
 run(refresh);window.BlockNationsLive.subscribe(queueRefresh);setInterval(()=>{if(!document.hidden)queueRefresh()},10000);
