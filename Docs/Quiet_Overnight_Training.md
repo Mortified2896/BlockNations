@@ -274,3 +274,30 @@ next learning change needs stronger experience with varied, coordinated
 opponents and uncertainty; adopting the larger network or adding last-seen
 features alone is not supported by these observations. Finish the recorded
 capacity pairs before changing their conditions.
+
+## Independent direct comparison for private review
+
+The compact seed-84 candidate separately faced the preserved 162,299,959
+champion on evaluation seeds 704501 and 1704504, using 128 games per mode/pack
+with balanced colours and starting roles. The raw-match validator rechecked
+all 512 outcomes; none were interrupted.
+
+| Sampling | Primary candidate wins | Confirmation candidate wins |
+| --- | --- | --- |
+| Hard versus Hard | 96/128 | 84/128 |
+| Raw Policy versus Raw Policy | 68/128 | 73/128 |
+
+Hard first/second-role results were 49/64 and 47/64 on primary, then 38/64 and
+46/64 on confirmation. This passed the existing Hard direct-incumbent criterion.
+Raw Policy first-role results were below half on both packs, so retain the
+mode distinction. These empirical gates do not create independent maps or
+establish human strength. The direct review did not perform the separate
+population-selection step or change a champion/release. The frozen candidate
+is already discoverable in the private model selector.
+
+Evidence is under
+`benchmarks/capacity-night-evidence-20261015/control84-direct-archive/`.
+The two completed capacity pairs also disagree about the expansion: seed 84
+lost primary mean strength while seed 85 gained 13/512 on both packs relative
+to its own control. Finish seed 86 and inspect role retention before adopting
+an architectural or recipe change.
