@@ -9,6 +9,16 @@ The user LaunchAgent `com.blocknations.training-power` runs
 in. It reads `pmset -g batt`. AC attached counts as plugged in even when macOS
 says "not charging", so an 80% charge ceiling works.
 
+On 2026-10-14 the local LaunchAgent's `ProcessType` was changed from Background
+to Standard while recovering a timed-out simulation worker during the frozen
+AI release build. macOS applies stronger CPU/I/O limits to Background jobs;
+Standard uses the ordinary light limits. The prior plist and failure receipts
+were preserved under `Logs/Validation/ChampionRelease-20261014/`. Checkpoint
+163,687,393 had a finite actor and all twelve finite retained optimizer states
+before the controller was rearmed on a fresh AC/80% reading. The resumed learner
+advanced beyond 163,719,000 with no rejected actions. Scheduling classification
+does not change the start/stop thresholds, identity checks or saved-run recipe.
+
 - Start/resume the configured run on AC power at **80% or above**.
 - Keep running on AC between 76% and 79%.
 - Request a graceful save/stop when unplugged or at **75% or below** on AC.

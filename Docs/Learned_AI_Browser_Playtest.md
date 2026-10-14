@@ -80,6 +80,30 @@ The published best-actor artifact is preserved at `Build/CoreThreeBestWeb`, sepa
 
 ## Validation and acceptance
 
+### Champion refresh with setup menu retained, 2026-10-14
+
+The owner's model-refresh request replaced the bundled actor with checkpoint
+163,463,523. They withdrew the direct-launch menu change before implementation,
+so the setup menu and current fog behavior remain intact. Model source and manifest
+were committed as `fc5d925`. Five exporter checks, nineteen build/audit checks,
+sixteen actual Unity CPU parity fixtures, all four private gameplay flows and
+all 103 web checks passed. The new local Mac build is
+`Build/Champion163463523-20261014.app`.
+
+The audited browser artifact is preserved separately at
+`Build/Champion163463523Web-20261014`, source digest
+`5bd208cad696f8e0e542e094db5d282d278ac19fc80c8e77124173024f505430`.
+Preview received version `897fb2fe-83eb-4516-8001-6622cb2e37b8` and production
+received `9b52ea74-f4d7-45bb-8cf7-0d7b2d4beeb5`, using identical artifact bytes.
+Only the new data bundle, game index and release manifest required asset upload.
+Existing access, multiplayer and Review service bindings were retained. Release
+metadata remains approval-gated; the public PWA manifest remains available.
+The authenticated production gameplay flow was not exercised in this turn;
+the actual Unity gameplay checks ran in the owned native snapshot. Detailed build,
+test, upload and runtime receipts are under
+`Logs/Validation/ChampionRelease-20261014/`. Reload the browser page to load the
+new actor; an already-running player retains its loaded model.
+
 ### Published best three-unit opponent, 2026-10-11
 
 The owner's direct live-publication request authorized this selected release. `blocknations.moneymattersmedia.com` received worker version `5e97d797-0257-4348-b679-1ed79e3daa0b`, at 100%, with actor `BlockNationsSeatV2-33749992` and fixed Hard sampling. Its game-source digest is `1a765352da01b81bca4143123fe2d05214054639e6c5e43c240b6a5097b3dc2b`. The previous public worker `6d235add-976d-4e8a-88f9-713810c075e8` and earlier actor remain recoverable. Future training checkpoints do not automatically replace this release.
