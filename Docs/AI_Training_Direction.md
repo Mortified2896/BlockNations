@@ -59,6 +59,15 @@ Explore a compact spatial board encoder, shared processing of unit/recruit capab
 
 Generalization is a goal, not a guarantee. New combinations can require further training; genuinely new mechanics require rules and observation/action features. Version model contracts separately from gameplay saves, retain compatible old inference adapters, and make incompatible exports fail clearly. Do not silently omit units/actions to fit a tensor capacity.
 
+An opt-in [shared capability policy prototype](AI_Capability_Policy_Prototype.md)
+now implements shared spatial/recruit processing and scoring for the existing
+v4 observations/v2 legal candidates. Recruit-slot permutation equivariance is
+tested by construction, alongside stock-PPO updates and checkpoint round trips.
+It has a separate architecture identity and new weights; it is not an adopted
+model or evidence of stronger play. The existing canvas/recruit/two-seat limits
+and two-stage action interface remain, and initialized training, retained
+strength, held-out content and human counterplay remain required comparisons.
+
 An opt-in development adapter now supports **recruit-slot permutation** for the existing feed-forward schema-v2 policy. `Tools/Training/roster_augmentation.py` shuffles the public capability blocks and their corresponding recruitment masks together, then maps the selected index back before sending it to the C# environment. Source selection, movement/attack targets, rewards, turn ownership and fog inputs retain their original meaning. The environment wrapper uses composition so its internal fixed opponents continue seeing the original roster order. Decisions and their mappings are cached until the next real step; terminal rewards and interruption flags are preserved. This makes memorizing a fixed recruit index less useful, without prescribing which unit to buy. It does not yet prove the trained network is order independent or that unseen units work well.
 
 Activation uses the separate `roster_augmented_training.py` entry point with the ordinary trainer arguments/environment, and an explicit owned-run `roster-augmentation.json` recipe containing `version: 1`, the current `rulesVersion`, matching `boardSize`, `mode: "per-decision"` and an integer `seed`. The adapter rejects recurrent policies, incompatible contracts and padded recruit actions. The normal supervisor and existing runs remain on their normal entry point. Game saves, inference shapes and mobile model size are unchanged. Eight focused checks cover all 24 four-unit permutations, inverse action legality, unchanged non-roster inputs, per-agent mappings, stale-decision invalidation, terminal/group rewards, deterministic seeds and all four actual C# recruit commands. A preserved-weight 4,096-step PPO smoke also completed with all 12 optimizer states advancing, all eight retained challenger identities exercised, and zero rejected actions. Performance needs a separate matched trial before activation in the main learner; see the balance experiment log.

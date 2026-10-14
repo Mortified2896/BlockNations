@@ -4,6 +4,12 @@ Prepared on 2026-10-15 after the owner requested continued AI improvement,
 overnight learning, keyboard darkness and no game audio. Strength against humans
 remains an open goal; a completed training session is not evidence of that goal.
 
+The six-arm study and separate capability-policy feasibility trial have now
+completed. Use the [October 15 result note](AI_Overnight_Results_2026-10-15.md)
+for the full paired comparison, retained-role regressions, counterplay and
+checkpoint/export evidence. The ordinary guarded learner has resumed; the
+overnight quiet guard remains scheduled through 09:00 Hong Kong time.
+
 ## Quiet execution
 
 Overnight learning and evaluation use the standalone C# worker and one PyTorch
@@ -301,3 +307,26 @@ The two completed capacity pairs also disagree about the expansion: seed 84
 lost primary mean strength while seed 85 gained 13/512 on both packs relative
 to its own control. Finish seed 86 and inspect role retention before adopting
 an architectural or recipe change.
+
+## Training-experience and private-export checks
+
+A separate training-only screen increased the existing fair search opponent's
+budget to 2,048 work units. The compact seed-84 candidate won 32/32 against the
+unrestricted opponent, 32/32 against Archer-only, 27/32 against Warrior-only,
+and 32/32 against Rider-only, with balanced roles and zero interruptions.
+Raw-match verification reproduced 123/128. This small screen shows that simply
+increasing this teacher's work does not supply the coordinated counterplay seen
+in the console games; it is not a new acceptance pack or human win-rate claim.
+Evidence is in `benchmarks/capacity-night-evidence-20261015/strong-search-training-screen/`.
+
+The same compact candidate has an offline probability export in the sibling
+`private-export-control84/` directory. Source/checkpoint conversion checks passed,
+then all 141 recorded fair counterplay decisions matched Torch at dynamic batch
+sizes with a maximum absolute probability error below 0.000005. Masked actions
+remained zero. This is a private artifact and export-consistency check; it does
+not change selected opponents, the public release, or the strength limitations.
+
+An isolated [shared capability policy prototype](AI_Capability_Policy_Prototype.md)
+now implements the next bounded representation step. Its new weights, shared
+recruit scoring, stock-PPO/checkpoint tests and completed end-to-end feasibility
+trial remain separate from the pinned capacity experiment and ordinary learner.
