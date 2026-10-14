@@ -54,6 +54,8 @@ def settings(run):
         raise ValueError('Automatic evaluation requires an owned 7x7 run and fixed suite inside its training root.')
     if type(config.get('replicatedPromotion', False)) is not bool:
         raise ValueError('Replicated promotion must be explicitly enabled or disabled.')
+    if type(config.get('headToHeadPromotion', False)) is not bool:
+        raise ValueError('Direct promotion must be explicitly enabled or disabled.')
     if config.get('replicatedPromotion', False):
         from tournament_selection import policy
         policy(config.get('promotionMargins'))
@@ -134,7 +136,17 @@ def perform_job(run, worker, job_path):
         result = evaluate(manifest, Path(config['suite']), worker, job_path.parent / 'results')
         job.update(games=sum(r['games'] for r in result['results']), suiteId=result['suiteId'])
         confirmation = None
-        if config.get('replicatedPromotion', False):
+        head_to_head = None
+        if config.get('headToHeadPromotion', False):
+            from champion_matches import challenge
+            job.update(state='challenging', reason='Playing the incumbent directly in both modes on two seed packs.')
+            atomic_json(job_path, job)
+            head_to_head = challenge(run, manifest, run/incumbent['candidateManifest'],
+                                     Path(config['suite']), worker, job_path.parent/'direct-matches')
+            job['diagnosticGames'] = job['games']
+            job['directGames'] = sum(sum(r['games'] for r in read_json(path)['results']) for path in head_to_head.values())
+            job['games'] += job['directGames']
+        elif config.get('replicatedPromotion', False):
             from tournament_selection import baseline, confirmation_suite, review
             repeat_suite = job_path.parent/'confirmation-suite.json'
             atomic_json(repeat_suite, confirmation_suite(read_json(Path(config['suite']))))
@@ -147,8 +159,11 @@ def perform_job(run, worker, job_path):
                                    read_json(old_repeat_path), new_repeat, step, config.get('promotionMargins'))
         try:
             kwargs = dict(confirmation=confirmation, margins=config.get('promotionMargins')) if confirmation else {}
+            if head_to_head:
+                kwargs = dict(head_to_head=head_to_head)
             selected = select(run, manifest, job_path.parent / 'results/suite.json', **kwargs)
-            job.update(state='promoted', champion=selected['checkpoint'], reason='Passed the fixed-reference promotion gate.')
+            job.update(state='promoted', champion=selected['checkpoint'], promotionEvidence=selected.get('promotionEvidence'),
+                       reason='Passed replicated direct-incumbent matches.' if head_to_head else 'Passed the fixed-reference promotion gate.')
         except ValueError as error:
             if not str(error).startswith(('Candidate increased', 'Candidate regressed', 'Candidate did not improve')):
                 raise
@@ -178,7 +193,7 @@ def retire(run):
         model = run / job.get('candidateManifest', 'missing')
         folder = model.parent
         if any(any((run/relative).is_relative_to(path.parent) for relative in
-                   [item.get('evaluation', 'missing'), *item.get('confirmation', {}).values()])
+                   [item.get('evaluation', 'missing'), *item.get('confirmation', {}).values(), *item.get('headToHead', {}).values()])
                for item in protected_evidence):
             continue
         if selected == folder or any((run/item.get('candidateManifest', 'missing')).parent == folder for item in protected_evidence):

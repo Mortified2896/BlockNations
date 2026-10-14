@@ -184,6 +184,40 @@ class AutomaticEvaluationTests(unittest.TestCase):
         evaluate.assert_not_called();select.assert_not_called()
         self.assertEqual(result['state'], 'failed')
 
+    def test_direct_job_uses_incumbent_matches_and_never_creates_reference_regression_hold(self):
+        source = self.root/'BlockNationsSeatV2-77.pt'; source.write_bytes(b'fixture')
+        folder = self.run/'frozen-evaluations/fixture-77'; folder.mkdir(parents=True)
+        manifest = folder/'manifest.json'; self.write(manifest, {})
+        self.write(self.run/'trainer.yaml', {}); self.write(self.run/'training-opponents.json', {})
+        incumbent = dict(candidateManifest='frozen-evaluations/incumbent/manifest.json', suiteId='fixed', checkpoint='old')
+        self.write(self.run/'playtest-champion.json', incumbent)
+        self.config.update(headToHeadPromotion=True, replicatedPromotion=True); self.write(self.run/CONFIG, self.config)
+        job_dir = self.run/'evaluations/automatic/77'; job_dir.mkdir(parents=True)
+        job_path = job_dir/'job.json'; self.write(job_path, dict(owner=OWNER, runId='saved'))
+        evidence = dict(primary=job_dir/'direct/primary/suite.json', confirmation=job_dir/'direct/confirmation/suite.json')
+        for path in evidence.values():
+            path.parent.mkdir(parents=True); self.write(path, dict(results=[dict(games=128), dict(games=128)]))
+        with patch('evaluate_suite.prepare', return_value=(None, None, None, dict(suiteId='fixed'))), \
+                patch('playtest_champion.resolve_champion'), \
+                patch('automatic_evaluation.latest_checkpoint', return_value=source), \
+                patch('evaluate_milestone.freeze', return_value=manifest), \
+                patch('evaluate_suite.run', return_value=dict(results=[dict(games=64)], suiteId='fixed')), \
+                patch('champion_matches.challenge', return_value=evidence) as challenge, \
+                patch('tournament_selection.review') as review, patch('reference_score.publish'), \
+                patch('playtest_champion.select', return_value=dict(checkpoint='new', promotionEvidence=dict(accepted=True))) as select:
+            result = perform_job(self.run, self.worker, job_path)
+        challenge.assert_called_once()
+        select.assert_called_once_with(self.run, manifest, job_dir/'results/suite.json', head_to_head=evidence)
+        review.assert_not_called()
+        self.assertEqual(result['state'], 'promoted')
+        self.assertTrue(result['promotionEvidence']['accepted'])
+        self.assertEqual(result['directGames'], 512)
+        self.assertEqual(result['games'], 576)
+
+    def test_direct_settings_require_explicit_boolean(self):
+        self.config['headToHeadPromotion'] = 'true'; self.write(self.run/CONFIG, self.config)
+        with self.assertRaises(ValueError): settings(self.run)
+
     def test_source_change_refreshes_same_champion_before_candidate_evaluation(self):
         source = self.root/'BlockNationsSeatV2-77.pt';source.write_bytes(b'fixture')
         folder = self.run/'frozen-evaluations/fixture-77';folder.mkdir(parents=True)

@@ -8,6 +8,7 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import plistlib
 import re
 import signal
 import subprocess
@@ -36,7 +37,7 @@ def parse_power(output):
 
 
 def read_power():
-    """Retry one transient probe failure; never substitute cached power state."""
+    """Retry pmset, then read the live battery registry; never use cached state."""
     for attempt in range(2):
         try:
             output = subprocess.check_output(['/usr/bin/pmset', '-g', 'batt'],
@@ -44,7 +45,20 @@ def read_power():
             return parse_power(output)
         except (subprocess.SubprocessError, ValueError):
             if attempt == 1:
-                raise
+                output = subprocess.check_output(['/usr/sbin/ioreg', '-a', '-r', '-c', 'AppleSmartBattery'], timeout=5)
+                return parse_battery_registry(output)
+
+
+def parse_battery_registry(output):
+    batteries = plistlib.loads(output)
+    if not isinstance(batteries, list) or len(batteries) != 1 or not isinstance(batteries[0], dict):
+        raise ValueError('Cannot determine one live internal battery')
+    battery = batteries[0]
+    connected, current, maximum = (battery.get(k) for k in ('ExternalConnected', 'CurrentCapacity', 'MaxCapacity'))
+    if (type(connected) is not bool or type(current) is not int or type(maximum) is not int or
+            maximum <= 0 or not 0 <= current <= maximum):
+        raise ValueError('Cannot determine live battery power and charge')
+    return connected, int(100*current/maximum)
 
 
 def action(running, ac, percent, start=80, stop=75):

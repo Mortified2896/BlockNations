@@ -5,9 +5,10 @@ import unittest
 import subprocess
 import time
 import os
+import plistlib
 from unittest.mock import patch
 
-from power_controller import action, identity, parse_power, read_power, tick, command_for, reconcile_boot
+from power_controller import action, identity, parse_power, read_power, tick, command_for, reconcile_boot, parse_battery_registry
 
 
 class PowerControllerTests(unittest.TestCase):
@@ -28,16 +29,31 @@ class PowerControllerTests(unittest.TestCase):
 
     def test_failed_retry_preserves_unknown_power_failure(self):
         timeout = subprocess.TimeoutExpired(['/usr/bin/pmset', '-g', 'batt'], 5)
-        with patch('power_controller.subprocess.check_output', side_effect=[timeout, timeout]) as probe:
+        with patch('power_controller.subprocess.check_output', side_effect=[timeout, timeout, timeout]) as probe:
             with self.assertRaises(subprocess.TimeoutExpired):
                 read_power()
-        self.assertEqual(probe.call_count, 2)
+        self.assertEqual(probe.call_count, 3)
 
     def test_malformed_retry_does_not_assume_plugged_in(self):
-        with patch('power_controller.subprocess.check_output', return_value='battery unavailable') as probe:
+        with patch('power_controller.subprocess.check_output', side_effect=['battery unavailable', 'battery unavailable', b'invalid plist']) as probe:
             with self.assertRaises(ValueError):
                 read_power()
-        self.assertEqual(probe.call_count, 2)
+        self.assertEqual(probe.call_count, 3)
+
+    def test_live_registry_fallback_preserves_ac_battery_and_low_charge(self):
+        timeout = subprocess.TimeoutExpired('pmset', 5)
+        for connected, percent in ((True, 80), (False, 80), (True, 75)):
+            output = plistlib.dumps([dict(ExternalConnected=connected, CurrentCapacity=percent, MaxCapacity=100)])
+            with patch('power_controller.subprocess.check_output', side_effect=[timeout, timeout, output]) as probe:
+                self.assertEqual(read_power(), (connected, percent))
+            self.assertEqual(probe.call_args.args[0][0], '/usr/sbin/ioreg')
+            self.assertEqual(action(True, connected, percent), 'keep' if connected and percent > 75 else 'stop')
+
+    def test_registry_missing_ambiguous_or_invalid_properties_fail_closed(self):
+        for batteries in ([], [{}, {}], {}, [dict(ExternalConnected=1, CurrentCapacity=80, MaxCapacity=100)],
+                          [dict(ExternalConnected=True, CurrentCapacity=80, MaxCapacity=0)],
+                          [dict(ExternalConnected=True, CurrentCapacity=101, MaxCapacity=100)]):
+            with self.assertRaises(ValueError): parse_battery_registry(plistlib.dumps(batteries))
 
     def test_benchmark_review_blocks_power_restart(self):
         with tempfile.TemporaryDirectory() as folder:

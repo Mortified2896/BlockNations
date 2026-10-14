@@ -30,6 +30,18 @@ AC reading substitutes for unknown power. A transient failure can therefore add
 up to five seconds to detection. The original successful save and fault receipts
 were preserved before the reviewed restart.
 
+On October 14, both fresh `pmset` attempts also timed out during verification of
+the champion-selection repair. After those two failures the controller now queries
+the live `AppleSmartBattery` I/O registry with `ioreg`, with its own five-second
+bound. Exactly one battery, a boolean `ExternalConnected` and valid integer
+`CurrentCapacity`/`MaxCapacity` are required. This reads current hardware state;
+it does not substitute the previous AC reading. Fresh battery or low-charge results
+still stop training immediately. Missing, ambiguous, malformed or unavailable
+registry data retains the fault/stop behavior. All three failed probes can take
+up to fifteen seconds. The real registry read agreed with AC power at 80%; tests
+also cover disconnected and 75% fallback readings. Physical cable acceptance
+remains separate.
+
 Local configuration and state are outside Git:
 
 ```text

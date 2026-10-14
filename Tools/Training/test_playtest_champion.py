@@ -146,6 +146,39 @@ class PlaytestChampionTests(unittest.TestCase):
         self.assertEqual(next((self.run/'champion-history').glob('*.json')).read_text().strip(), json.dumps(json.loads(original), indent=2))
         self.assertTrue(evaluation.exists())
 
+    def test_direct_winner_promotes_despite_reference_regression_and_protects_evidence(self):
+        old, old_manifest, old_results = self.candidate(100, 4)
+        new, new_manifest, new_results = self.candidate(200, 1)
+        select(self.run, old_manifest, old_results, initialize=True)
+        old_identity = json.loads(old_results.read_text())['candidate']
+        new_identity = json.loads(new_results.read_text())['candidate']
+        paths = {}
+        for label, seed in (('primary', 610014), ('confirmation', 1610017)):
+            target = self.run/'evaluations'/('direct-'+label); target.mkdir()
+            cases, results = [], []
+            for mode in ('Hard', 'Policy'):
+                name = 'champion-'+mode.lower(); (target/name).mkdir()
+                records = [dict(firstSeat=first, candidateSeat=seat, interrupted=False, winner=seat)
+                           for first in (0, 1) for seat in (0, 1) for _ in range(32)]
+                result = dict(self.contract, candidateSha256=new_identity['sha256'], referenceSha256=old_identity['sha256'],
+                              seed=seed, difficulty=mode, referenceDifficulty=mode,
+                              games=128, wins=128, losses=0, interruptions=0,
+                              startingPositionResults=[dict(candidateStarts=s, games=64, wins=64, losses=0, interruptions=0)
+                                                       for s in (True, False)])
+                self.write(target/name/'evaluation.json', dict(result, records=records))
+                cases.append(dict(name=name, seed=seed, gamesPerCell=32, difficulty=mode, referenceDifficulty=mode,
+                                  reference=dict(kind='frozen', **old_identity)))
+                results.append(dict(result, case=name))
+            receipt = dict(self.contract, candidate=new_identity, cases=cases, results=results, state='completed', suiteId=label)
+            paths[label] = target/'suite.json'; self.write(paths[label], receipt)
+        select(self.run, new_manifest, new_results, head_to_head=paths)
+        self.assertEqual(preferred_checkpoint(self.run)[0], new)
+        pointer = json.loads((self.run/POINTER).read_text())
+        self.assertEqual(pointer['promotionEvidence']['criterion'], 'direct-incumbent-v1')
+        paths['confirmation'].write_text('{}')
+        with self.assertRaisesRegex(ValueError, 'direct-match evidence changed'):
+            preferred_checkpoint(self.run)
+
     def test_replicated_promotion_checks_actual_records_for_both_actors(self):
         old, old_manifest, old_results = self.candidate(100, 2)
         new, new_manifest, new_results = self.candidate(200, 3)

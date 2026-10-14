@@ -1,7 +1,8 @@
 """Select and retain an evaluated local playtest champion independently of training.
 
-Selection never edits learner weights or publishes a game release. Subsequent
-candidates must pass the same complete benchmark without per-role regressions.
+Selection never edits learner weights or publishes a game release. Automatic
+direct challenges establish a winner over the incumbent while keeping the
+fixed-reference benchmark as a separate diagnostic. Legacy gates remain available.
 """
 import argparse
 import hashlib
@@ -116,6 +117,12 @@ def resolve_champion(run):
     if (receipt['suiteId'] != selection['suiteId'] or checkpoint.name != selection['checkpoint'] or
             digest(checkpoint) != selection['checkpointSha256']):
         raise ValueError('Selected champion benchmark identity changed.')
+    if selection.get('headToHead'):
+        for key, relative in selection['headToHead'].items():
+            evidence = owned_path(run, relative)
+            if digest(evidence) != selection['headToHeadSha256'][key]:
+                raise ValueError('Selected champion direct-match evidence changed.')
+            checked_evaluation(run, manifest, evidence)
     return checkpoint
 
 
@@ -130,7 +137,7 @@ def preferred_checkpoint(run, source='Champion'):
     return latest_checkpoint(run), 'latest completed checkpoint'
 
 
-def select(run, manifest, evaluation, *, initialize=False, confirmation=None, margins=None):
+def select(run, manifest, evaluation, *, initialize=False, confirmation=None, margins=None, head_to_head=None):
     run = Path(run).absolute()
     owned = json.loads((run/'run.json').read_text())
     if owned.get('owner') != 'BlockNations.LocalTraining.v1' or owned.get('schema') != 2:
@@ -141,7 +148,7 @@ def select(run, manifest, evaluation, *, initialize=False, confirmation=None, ma
     frozen_actor(manifest, run_rules_version(run))
     previous = resolve_champion(run)
     if previous is None:
-        if confirmation is not None:
+        if confirmation is not None or head_to_head is not None:
             raise ValueError('Initialize an evaluated champion before replicated promotion.')
         if not initialize:
             raise ValueError('Initialize an explicitly selected evaluated champion first.')
@@ -152,7 +159,16 @@ def select(run, manifest, evaluation, *, initialize=False, confirmation=None, ma
         incumbent = json.loads(owned_path(run, selection['evaluation']).read_text())
         if candidate['suiteId'] != incumbent['suiteId'] or candidate['cases'] != incumbent['cases']:
             raise ValueError('Promotion requires identical benchmark opponents, seeds, sampling and implementation.')
-        if confirmation is not None:
+        if head_to_head is not None:
+            if confirmation is not None or set(head_to_head) != {'primary', 'confirmation'}:
+                raise ValueError('Choose one complete promotion criterion.')
+            from champion_matches import assess as assess_direct
+            packs = [checked_evaluation(run, manifest, head_to_head[key])[1]
+                     for key in ('primary', 'confirmation')]
+            evidence = assess_direct(*packs, incumbent['candidate'], candidate['candidate'])
+            if not evidence['accepted']:
+                raise ValueError('Candidate did not improve direct matches: ' + '; '.join(evidence['reasons']))
+        elif confirmation is not None:
             from tournament_selection import assess
             old_checkpoint, old_repeat = checked_evaluation(run, run/selection['candidateManifest'], confirmation['incumbent'])
             new_checkpoint, new_repeat = checked_evaluation(run, manifest, confirmation['candidate'])
@@ -163,9 +179,9 @@ def select(run, manifest, evaluation, *, initialize=False, confirmation=None, ma
                 raise ValueError('Candidate did not improve replicated benchmarks: ' + '; '.join(evidence['reasons']))
         else:
             evidence = None
-        improved = confirmation is not None
+        improved = confirmation is not None or head_to_head is not None
         for case, new, old in zip(candidate['cases'], candidate['results'], incumbent['results']):
-            if confirmation is not None:
+            if confirmation is not None or head_to_head is not None:
                 break  # The replicated gate includes outcome/role/interruption checks.
             if case['reference']['kind'] == 'self':
                 continue  # Self-play is a balance diagnostic, not strength against a fixed opponent.
@@ -188,6 +204,11 @@ def select(run, manifest, evaluation, *, initialize=False, confirmation=None, ma
     if confirmation is not None:
         selection['confirmation'] = {key: str(Path(value).relative_to(run)) for key, value in confirmation.items()}
         selection['promotionEvidence'] = evidence
+    if head_to_head is not None:
+        selection['headToHead'] = {key: str(Path(value).relative_to(run)) for key, value in head_to_head.items()}
+        selection['headToHeadSha256'] = {key: digest(Path(value)) for key, value in head_to_head.items()}
+        selection['promotionEvidence'] = evidence
+        selection['strengthStatus'] = 'replicated direct winner over previous champion; fixed-reference results are diagnostics'
     from playtest import atomic_json
     if previous is not None:
         history = run/'champion-history'

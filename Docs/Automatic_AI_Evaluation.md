@@ -1,5 +1,54 @@
 # Automatic private AI evaluations
 
+## Direct champion selection correction, 2026-10-14
+
+The installed run now enables `headToHeadPromotion: true`. Champion selection uses
+direct games against the exact incumbent, rather than requiring a higher aggregate
+score against the older fixed references. The reference pack still runs and is
+published for diagnosis. Its regressions do not create a training-review stop in
+this mode. Existing manual callers and configurations without this option retain
+their earlier gates. An existing review hold requires explicit inspection and
+resolution; enabling this option alone does not clear it.
+
+Each candidate plays 128 balanced games against the incumbent in Hard sampling
+and another 128 in unmodified Policy sampling. A second pack uses different seeds.
+Promotion requires at least 55% wins in every mode/pack, at least 50% wins in each
+starting role, and no interruptions. Complete per-match receipts verify both actor
+identities, rules, sampling, colours and starting roles. The selection retains
+direct evidence paths and hashes; retention protects those receipts and archives
+the previous champion. These are empirical requirements on fixed geometry, not
+independent statistical trials or a claim of superiority against every opponent.
+Nontransitive matchups remain possible, so the reference diagnostics still matter.
+
+The defect was demonstrated with previously rejected checkpoint 163,349,943:
+it beat retained checkpoint 33,749,992 in 128/128 Hard games and 107/128 Policy
+games. The old gate had no direct incumbent comparison; a reference-score decrease
+was being presented as evidence that the incumbent was stronger and had stopped
+training after three such decreases.
+
+The complete repaired job then selected the final saved checkpoint 163,463,523.
+Its direct results against 33,749,992 were:
+
+| Sampling | Primary pack | Confirmation pack |
+| --- | --- | --- |
+| Hard | 128/128 wins | 128/128 wins |
+| Policy | 84/128 wins | 88/128 wins |
+
+All 512 direct games completed without interruption and every starting role passed.
+The same candidate completed all 1,280 reference-pack games, winning 642/704
+external-reference games versus the previous incumbent's 659/704. That reference
+tradeoff remains visible; it does not overturn the measured direct result.
+The incumbent pointer was updated by the verified selection function, without
+changing learner weights or optimizer state. The old review and controller fault
+receipts were preserved under ignored `Logs/Validation/EvaluationAudit-20261014/`
+before resolving the reference-score hold and rearming the configured power
+controller after a successful saved shutdown and a fresh AC/80% reading.
+
+Future automatic jobs use the direct criterion. Newly launched private playtests
+select the promoted actor; an already-open frozen session keeps its own weights.
+This correction establishes stronger direct play against the previous champion;
+human difficulty and broader generalization still need their own evidence.
+
 Implemented for the owner's 2026-10-12 request to replace manual checkpoint checks with recurring evaluation and promotion. This changes local training tooling and the private frozen-opponent selection; it does not publish a game release, alter learner weights/recipes, or modify saves/PBp.
 
 The optional `automatic_evaluation.py` scheduler watches **cumulative decisions** in the run's existing `board-7-progress.json`. It starts an immediate evaluation of a recent completed checkpoint, then checks a new checkpoint after each configured interval. The installed interval is **2,000,000 decisions**. A new session's counters do not reset the schedule. Training Elo is not a trigger or promotion criterion because its changing training opponents make it an unreliable strength comparison.
