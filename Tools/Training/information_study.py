@@ -35,7 +35,9 @@ def migration(checkpoint, network, source, target):
     return module.migrate(checkpoint,network,source_size=SIZES[source],target_size=SIZES[target])
 
 
-def prepare_arm(root, name, parent_path, recipe_run, worker, steps, seed, schema, *, episode_starts=None, weakness=None):
+def prepare_arm(root, name, parent_path, recipe_run, worker, steps, seed, schema, *, episode_starts=None, weakness=None, fog_diagnostic=False, full_vision_seats=0):
+    if full_vision_seats not in (0, 3) or full_vision_seats and not fog_diagnostic:
+        raise ValueError('Fog training compares standard vision with symmetric full vision in diagnostic runs.')
     from mlagents.torch_utils import torch
     parent=json.loads(Path(parent_path).read_text()); original=checkpoint_schema(parent['checkpoint'])
     validate_schema(schema)
@@ -59,8 +61,12 @@ def prepare_arm(root, name, parent_path, recipe_run, worker, steps, seed, schema
     if episode_starts:treatment_record['episodeStartsSha256']=sha(Path(episode_starts).read_bytes())
     if weakness:treatment_record['weaknessDiagnosticSha256']=sha(Path(weakness).read_bytes())
     contract['informationTreatment']=treatment_record
+    if fog_diagnostic:
+        contract.update(diagnosticOnly=True, diagnosticFullVisionSeats=full_vision_seats)
+        treatment_record['diagnosticFullVisionSeats']=full_vision_seats
     atomic_json(run/'run.json',contract)
     environment.update(BLOCKNATIONS_OBSERVATION_VERSION=str(schema),BLOCKNATIONS_HUMAN_IMITATION='disabled',BLOCKNATIONS_TORCH_THREADS='1')
+    environment['BLOCKNATIONS_DIAGNOSTIC_FULL_VISION_SEATS']=str(full_vision_seats)
     execution=json.loads((run/'execution-settings.json').read_text());execution.update(modelSchema=schema,torchThreads=1)
     atomic_json(run/'execution-settings.json',execution)
     if episode_starts is not None:
@@ -116,7 +122,7 @@ def run_study(root,parent,recipe_run,suite,worker,destination,name,*,treatment='
     if (not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,32}',name) or type(steps)is not int or not 2048<=steps<=1000000 or
             not 1<=len(seeds)<=3 or len(set(seeds))!=len(seeds) or any(type(s)is not int or not 0<=s<2**31 for s in seeds) or not 0<hours<=6):
         raise ValueError('Use bounded distinct seeds, steps, names and per-arm time.')
-    if treatment not in ('observation','history','episode-starts','weakness') or (episode_starts is not None)!=(treatment=='episode-starts') or (weakness is not None)!=(treatment=='weakness'):
+    if treatment not in ('observation','history','episode-starts','weakness','fog') or (episode_starts is not None)!=(treatment=='episode-starts') or (weakness is not None)!=(treatment=='weakness'):
         raise ValueError('Choose exactly one recorded treatment per experiment.')
     source_schema=checkpoint_schema(json.loads(parent.read_text())['checkpoint'])
     if treatment=='history': control_schema,target_schema=3,4
@@ -126,9 +132,12 @@ def run_study(root,parent,recipe_run,suite,worker,destination,name,*,treatment='
     if control_schema != source_schema: raise ValueError('History compares from an explicitly selected frozen v3 parent.')
     frozen_actor(parent,run_rules_version(recipe_run))
     definition=json.loads(suite.read_text());definition['workerSha256']=worker_digest(worker)
+    if treatment=='fog':definition.update(diagnosticOnly=True,diagnosticFullVision='fog')
     if not resume:destination.mkdir(parents=True,exist_ok=False)
     suite_copy=destination/'fixed-suite.json'
     if not resume:atomic_json(suite_copy,definition)
+    full_vision_suite=destination/'full-vision-suite.json'
+    if treatment=='fog' and not resume:atomic_json(full_vision_suite,dict(definition,diagnosticFullVision='both'))
     repeat_suite=destination/'confirmation-suite.json'
     if confirmation and not resume:
         from tournament_selection import confirmation_suite
@@ -169,6 +178,11 @@ def run_study(root,parent,recipe_run,suite,worker,destination,name,*,treatment='
     try:
         if sys.platform=='darwin': assertion=subprocess.Popen(['/usr/bin/caffeinate','-i','-s','-w',str(os.getpid())],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         atomic_json(destination/'study.json',receipt)
+        if treatment=='fog':
+            nofog=evaluate_or_resume(parent,full_vision_suite,worker,destination/'baseline-full-vision',guard)
+            rows=[r for c,r in zip(nofog['cases'],nofog['results']) if c['reference']['kind']!='self']
+            receipt['baselineFullVision']=dict(suiteId=nofog['suiteId'],externalWins=sum(r['wins'] for r in rows),externalGames=sum(r['games'] for r in rows),interruptions=sum(r['interruptions'] for r in rows))
+            atomic_json(destination/'study.json',receipt)
         guard()
         baseline=evaluate_or_resume(parent,suite_copy,worker,destination/'baseline',guard)
         baseline_external=[r for c,r in zip(baseline['cases'],baseline['results']) if c['reference']['kind']!='self']
@@ -190,7 +204,8 @@ def run_study(root,parent,recipe_run,suite,worker,destination,name,*,treatment='
                 current_key=str(seed)+'-'+arm
                 if not run.exists():
                     run,environment=prepare_arm(root,run.name,parent,recipe_run,worker,steps,seed,schema,
-                        episode_starts=episode_starts if arm=='treatment' else None,weakness=weakness if arm=='treatment' else None)
+                        episode_starts=episode_starts if arm=='treatment' else None,weakness=weakness if arm=='treatment' else None,
+                        fog_diagnostic=treatment=='fog',full_vision_seats=3 if treatment=='fog' and arm=='treatment' else 0)
                     save_environment(run,environment)
                     receipt.setdefault('armInputs',{})[current_key]={name:sha((run/name).read_bytes()) for name in
                         ('run.json','trainer.yaml','training-opponents.json','study-environment.json')}
@@ -234,6 +249,10 @@ def run_study(root,parent,recipe_run,suite,worker,destination,name,*,treatment='
                 guard();pack=evaluate_or_resume(frozen,suite_copy,worker,folder/'fixed-results',guard)
                 external=[r for c,r in zip(pack['cases'],pack['results']) if c['reference']['kind']!='self']
                 repeated={}
+                if treatment=='fog':
+                    nofog=evaluate_or_resume(frozen,full_vision_suite,worker,folder/'full-vision-results',guard)
+                    rows=[r for c,r in zip(nofog['cases'],nofog['results']) if c['reference']['kind']!='self']
+                    repeated.update(fullVisionSuiteId=nofog['suiteId'],fullVisionWins=sum(r['wins'] for r in rows),fullVisionGames=sum(r['games'] for r in rows),fullVisionInterruptions=sum(r['interruptions'] for r in rows))
                 if confirmation:
                     repeat=evaluate_or_resume(frozen,repeat_suite,worker,folder/'confirmation-results',guard)
                     rows=[r for c,r in zip(repeat['cases'],repeat['results']) if c['reference']['kind']!='self']
@@ -254,6 +273,8 @@ def run_study(root,parent,recipe_run,suite,worker,destination,name,*,treatment='
             interruptions=sum(r['interruptions'] for r in receipt['results'] if r['arm']==arm)) for arm in ('control','treatment')}
         if confirmation:
             receipt['confirmationComparison']={arm:dict(wins=sum(r['confirmationWins'] for r in receipt['results'] if r['arm']==arm),games=sum(r['confirmationGames'] for r in receipt['results'] if r['arm']==arm),interruptions=sum(r['confirmationInterruptions'] for r in receipt['results'] if r['arm']==arm)) for arm in ('control','treatment')}
+        if treatment=='fog':
+            receipt['fullVisionComparison']={arm:dict(wins=sum(r['fullVisionWins'] for r in receipt['results'] if r['arm']==arm),games=sum(r['fullVisionGames'] for r in receipt['results'] if r['arm']==arm),interruptions=sum(r['fullVisionInterruptions'] for r in receipt['results'] if r['arm']==arm)) for arm in ('control','treatment')}
         receipt['decision']='Review paired role/opponent results and human play before a longer continuation; no automatic promotion.'
     except PowerPause as error:
         receipt.update(state='paused_power',powerPauseReason=str(error))
@@ -279,7 +300,7 @@ if __name__=='__main__':
     for field in ('root','parent','recipe-run','suite','worker','destination'):parser.add_argument('--'+field,type=Path,required=True)
     parser.add_argument('--name',required=True);parser.add_argument('--steps',type=int,default=250000)
     parser.add_argument('--seeds',type=int,nargs='+',default=[61,62,63]);parser.add_argument('--hours-per-arm',type=float,default=3)
-    parser.add_argument('--treatment',choices=('observation','history','episode-starts','weakness'),default='observation')
+    parser.add_argument('--treatment',choices=('observation','history','episode-starts','weakness','fog'),default='observation')
     parser.add_argument('--episode-starts',type=Path);parser.add_argument('--weakness-diagnostic',type=Path)
     parser.add_argument('--power-controlled',action='store_true');parser.add_argument('--resume',action='store_true')
     parser.add_argument('--confirmation',action='store_true')

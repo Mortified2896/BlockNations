@@ -32,6 +32,15 @@ namespace BlockNations.AI
         }
 
         public Context Observe(MatchState state, int seat, bool includeZeroDamageAttacks = true, ISet<string> excludedActions = null, bool[] previouslySeen = null)
+            => ObserveCore(state, seat, includeZeroDamageAttacks, excludedActions, previouslySeen, false);
+
+#if BLOCKNATIONS_TRAINING_DIAGNOSTICS
+        // Compiled only by diagnostic console tools. Product AI cannot call this.
+        public Context ObserveWithDiagnosticFullVision(MatchState state, int seat)
+            => ObserveCore(state, seat, true, null, null, true);
+#endif
+
+        private Context ObserveCore(MatchState state, int seat, bool includeZeroDamageAttacks, ISet<string> excludedActions, bool[] previouslySeen, bool fullVision)
         {
             if (seat < 0 || seat >= state.SeatCount) throw new ArgumentOutOfRangeException(nameof(seat));
             if (!knowledge.TryGetValue(seat, out Knowledge memory))
@@ -42,6 +51,7 @@ namespace BlockNations.AI
             }
             if (memory.Seen.Length != state.Tiles.Length) throw new InvalidOperationException("Reset knowledge before changing boards.");
             bool[] visible = MatchEngine.Visibility(state, seat);
+            if (fullVision) Array.Fill(visible, true);
             for (int i = 0; i < visible.Length; i++) memory.Seen[i] |= visible[i] || (previouslySeen != null && previouslySeen[i]);
             var observation = new AIObservation { Width = state.Width, Height = state.Height, Seat = seat,
                 Gold = state.GoldForSeat(seat), CityVision = state.CityVision, Round = state.Round, IncomePerCity = state.IncomePerCity,

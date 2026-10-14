@@ -70,6 +70,14 @@ namespace BlockNations.Simulation
         }
 
         public static MatchTransition Apply(MatchState state, MatchCommand command)
+            => ApplyCore(state, command, false);
+
+#if BLOCKNATIONS_TRAINING_DIAGNOSTICS
+        public static MatchTransition ApplyWithDiagnosticFullVision(MatchState state, MatchCommand command)
+            => ApplyCore(state, command, true);
+#endif
+
+        private static MatchTransition ApplyCore(MatchState state, MatchCommand command, bool fullVision)
         {
             if (!state.IsTurnOwnedBySeat(command.Seat)) return default;
             if (command.Kind == MatchActionKind.EndTurn)
@@ -83,6 +91,7 @@ namespace BlockNations.Simulation
             }
             if (command.Kind == MatchActionKind.Recruit) return Recruit(state, command);
             bool[] visible = Visibility(state, command.Seat);
+            if (fullVision) Array.Fill(visible, true);
             MatchLegalAction legal = null;
             foreach (MatchLegalAction candidate in LegalUnitActions(state, command.Seat, command.ActorId, visible))
                 if (candidate.Command.Equals(command)) { legal = candidate; break; }
