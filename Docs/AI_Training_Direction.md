@@ -137,6 +137,42 @@ On 2026-10-11 the approved profiles were prepared in shared C# and the Unity ada
 
 Those three profile trials subsequently completed and each lost overall fixed-reference strength relative to its transferred parent. Neither a raw-policy starting-role split near 50% nor more Archer purchases was sufficient evidence of better play. The next bounded core-three trial tests a longer public-capability/slot permutation continuation against its completed unaugmented control, with the same parent, learned-step budget and opponents. It changes the learning presentation rather than assigning rewards to named units; supported slots and hidden-information boundaries remain intact. Keep the stronger preserved opponent available and use fixed-strength results to choose future continuations. See [the completed rule-profile comparison](AI_Balance_Experiment.md#completed-rule-profile-results-and-longer-capability-training-2026-10-11).
 
+## Overnight architecture evidence, 2026-10-15
+
+The [completed overnight results](AI_Overnight_Results_2026-10-15.md) do not resolve
+human difficulty. Wider continued networks had a small positive aggregate mean
+but inconsistent seed/starting-role retention; a stronger compact continuation
+still lost fresh fair coordinated console counterplay in both roles. Preserve
+the selected compact opponent and the separate public release.
+
+The [capability policy](AI_Capability_Policy_Prototype.md) now has actual PPO,
+checkpoint/resume and probability-export support, with strict architecture and
+content identities. Its [initialization pipeline](AI_Capability_Policy_Initialization.md)
+generates separate fair training experience and loads prepared new-architecture
+weights with fresh PPO Adam. Both initial raw-teacher architectures lost full-game
+strength despite improved imitation metrics. New units/rules still need explicit
+capabilities, appropriate training coverage and held-out content tests; accepting
+an observation shape or permuting recruit slots does not establish useful play.
+
+The next bounded data experiment matches teacher labels and rollout actions to
+the actual Hard deployment sampler. A remaining hypothesis is sequential
+distribution shift: a learner's mistakes lead to positions underrepresented by
+teacher-only experience. Iterative fresh learner rollouts with fair teacher labels
+are a justified later experiment if direct transfer remains weak; held-out human
+counterplay and acceptance games stay excluded. This is a hypothesis about the
+observed gap, not a proven diagnosis. The general issue and iterative approach
+are described by [Ross, Gordon and Bagnell (2011)](https://proceedings.mlr.press/v15/ross11a.html).
+
+Keep immutable rules/observation/action/architecture/sampler identities and
+separate training, internal validation and acceptance partitions. Reusable
+training must also retain a diverse opponent pool and verify both starting
+roles; short prototype self-play is a feasibility recipe, not the existing
+gentle continuation recipe or evidence of equivalent strength. Only complete
+frozen-game comparisons and subsequent ordinary counterplay can justify
+selection. Capacity, imitation KL, training Elo and elapsed steps remain
+diagnostics. The quiet headless worker and hardware/storage safeguards apply to
+every longer experiment.
+
 ## References
 
 - [Current ML training MVP](ML_Training_MVP.md): implemented controls, schemas, storage, replay, and validation limits.

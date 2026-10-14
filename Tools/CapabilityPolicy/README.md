@@ -70,3 +70,24 @@ evaluation seeds and ordinary coordinated counterplay. Distillation from a
 protected teacher is a possible initialization study; it must use a separately
 declared training corpus, never the held-out counterplay journals or acceptance
 packs. A from-scratch smoke only establishes feasibility.
+
+The [explicit teacher-initialization pipeline](../../Docs/AI_Capability_Policy_Initialization.md)
+now provides `collect.py`, `distill.py` and `train.py --initialize`. It creates new
+fair training experience, splits whole matches, checks immutable inputs and
+starts PPO with fresh Adam/step zero. Its first lower-KL v1 fit lost full-game
+strength, so it remains unselected. Technical preparation is not an adoption gate.
+
+Architecture identity is explicit and separate from observation/rules versions.
+`shared-capability-v1` retains the original mean-pooled context;
+`shared-capability-v2` adds a global layout projection and wider context. Select
+the latter with `--architecture shared-capability-v2` in distillation and PPO.
+The registry and strict loaders preserve v1 rather than guessing a network from
+its tensor shapes. Global layout retention is a hypothesis to measure, not a
+claim of stronger play.
+
+Teacher collection can explicitly target the deployment sampler:
+`collect.py --teacher-mode Hard --action-noise 0.05` records the preset and uses
+the same distribution for labels and rollout actions. The original defaults
+remain raw `Policy` and 0.2 noise. Value labels are still the raw teacher's fair
+critic, so they are approximate for changed sampling. The first raw-teacher v1
+and spatial-v2 transfers both lost full-game strength; neither is selected.

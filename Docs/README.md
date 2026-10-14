@@ -23,6 +23,7 @@ Start with the current state, then use the relevant implementation/setup referen
 | [Paired Training Study Reports](Training_Study_Reports.md) | Raw-match verification, separate training seeds/opponent/role results and honest incomplete-study reporting. |
 | [Recorded Training Decision Diagnostics](Training_Replay_Diagnostics.md) | V2/V3/V4 replay verification, isolated full-view projections, legitimate history and retained counterplay cases. |
 | [Shared Capability Policy Prototype](AI_Capability_Policy_Prototype.md) | Opt-in shared spatial/recruit scoring, completed PPO save/resume/export feasibility, explicit architecture identity and pending strength trials. |
+| [Fair Capability Policy Initialization](AI_Capability_Policy_Initialization.md) | New fair teacher data, whole-match validation, explicit fresh-PPO initialization and rejected v1 strength transfer. |
 | [Tournament-Guided Training](Tournament_Guided_Training.md) | Comparable champion refresh, replicated promotion, training-only weakness feedback and saved regression review stops. |
 | [Observation Contract v3](../Tools/ObservationContract/README.md) | Opt-in public role/capability inputs, preserved actor/critic/Adam initialization, synthetic parity checks and pending separate activation. |
 | [7×7 Balance Experiment](AI_Balance_Experiment.md) | Approved whole-number units, 2/3 opening, continued weights, generic opponent mix, balanced fixed evaluations and v4 model lineage. |

@@ -3,8 +3,8 @@
 The October 15 overnight investigation now includes an opt-in trainable
 spatial/capability policy in [Tools/CapabilityPolicy](../Tools/CapabilityPolicy/README.md).
 It implements a bounded part of the adaptable representation in the
-[training direction](AI_Training_Direction.md), while the original capacity study
-continues with its pinned source, worker and conditions.
+[training direction](AI_Training_Direction.md). The original matched capacity
+study has completed with its pinned source, worker and conditions.
 
 The current flat MLP assigns separate weights to each input/recruit index. The
 new actor shares square processing and recruit-capability processing, then
@@ -65,3 +65,13 @@ path. A useful next comparison needs suitable initialization, several independen
 seeds, retained opponent/role strength, new evaluation seeds, held-out content
 and ordinary coordinated counterplay. A short from-scratch feasibility trial
 does not replace those checks.
+
+The subsequent [teacher-initialization comparison](AI_Capability_Policy_Initialization.md)
+completed its v1 fit/PPO smoke but lost fresh full-game strength, so v1 remains
+an unselected prototype. A distinct v2 retains global board layout and a wider
+context with shared recruit processing. It has explicit registry/checkpoint
+identity and preserves v1 loading. Its controlled transfer also lost full-game
+strength: 94/256 Hard wins after fitting and 99/256 after 8,203 PPO steps, versus
+the compact teacher's 229/256 on the same panel. Both prototypes remain outside
+selection. The initialization note records the complete sampling comparison and
+the separate fresh Hard-teacher corpus trial.

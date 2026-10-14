@@ -5,8 +5,9 @@ compact continuations and a small average benefit from greater capacity, but
 inconsistent retention of the strongest opponent/starting-role matchup. The
 compact seed-84 candidate still loses to ordinary coordinated console counterplay
 in both starting roles. Human strength is not fixed, and no model was promoted.
-A separate shared-capability architecture now has verified PPO/save/resume/export
-feasibility; it needs initialized training and strength/generalization trials.
+A separate shared-capability architecture has verified PPO/save/resume/export
+feasibility. Its first teacher initializations lost full-game strength and remain
+unselected; a separate deployment-policy initialization is still being measured.
 
 ## Completed matched comparison
 
@@ -109,10 +110,44 @@ C# decisions, with maximum error below 0.00000012. The exact ordinary controller
 configuration was restored, and its saved main learner resumed. This is a working
 architecture/training path, not a strong new opponent or faithful RNG continuation.
 
-The next justified representation experiment needs suitable initialization (for
-example a separately declared teacher-distillation corpus), matched continuation
-seeds, retained opponent/role checks, held-out roster/stat/rule variants and fresh
-coordinated counterplay. Never ingest these held-out journals/acceptance packs.
+The [teacher-initialization pipeline](AI_Capability_Policy_Initialization.md)
+subsequently generated 8,192 new fair training positions and split whole matches
+between fitting and validation. It fits teacher probabilities/value, then starts
+the new architecture's PPO at step zero with fresh Adam; no MLP tensors are
+padded into incompatible weights. The v1 validation KL improved from 0.6562 to
+0.1761, but a complete 768-game screen rejected strength preservation: teacher
+229/256, distilled v1 100/256, v1 after 8,249 PPO steps 90/256 (one interruption).
+
+A distinct spatial v2 retains full square layout in global context, with 209,773
+parameters and explicit architecture identity. The same corpus, seed and fit
+budget improved validation KL slightly to 0.1649. Its initialized PPO reached
+step 8,203, with 155 finite checkpoint tensors, all 28 Adam states advanced,
+189 captures and no interruptions/rejected actions. The complete 1,536-game
+sampling comparison still rejected it:
+
+| Candidate | Hard wins | Raw Policy wins |
+| --- | ---: | ---: |
+| Compact teacher | 229/256 | 137/256 |
+| Distilled spatial v2 | 94/256 | 24/256 |
+| Spatial v2 after 8,203 PPO steps | 99/256 | 33/256 |
+
+References used Hard in every row. Both colours, starting roles and two seeds
+were retained; all raw records, counts, identities, fair worker status and
+source hashes were checked. These repeat the teacher conditions deliberately,
+not as independent new evidence of teacher strength. Reduced imitation error,
+more parameters and completed PPO do not qualify an architecture for adoption.
+
+The optional teacher-corpus generator now records an explicit deployment sampler
+and bounded action noise. The separate Hard-teacher trial uses 16,384 fresh fair
+positions and 5% legal noise; its corpus completed 324 games without interruption
+or rejection. Fitting, short PPO and new full-game results remain pending. This
+combined data-distribution/fit-budget change is not an isolated causal test.
+Twenty-eight focused capability checks passed, including real C# integration.
+All experiments preserve the selected compact model and original checkpoints.
+
+Further representation work needs retained opponent/role checks, independently
+trained seeds, held-out roster/stat/rule variants and fresh coordinated
+counterplay. Never ingest these held-out journals/acceptance packs.
 The fixed canvas, two seats, 16 recruit capacity and two-stage action interface
 remain explicit model-contract limits. New mechanics need authoritative rules
 and observable/action capabilities. No prototype is silently compatible with a
