@@ -219,3 +219,29 @@ representation/decision diagnostic, not a full-game or human-strength gain.
 The retained runtime, source hashes and five-model receipt remain in
 `benchmarks/capacity-night-evidence-20261015/` for the morning review; the
 capacity study's original source and worker pins are unchanged.
+
+## First completed capacity pair
+
+The first seed-84 pair has now completed and its raw-match report verifies both
+actors on both packs with zero interruptions and rejected training actions.
+
+| Seed 84 arm | Primary | Confirmation | Recorded elapsed time |
+| --- | --- | --- | --- |
+| Compact 128x2 control | 491/512 | 479/512 | 45.3 minutes |
+| Expanded 256x2 treatment | 484/512 | 482/512 | 56.7 minutes |
+
+The expanded actor lost 1.37 percentage points on primary and gained 0.59 on
+confirmation relative to control, taking about 25% longer. Against the protected
+archive its first-role wins fell from 23/32 to 12/32 on primary and from 19/32
+to 11/32 on confirmation; its second-role results were 25/32 and 26/32. Thus a
+small confirmation mean gain conceals a weaker archive matchup when first.
+One pair does not establish a capacity benefit or justify replacing the compact
+opponent. Seeds 85/86 continue with their original alternating arm order.
+
+A separate read-only replay of the two completed actors also preserved all 129
+original legal choices and the outcome. Both still selected and moved the city
+defender under Hard at decisions 118/119. At the root, expanded raw End Turn
+probability was 6.21%, versus control's 18.65%; this is a decision preference,
+not a full-game win rate. Its receipt is
+`benchmarks/capacity-night-evidence-20261015/city-defense-capacity84/`.
+The study, protected champion and public release retain their original roles.
