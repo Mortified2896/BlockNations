@@ -25,6 +25,7 @@ from trainer import TRAINER, register
 from artifacts import checkpoint
 import initialization
 from architectures import ARCHITECTURES
+import league
 
 
 @contextmanager
@@ -64,8 +65,10 @@ def exclusive(root):
                 lock.unlink()
 
 
-def recipe(steps, width):
-    return dict(behaviors={'BlockNationsSeatV4': dict(trainer_type=TRAINER,
+def recipe(steps, width, preset='feasibility'):
+    if preset not in ('feasibility', 'gentle'):
+        raise ValueError('Choose an explicit audited capability PPO recipe.')
+    plan = dict(behaviors={'BlockNationsSeatV4': dict(trainer_type=TRAINER,
         hyperparameters=dict(batch_size=64, buffer_size=1024, learning_rate=.0003,
                              beta=.005, epsilon=.2, lambd=.95, num_epoch=3,
                              learning_rate_schedule='constant', shared_critic=True),
@@ -76,6 +79,14 @@ def recipe(steps, width):
         self_play=dict(save_steps=1024, team_change=1024, swap_steps=128, window=4,
                        play_against_latest_model_ratio=.5, initial_elo=1200))},
         engine_settings=dict(time_scale=1, target_frame_rate=60), torch_settings=dict(device='cpu'))
+    if preset == 'gentle':
+        behavior = plan['behaviors']['BlockNationsSeatV4']
+        behavior['hyperparameters'].update(batch_size=128, buffer_size=2048, learning_rate=.000075, beta=.1,
+                                            beta_schedule='constant', epsilon_schedule='constant')
+        behavior.update(summary_freq=10000, checkpoint_interval=25000)
+        behavior['self_play'].update(save_steps=25000, team_change=10000, swap_steps=1000,
+                                    window=40, play_against_latest_model_ratio=.25)
+    return plan
 
 
 def main():
@@ -85,6 +96,9 @@ def main():
     parser.add_argument('--steps', type=int, default=8192)
     parser.add_argument('--width', type=int, choices=(16, 32, 64), default=32)
     parser.add_argument('--architecture', choices=tuple(ARCHITECTURES), default=ARCHITECTURE)
+    parser.add_argument('--recipe', choices=('feasibility', 'gentle'), default='feasibility')
+    parser.add_argument('--parallel-games', type=int, choices=(2, 4, 8), default=2)
+    parser.add_argument('--opponents-from', type=Path, help='Copy a compatible retained training league into a new trial.')
     parser.add_argument('--seed', type=int, default=207)
     parser.add_argument('--board-size', type=int, choices=(5, 6, 7, 9, 11), default=7)
     parser.add_argument('--rules-version', choices=SUPPORTED_RULES, default=CORE_THREE_RULES)
@@ -97,7 +111,8 @@ def main():
     if (root.resolve() != root or destination.resolve() != destination or
             not destination.is_relative_to(root/'benchmarks') or destination == root/'benchmarks' or
             json.loads((root/ROOT_MARKER).read_text()).get('owner') != 'BlockNations.LocalTraining.v1' or
-            not 2048 <= args.steps <= 1000000 or not 0 <= args.seed < 2**31 or not 0 < args.hours <= 6):
+            not 2048 <= args.steps <= 1000000 or not 0 <= args.seed < 2**31 or not 0 < args.hours <= 6 or
+            args.resume and args.opponents_from is not None):
         raise ValueError('Use a bounded owned benchmark trial and an explicit compatible worker.')
     PowerGuard(True).check()
     with exclusive(root):
@@ -110,12 +125,14 @@ def run(args, root, destination, worker):
     identity = dict(owner='BlockNations.CapabilityPrototype.v1', architecture=args.architecture,
                     observationVersion=4, actionVersion=2, rulesVersion=args.rules_version,
                     boardSize=args.board_size, openingEconomyVersion=2, seed=args.seed, width=args.width,
+                    recipe=args.recipe, parallelGames=args.parallel_games,
                     workerSha256=worker_digest(worker), sources=pins,
                     partition='training', promotion='disabled', initialization='new-architecture-random-weights')
     receipt = destination/'prototype.json'
     initial_contract = dict(width=args.width, boardSize=args.board_size, rulesVersion=args.rules_version, architecture=args.architecture)
     if args.resume:
         identity['initialization'] = initialization.identity(destination, initial_contract) or identity['initialization']
+        identity['retainedOpponents'] = league.identity(destination, initial_contract)
         previous = json.loads(receipt.read_text())
         if any(previous.get(k) != v for k, v in identity.items()) or args.steps < previous['targetSteps']:
             raise ValueError('Resume requires the same pinned architecture/recipe/worker and an explicit nondecreasing step target.')
@@ -124,8 +141,10 @@ def run(args, root, destination, worker):
         destination.mkdir(parents=True, exist_ok=False)
         if args.initialize is not None:
             identity['initialization'] = initialization.install(root, args.initialize, destination, initial_contract)
+        identity['retainedOpponents'] = (league.install(root, args.opponents_from, destination, initial_contract)
+                                        if args.opponents_from is not None else None)
     config = destination/'trainer.json'
-    atomic_json(config, recipe(args.steps, args.width))
+    atomic_json(config, recipe(args.steps, args.width, args.recipe))
     state = dict(identity, state='starting', targetSteps=args.steps, startedUnix=time.time(), pid=os.getpid())
     if args.resume:
         state['resumedFrom'] = resumed
@@ -145,6 +164,9 @@ def run(args, root, destination, worker):
                 next_storage = time.monotonic()+30
                 if size(root) > 19_488_000_000 or shutil.disk_usage(root).free < 20_512_000_000:
                     raise RuntimeError('Shared training storage reserve reached.')
+                if any(hashlib.sha256((Path(__file__).parents[1]/path).read_bytes()).hexdigest() != sha
+                       for path, sha in pins.items()):
+                    raise RuntimeError('Pinned trial source changed; preserve the saved experiment identity.')
         except RuntimeError as error:
             state.update(stopReason=str(error))
             # The SDK catches KeyboardInterrupt and saves its current PPO state.
@@ -152,7 +174,7 @@ def run(args, root, destination, worker):
     guard()
     os.environ.pop('BLOCKNATIONS_EPISODE_STARTS', None)
     os.environ.update(BLOCKNATIONS_SIMULATION_WORKER=str(worker), BLOCKNATIONS_RATING_RUN=str(destination),
-        BLOCKNATIONS_PARALLEL_GAMES='2', BLOCKNATIONS_SIMULATION_SEED=str(args.seed),
+        BLOCKNATIONS_PARALLEL_GAMES=str(args.parallel_games), BLOCKNATIONS_SIMULATION_SEED=str(args.seed),
         BLOCKNATIONS_RATING_BOARD=str(args.board_size), BLOCKNATIONS_SIMULATION_CURRICULUM='false',
         BLOCKNATIONS_SIMULATION_DISTANCE='2', BLOCKNATIONS_RATING_SESSION=uuid.uuid4().hex,
         BLOCKNATIONS_OPENING_ECONOMY_VERSION='2', BLOCKNATIONS_RULES_VERSION=args.rules_version,
@@ -164,7 +186,18 @@ def run(args, root, destination, worker):
     from mlagents.trainers import learn
     from dotnet_environment import install, BatchedSimulationManager
     register()
-    install(learn, lambda: None)
+    assignment = lambda: None
+    if identity['retainedOpponents'] is not None:
+        import mlagents.trainers.trainer.trainer_factory as factory
+        import rated_training
+        factory.GhostTrainer = rated_training.WholeMatchGhostTrainer
+        def assignment():
+            active = rated_training.ACTIVE_TRAINER
+            if active is None:
+                return None
+            learner, opponent = active.identities()
+            return dict(learningSeat=active._learning_team, learner=learner, opponent=opponent)
+    install(learn, assignment)
     class GuardedManager(BatchedSimulationManager):
         def _step(self):
             guard()
@@ -188,12 +221,17 @@ def run(args, root, destination, worker):
             raise RuntimeError('The SDK returned before the requested capability learning budget.')
         arena = json.loads((destination/'arena-status.json').read_text())
         expected = dict(boardSize=args.board_size, schema=4, simulationVersion=args.rules_version,
-                        simulationBackend='standalone-dotnet', diagnosticFullVisionSeats=0, workerCount=2)
+                        simulationBackend='standalone-dotnet', diagnosticFullVisionSeats=0, workerCount=args.parallel_games)
         if (any(arena.get(key) != value for key, value in expected.items()) or arena.get('failure') or
                 type(arena.get('rejections')) is not int or arena['rejections'] != 0 or
                 type(arena.get('games')) is not int or arena['games'] <= 0):
             raise RuntimeError('The actual prototype environment failed its fair-contract, match-progress or legality check.')
         state['arena'] = {key: arena.get(key) for key in [*expected, 'games', 'captures', 'interruptions', 'rejections', 'decisions']}
+        if identity['retainedOpponents'] is not None:
+            state['arena'].update(challengerDecisions=arena.get('challengerDecisions'),
+                challengerDecisionsByPolicy=arena.get('challengerDecisionsByPolicy'))
+            if identity['retainedOpponents']['probability'] > 0 and not arena.get('challengerDecisions', 0):
+                raise RuntimeError('Retained league produced no actual challenger decisions.')
         state['state'] = 'saved' if state.get('stopReason') else 'finished'
     except BaseException as error:
         state.update(state='failed', error=type(error).__name__+': '+str(error))
