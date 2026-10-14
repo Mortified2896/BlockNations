@@ -19,6 +19,24 @@ request silence and windowed presentation. Silence stays in the player across
 audio-device changes. Ordinary product launches retain their audio settings.
 No scene, prefab, UI layout or shipped policy needs to change for this safeguard.
 
+A later live check found the Mac's output had become unmuted at 50%, with
+AirPods Pro 3 selected, although no game/editor was running. A one-time mute
+therefore was not a durable overnight backstop. `overnight_quiet.py` now checks
+the current output every 15 seconds through CoreAudio, reapplies mute if needed,
+and verifies the current route's mute readback. It retries once if the route
+changes during the operation; unavailable or unacknowledged settings produce a
+fault receipt rather than a claim of silence. This polling backstop is bounded
+by the interval; the headless learner and pre-scene player mute remain the
+primary protection against game music.
+
+The same guard reads back zero built-in keyboard brightness/backlight and its
+30-second idle timeout. Its owned configuration expires at 09:00 Hong Kong time
+on October 15, 2026. After expiry it stops applying settings and does not restore
+audible output automatically. The current Mac's private keyboard API was checked
+for the required selectors before use; missing APIs fail explicitly. Config and
+status are `overnight-quiet.json` and `overnight-quiet-status.json` below the
+shared training root, and the login job is `com.blocknations.overnight-quiet`.
+
 For this night the existing native inspector was closed, macOS output was muted,
 and the built-in keyboard brightness was set to zero. Its idle timeout was
 changed from 300 to 30 seconds, with idle dimming reported as enabled. These were
