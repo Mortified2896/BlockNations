@@ -73,12 +73,14 @@ def freeze(run, source, after_step, config, recipe_sha):
             manifest['weightTransfer'] = run_manifest['weightTransfer']
         if 'informationTreatment' in run_manifest:
             manifest['informationTreatment'] = run_manifest['informationTreatment']
+        if run_manifest.get('diagnosticOnly'):
+            manifest.update(diagnosticOnly=True, diagnosticFullVisionSeats=run_manifest['diagnosticFullVisionSeats'])
         feedback = json.loads((run/'training-league.json').read_text()) if (run/'training-league.json').exists() else {}
         if feedback.get('owner') == 'BlockNations.TrainingFeedback.v1' and feedback.get('partition') == 'training' and feedback.get('runId') == run.name:
             manifest['trainingFeedback'] = {key: feedback[key] for key in
                 ('source', 'baseRecipeSha256', 'recipe', 'adapted', 'championSha256', 'updatedUnix')}
         atomic_json(temporary/'manifest.json',manifest)
-        actor, _ = frozen_actor(temporary/'manifest.json', rules_version)  # Strict shapes and finite weights.
+        actor, _ = frozen_actor(temporary/'manifest.json', rules_version, allow_diagnostic=bool(manifest.get('diagnosticOnly')))  # Strict shapes and finite weights.
         manifest.update(actorId=actor.actor_id,checkpoint=str(final/source.name),trainerConfig=str(final/'trainer.yaml'))
         atomic_json(temporary/'manifest.json',manifest)
         temporary.rename(final)

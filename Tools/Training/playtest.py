@@ -38,6 +38,8 @@ def atomic_json(path: Path, value: dict) -> None:
 
 def latest_checkpoint(run: Path, *, allow_pending=False) -> Path | None:
     manifest = read_json(run / "run.json")
+    if manifest.get('diagnosticOnly'):
+        raise ValueError('Diagnostic training runs are excluded from ordinary human playtests.')
     if (manifest.get("owner") != "BlockNations.LocalTraining.v1" or manifest.get("schema") != 2 or
             manifest.get("observationSize") != 3120 or manifest.get("actionCount") != 259 or
             manifest.get("boardSize") not in (5, 6, 7, 9, 11)):

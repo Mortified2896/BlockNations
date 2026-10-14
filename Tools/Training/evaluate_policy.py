@@ -51,8 +51,20 @@ class TacticalActor:
         return np.array([[advice[int(agent)]] for agent in decisions.agent_id], dtype=np.int32)
 
 
+class MatchedArenaRandom:
+    """One RNG per seat/arena/game, so other matches cannot consume its draws."""
+    def __init__(self, generators):
+        self.generators = iter(generators)
+
+    def choice(self, *args, **kwargs):
+        return next(self.generators).choice(*args, **kwargs)
+
+
 def evaluate(worker, directory, candidate, reference=None, *, games_per_cell=16, seed=10001,
-             reference_type='', reference_work=64, difficulty='Hard', reference_difficulty=None, rules_version=RULES_VERSION, guard=None):
+             reference_type='', reference_work=64, difficulty='Hard', reference_difficulty=None, rules_version=RULES_VERSION, guard=None,
+             diagnostic_full_vision='fog', diagnostic_matched_streams=False):
+    if diagnostic_full_vision not in ('fog', 'candidate', 'both'):
+        raise ValueError('Choose fog, candidate full vision, or symmetric full vision.')
     rules_version = validate_rules_version(rules_version)
     observation_version = max(getattr(candidate, "observation_version", 2), getattr(reference, "observation_version", 2))
     if games_per_cell < 4 or games_per_cell % 4:
@@ -70,9 +82,12 @@ def evaluate(worker, directory, candidate, reference=None, *, games_per_cell=16,
             cell = directory / f'first-{first}-candidate-{candidate_seat}'
             cell.mkdir()
             env = DotNetEnvironment(worker, cell, 4, seed, 7, False, 2, uuid.uuid4().hex,
-                                   opening_economy_version=OPENING_ECONOMY_VERSION, first_seat=first, rules_version=rules_version, observation_version=observation_version)
+                                   opening_economy_version=OPENING_ECONOMY_VERSION, first_seat=first, rules_version=rules_version, observation_version=observation_version,
+                                   diagnostic_full_vision_seats=0 if diagnostic_full_vision == 'fog' else 3 if diagnostic_full_vision == 'both' else 1 << candidate_seat)
             # Independent seeded streams for each colour, unaffected by Torch RNG.
             randoms = [np.random.default_rng(seed + seat*7919) for seat in (0, 1)]
+            episodes = [0]*4
+            arena_randoms = [[np.random.default_rng([seed, seat, arena, 0]) for arena in range(4)] for seat in (0,1)]
             finished = [0]*4
             recruits = [[Counter(), Counter()] for _ in range(4)]
             quota = games_per_cell // 4
@@ -90,10 +105,14 @@ def evaluate(worker, directory, candidate, reference=None, *, games_per_cell=16,
                                 game=finished[arena], interrupted=interrupted,
                                 winner=None if interrupted else candidate_seat if reward > 0 else 1-candidate_seat,
                                 round=env.stats[arena]['round'],
+                                openingSeed=seed+arena*7919, diagnosticFullVision=diagnostic_full_vision,
+                                candidateFinalGold=env.stats[arena]['gold'+str(candidate_seat)],
                                 candidateRecruits=dict(recruits[arena][candidate_seat]),
                                 referenceRecruits=dict(recruits[arena][1-candidate_seat])))
                             finished[arena] += 1
                         recruits[arena] = [Counter(), Counter()]
+                        episodes[arena] += 1
+                        for seat in (0,1): arena_randoms[seat][arena] = np.random.default_rng([seed,seat,arena,episodes[arena]])
                     if min(finished) >= quota:
                         break
                     for seat, name in enumerate(env.names):
@@ -102,7 +121,8 @@ def evaluate(worker, directory, candidate, reference=None, *, games_per_cell=16,
                             continue
                         actor = candidate if seat == candidate_seat else reference
                         mode = difficulty if seat == candidate_seat else reference_difficulty
-                        actions = actor.choose(decisions, randoms[seat], mode, environment=env, seat=seat)
+                        random = MatchedArenaRandom([arena_randoms[seat][int(agent)//2] for agent in decisions.agent_id]) if diagnostic_matched_streams else randoms[seat]
+                        actions = actor.choose(decisions, random, mode, environment=env, seat=seat)
                         for agent, action in zip(decisions.agent_id, actions[:, 0]):
                             if 242 <= action < 258:
                                 recruits[int(agent)//2][seat][env.roster[int(action)-242]] += 1
@@ -139,6 +159,10 @@ def evaluate(worker, directory, candidate, reference=None, *, games_per_cell=16,
         firstPlayerWinRate95=wilson(first_wins, len(captures)), startingPositionResults=breakdown,
         candidateRecruits=dict(recruit_counts), candidateWinningRecruits=dict(winning_recruits),
         elapsedSeconds=time.monotonic()-started, records=records)
+    if diagnostic_full_vision != 'fog':
+        result.update(diagnosticOnly=True, diagnosticFullVision=diagnostic_full_vision)
+    if diagnostic_matched_streams:
+        result.update(diagnosticOnly=True, diagnosticFullVision=diagnostic_full_vision, diagnosticSampling='seat-arena-game-v1')
     (directory/'evaluation.json').write_text(json.dumps(result, indent=2)+'\n')
     return result
 

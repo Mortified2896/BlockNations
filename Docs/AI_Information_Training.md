@@ -42,6 +42,8 @@ After early results, compare full per-opponent/per-role records before committin
 
 ## Subsequent separate treatments
 
+The owner's October 14 fog question is implemented as a separate [fog versus full-vision diagnostic](Fog_Training_Diagnostic.md). Frozen input ablation and `--treatment fog` continued-learning arms use the same model contract, preserve private wallets/counters, and cross-evaluate normal fog/full vision. The resulting diagnostic actors and suites cannot promote a normal champion.
+
 For fair history, first choose and freeze an explicit v3 parent. Use `--treatment history` with that parent to compare v3 and v4. Both start with the same preserved v3 function and optimizer. Do not combine history with a new reward, opponent recipe, recurrent network or game balance change.
 
 For failure-position training, `prepare_episode_starts.py` reads only owned live-training replay files. The C# authoring tool checks a complete standard-opening game and verifies every transition against legal commands. It chooses several reachable losing-seat positions before the capture, preserving command prefixes. At reset, the worker replays those commands and rebuilds each seat's legitimate observations/history. No omniscient observation snapshot is used as policy input. The initial recipe uses 15% such starts and 85% normal openings, with a maximum permitted fraction of 20%. These outcomes are marked as curriculum and excluded from whole-standard-game Elo; they retain the normal 100-round guard. Decision histograms count only the played continuation, not the replayed prefix.

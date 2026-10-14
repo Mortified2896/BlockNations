@@ -46,6 +46,7 @@ internal static class Program
         int openingEconomyVersion = int.Parse(Argument(args, "--opening-economy-version", MatchOpening.CurrentEconomyVersion.ToString()));
         int fixedFirstSeat = int.Parse(Argument(args, "--first-seat", "-1"));
         int observationVersion = int.Parse(Argument(args, "--observation-version", "2"));
+        int diagnosticFullVisionSeats = int.Parse(Argument(args, "--diagnostic-full-vision-seats", "0"));
         LearnedObservationContract.Size(observationVersion);
         string episodePath = Argument(args, "--episode-starts", "");
         EpisodeStartRecipe starts = null;
@@ -62,7 +63,7 @@ internal static class Program
             throw new ArgumentException("Invalid worker/session configuration.");
         OwnedDirectory(run);
         var arenas = Enumerable.Range(0, count).Select(i => new SelfPlayArena(i, size, unchecked(seed + i * 7919), curriculum, distance,
-            rules.PolicyCatalog, openingEconomyVersion, fixedFirstSeat, rules, observationVersion, starts)).ToArray();
+            rules.PolicyCatalog, openingEconomyVersion, fixedFirstSeat, rules, observationVersion, starts, diagnosticFullVisionSeats)).ToArray();
         string progressPath = Path.Combine(run, $"board-{size}-progress.json");
         var progress = File.Exists(progressPath) ? JsonSerializer.Deserialize<TrainingProgressHistory>(File.ReadAllText(progressPath), Json) : new TrainingProgressHistory { boardSize = size };
         if (progress == null || !progress.IsValid() || progress.boardSize != size) throw new InvalidOperationException("Invalid saved training progress.");
@@ -167,7 +168,7 @@ internal static class Program
                 .Where(a => request.referenceAgents == null || request.referenceAgents.Contains(a.Worker * 2 + request.referenceSeat))
                 .Select(a => new ActionRequest { agent = a.Worker * 2 + request.referenceSeat,
                     action = a.ReferenceChoice(request.recruitType, request.workBudget) }).ToArray() : Array.Empty<ActionRequest>();
-            Console.WriteLine(JsonSerializer.Serialize(new { protocol = 1, rulesVersion = rules.Version, behavior = LearnedObservationContract.Behavior(observationVersion),
+            Console.WriteLine(JsonSerializer.Serialize(new { protocol = 1, rulesVersion = rules.Version, diagnosticFullVisionSeats, behavior = LearnedObservationContract.Behavior(observationVersion),
                 observationSize = LearnedObservationContract.Size(observationVersion), observationVersion, actionVersion = LearnedActionSchema.Version, actionCount = LearnedActionSchema.ActionCount, steps, stats, referenceActions,
                 recruitTypes = rules.PolicyCatalog.Select(t => t.TypeId).ToArray(),
                 enabledRecruitTypes = rules.RecruitableUnits.Select(t => t.TypeId).ToArray() }, Json));
