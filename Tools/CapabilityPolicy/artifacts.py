@@ -13,7 +13,7 @@ from model_contract import spec
 from policy import CapabilityActor
 
 
-def checkpoint(path, width):
+def checkpoint(path, width, *, prepared=False):
     path = Path(path).absolute()
     if path.is_symlink() or path.stat().st_size > 20_000_000:
         raise ValueError('Use a bounded unlinked capability checkpoint.')
@@ -41,19 +41,25 @@ def checkpoint(path, width):
     finite(saved)
     optimizer = torch.optim.Adam(actor.parameters(), lr=.0003)
     optimizer.load_state_dict(saved['Optimizer:value_optimizer'])
+    step = saved['global_step']['_GlobalSteps__global_step']
+    if step.numel() != 1 or step.item() != int(step.item()) or step.item() < 0:
+        raise ValueError('Invalid capability learning-step identity.')
+    if prepared and (step.item() != 0 or optimizer.state):
+        raise ValueError('Prepared initialization requires step zero and fresh empty PPO Adam state.')
+    if not prepared and step.item() == 0:
+        raise ValueError('Use a completed positive capability learning-step checkpoint.')
     counters = {}
     for name, parameter in actor.named_parameters():
         if not parameter.requires_grad: continue
         state = optimizer.state.get(parameter, {})
+        if prepared:
+            continue
         if (set(state) != {'step', 'exp_avg', 'exp_avg_sq'} or state['step'].numel() != 1 or
                 state['step'].item() <= 0 or state['step'].item() != int(state['step'].item()) or
                 any(state[key].shape != parameter.shape for key in ('exp_avg', 'exp_avg_sq')) or
                 (state['exp_avg_sq'] < 0).any()):
             raise ValueError('Capability Adam state/counters do not match the trained architecture.')
         counters[name] = int(state['step'].item())
-    step = saved['global_step']['_GlobalSteps__global_step']
-    if step.numel() != 1 or step.item() <= 0 or step.item() != int(step.item()):
-        raise ValueError('Use a completed positive capability learning-step checkpoint.')
     return actor, dict(step=int(step.item()), checkpointSha256=hashlib.sha256(contents).hexdigest(),
                        finiteTensors=tensors, optimizerSteps=counters,
                        trainableParameters=sum(p.numel() for p in actor.parameters() if p.requires_grad))

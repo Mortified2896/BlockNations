@@ -23,6 +23,7 @@ from training_contract import CORE_THREE_RULES, SUPPORTED_RULES
 from policy import ARCHITECTURE
 from trainer import TRAINER, register
 from artifacts import checkpoint
+import initialization
 
 
 @contextmanager
@@ -86,7 +87,9 @@ def main():
     parser.add_argument('--board-size', type=int, choices=(5, 6, 7, 9, 11), default=7)
     parser.add_argument('--rules-version', choices=SUPPORTED_RULES, default=CORE_THREE_RULES)
     parser.add_argument('--hours', type=float, default=.25)
-    parser.add_argument('--resume', action='store_true')
+    start = parser.add_mutually_exclusive_group()
+    start.add_argument('--resume', action='store_true')
+    start.add_argument('--initialize', type=Path, help='Explicit prepared architecture weights; PPO starts at step zero with fresh Adam.')
     args = parser.parse_args()
     root, destination, worker = (p.absolute() for p in (args.root, args.destination, args.worker))
     if (root.resolve() != root or destination.resolve() != destination or
@@ -108,13 +111,17 @@ def run(args, root, destination, worker):
                     workerSha256=worker_digest(worker), sources=pins,
                     partition='training', promotion='disabled', initialization='new-architecture-random-weights')
     receipt = destination/'prototype.json'
+    initial_contract = dict(width=args.width, boardSize=args.board_size, rulesVersion=args.rules_version)
     if args.resume:
+        identity['initialization'] = initialization.identity(destination, initial_contract) or identity['initialization']
         previous = json.loads(receipt.read_text())
         if any(previous.get(k) != v for k, v in identity.items()) or args.steps < previous['targetSteps']:
             raise ValueError('Resume requires the same pinned architecture/recipe/worker and an explicit nondecreasing step target.')
         _, resumed = checkpoint(destination/'checkpoints/capability/BlockNationsSeatV4/checkpoint.pt', args.width)
     else:
         destination.mkdir(parents=True, exist_ok=False)
+        if args.initialize is not None:
+            identity['initialization'] = initialization.install(root, args.initialize, destination, initial_contract)
     config = destination/'trainer.json'
     atomic_json(config, recipe(args.steps, args.width))
     state = dict(identity, state='starting', targetSteps=args.steps, startedUnix=time.time(), pid=os.getpid())
@@ -161,7 +168,7 @@ def run(args, root, destination, worker):
             return super()._step()
     learn.SubprocessEnvManager = GuardedManager
     sys.argv = ['capability-ppo', str(config), '--run-id', 'capability', '--results-dir', str(destination/'checkpoints'),
-                '--seed', str(args.seed), '--torch-device', 'cpu', '--timeout-wait', '300']+(['--resume'] if args.resume else [])
+                '--seed', str(args.seed), '--torch-device', 'cpu', '--timeout-wait', '300']+(['--resume'] if args.resume or args.initialize is not None else [])
     state['state'] = 'running'; atomic_json(receipt, state)
     assertion = None
     try:
