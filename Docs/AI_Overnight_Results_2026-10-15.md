@@ -140,9 +140,26 @@ more parameters and completed PPO do not qualify an architecture for adoption.
 The optional teacher-corpus generator now records an explicit deployment sampler
 and bounded action noise. The separate Hard-teacher trial uses 16,384 fresh fair
 positions and 5% legal noise; its corpus completed 324 games without interruption
-or rejection. Fitting, short PPO and new full-game results remain pending. This
-combined data-distribution/fit-budget change is not an isolated causal test.
-Twenty-eight focused capability checks passed, including real C# integration.
+or rejection. Its selected fit achieved 91.9% internal multi-choice top agreement,
+but a complete fresh-seed 1,280-game screen still rejected useful strength
+preservation. The teacher won 234/256 Hard games, the prepared model 145/256 (one
+interruption) and its 8,217-step PPO child 119/256. Raw Policy results were 109/256
+and 81/256 for those two new models. All raw records, identities and per-role
+counts were independently checked. Hard PPO's first/second split was 24/128 and
+95/128. This combined data-distribution/fit-budget change is not an isolated
+causal test, and lower internal error does not establish human competence.
+
+The optional capability PPO now supports immutable copied retained leagues,
+explicit conservative/feasibility recipes and arena counts. Thirty-two focused
+checks passed, including real C# integration and copied-input/tamper checks.
+The actual retained eight-opponent pool preflight validated 15 copied files and
+four finite frozen actors. Its separate gentle eight-arena pilot completed a
+real 8,207-step warmup: 155 finite checkpoint tensors, all 28 Adam states advanced,
+261 captures, 5,244 challenger decisions across all eight entries and zero
+interruptions/rejections. Independent verification of the resumed step-24,988
+checkpoint found all 155 tensors finite, all 28 Adam counters advanced from
+144 to 528, and unchanged copied inputs/source hashes. It continues toward
+131,072 with a new 1,792-game screen queued; those later outcomes remain pending.
 All experiments preserve the selected compact model and original checkpoints.
 
 Further representation work needs retained opponent/role checks, independently

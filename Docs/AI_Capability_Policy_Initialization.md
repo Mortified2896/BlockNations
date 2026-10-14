@@ -148,8 +148,60 @@ deployment-policy corpus: 16,384 new fair positions, actual Hard labels/actions,
 completed with 261 training/67 validation whole-match groups, 324 captures and
 zero interruptions/rejections. This deliberately changes corpus size, sampling,
 noise and fit budget together; it is a new initialization attempt, not an isolated
-causal test. Fitting/PPO/full-game strength results remain pending. Its fresh
-experience contains no held-out benchmark or counterplay journals.
+causal test. Its fresh experience contains no held-out benchmark or counterplay
+journals. Its selected update 2,304 reduced its own multi-choice validation KL
+from 1.3231 to 0.2072, with 91.9% teacher top-choice agreement. KL values across
+different corpus/sampling targets are not directly comparable. Its initialized
+PPO reached step 8,217, with 155 finite checkpoint tensors, all 28 Adam states
+advanced by 336, 402 captures and no interruption/rejected action. An independent
+input/checkpoint verification and exact-controller restoration succeeded.
+
+The complete fresh-seed screen used 1,280 games on seeds 1,015,011/1,015,012,
+the same four reference types, both colours and starting roles. It again rejected
+strength preservation:
+
+| Candidate | Hard wins | Raw Policy wins |
+| --- | ---: | ---: |
+| Compact teacher | 234/256 | — |
+| Hard-teacher initialization | 145/256 | 109/256 |
+| Initialized PPO after 8,217 steps | 119/256 | 81/256 |
+
+The initialized Hard row had one interruption against the Archer reference;
+all other rows had none. Source/actor identities, all 40 complete result files,
+raw records, role counts and zero rejected actions were checked in
+`sampling-screen/verified.json`. Hard PPO's role split was 24/128 first and
+95/128 second, versus the teacher's 114/128 and 120/128. The fit still loses
+important full-game decisions. Matching the teacher sampler does not by itself
+solve transfer, forgetting or human difficulty. No candidate was selected.
+
+## Retained opponents for longer PPO
+
+The opt-in `--recipe gentle --parallel-games 8 --opponents-from` path now connects
+the capability learner to the existing whole-match retained-opponent adapter.
+It copies only verified frozen weights/configuration/manifests and a bounded
+version-two recipe, checks finite actor identities and matching board/rules/opening,
+and binds the copied files to immutable resume identity. At least half the games
+remain learned self-play. The challenger replaces only the opposing seat's moves;
+the learner keeps its entire legal roster, rewards and fair observations. Private
+journals are excluded. Copied inputs survive original-source removal; mutations,
+incompatible contracts or unreceipted pools fail closed.
+
+Thirty-two focused checks passed, including actual C# environment checks. The
+real eight-entry retained pool preflight validated all four frozen actors and
+15 copied files. The separately queued `capability-retained-training-20261015`
+pilot then completed a real eight-arena warmup to step 8,207, with 155 finite
+tensors, all 28 Adam states at 144, actual saved learning rate 0.000075, 261
+captures and zero interruptions/rejections. It recorded 5,244 challenger choices
+covering all eight retained policies. It has explicitly resumed toward 131,072;
+that target is not a completed result. A frozen warmup snapshot is preserved
+outside ordinary selection. An independent check loaded that snapshot and the
+resumed step-24,988 checkpoint: all 155 tensors were finite and all 28 Adam
+counters advanced from 144 to 528, while copied initialization/league identities
+and every pinned Python source hash matched. The final target is still pending.
+A fresh 1,792-game comparison is queued after the owned sequence restores the
+controller, covering prepared weights, the frozen warmup and the final model
+in Hard/Policy plus the compact Hard teacher. Parameter/value/Adam and copied
+input continuation do not claim faithful environment/RNG/snapshot trajectories.
 
 Further strength work needs fresh full-game seeds, both starting roles, retained
 opponents and coordinated counterplay. Better teacher approximation does not

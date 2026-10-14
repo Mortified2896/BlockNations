@@ -91,3 +91,24 @@ the same distribution for labels and rollout actions. The original defaults
 remain raw `Policy` and 0.2 noise. Value labels are still the raw teacher's fair
 critic, so they are approximate for changed sampling. The first raw-teacher v1
 and spatial-v2 transfers both lost full-game strength; neither is selected.
+
+Longer trials can explicitly select `train.py --recipe gentle --parallel-games 8`
+and `--opponents-from "$BN_RETAINED_LEAGUE_RUN"`. The gentle recipe uses the
+existing conservative continuation's optimization schedules and opponent cadence
+with the selected capability width/shared critic; feasibility defaults stay
+unchanged. Arena count and recipe are part of immutable resume identity.
+
+The optional league uses the existing whole-match challenger adapter. It copies
+only verified frozen weights/configuration/manifests and the bounded version-two
+recipe into the benchmark run, checks finite actors and IDs, and preserves at
+least half learned self-play. It checks the matching rules, board and opening;
+the learner remains unrestricted. Private journals are not copied. Resume reads
+its own immutable copied inputs, so omit `--opponents-from` on `--resume` and
+preserve the same recipe/arena/seed/architecture arguments. Source changes cause
+a save/stop rather than an unrecorded change of experiment. This preserves
+parameters/value/Adam and copied inputs; it does not restore the prior full
+environment/RNG/opponent-snapshot trajectory. The October 15 real eight-arena
+warmup exercised all eight retained policies and saved at 8,207 steps without
+rejected actions. Independent resumed step-24,988 verification confirmed finite
+state, advancing Adam and copied-source/input identities. Final continuation and
+frozen-game strength remain pending.
