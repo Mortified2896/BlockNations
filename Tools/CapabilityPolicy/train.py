@@ -24,6 +24,7 @@ from policy import ARCHITECTURE
 from trainer import TRAINER, register
 from artifacts import checkpoint
 import initialization
+from architectures import ARCHITECTURES
 
 
 @contextmanager
@@ -83,6 +84,7 @@ def main():
         parser.add_argument('--'+name, type=Path, required=True)
     parser.add_argument('--steps', type=int, default=8192)
     parser.add_argument('--width', type=int, choices=(16, 32, 64), default=32)
+    parser.add_argument('--architecture', choices=tuple(ARCHITECTURES), default=ARCHITECTURE)
     parser.add_argument('--seed', type=int, default=207)
     parser.add_argument('--board-size', type=int, choices=(5, 6, 7, 9, 11), default=7)
     parser.add_argument('--rules-version', choices=SUPPORTED_RULES, default=CORE_THREE_RULES)
@@ -105,19 +107,19 @@ def main():
 def run(args, root, destination, worker):
     sources = list(Path(__file__).parent.glob('*.py'))+list((Path(__file__).parents[1]/'Training').glob('*.py'))
     pins = {str(p.relative_to(Path(__file__).parents[1])): hashlib.sha256(p.read_bytes()).hexdigest() for p in sources}
-    identity = dict(owner='BlockNations.CapabilityPrototype.v1', architecture=ARCHITECTURE,
+    identity = dict(owner='BlockNations.CapabilityPrototype.v1', architecture=args.architecture,
                     observationVersion=4, actionVersion=2, rulesVersion=args.rules_version,
                     boardSize=args.board_size, openingEconomyVersion=2, seed=args.seed, width=args.width,
                     workerSha256=worker_digest(worker), sources=pins,
                     partition='training', promotion='disabled', initialization='new-architecture-random-weights')
     receipt = destination/'prototype.json'
-    initial_contract = dict(width=args.width, boardSize=args.board_size, rulesVersion=args.rules_version)
+    initial_contract = dict(width=args.width, boardSize=args.board_size, rulesVersion=args.rules_version, architecture=args.architecture)
     if args.resume:
         identity['initialization'] = initialization.identity(destination, initial_contract) or identity['initialization']
         previous = json.loads(receipt.read_text())
         if any(previous.get(k) != v for k, v in identity.items()) or args.steps < previous['targetSteps']:
             raise ValueError('Resume requires the same pinned architecture/recipe/worker and an explicit nondecreasing step target.')
-        _, resumed = checkpoint(destination/'checkpoints/capability/BlockNationsSeatV4/checkpoint.pt', args.width)
+        _, resumed = checkpoint(destination/'checkpoints/capability/BlockNationsSeatV4/checkpoint.pt', args.width, architecture=args.architecture)
     else:
         destination.mkdir(parents=True, exist_ok=False)
         if args.initialize is not None:
@@ -155,7 +157,8 @@ def run(args, root, destination, worker):
         BLOCKNATIONS_SIMULATION_DISTANCE='2', BLOCKNATIONS_RATING_SESSION=uuid.uuid4().hex,
         BLOCKNATIONS_OPENING_ECONOMY_VERSION='2', BLOCKNATIONS_RULES_VERSION=args.rules_version,
         BLOCKNATIONS_OBSERVATION_VERSION='4', BLOCKNATIONS_HUMAN_IMITATION='disabled',
-        BLOCKNATIONS_DIAGNOSTIC_FULL_VISION_SEATS='0', BLOCKNATIONS_TORCH_THREADS='1')
+        BLOCKNATIONS_DIAGNOSTIC_FULL_VISION_SEATS='0', BLOCKNATIONS_TORCH_THREADS='1',
+        BLOCKNATIONS_CAPABILITY_ARCHITECTURE=args.architecture)
     from mlagents import torch_utils
     torch_utils.torch.set_num_threads(1)
     from mlagents.trainers import learn
@@ -176,7 +179,7 @@ def run(args, root, destination, worker):
             assertion = subprocess.Popen(['/usr/bin/caffeinate', '-i', '-s', '-w', str(os.getpid())],
                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         learn.main()
-        _, verified = checkpoint(destination/'checkpoints/capability/BlockNationsSeatV4/checkpoint.pt', args.width)
+        _, verified = checkpoint(destination/'checkpoints/capability/BlockNationsSeatV4/checkpoint.pt', args.width, architecture=args.architecture)
         state['checkpoint'] = verified
         if args.resume and (verified['step'] < resumed['step'] or any(
                 verified['optimizerSteps'][key] < value for key, value in resumed['optimizerSteps'].items())):

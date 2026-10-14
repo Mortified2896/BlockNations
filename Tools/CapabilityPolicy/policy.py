@@ -47,6 +47,9 @@ class CapabilityBody(nn.Module):
         # Public schema fields already have fixed documented scales.
         pass
 
+    def board_context(self, squares, present):
+        return squares.sum(dim=1)/present.sum(dim=1).clamp(min=1)
+
     def forward(self, inputs, actions=None, memories=None, sequence_length=1):
         if not torch.onnx.is_in_onnx_export():
             if len(inputs) != 1 or inputs[0].ndim != 2 or inputs[0].shape[1] != OBSERVATIONS:
@@ -62,7 +65,7 @@ class CapabilityBody(nn.Module):
         fields = torch.cat((tiles, unit_capability, history, self.coordinates.expand(batch, -1, -1)), dim=-1)
         board = (fields*present).transpose(1, 2).reshape(batch, 39, 11, 11)
         squares = self.spatial(board).flatten(2).transpose(1, 2)*present
-        board_mean = squares.sum(dim=1)/present.sum(dim=1).clamp(min=1)
+        board_mean = self.board_context(squares, present)
         selected = tiles[:, :, 20:21]*present
         source = (squares*selected).sum(dim=1)/selected.sum(dim=1).clamp(min=1)
 

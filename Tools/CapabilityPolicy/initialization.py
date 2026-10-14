@@ -6,6 +6,7 @@ import shutil
 
 from artifacts import checkpoint
 from policy import ARCHITECTURE
+from architectures import actor_class
 
 OWNER = 'BlockNations.CapabilityInitialization.v1'
 INSTALLED = 'BlockNations.CapabilityInitializationInstall.v1'
@@ -24,8 +25,10 @@ def read(path):
 
 def validate(document, expected):
     wanted = dict(owner=OWNER, state='prepared', partition='training',
-                  architecture=ARCHITECTURE, observationVersion=4, actionVersion=2,
-                  openingEconomyVersion=2, kind='teacher-distillation', **expected)
+                  observationVersion=4, actionVersion=2, openingEconomyVersion=2,
+                  kind='teacher-distillation', **expected)
+    wanted['architecture'] = expected.get('architecture', ARCHITECTURE)
+    actor_class(wanted['architecture'])
     if any(document.get(key) != value for key, value in wanted.items()):
         raise ValueError('Prepared initialization belongs to a different architecture, rules or recipe.')
 
@@ -41,7 +44,7 @@ def identity(run, expected):
     document = read(run/'initialization/source-manifest.json')
     validate(document, expected)
     prepared = run/'initialization/prepared.pt'
-    _, health = checkpoint(prepared, expected['width'], prepared=True)
+    _, health = checkpoint(prepared, expected['width'], prepared=True, architecture=document['architecture'])
     if (record.get('owner') != INSTALLED or record.get('sourceManifestSha256') != digest(run/'initialization/source-manifest.json') or
             record.get('checkpointSha256') != health['checkpointSha256'] or
             document.get('checkpointSha256') != health['checkpointSha256'] or
@@ -62,7 +65,7 @@ def install(root, manifest, run, expected):
     source = Path(document['checkpoint']).absolute()
     if source.resolve() != source or source.parent != manifest.parent:
         raise ValueError('Prepared weights must belong to their initialization manifest directory.')
-    _, health = checkpoint(source, expected['width'], prepared=True)
+    _, health = checkpoint(source, expected['width'], prepared=True, architecture=document['architecture'])
     if health['checkpointSha256'] != document.get('checkpointSha256'):
         raise ValueError('Prepared initialization checkpoint changed.')
     folder = run/'initialization'; folder.mkdir(exist_ok=False)

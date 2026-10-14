@@ -1,10 +1,11 @@
 """Explicit process-local custom PPO registration, pinned to audited SDK 1.1.0."""
 import mlagents.trainers
+import os
 from mlagents.trainers.policy.torch_policy import TorchPolicy
 from mlagents.trainers.ppo.trainer import PPOTrainer
 from mlagents.trainers.ppo.optimizer_torch import PPOSettings
 
-from policy import CapabilityActor
+from architectures import actor_class, DEFAULT
 
 TRAINER = 'capability_ppo_v1'
 
@@ -17,8 +18,9 @@ class CapabilityPPOTrainer(PPOTrainer):
     def create_policy(self, parsed_behavior_id, behavior_spec):
         if not self.shared_critic:
             raise ValueError('Capability PPO v1 requires its shared invariant critic.')
+        architecture = os.environ.get('BLOCKNATIONS_CAPABILITY_ARCHITECTURE', DEFAULT)
         return TorchPolicy(self.seed, behavior_spec, self.trainer_settings.network_settings,
-                           CapabilityActor, dict(stream_names=[key.value for key in self.trainer_settings.reward_signals]))
+                           actor_class(architecture), dict(stream_names=[key.value for key in self.trainer_settings.reward_signals]))
 
 
 def register():

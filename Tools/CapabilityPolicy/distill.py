@@ -30,6 +30,7 @@ from train import exclusive, recipe
 from artifacts import checkpoint
 from corpus import load
 from initialization import OWNER
+from architectures import actor_class, ARCHITECTURES
 
 
 def divergence(predicted, target):
@@ -59,7 +60,7 @@ def metrics(actor, arrays, indices):
     return result
 
 
-def prepare(root, corpus_manifest, destination, *, width=32, seed=209, updates=2048):
+def prepare(root, corpus_manifest, destination, *, width=32, seed=209, updates=2048, architecture=ARCHITECTURE):
     root, corpus_manifest, destination=(Path(path).absolute() for path in (root, corpus_manifest, destination))
     if (root.resolve()!=root or json.loads((root/ROOT_MARKER).read_text()).get('owner')!='BlockNations.LocalTraining.v1' or
             destination.resolve()!=destination or not destination.is_relative_to(root/'benchmarks') or destination==root/'benchmarks' or
@@ -72,7 +73,8 @@ def prepare(root, corpus_manifest, destination, *, width=32, seed=209, updates=2
     train=np.flatnonzero(~arrays['validation']); validation=np.flatnonzero(arrays['validation'])
     register(); torch.manual_seed(seed)
     contract=spec(4)
-    actor=CapabilityActor(contract.observation_specs, NetworkSettings(hidden_units=width,num_layers=2),contract.action_spec)
+    factory=actor_class(architecture)
+    actor=factory(contract.observation_specs, NetworkSettings(hidden_units=width,num_layers=2),contract.action_spec)
     optimizer=torch.optim.Adam(actor.parameters(),lr=.001)
     random=np.random.default_rng(seed)
     sources=list(Path(__file__).parent.glob('*.py'))+list((Path(__file__).parents[1]/'Training').glob('*.py'))
@@ -81,7 +83,7 @@ def prepare(root, corpus_manifest, destination, *, width=32, seed=209, updates=2
     initial=metrics(actor,arrays,validation)
     best_score=initial['multiChoice']['kl']+.1*initial['valueMSE']; best_state=copy.deepcopy(actor.state_dict())
     best_metrics=initial; best_update=0; update=0; last_policy=None; last_torch_random=None
-    record=dict(owner='BlockNations.CapabilityDistillation.v1',state='training',partition='training',architecture=ARCHITECTURE,
+    record=dict(owner='BlockNations.CapabilityDistillation.v1',state='training',partition='training',architecture=architecture,
                 corpusManifest=str(corpus_manifest),corpusManifestSha256=hashlib.sha256(corpus_manifest.read_bytes()).hexdigest(),
                 corpusSha256=data['corpusSha256'],teacher=data['teacher'],rulesVersion=data['rulesVersion'],boardSize=data['boardSize'],
                 width=width,seed=seed,updates=updates,initialValidation=initial,history=[],sources=pins,
@@ -125,14 +127,14 @@ def prepare(root, corpus_manifest, destination, *, width=32, seed=209, updates=2
             raise ValueError('Teacher approximation did not halve held-out-match multi-choice KL; do not prepare an initializer.')
         folder=destination/'initialization'; folder.mkdir()
         # Reconstruct stock PPO modules with fresh optimizer state and step zero.
-        policy=TorchPolicy(seed,contract,NetworkSettings(hidden_units=width,num_layers=2),CapabilityActor,{})
+        policy=TorchPolicy(seed,contract,NetworkSettings(hidden_units=width,num_layers=2),factory,{})
         policy.actor.load_state_dict(best_state,strict=True)
         settings=RunOptions.from_dict(recipe(8192,width)).behaviors['BlockNationsSeatV4']
         ppo=TorchPPOOptimizer(policy,settings)
         modules=dict(policy.get_modules(),**ppo.get_modules())
         saved=folder/'checkpoint.pt'
         torch.save({name:module.state_dict() for name,module in modules.items()},saved)
-        _, health=checkpoint(saved,width,prepared=True)
+        _, health=checkpoint(saved,width,prepared=True,architecture=architecture)
         inputs=torch.as_tensor(arrays['observations'][validation[:64]])
         masks=torch.as_tensor(arrays['allowed'][validation[:64]],dtype=torch.float32)
         export(actor,inputs[:1],masks[:1],folder/'PreparedPolicy.onnx')
@@ -143,7 +145,7 @@ def prepare(root, corpus_manifest, destination, *, width=32, seed=209, updates=2
             np.testing.assert_allclose(actual,expected,rtol=1e-4,atol=1e-6)
             if not np.all(actual[masks[:count].numpy()==0]==0): raise ValueError('Export allowed a masked action.')
             maximum=max(maximum,float(np.max(np.abs(actual-expected))))
-        initializer=dict(owner=OWNER,state='prepared',kind='teacher-distillation',partition='training',architecture=ARCHITECTURE,
+        initializer=dict(owner=OWNER,state='prepared',kind='teacher-distillation',partition='training',architecture=architecture,
                          observationVersion=4,actionVersion=2,openingEconomyVersion=2,rulesVersion=data['rulesVersion'],boardSize=data['boardSize'],
                          width=width,checkpoint=str(saved),checkpointSha256=health['checkpointSha256'],
                          corpusSha256=data['corpusSha256'],teacher=data['teacher'],sourceDistillation=str(destination/'distillation.json'),
@@ -168,8 +170,9 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     for name in ('root','corpus','destination'): parser.add_argument('--'+name,type=Path,required=True)
     parser.add_argument('--width',type=int,choices=(16,32,64),default=32)
+    parser.add_argument('--architecture',choices=tuple(ARCHITECTURES),default=ARCHITECTURE)
     parser.add_argument('--seed',type=int,default=209); parser.add_argument('--updates',type=int,default=2048)
     args=parser.parse_args(); torch.set_num_threads(1)
     with exclusive(args.root.absolute()):
-        result=prepare(args.root,args.corpus,args.destination,width=args.width,seed=args.seed,updates=args.updates)
+        result=prepare(args.root,args.corpus,args.destination,width=args.width,seed=args.seed,updates=args.updates,architecture=args.architecture)
     print(json.dumps({key:result[key] for key in ['state','bestUpdate','bestValidation','initializationManifest']}))

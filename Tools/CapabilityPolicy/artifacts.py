@@ -10,17 +10,17 @@ from mlagents.trainers.settings import NetworkSettings
 
 sys.path.insert(0, str(Path(__file__).parents[1]/'Training'))
 from model_contract import spec
-from policy import CapabilityActor
+from architectures import actor_class, DEFAULT
 
 
-def checkpoint(path, width, *, prepared=False):
+def checkpoint(path, width, *, prepared=False, architecture=DEFAULT):
     path = Path(path).absolute()
     if path.is_symlink() or path.stat().st_size > 20_000_000:
         raise ValueError('Use a bounded unlinked capability checkpoint.')
     contents = path.read_bytes()
     saved = torch.load(io.BytesIO(contents), map_location='cpu')
     contract = spec(4)
-    actor = CapabilityActor(contract.observation_specs, NetworkSettings(hidden_units=width, num_layers=2), contract.action_spec)
+    actor = actor_class(architecture)(contract.observation_specs, NetworkSettings(hidden_units=width, num_layers=2), contract.action_spec)
     actor.load_state_dict(saved['Policy'], strict=True)
     if saved['Policy'].keys() != saved['Optimizer:critic'].keys() or any(
             not torch.equal(value, saved['Optimizer:critic'][name]) for name, value in saved['Policy'].items()):
