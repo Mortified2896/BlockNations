@@ -36,6 +36,8 @@ def checked_evaluation(run, manifest_path, evaluation_path):
     evaluation_path = owned_path(run, str(Path(evaluation_path).absolute().relative_to(run)))
     manifest = json.loads(manifest_path.read_text())
     evaluation = json.loads(evaluation_path.read_text())
+    if manifest.get('diagnosticOnly') or evaluation.get('diagnosticOnly'):
+        raise ValueError('Diagnostic actors and visibility suites cannot promote a playable champion.')
     contract = dict(rulesVersion=run_rules_version(run), boardSize=json.loads((run/'run.json').read_text())['boardSize'],
                     openingEconomyVersion=OPENING_ECONOMY_VERSION)
     if any(manifest.get(key) != value or evaluation.get(key) != value for key, value in contract.items()):

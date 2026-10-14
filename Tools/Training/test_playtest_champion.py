@@ -87,6 +87,15 @@ class PlaytestChampionTests(unittest.TestCase):
             self.assertEqual(session.state['checkpointSelection'], 'evaluated champion')
             session.close()
 
+    def test_diagnostic_models_and_suites_cannot_promote_even_with_perfect_results(self):
+        for index, target in enumerate(('manifest', 'evaluation')):
+            _, manifest, evaluation = self.candidate(500+index, 4)
+            path = manifest if target == 'manifest' else evaluation
+            data = json.loads(path.read_text()); data['diagnosticOnly'] = True; self.write(path, data)
+            with self.assertRaisesRegex(ValueError, 'Diagnostic'):
+                select(self.run, manifest, evaluation, initialize=True)
+            self.assertFalse((self.run/POINTER).exists())
+
     def test_regression_or_changed_suite_preserves_incumbent_then_improvement_can_promote(self):
         _, manifest, evaluation = self.candidate(100, 2)
         select(self.run, manifest, evaluation, initialize=True)

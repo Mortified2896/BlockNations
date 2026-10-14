@@ -33,9 +33,11 @@ def worker_digest(worker):
     return hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
 
 
-def frozen_actor(manifest_path, rules_version=RULES_VERSION, transfer=None):
+def frozen_actor(manifest_path, rules_version=RULES_VERSION, transfer=None, *, allow_diagnostic=False):
     manifest_path = Path(manifest_path)
     manifest = json.loads(manifest_path.read_text())
+    if manifest.get('diagnosticOnly') and not allow_diagnostic:
+        raise ValueError('Diagnostic training actors cannot enter ordinary evaluation, playtests or release export.')
     if (manifest.get('boardSize') != 7 or
             manifest.get('openingEconomyVersion') != OPENING_ECONOMY_VERSION):
         raise ValueError('Benchmark requires a compatible frozen 7x7 provenance manifest.')
@@ -68,7 +70,11 @@ def prepare(candidate_manifest, suite_path, *, candidate_transfer=None):
             any(c not in '0123456789abcdef' for c in suite['workerSha256']) or
             not isinstance(suite.get('cases'), list) or not 1 <= len(suite['cases']) <= 32):
         raise ValueError('Choose a bounded, versioned benchmark suite for the current contract.')
-    candidate, identity = frozen_actor(candidate_manifest, rules_version, candidate_transfer)
+    diagnostic = suite.get('diagnosticOnly', False)
+    vision = suite.get('diagnosticFullVision', 'fog')
+    if type(diagnostic) is not bool or vision not in ('fog', 'candidate', 'both') or vision != 'fog' and not diagnostic:
+        raise ValueError('Full vision needs an explicitly diagnostic suite.')
+    candidate, identity = frozen_actor(candidate_manifest, rules_version, candidate_transfer, allow_diagnostic=diagnostic)
     prepared, definitions, names = [], [], set()
     for case in suite['cases']:
         name = case.get('name')
@@ -85,7 +91,7 @@ def prepare(candidate_manifest, suite_path, *, candidate_transfer=None):
         if kind == 'self':
             actor, ref_identity = candidate, dict(kind='self')
         elif kind == 'frozen':
-            actor, ref_identity = frozen_actor(reference['manifest'], rules_version, reference.get('transferRules'))
+            actor, ref_identity = frozen_actor(reference['manifest'], rules_version, reference.get('transferRules'), allow_diagnostic=diagnostic)
             if (reference.get('checkpointSha256') != ref_identity['sha256'] or
                     reference.get('configSha256') != ref_identity['configSha256']):
                 raise ValueError('Fixed reference differs from the benchmark definition.')
@@ -111,6 +117,8 @@ def prepare(candidate_manifest, suite_path, *, candidate_transfer=None):
                                        for name in ('evaluate_suite.py', 'evaluate_policy.py', 'frozen_policy.py', 'playtest_sampling.py',
                                                     'training_contract.py', 'model_contract.py', 'dotnet_environment.py', 'training_opponents.py',
                                                     'training_feedback.py', 'weakness_sampling.py')})
+    if diagnostic:
+        canonical.update(diagnosticOnly=True, diagnosticFullVision=vision, diagnosticSampling='seat-arena-game-v1')
     suite_id = hashlib.sha256(json.dumps(canonical, sort_keys=True).encode()).hexdigest()
     return candidate, identity, prepared, dict(canonical, suiteId=suite_id)
 
@@ -133,6 +141,9 @@ def run(candidate_manifest, suite_path, worker, destination, *, candidate_transf
         for case, reference in cases:
             if guard is not None: guard()
             options = dict(guard=guard) if guard is not None else {}
+            if definition.get('diagnosticOnly'):
+                options['diagnostic_full_vision'] = definition['diagnosticFullVision']
+                options['diagnostic_matched_streams'] = True
             result = evaluate(worker, destination/case['name'], candidate, reference,
                               games_per_cell=case['gamesPerCell'], seed=case['seed'],
                               difficulty=case['difficulty'], reference_difficulty=case['referenceDifficulty'],

@@ -74,6 +74,8 @@ def verify(source: onnx.ModelProto, converted: onnx.ModelProto, seed: int = 42) 
 
 def export(run: Path, destination: Path, checkpoint: Path | None = None) -> dict:
     manifest = read_json(run / "run.json")
+    if manifest.get('diagnosticOnly'):
+        raise ValueError('Diagnostic training actors cannot be exported as playable opponents.')
     arena = read_json(run / "arena-status.json")
     rules = run_rules_version(run)
     if manifest.get("boardSize") != 7 or arena.get("simulationVersion") != rules:

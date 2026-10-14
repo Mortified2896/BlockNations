@@ -36,7 +36,12 @@ def atomic_json(path, data):
 
 class DotNetEnvironment(BaseEnv):
     def __init__(self, executable, run, workers, seed, size, curriculum, distance, session, policy_provider=lambda: None,
-                 opening_economy_version=OPENING_ECONOMY_VERSION, first_seat=-1, rules_version=RULES_VERSION, observation_version=2, episode_starts=None):
+                 opening_economy_version=OPENING_ECONOMY_VERSION, first_seat=-1, rules_version=RULES_VERSION, observation_version=2, episode_starts=None, diagnostic_full_vision_seats=0):
+        if type(diagnostic_full_vision_seats) is not int or diagnostic_full_vision_seats not in (0, 1, 2, 3):
+            raise ValueError('Full-vision diagnostics need an explicit two-seat mask.')
+        if diagnostic_full_vision_seats and (curriculum or episode_starts is not None):
+            raise ValueError('Full-vision diagnostics use standard openings.')
+        self.diagnostic_full_vision_seats = diagnostic_full_vision_seats
         self.rules_version = validate_rules_version(rules_version)
         self.observation_version = validate_schema(observation_version)
         self.behavior, self.names, self.spec = behavior(observation_version), names(observation_version), spec(observation_version)
@@ -73,6 +78,8 @@ class DotNetEnvironment(BaseEnv):
                             '--rules-version', self.rules_version, '--observation-version', str(observation_version)]
         if episode_starts is not None:
             command += ['--episode-starts', str(Path(episode_starts).absolute())]
+        if diagnostic_full_vision_seats:
+            command += ['--diagnostic-full-vision-seats', str(diagnostic_full_vision_seats)]
         self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                         text=True, bufsize=1, cwd=self.run)
         self.reader = threading.Thread(target=self._read, daemon=True)
@@ -118,7 +125,8 @@ class DotNetEnvironment(BaseEnv):
             raise RuntimeError(str(response) + ' ' + self.stderr_tail) from response
         if (response.get('protocol') != 1 or response.get('behavior') != self.behavior or
                 response.get('observationSize') != self.observation_size or response.get('actionCount') != ACTIONS or
-                response.get('rulesVersion') != self.rules_version):
+                response.get('rulesVersion') != self.rules_version or
+                response.get('diagnosticFullVisionSeats', 0) != self.diagnostic_full_vision_seats):
             raise ValueError('C# rules/model protocol mismatch; do not train on an incompatible worker.')
         self.stats = response['stats']
         self.roster = tuple(response.get('recruitTypes', ()))
@@ -175,6 +183,7 @@ class DotNetEnvironment(BaseEnv):
         for key in ('decisions', 'actions', 'games', 'captures', 'interruptions', 'rejections', 'trainerResets'):
             status[key] = sum(worker[key] for worker in self.stats)
         status.update(paused=paused, trainerConnected=not self.closed, failure=failure, humanPlaytest=False,
+                      diagnosticFullVisionSeats=self.diagnostic_full_vision_seats,
                       workerCount=self.workers, elapsedSeconds=now-self.started,
                       challengerDecisions=self.opponents.decisions, challengerPolicy=self.opponents.identifier,
                       challengerDecisionsByPolicy=dict(self.opponents.decisions_by_policy),
@@ -322,7 +331,8 @@ def install(learn, policy_provider):
                                      opening_economy_version=int(os.environ.get('BLOCKNATIONS_OPENING_ECONOMY_VERSION', OPENING_ECONOMY_VERSION)),
                                      rules_version=os.environ.get('BLOCKNATIONS_RULES_VERSION', RULES_VERSION),
                                      observation_version=int(os.environ.get('BLOCKNATIONS_OBSERVATION_VERSION', '2')),
-                                     episode_starts=os.environ.get('BLOCKNATIONS_EPISODE_STARTS'))
+                                     episode_starts=os.environ.get('BLOCKNATIONS_EPISODE_STARTS'),
+                                     diagnostic_full_vision_seats=int(os.environ.get('BLOCKNATIONS_DIAGNOSTIC_FULL_VISION_SEATS', '0')))
         return create
     learn.create_environment_factory = factory
     learn.SubprocessEnvManager = BatchedSimulationManager
