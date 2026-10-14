@@ -218,6 +218,44 @@ class AutomaticEvaluationTests(unittest.TestCase):
         self.config['headToHeadPromotion'] = 'true'; self.write(self.run/CONFIG, self.config)
         with self.assertRaises(ValueError): settings(self.run)
 
+    def test_population_settings_require_a_boolean_and_the_direct_gate(self):
+        for flag,direct in [('true',True),(True,False)]:
+            self.config.update(populationPromotion=flag,headToHeadPromotion=direct)
+            self.write(self.run/CONFIG,self.config)
+            with self.assertRaises(ValueError):settings(self.run)
+
+    def test_population_rejection_preserves_champion_and_skips_the_direct_challenge(self):
+        for accepted in (False,True):
+            with self.subTest(populationAccepted=accepted):
+                source=self.root/'BlockNationsSeatV2-77.pt';source.write_bytes(b'fixture')
+                folder=self.run/'frozen-evaluations'/('fixture-'+str(accepted));folder.mkdir(parents=True)
+                manifest=folder/'manifest.json';self.write(manifest,{})
+                self.write(self.run/'trainer.yaml',{});self.write(self.run/'training-opponents.json',{})
+                self.write(self.run/'playtest-champion.json',dict(candidateManifest='old.json',suiteId='fixed',checkpoint='old'))
+                self.config.update(headToHeadPromotion=True,populationPromotion=True);self.write(self.run/CONFIG,self.config)
+                job_dir=self.run/'evaluations/automatic'/str(accepted);job_dir.mkdir(parents=True)
+                job_path=job_dir/'job.json';self.write(job_path,dict(owner=OWNER,runId='saved'))
+                evidence={label:job_dir/(label+'.json') for label in ('primary','confirmation')}
+                for p in evidence.values():self.write(p,dict(results=[dict(games=256)]))
+                before=(self.run/'playtest-champion.json').read_bytes()
+                with patch('evaluate_suite.prepare',return_value=(None,None,None,dict(suiteId='fixed'))), \
+                        patch('playtest_champion.resolve_champion'), \
+                        patch('automatic_evaluation.latest_checkpoint',return_value=source), \
+                        patch('evaluate_milestone.freeze',return_value=manifest), \
+                        patch('evaluate_suite.run',return_value=dict(results=[dict(games=64)],suiteId='fixed')), \
+                        patch('population_promotion.review',return_value=dict(accepted=accepted,reasons=['fixture'],candidateConfirmationGames=64)) as population, \
+                        patch('champion_matches.challenge',return_value=evidence) as challenge, \
+                        patch('reference_score.publish'), \
+                        patch('playtest_champion.select',return_value=dict(checkpoint='new')) as select:
+                    result=perform_job(self.run,self.worker,job_path)
+                population.assert_called_once()
+                self.assertEqual(result['state'],'promoted' if accepted else 'retained')
+                self.assertEqual(result['games'],640 if accepted else 128)
+                if accepted:challenge.assert_called_once();select.assert_called_once()
+                else:
+                    challenge.assert_not_called();select.assert_not_called()
+                    self.assertEqual((self.run/'playtest-champion.json').read_bytes(),before)
+
     def test_source_change_refreshes_same_champion_before_candidate_evaluation(self):
         source = self.root/'BlockNationsSeatV2-77.pt';source.write_bytes(b'fixture')
         folder = self.run/'frozen-evaluations/fixture-77';folder.mkdir(parents=True)

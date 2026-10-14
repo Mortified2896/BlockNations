@@ -56,6 +56,9 @@ def settings(run):
         raise ValueError('Replicated promotion must be explicitly enabled or disabled.')
     if type(config.get('headToHeadPromotion', False)) is not bool:
         raise ValueError('Direct promotion must be explicitly enabled or disabled.')
+    if (type(config.get('populationPromotion', False)) is not bool or
+            config.get('populationPromotion', False) and not config.get('headToHeadPromotion', False)):
+        raise ValueError('Population promotion supplements the replicated direct-incumbent gate.')
     if config.get('replicatedPromotion', False):
         from tournament_selection import policy
         policy(config.get('promotionMargins'))
@@ -135,6 +138,19 @@ def perform_job(run, worker, job_path):
         atomic_json(job_path, job)
         result = evaluate(manifest, Path(config['suite']), worker, job_path.parent / 'results')
         job.update(games=sum(r['games'] for r in result['results']), suiteId=result['suiteId'])
+        if config.get('populationPromotion', False):
+            from population_promotion import review as population_review
+            job.update(state='confirming', reason='Checking the fixed Hard population on a second seed pack.')
+            atomic_json(job_path, job)
+            population = population_review(run, manifest, config['suite'], worker, job_path.parent)
+            job['populationReview'] = population
+            job['games'] += population['candidateConfirmationGames']
+            if not population['accepted']:
+                job.update(state='retained', champion=incumbent['checkpoint'],
+                           reason='Candidate did not improve the fixed population: '+'; '.join(population['reasons']))
+                from reference_score import publish
+                publish(run, manifest, job_path.parent/'results/suite.json')
+                return job
         confirmation = None
         head_to_head = None
         if config.get('headToHeadPromotion', False):
@@ -164,6 +180,8 @@ def perform_job(run, worker, job_path):
             selected = select(run, manifest, job_path.parent / 'results/suite.json', **kwargs)
             job.update(state='promoted', champion=selected['checkpoint'], promotionEvidence=selected.get('promotionEvidence'),
                        reason='Passed replicated direct-incumbent matches.' if head_to_head else 'Passed the fixed-reference promotion gate.')
+            if config.get('populationPromotion', False):
+                job['reason']='Passed replicated fixed-population and direct-incumbent gates.'
         except ValueError as error:
             if not str(error).startswith(('Candidate increased', 'Candidate regressed', 'Candidate did not improve')):
                 raise
