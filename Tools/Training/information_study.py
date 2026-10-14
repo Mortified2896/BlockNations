@@ -35,7 +35,7 @@ def migration(checkpoint, network, source, target):
     return module.migrate(checkpoint,network,source_size=SIZES[source],target_size=SIZES[target])
 
 
-def prepare_arm(root, name, parent_path, recipe_run, worker, steps, seed, schema, *, episode_starts=None, weakness=None, fog_diagnostic=False, full_vision_seats=0):
+def prepare_arm(root, name, parent_path, recipe_run, worker, steps, seed, schema, *, episode_starts=None, weakness=None, fog_diagnostic=False, full_vision_seats=0, capacity=False):
     if full_vision_seats not in (0, 3) or full_vision_seats and not fog_diagnostic:
         raise ValueError('Fog training compares standard vision with symmetric full vision in diagnostic runs.')
     from mlagents.torch_utils import torch
@@ -43,11 +43,20 @@ def prepare_arm(root, name, parent_path, recipe_run, worker, steps, seed, schema
     validate_schema(schema)
     if schema < original or schema > original+1:
         raise ValueError('Compare a parent contract with itself or one next prefix extension.')
+    if type(capacity) is not bool or capacity and (schema != original or episode_starts or weakness or fog_diagnostic):
+        raise ValueError('Change capacity separately from observation, vision or curriculum treatments.')
     run, environment, provenance=arm_files(root,name,parent_path,recipe_run,run_rules_version(recipe_run),worker,steps,seed,parallel_games=8)
     options=json.loads((run/'trainer.yaml').read_text()); network=options['behaviors'][behavior(original)]['network_settings']
+    original_network=copy.deepcopy(network)
     saved=run/'checkpoints'/name/behavior(original)/'checkpoint.pt'
     old=torch.load(saved,map_location='cpu'); new=old
     for previous in range(original,schema): new=migration(new,network,previous,previous+1)
+    if capacity:
+        from capacity_expansion import expand
+        new,network=expand(old,network,schema,seed)
+        torch.save(new,saved)
+        options['behaviors'][behavior(original)]['network_settings']=network
+        atomic_json(run/'trainer.yaml',options)
     if schema != original:
         folder=saved.parent.with_name(behavior(schema)); saved.parent.rename(folder)
         saved=folder/'checkpoint.pt'; torch.save(new,saved)
@@ -58,6 +67,10 @@ def prepare_arm(root, name, parent_path, recipe_run, worker, steps, seed, schema
                     experiment='matched-information-study',humanIngestion='disabled-for-both-arms')
     contract['weightTransfer']['observationMigration']=dict(source=original,target=schema,parentSha256=parent['sha256'],optimizer='preserved')
     treatment_record=dict(observationVersion=schema,actionVersion=2,humanIngestion='disabled',workers=8,torchThreads=1)
+    if capacity:
+        contract['experiment']='matched-capacity-study'
+        treatment_record.update(sourceHiddenUnits=128,targetHiddenUnits=256,initialFunction='preserved',newAdamMoments='zero')
+        contract['weightTransfer']['capacityExpansion']=dict(source=128,target=256,initialFunction='preserved',optimizer='old moments and counters preserved; added moments zero')
     if episode_starts:treatment_record['episodeStartsSha256']=sha(Path(episode_starts).read_bytes())
     if weakness:treatment_record['weaknessDiagnosticSha256']=sha(Path(weakness).read_bytes())
     contract['informationTreatment']=treatment_record
@@ -88,7 +101,7 @@ def prepare_arm(root, name, parent_path, recipe_run, worker, steps, seed, schema
     from frozen_policy import FrozenPolicy
     import numpy as np
     from mlagents.trainers.policy.torch_policy import TorchPolicy
-    initial=FrozenPolicy(parent['checkpoint'],network,spec(original),parent['sha256'])
+    initial=FrozenPolicy(parent['checkpoint'],original_network,spec(original),parent['sha256'])
     policy=TorchPolicy(seed,spec(schema),NetworkSettings(**network),SimpleActor,dict(conditional_sigma=False,tanh_squash=False))
     policy.actor.load_state_dict(new['Policy'],strict=True)
     random=np.random.default_rng(seed)
@@ -97,7 +110,7 @@ def prepare_arm(root, name, parent_path, recipe_run, worker, steps, seed, schema
         encoded,_=policy.actor.network_body([torch.as_tensor(values)])
         actual=policy.actor.action_model._get_dists(encoded,torch.as_tensor(~mask,dtype=torch.float32)).discrete[0].probs.numpy()
     np.testing.assert_allclose(np.where(mask,0,actual),initial.probabilities(values,mask),rtol=1e-4,atol=1e-6)
-    before_critic=ValueNetwork(['extrinsic'],spec(original).observation_specs,NetworkSettings(**network))
+    before_critic=ValueNetwork(['extrinsic'],spec(original).observation_specs,NetworkSettings(**original_network))
     after_critic=ValueNetwork(['extrinsic'],spec(schema).observation_specs,NetworkSettings(**network))
     before_critic.load_state_dict(old['Optimizer:critic'],strict=True);after_critic.load_state_dict(new['Optimizer:critic'],strict=True)
     with torch.no_grad():
@@ -107,7 +120,7 @@ def prepare_arm(root, name, parent_path, recipe_run, worker, steps, seed, schema
     if any(int(new['Optimizer:value_optimizer']['state'][i]['step'])!=int(old['Optimizer:value_optimizer']['state'][i]['step']) for i in range(6,18)):
         raise ValueError('Observation migration changed Adam counters.')
     atomic_json(run/'initialization.json',dict(version=1,sourceSchema=original,targetSchema=schema,actorParitySamples=8,criticParitySamples=8,
-                optimizerCountersPreserved=True,parentSha256=parent['sha256']))
+                optimizerCountersPreserved=True,parentSha256=parent['sha256'],sourceHiddenUnits=original_network['hidden_units'],targetHiddenUnits=network['hidden_units']))
     return run,environment
 
 
@@ -122,7 +135,7 @@ def run_study(root,parent,recipe_run,suite,worker,destination,name,*,treatment='
     if (not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,32}',name) or type(steps)is not int or not 2048<=steps<=1000000 or
             not 1<=len(seeds)<=3 or len(set(seeds))!=len(seeds) or any(type(s)is not int or not 0<=s<2**31 for s in seeds) or not 0<hours<=6):
         raise ValueError('Use bounded distinct seeds, steps, names and per-arm time.')
-    if treatment not in ('observation','history','episode-starts','weakness','fog') or (episode_starts is not None)!=(treatment=='episode-starts') or (weakness is not None)!=(treatment=='weakness'):
+    if treatment not in ('observation','history','episode-starts','weakness','fog','capacity') or (episode_starts is not None)!=(treatment=='episode-starts') or (weakness is not None)!=(treatment=='weakness'):
         raise ValueError('Choose exactly one recorded treatment per experiment.')
     source_schema=checkpoint_schema(json.loads(parent.read_text())['checkpoint'])
     if treatment=='history': control_schema,target_schema=3,4
@@ -205,7 +218,8 @@ def run_study(root,parent,recipe_run,suite,worker,destination,name,*,treatment='
                 if not run.exists():
                     run,environment=prepare_arm(root,run.name,parent,recipe_run,worker,steps,seed,schema,
                         episode_starts=episode_starts if arm=='treatment' else None,weakness=weakness if arm=='treatment' else None,
-                        fog_diagnostic=treatment=='fog',full_vision_seats=3 if treatment=='fog' and arm=='treatment' else 0)
+                        fog_diagnostic=treatment=='fog',full_vision_seats=3 if treatment=='fog' and arm=='treatment' else 0,
+                        capacity=treatment=='capacity' and arm=='treatment')
                     save_environment(run,environment)
                     receipt.setdefault('armInputs',{})[current_key]={name:sha((run/name).read_bytes()) for name in
                         ('run.json','trainer.yaml','training-opponents.json','study-environment.json')}
@@ -300,7 +314,7 @@ if __name__=='__main__':
     for field in ('root','parent','recipe-run','suite','worker','destination'):parser.add_argument('--'+field,type=Path,required=True)
     parser.add_argument('--name',required=True);parser.add_argument('--steps',type=int,default=250000)
     parser.add_argument('--seeds',type=int,nargs='+',default=[61,62,63]);parser.add_argument('--hours-per-arm',type=float,default=3)
-    parser.add_argument('--treatment',choices=('observation','history','episode-starts','weakness','fog'),default='observation')
+    parser.add_argument('--treatment',choices=('observation','history','episode-starts','weakness','fog','capacity'),default='observation')
     parser.add_argument('--episode-starts',type=Path);parser.add_argument('--weakness-diagnostic',type=Path)
     parser.add_argument('--power-controlled',action='store_true');parser.add_argument('--resume',action='store_true')
     parser.add_argument('--confirmation',action='store_true')

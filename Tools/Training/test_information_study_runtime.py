@@ -9,6 +9,19 @@ from power_study_controller import tick
 
 
 class StudyRuntimeTests(unittest.TestCase):
+    def test_controller_preserves_another_live_study_in_the_shared_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);destination=root/'study';destination.mkdir()
+            config=root/'controller.json'
+            command=['python','study.py','--root',str(root),'--destination',str(destination),'--power-controlled']
+            config.write_text(json.dumps(dict(owner='BlockNations.PowerStudy.v1',command=command,destination=str(destination),processExecutable='native-python',enabled=True)))
+            lock=root/'information-study.lock';lock.write_text('7654')
+            with patch('power_study_controller.command_for',return_value='another owned study'), \
+                    patch('power_study_controller.subprocess.Popen') as launch:
+                tick(config);launch.assert_not_called()
+            self.assertEqual(lock.read_text(),'7654')
+            self.assertEqual(json.loads((root/'controller-status.json').read_text())['state'],'waiting_for_other_study')
+
     def test_power_hysteresis_and_unplug_pause(self):
         guard=PowerGuard(True)
         def reading(source,percent):return f"Now drawing from '{source}'\n battery {percent}%; present: true"

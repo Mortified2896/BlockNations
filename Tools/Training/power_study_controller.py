@@ -35,6 +35,14 @@ def tick(config_path):
                 status.update(state=state or 'starting',studyPid=pid,updatedUnix=time.time());atomic_json(status_path,status);return
         if receipt and state not in ('paused_power','running'):
             raise ValueError('Study is not in an explicitly resumable state.')
+        if '--root' in command:
+            shared_lock=Path(command[command.index('--root')+1])/'information-study.lock'
+            if shared_lock.exists():
+                owner=shared_lock.read_text().strip()
+                if not owner.isdigit():raise ValueError('Invalid shared study lock; preserve it for inspection.')
+                if command_for(int(owner)):
+                    status.update(state='waiting_for_other_study',updatedUnix=time.time())
+                    atomic_json(status_path,status);return
         ac,percent=parse_power(subprocess.check_output(['/usr/bin/pmset','-g','batt'],text=True,timeout=5))
         status.update(acPower=ac,batteryPercent=percent,updatedUnix=time.time())
         if not ac or percent<80:

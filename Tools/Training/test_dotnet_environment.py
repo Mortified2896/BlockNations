@@ -6,12 +6,28 @@ import threading
 import time
 import unittest
 import uuid
+import queue
+from unittest.mock import Mock
 
 import numpy as np
 from mlagents_envs.base_env import ActionTuple
 from dotnet_environment import DotNetEnvironment, NAMES, ACTIONS, OBSERVATIONS
 
 WORKER = Path(os.environ.get('BLOCKNATIONS_TEST_WORKER', Path(__file__).resolve().parents[2] / 'Build/TrainingWorker/BlockNations.TrainingWorker.dll'))
+
+
+class CommunicationDeadlineTests(unittest.TestCase):
+    def test_reference_batches_have_a_bounded_deadline_and_never_retry_unknown_actions(self):
+        for operation, seconds in (('reference', 120), ('step', 30), ('status', 30)):
+            env = object.__new__(DotNetEnvironment)
+            env.closed = False; env.stderr_tail = ''
+            env.process = Mock(); env.responses = Mock(); env.responses.get.side_effect = queue.Empty
+            env._publish_status = Mock()
+            with self.assertRaisesRegex(RuntimeError, f'during {operation}'):
+                env._exchange(dict(op=operation))
+            env.responses.get.assert_called_once_with(timeout=seconds)
+            env.process.stdin.write.assert_called_once()
+            env._publish_status.assert_called_once()
 
 
 @unittest.skipUnless(WORKER.is_file(), 'Build the actual shared C# worker first.')

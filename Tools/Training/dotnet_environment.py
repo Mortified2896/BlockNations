@@ -111,14 +111,18 @@ class DotNetEnvironment(BaseEnv):
     def _exchange(self, request):
         if self.closed:
             raise RuntimeError('Simulation is closed.')
+        # A reference RPC computes bounded searches for several arenas in one
+        # response. Keep ordinary steps fail-fast, but allow the larger batch
+        # its own bounded deadline. Never retry an action with unknown outcome.
+        timeout = 120 if request['op'] == 'reference' else 30
         try:
             self.process.stdin.write(json.dumps(request, separators=(',', ':')) + '\n')
             self.process.stdin.flush()
-            response = self.responses.get(timeout=30)
+            response = self.responses.get(timeout=timeout)
         except (BrokenPipeError, queue.Empty) as error:
-            self.failure = 'C# simulation stopped responding. ' + self.stderr_tail
+            self.failure = f"C# simulation stopped responding during {request['op']} (deadline {timeout}s). " + self.stderr_tail
             self._publish_status(force=True, failure=self.failure)
-            raise RuntimeError('C# simulation stopped responding. ' + self.stderr_tail) from error
+            raise RuntimeError(self.failure) from error
         if isinstance(response, Exception):
             self.failure = str(response) + ' ' + self.stderr_tail
             self._publish_status(force=True, failure=self.failure)
