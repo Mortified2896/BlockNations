@@ -241,6 +241,8 @@ of the 20 GB ceiling, with 107.68 GB free disk. The final receipt is
 The overnight heartbeat was paused after handoff; the broader AI goal is unmet.
 Public promotion, physical human difficulty, difficulty calibration, intrinsic
 starting-role balance and phone/browser inference acceptance remain separate
-unmet gates. The wider Unity menu suite also retains its previously documented
-unrelated Assistant-connection interruption; the audio tests/native silent build
-passed. See [quiet setup and validation](Quiet_Overnight_Training.md).
+unmet gates. After the owner's subsequent request to remove Unity Assistant,
+Unity resolved and compiled successfully, and the same wider Unity menu/training
+suite passed all 48 checks, including the previously interrupted scene test.
+The audio tests/native silent build also passed. See
+[quiet setup and validation](Quiet_Overnight_Training.md).

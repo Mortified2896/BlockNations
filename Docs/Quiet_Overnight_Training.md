@@ -149,6 +149,18 @@ code-only builder did not rewrite a scene; incidental importer/package/setting
 normalization was restored. Private receipts are under
 `Logs/Validation/QuietOvernight-20261015/`.
 
+At the owner's subsequent request on 2026-10-15, Unity Assistant was removed
+from the project manifest. Unity 6000.4.0f1 resolved the package graph, removing
+Assistant and its now-unused glTFast/Serialization dependencies without changing
+remaining package versions. ML-Agents and Unity Inference remain installed.
+Import/compilation exited successfully. A fresh graphical EditMode run with
+audio disabled passed all 48 checks in the same four fixtures, including
+`TrainingHumanPlaytestTests.AuthoredTrainingMenuExitTargetsItsArenaAndProductMenuIsPreserved`.
+This resolves the earlier Assistant-interrupted check; receipts are under
+`Logs/Validation/RemoveUnityAssistant-20261015/`. Incidental model-importer
+whitespace and the Inference analytics define were restored rather than included
+in the package-removal change. No scene, model or gameplay code was changed.
+
 The main learner acknowledged a successful save/stop (`exitCode: 0`) before the
 exclusive study started. Its resume command now uses the current-source worker
 and verified silent player; learner weights, optimizer and recipe were preserved.
