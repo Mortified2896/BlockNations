@@ -154,8 +154,13 @@ strength despite improved imitation metrics. New units/rules still need explicit
 capabilities, appropriate training coverage and held-out content tests; accepting
 an observation shape or permuting recruit slots does not establish useful play.
 
-The next bounded data experiment matches teacher labels and rollout actions to
-the actual Hard deployment sampler. A remaining hypothesis is sequential
+Matching teacher labels and rollout actions to the actual Hard deployment
+sampler still lost strength. A subsequent aggregate retained original experience
+and added fresh teacher-labelled student/retained-opponent positions. Its matched
+Hard result recovered to 230/256 versus the teacher's 237/256 and the original
+initializer's 142/256, with weak strongest-neural-archive retention. This single
+fit remains unselected and needs independent replication, held-out content and
+ordinary counterplay. A remaining hypothesis is sequential
 distribution shift: a learner's mistakes lead to positions underrepresented by
 teacher-only experience. Iterative fresh learner rollouts with fair teacher labels
 are a justified later experiment if direct transfer remains weak; held-out human

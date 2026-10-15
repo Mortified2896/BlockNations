@@ -6,8 +6,11 @@ inconsistent retention of the strongest opponent/starting-role matchup. The
 compact seed-84 candidate still loses to ordinary coordinated console counterplay
 in both starting roles. Human strength is not fixed, and no model was promoted.
 A separate shared-capability architecture has verified PPO/save/resume/export
-feasibility. Its first teacher initializations lost full-game strength and remain
-unselected; a separate deployment-policy initialization is still being measured.
+support. Expert labels on newly generated student/reference experience recovered
+most of the teacher's tested strength: 230/256 versus 237/256 on a fresh matched
+panel, compared with the earlier initialization's 142/256. It still trails the
+strongest archived neural matchup and lacks independent replication, novel-content
+and human validation. It remains unselected.
 
 ## Completed matched comparison
 
@@ -158,9 +161,50 @@ real 8,207-step warmup: 155 finite checkpoint tensors, all 28 Adam states advanc
 261 captures, 5,244 challenger decisions across all eight entries and zero
 interruptions/rejections. Independent verification of the resumed step-24,988
 checkpoint found all 155 tensors finite, all 28 Adam counters advanced from
-144 to 528, and unchanged copied inputs/source hashes. It continues toward
-131,072 with a new 1,792-game screen queued; those later outcomes remain pending.
-All experiments preserve the selected compact model and original checkpoints.
+144 to 528, and unchanged copied inputs/source hashes. It subsequently finished
+at 131,112 with all 28 Adam counters at 2,976, actual learning rate 0.000075,
+3,416 captures, 80,455 opposing choices and zero interruptions/rejections in the
+continued segment. The exact ordinary controller was restored.
+
+Its complete independently verified 1,792-game screen found partial Hard recovery:
+teacher 230/256, original initialization 148/256, warmup 191/256 and final 203/256.
+Raw Policy fell from 100/256 at warmup to 69/256 at the final checkpoint.
+There were no evaluation interruptions. Hard's gains were all second-role:
+77/128 first stayed unchanged while second rose from 114/128 to 126/128; the
+teacher scored 113/128 and 117/128. Final Archer-reference retention was 42/64
+versus the teacher's 64/64. No model was selected. A separate 64-position dynamic
+probability-export check passed with maximum error below 0.00000275, masked zero
+and finite initializers; this remains a technical private export.
+
+An independent fit diagnostic found 95.2% training top-choice agreement versus
+91.9% internal validation for the Hard initializer, despite its much worse full
+games. The next corpus therefore asks the teacher for labels on new student
+experience, with a retained reference pool and an explicit 50/50 action mixture.
+It generated 16,384 fresh positions/249 completed games with no interruption or
+rejection and 4,573 reference choices across all eight entries. Independent
+inference checked 128 new teacher labels within 0.000004. Thirty-six focused
+checks passed for frozen student loading, aggregation/split/partition checks and
+real C# integration. The combined 32,768-position fit completed at 4,096 updates,
+selecting update 3,840. Its prepared checkpoint passed source/label/aggregate
+identity checks, 71 finite tensors, zero PPO steps and empty Adam; dynamic export
+parity was within 0.00000513. The exact controller was restored.
+
+The complete fresh 1,280-game comparison showed useful transfer recovery:
+teacher Hard 237/256, original initializer Hard 142/256, aggregated initializer
+Hard 230/256. Raw Policy rose from 115/256 to 191/256. No games were interrupted.
+Both-role Hard improved from 64/128 first and 78/128 second to 111/128 and 119/128,
+versus the teacher's 115/128 and 122/128. The aggregate matched 64/64 against both
+tactical Warrior/Archer references, but its strongest-neural-archive result was
+38/64 versus the teacher's 51/64. This is one fit/seed with a combined data-size
+and rollout-distribution change; independent replication, content tests and
+ordinary counterplay remain required. It is not a selected model or human fix.
+
+Fresh fair console counterplay also beat the earlier 131,112-step PPO model in
+round 6. All 33 agent-controlled choices, 23 AI choices, observations, masks and
+outcome reproduced exactly. This is a held-out agent diagnostic, not a physical
+human test; the aggregate initializer is being checked separately. All experiments
+preserve the selected compact model and original checkpoints. No evaluation or
+counterplay journals entered fitting.
 
 Further representation work needs retained opponent/role checks, independently
 trained seeds, held-out roster/stat/rule variants and fresh coordinated

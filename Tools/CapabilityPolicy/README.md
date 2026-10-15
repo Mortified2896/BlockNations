@@ -111,4 +111,28 @@ environment/RNG/opponent-snapshot trajectory. The October 15 real eight-arena
 warmup exercised all eight retained policies and saved at 8,207 steps without
 rejected actions. Independent resumed step-24,988 verification confirmed finite
 state, advancing Adam and copied-source/input identities. Final continuation and
-frozen-game strength remain pending.
+frozen-game strength remained a separate gate. That run completed at 131,112
+but its fresh Hard screen still lost to the teacher (203/256 versus 230/256),
+with weak first-role retention. No prototype was selected.
+
+`collect.py --student "$BN_STUDENT_MANIFEST" --student-mode Hard --teacher-fraction 0.5`
+can generate new experience from a frozen prepared/completed student mixed with
+the teacher. `--teacher-mode Hard` still defines the labels; student behaviour
+never substitutes for expert targets. Add `--opponents-from` for the copied
+retained training pool. Collection currently fixes references to seat 1, draws
+the first player randomly and labels both seats from their own fair inputs.
+
+Repeat `distill.py --corpus "$BN_ORIGINAL_CORPUS" --corpus "$BN_NEW_CORPUS"`
+to retain original knowledge while fitting new experience. Up to four compatible
+owned corpora/65,536 positions can be combined; individual file limits stay
+unchanged. Whole-match splits persist across sources. Duplicate corpora,
+incompatible teacher/sampler/contracts and split leaks fail closed. The composite
+identity binds every source manifest/content hash and is explicitly distinguished
+from one NPZ digest. Neither collection nor aggregation accepts held-out games.
+
+The first actual aggregate completed 32,768 positions and prepared finite
+step-zero/fresh-Adam weights. Its matched fresh Hard screen recovered to230/256
+wins versus142/256 for the original initialization and237/256 for the teacher.
+The strongest archived neural matchup still regressed, and this is one fit/seed.
+It is promising transfer evidence, not an automatic selection or human-strength
+claim. See the initialization/results notes for raw roles, references and limits.

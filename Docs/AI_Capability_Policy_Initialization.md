@@ -192,16 +192,97 @@ real eight-entry retained pool preflight validated all four frozen actors and
 pilot then completed a real eight-arena warmup to step 8,207, with 155 finite
 tensors, all 28 Adam states at 144, actual saved learning rate 0.000075, 261
 captures and zero interruptions/rejections. It recorded 5,244 challenger choices
-covering all eight retained policies. It has explicitly resumed toward 131,072;
-that target is not a completed result. A frozen warmup snapshot is preserved
+covering all eight retained policies. It resumed and completed at step 131,112.
+The continued segment recorded 3,416 captures, 80,455 opposing choices across all
+eight entries and zero interruptions/rejections; all 28 Adam counters reached
+2,976 and the actual learning rate remained 0.000075. The exact controller was
+restored. A frozen warmup snapshot is preserved
 outside ordinary selection. An independent check loaded that snapshot and the
 resumed step-24,988 checkpoint: all 155 tensors were finite and all 28 Adam
 counters advanced from 144 to 528, while copied initialization/league identities
-and every pinned Python source hash matched. The final target is still pending.
-A fresh 1,792-game comparison is queued after the owned sequence restores the
-controller, covering prepared weights, the frozen warmup and the final model
-in Hard/Policy plus the compact Hard teacher. Parameter/value/Adam and copied
+and every pinned Python source hash matched. Parameter/value/Adam and copied
 input continuation do not claim faithful environment/RNG/snapshot trajectories.
+
+The complete fresh 1,792-game comparison checked all 56 result files, raw records,
+identities, both roles, source hashes and zero rejected actions. All rows had zero
+interruptions on seeds 1,015,021/1,015,022:
+
+| Candidate | Hard wins | Raw Policy wins |
+| --- | ---: | ---: |
+| Compact teacher | 230/256 | — |
+| Original Hard-teacher initialization | 148/256 | 118/256 |
+| Retained-pool warmup, step 8,207 | 191/256 | 100/256 |
+| Retained continuation, step 131,112 | 203/256 | 69/256 |
+
+Hard improved over the warmup, but the first-role result stayed at 77/128 while
+second-role wins rose from 114/128 to 126/128. The teacher was 113/128 and 117/128.
+The final candidate's Archer-reference result was 42/64 versus the teacher's
+64/64. This is partial recovery, not preserved strength or a solved human
+weakness. The different recipe/retained pool, seed and learning budget are not
+isolated causal factors. No model was selected. The final probability export
+passed batches 1/7/64 on 64 genuine internal positions, finite graph/initializers
+and zero masked probabilities, with maximum absolute error 0.00000275. Its
+873,315 bytes do not establish native/browser compatibility or device latency.
+
+## Expert labels on student experience
+
+The subsequent opt-in collector accepts `--student` pointing to immutable
+prepared weights or a completed positive-step prototype. It checks architecture,
+profile, full checkpoint identity and finite weights. An explicit
+`--teacher-fraction` mixes teacher/student action probabilities, while the stored
+targets always come from the unmodified teacher. Optional `--opponents-from`
+uses copied fair references on seat 1; first player is random and both seats'
+legitimate observations receive labels. It does not read evaluation journals.
+
+Repeated `distill.py --corpus` arguments aggregate one to four compatible owned
+training corpora, up to 65,536 positions. Individual archives retain their 16,384
+position/400 MB bounds. The original whole-match partitions are preserved;
+duplicate corpora, different teachers/samplers/contracts, evaluation partitions
+and cross-source split leaks are rejected. Multi-source identity explicitly
+hashes the ordered manifest/content identities; it is labelled separately from
+a single NPZ digest. Prepared weights still start PPO with step zero/fresh Adam.
+This implements an iterative training-data option motivated by
+[dataset aggregation](https://proceedings.mlr.press/v15/ross11a.html), not a proven
+convergence or strength guarantee for this game.
+
+Thirty-six focused checks passed, including real C# integration. The actual new
+corpus under `capability-rollout-aggregation-20261015` completed 16,384 positions
+from 249 games, with no interruption/rejection. Its 50/50 teacher/student Hard
+mixture used the frozen step-131,112 student, 5% legal action noise and all eight
+retained policies (4,573 reference choices). Independent inference rechecked
+128 new teacher labels within 0.000004. The combined 32,768-position fit completed
+with the same v2 width/seed/4,096-update budget. Selected update 3,840 achieved
+0.2284 multi-choice validation KL and 89.6% top agreement on its broader
+validation distribution. These internal metrics are not directly comparable to
+the original corpus. Independent verification checked 474 training/107 validation
+groups, both source/content identities, teacher labels, and a fresh prepared
+checkpoint with 71 finite tensors, step zero and empty PPO Adam. Probability
+export parity passed at batches 1/7/64 within 0.00000513. The exact ordinary
+controller was restored.
+
+The complete, independently verified 1,280-game matched screen on new seeds
+1,015,031/1,015,032 showed substantially better transfer, with no interruptions:
+
+| Candidate | Hard wins | Raw Policy wins |
+| --- | ---: | ---: |
+| Compact teacher | 237/256 | — |
+| Original Hard-teacher initialization | 142/256 | 115/256 |
+| Aggregated student/reference experience | 230/256 | 191/256 |
+
+Hard first/second results improved from 64/128 and 78/128 to 111/128 and 119/128;
+the teacher was 115/128 and 122/128. Warrior/Archer-reference wins rose from
+48/64 and 6/64 to 64/64 and 64/64. The strongest neural archive remained weak:
+38/64 versus the teacher's 51/64. The extra data and changed rollout/validation
+distribution are a combined intervention. This single fit/seed is promising
+transfer evidence, not replicated parity, novel-content generalization or a
+human-difficulty fix. No model was selected or published.
+
+A fresh fair console diagnostic against the earlier 131,112-step model won in
+round 6 using coordinated ranged attacks and a capture. All 33 agent-controlled
+choices, observation vectors, masks, 23 AI choices and the outcome were reproduced
+exactly. This was not a physical human trial. Its evaluation-only journal is
+excluded from both corpora. Counterplay against the aggregate initializer is
+still being checked separately.
 
 Further strength work needs fresh full-game seeds, both starting roles, retained
 opponents and coordinated counterplay. Better teacher approximation does not
