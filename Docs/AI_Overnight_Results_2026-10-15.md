@@ -191,7 +191,10 @@ parity was within 0.00000513. The exact controller was restored.
 
 The complete fresh 1,280-game comparison showed useful transfer recovery:
 teacher Hard 237/256, original initializer Hard 142/256, aggregated initializer
-Hard 230/256. Raw Policy rose from 115/256 to 191/256. No games were interrupted.
+Hard 230/256. Raw Policy rose from 115/256 to 191/256. A separate 256-game
+teacher-Policy diagnostic on the same seeds/reference pack scored 133/256. The
+combined comparison therefore covers 1,536 completed games. No games were
+interrupted.
 Both-role Hard improved from 64/128 first and 78/128 second to 111/128 and 119/128,
 versus the teacher's 115/128 and 122/128. The aggregate matched 64/64 against both
 tactical Warrior/Archer references, but its strongest-neural-archive result was
@@ -202,7 +205,11 @@ ordinary counterplay remain required. It is not a selected model or human fix.
 Fresh fair console counterplay also beat the earlier 131,112-step PPO model in
 round 6. All 33 agent-controlled choices, 23 AI choices, observations, masks and
 outcome reproduced exactly. This is a held-out agent diagnostic, not a physical
-human test; the aggregate initializer is being checked separately. All experiments
+human test. In the separate aggregate-initializer diagnostic, the AI won in
+round 4 after the agent moved its defender away from the city despite revealing
+an approaching Rider. All 12 agent choices, 23 AI choices, observations, masks
+and outcome reproduced exactly. This was an agent mistake and one game; it does
+not establish human difficulty or reliable tactical defense. All experiments
 preserve the selected compact model and original checkpoints. No evaluation or
 counterplay journals entered fitting.
 
@@ -217,16 +224,21 @@ legacy game loader merely because it has an ONNX file.
 ## Quiet operation and remaining review
 
 Training and feasibility used standalone C# workers and Python, without opening
-a Unity Editor, player or viewer. The independent quiet guard continues until
+a Unity Editor, player or viewer. The independent quiet guard ran through
 09:00 Hong Kong time: native output-mute readback, keyboard brightness/backlight
 zero and 30-second idle dim, with no display/user-activity caffeinate assertion.
 The audio driver retained its volume setting; mute succeeded. No instantaneous
 Bluetooth-route guarantee is inferred from the 15-second backstop. The source of
 game music was removed by headless operation/pre-scene training mute.
 
-At the morning handoff, recheck current process/guard state and shared storage,
-then unload only the owned overnight quiet guard after reporting. Preserve its
-receipts and leave output muted/keyboard dark until the owner adjusts them.
+At the 09:01 morning handoff, the owned quiet guard was disabled and unloaded.
+Independent native readback still showed output muted and keyboard brightness
+and actual backlight zero, with a 30-second idle timeout. Neither setting was
+restored automatically. The ordinary headless learner/controller was running
+on AC at 80% battery and nominal thermal state. Shared artifacts used 12.33 GB
+of the 20 GB ceiling, with 107.68 GB free disk. The final receipt is
+`benchmarks/morning-handoff-20261015.json` under the private training root.
+The overnight heartbeat was paused after handoff; the broader AI goal is unmet.
 Public promotion, physical human difficulty, difficulty calibration, intrinsic
 starting-role balance and phone/browser inference acceptance remain separate
 unmet gates. The wider Unity menu suite also retains its previously documented

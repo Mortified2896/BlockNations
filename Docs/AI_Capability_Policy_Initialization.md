@@ -265,9 +265,15 @@ The complete, independently verified 1,280-game matched screen on new seeds
 
 | Candidate | Hard wins | Raw Policy wins |
 | --- | ---: | ---: |
-| Compact teacher | 237/256 | — |
+| Compact teacher | 237/256 | 133/256 |
 | Original Hard-teacher initialization | 142/256 | 115/256 |
 | Aggregated student/reference experience | 230/256 | 191/256 |
+
+The teacher's raw-Policy row was independently completed and verified in a
+separate 256-game diagnostic on the same seeds/reference pack. Together these
+comparisons cover 1,536 completed games without interruption. Sampling presets
+remain separate measures; the student's better raw Policy does not imply a
+better Hard policy.
 
 Hard first/second results improved from 64/128 and 78/128 to 111/128 and 119/128;
 the teacher was 115/128 and 122/128. Warrior/Archer-reference wins rose from
@@ -281,8 +287,12 @@ A fresh fair console diagnostic against the earlier 131,112-step model won in
 round 6 using coordinated ranged attacks and a capture. All 33 agent-controlled
 choices, observation vectors, masks, 23 AI choices and the outcome were reproduced
 exactly. This was not a physical human trial. Its evaluation-only journal is
-excluded from both corpora. Counterplay against the aggregate initializer is
-still being checked separately.
+excluded from both corpora. The aggregate initializer won a separate round-4
+diagnostic after the agent moved its city defender away despite revealing an
+approaching Rider. Its 12 agent choices, 23 AI choices, observation vectors,
+masks and outcome reproduced exactly. This agent mistake and one game do not
+establish reliable tactical defense or human difficulty. Both journals remain
+evaluation-only and excluded from fitting.
 
 Further strength work needs fresh full-game seeds, both starting roles, retained
 opponents and coordinated counterplay. Better teacher approximation does not
