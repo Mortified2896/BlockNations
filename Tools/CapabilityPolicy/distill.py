@@ -28,7 +28,7 @@ from policy import CapabilityActor, probabilities, export, ARCHITECTURE
 from trainer import register
 from train import exclusive, recipe
 from artifacts import checkpoint
-from corpus import load
+from corpus import load_many
 from initialization import OWNER
 from architectures import actor_class, ARCHITECTURES
 
@@ -61,7 +61,7 @@ def metrics(actor, arrays, indices):
 
 
 def prepare(root, corpus_manifest, destination, *, width=32, seed=209, updates=2048, architecture=ARCHITECTURE):
-    root, corpus_manifest, destination=(Path(path).absolute() for path in (root, corpus_manifest, destination))
+    root, destination=(Path(path).absolute() for path in (root, destination))
     if (root.resolve()!=root or json.loads((root/ROOT_MARKER).read_text()).get('owner')!='BlockNations.LocalTraining.v1' or
             destination.resolve()!=destination or not destination.is_relative_to(root/'benchmarks') or destination==root/'benchmarks' or
             width not in (16,32,64) or not 0<=seed<2**31 or not 128<=updates<=16384):
@@ -69,7 +69,7 @@ def prepare(root, corpus_manifest, destination, *, width=32, seed=209, updates=2
     power=PowerGuard(True); power.check()
     if size(root)>19_400_000_000 or shutil.disk_usage(root).free<20_600_000_000:
         raise RuntimeError('Preserve shared storage and the final-save reserve.')
-    arrays, data=load(root,corpus_manifest)
+    arrays, data=load_many(root,corpus_manifest)
     train=np.flatnonzero(~arrays['validation']); validation=np.flatnonzero(arrays['validation'])
     register(); torch.manual_seed(seed)
     contract=spec(4)
@@ -84,12 +84,15 @@ def prepare(root, corpus_manifest, destination, *, width=32, seed=209, updates=2
     best_score=initial['multiChoice']['kl']+.1*initial['valueMSE']; best_state=copy.deepcopy(actor.state_dict())
     best_metrics=initial; best_update=0; update=0; last_policy=None; last_torch_random=None
     record=dict(owner='BlockNations.CapabilityDistillation.v1',state='training',partition='training',architecture=architecture,
-                corpusManifest=str(corpus_manifest),corpusManifestSha256=hashlib.sha256(corpus_manifest.read_bytes()).hexdigest(),
+                corpusSources=data['corpusSources'],corpusIdentityKind=data['corpusIdentityKind'],
                 corpusSha256=data['corpusSha256'],teacher=data['teacher'],rulesVersion=data['rulesVersion'],boardSize=data['boardSize'],
                 width=width,seed=seed,updates=updates,initialValidation=initial,history=[],sources=pins,
                 teacherSampling=data.get('teacherSampling',dict(mode='Policy',settings=None)),
                 optimization=dict(learningRate=.001,batchSize=128,valueCoefficient=.1,gradientClip=1.,
                     target='recorded teacher sampling probabilities and fair raw-teacher critic value'),startedUnix=time.time())
+    if len(data['corpusSources']) == 1:
+        record.update(corpusManifest=data['corpusSources'][0]['manifest'],
+                      corpusManifestSha256=data['corpusSources'][0]['manifestSha256'])
     atomic_json(destination/'distillation.json',record)
     deadline=time.monotonic()+1800; next_check=0
     def guard():
@@ -150,7 +153,9 @@ def prepare(root, corpus_manifest, destination, *, width=32, seed=209, updates=2
         initializer=dict(owner=OWNER,state='prepared',kind='teacher-distillation',partition='training',architecture=architecture,
                          observationVersion=4,actionVersion=2,openingEconomyVersion=2,rulesVersion=data['rulesVersion'],boardSize=data['boardSize'],
                          width=width,checkpoint=str(saved),checkpointSha256=health['checkpointSha256'],
-                         corpusSha256=data['corpusSha256'],teacher=data['teacher'],sourceDistillation=str(destination/'distillation.json'),
+                         corpusSha256=data['corpusSha256'],corpusIdentityKind=data['corpusIdentityKind'],
+                         corpusSources=data['corpusSources'],teacher=data['teacher'],sourceDistillation=str(destination/'distillation.json'),
+                         teacherSampling=data.get('teacherSampling',dict(mode='Policy',settings=None)),
                          bestUpdate=best_update,validation=best_metrics,ppoStep=0,ppoAdam='fresh-empty',probabilityExportMaximumError=maximum)
         atomic_json(folder/'manifest.json',initializer)
         record.update(state='prepared',bestUpdate=best_update,bestValidation=best_metrics,initializationManifest=str(folder/'manifest.json'))
@@ -163,14 +168,17 @@ def prepare(root, corpus_manifest, destination, *, width=32, seed=209, updates=2
                         distillationOptimizer=optimizer.state_dict(),bestPolicy=best_state,bestUpdate=best_update,
                         update=update,randomState=random.bit_generator.state,
                         torchRandomState=last_torch_random if last_torch_random is not None else torch.get_rng_state(),
-                        corpusSha256=data['corpusSha256'],sources=pins),destination/'progress.pt')
+                        corpusSha256=data['corpusSha256'],corpusIdentityKind=data['corpusIdentityKind'],
+                        corpusSources=data['corpusSources'],sources=pins),destination/'progress.pt')
         record['finishedUnix']=time.time(); atomic_json(destination/'distillation.json',record)
     return record
 
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
-    for name in ('root','corpus','destination'): parser.add_argument('--'+name,type=Path,required=True)
+    for name in ('root','destination'): parser.add_argument('--'+name,type=Path,required=True)
+    parser.add_argument('--corpus',type=Path,action='append',required=True,
+                        help='Repeat for up to four compatible owned training corpora; preserve all whole-match splits.')
     parser.add_argument('--width',type=int,choices=(16,32,64),default=32)
     parser.add_argument('--architecture',choices=tuple(ARCHITECTURES),default=ARCHITECTURE)
     parser.add_argument('--seed',type=int,default=209); parser.add_argument('--updates',type=int,default=2048)

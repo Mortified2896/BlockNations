@@ -26,6 +26,8 @@ from information_study_runtime import PowerGuard
 from train import exclusive
 from corpus import OWNER, group, validate
 from playtest_sampling import PRESETS, sampling_weights
+from rollout import FrozenStudent, behaviour_distribution
+import league
 
 
 def teacher_distribution(probabilities, allowed, mode):
@@ -42,19 +44,24 @@ def teacher_distribution(probabilities, allowed, mode):
 
 
 def collect(root, teacher, worker, destination, *, decisions=8192, seed=21501501,
-            teacher_mode='Policy', action_noise=.2):
+            teacher_mode='Policy', action_noise=.2, student=None, student_mode='Hard',
+            teacher_fraction=1., opponents_from=None):
     root, teacher, worker, destination = (Path(path).absolute() for path in (root, teacher, worker, destination))
     estimate = decisions*(4712*4+259*5+32)
     if (root.resolve() != root or json.loads((root/ROOT_MARKER).read_text()).get('owner') != 'BlockNations.LocalTraining.v1' or
             destination.resolve() != destination or not destination.is_relative_to(root/'benchmarks') or
             destination == root/'benchmarks' or decisions not in (4096, 8192, 16384) or not 0 <= seed < 2**31 or
             teacher_mode not in ('Policy', *PRESETS) or type(action_noise) not in (int, float) or
-            not math.isfinite(action_noise) or not 0 <= action_noise <= .2):
+            not math.isfinite(action_noise) or not 0 <= action_noise <= .2 or
+            student_mode not in ('Policy', *PRESETS) or type(teacher_fraction) not in (int, float) or
+            not math.isfinite(teacher_fraction) or not 0 <= teacher_fraction <= 1 or
+            student is None and teacher_fraction != 1):
         raise ValueError('Use a new bounded owned corpus and an explicit recorded seed.')
     model = checked_manifest(root, teacher)
     if version('mlagents') != '1.1.0':
         raise RuntimeError('Teacher collection requires audited ML-Agents 1.1.0.')
     actor, identity = frozen_actor(teacher, model['rulesVersion'])
+    student_policy = FrozenStudent(root, student, rules=model['rulesVersion'], board_size=7) if student is not None else None
     plan = json.loads(Path(model['trainerConfig']).read_text())['behaviors'][behavior(actor.observation_version)]
     if plan['hyperparameters'].get('shared_critic'):
         raise ValueError('This teacher adapter requires its recorded separate extrinsic critic.')
@@ -89,13 +96,24 @@ def collect(root, teacher, worker, destination, *, decisions=8192, seed=21501501
                       settings=list(PRESETS[teacher_mode]) if teacher_mode in PRESETS else None),
                   valueLabels='fair critic of the unmodified teacher; approximate under changed sampling',
                   actionNoise=dict(kind='uniform-over-all-legal-actions', probability=action_noise), startedUnix=time.time())
+    if student_policy is not None:
+        record['studentRollout'] = dict(student_policy.identity, sampling=student_mode,
+            samplingSettings=list(PRESETS[student_mode]) if student_mode in PRESETS else None,
+            teacherFraction=teacher_fraction, labelSource='unmodified-frozen-teacher')
     record.update(sources=pins,packages={name:version(name) for name in ('mlagents','torch','numpy')})
     arrays = dict(observations=np.empty((decisions, 4712), np.float32), allowed=np.empty((decisions, 259), np.bool_),
                   teacherProbabilities=np.empty((decisions, 259), np.float32), teacherValues=np.empty(decisions, np.float32),
                   validation=np.empty(decisions, np.bool_), group=np.empty(decisions, np.uint64))
     rollout = destination/'rollout'; rollout.mkdir()
+    assignment = lambda: None
+    if opponents_from is not None:
+        record['retainedOpponents'] = league.install(root, opponents_from, rollout,
+            dict(boardSize=7, rulesVersion=model['rulesVersion']))
+        record['referenceSeat'] = 1
+        context = dict(learningSeat=0, learner='frozen-corpus-mixture', opponent='frozen-corpus-mixture')
+        assignment = lambda: context
     env = DotNetEnvironment(worker, rollout, 4, seed, 7, False, 2, uuid.uuid4().hex,
-                           rules_version=model['rulesVersion'], observation_version=4)
+                           rules_version=model['rulesVersion'], observation_version=4, policy_provider=assignment)
     random = np.random.default_rng(seed); count = 0
     atomic_json(destination/'manifest.json', record)
     try:
@@ -108,6 +126,10 @@ def collect(root, teacher, worker, destination, *, decisions=8192, seed=21501501
                 allowed = ~current.action_mask[0]
                 p = actor.probabilities(current.obs[0], ~allowed)
                 p = teacher_distribution(p, allowed, teacher_mode)
+                behaviour = p
+                if student_policy is not None:
+                    student_p = teacher_distribution(student_policy.probabilities(current.obs[0], allowed), allowed, student_mode)
+                    behaviour = behaviour_distribution(p, student_p, teacher_fraction)
                 with torch.no_grad():
                     labels = critic([torch.as_tensor(current.obs[0][:, :actor.observation_size])])[0]['extrinsic'].numpy()
                 choices = []
@@ -122,7 +144,7 @@ def collect(root, teacher, worker, destination, *, decisions=8192, seed=21501501
                         arrays['teacherValues'][count] = labels[i]
                         arrays['validation'][count] = held; arrays['group'][count] = key
                         count += 1
-                    choice = random.choice(np.flatnonzero(allowed[i])) if random.random() < action_noise else random.choice(259, p=p[i])
+                    choice = random.choice(np.flatnonzero(allowed[i])) if random.random() < action_noise else random.choice(259, p=behaviour[i])
                     choices.append([choice])
                 env.set_actions(name, ActionTuple(discrete=np.array(choices, dtype=np.int32)))
             env.step()
@@ -134,6 +156,11 @@ def collect(root, teacher, worker, destination, *, decisions=8192, seed=21501501
         record.update(state='completed', corpus=str(path), corpusSha256=hashlib.sha256(path.read_bytes()).hexdigest(),
                       rejections=0, collectionGames=sum(stat['games'] for stat in env.stats),
                       collectionInterruptions=sum(stat['interruptions'] for stat in env.stats))
+        if opponents_from is not None:
+            record.update(challengerDecisions=env.opponents.decisions,
+                          challengerDecisionsByPolicy=env.opponents.decisions_by_policy)
+            if record['retainedOpponents']['probability'] > 0 and not env.opponents.decisions:
+                raise ValueError('The corpus league did not produce actual opposing actions.')
     except BaseException as error:
         record.update(state='failed', error=type(error).__name__+': '+str(error), collectedDecisions=count)
         raise
@@ -150,8 +177,14 @@ if __name__ == '__main__':
     parser.add_argument('--teacher-mode', choices=('Policy', *PRESETS), default='Policy',
                         help='The same explicit sampler supplies both labels and rollout actions.')
     parser.add_argument('--action-noise', type=float, default=.2)
+    parser.add_argument('--student', type=Path, help='Prepared or completed frozen student for new rollouts; labels stay with the teacher.')
+    parser.add_argument('--student-mode', choices=('Policy', *PRESETS), default='Hard')
+    parser.add_argument('--teacher-fraction', type=float, default=1.)
+    parser.add_argument('--opponents-from', type=Path, help='Compatible retained training league, never recorded evaluation games.')
     args = parser.parse_args(); torch.set_num_threads(1)
     with exclusive(args.root.absolute()):
         result = collect(args.root, args.teacher, args.worker, args.destination, decisions=args.decisions, seed=args.seed,
-                         teacher_mode=args.teacher_mode, action_noise=args.action_noise)
+                         teacher_mode=args.teacher_mode, action_noise=args.action_noise,
+                         student=args.student, student_mode=args.student_mode, teacher_fraction=args.teacher_fraction,
+                         opponents_from=args.opponents_from)
     print(json.dumps({key: result[key] for key in ['state', 'decisions', 'trainingGroups', 'validationGroups', 'rejections']}))

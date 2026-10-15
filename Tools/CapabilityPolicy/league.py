@@ -112,7 +112,7 @@ def install(root, source, run, contract):
         entry['checkpoint'] = str((target/checkpoint.name).relative_to(run))
         entry['trainerConfig'] = str((target/config.name).relative_to(run))
     atomic_json(run/'run.json', dict(wanted, schema=4, runId=run.name,
-        architecture=contract['architecture'], behavior='BlockNationsSeatV4',
+        architecture=contract.get('architecture'), behavior='BlockNationsSeatV4',
         observationSize=4712, actionCount=259, experiment='capability-retained-opponents'))
     atomic_json(run/'training-opponents.json', recipe)
     (run/'retained-opponents-source.json').write_bytes(original)

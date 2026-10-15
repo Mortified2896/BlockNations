@@ -18,12 +18,13 @@ def group(seed, worker, match, reset):
     return int.from_bytes(digest[:8], 'big'), digest[8] % 5 == 0
 
 
-def validate(arrays):
+def validate(arrays, *, aggregate=False):
     if set(arrays) != set(FIELDS):
         raise ValueError('Unexpected corpus fields.')
     values, allowed, target, value, held, groups = (arrays[name] for name in FIELDS)
     count = len(values)
-    if (not 128 <= count <= 16384 or values.shape != (count, OBSERVATIONS) or values.dtype != np.float32 or
+    if (type(aggregate) is not bool or not 128 <= count <= (65536 if aggregate else 16384) or
+            values.shape != (count, OBSERVATIONS) or values.dtype != np.float32 or
             allowed.shape != (count, ACTIONS) or allowed.dtype != np.bool_ or
             target.shape != allowed.shape or target.dtype != np.float32 or
             value.shape != (count,) or value.dtype != np.float32 or
@@ -78,3 +79,41 @@ def load(root, manifest):
     if any(record.get(key) != value for key, value in measured.items()):
         raise ValueError('Corpus counts disagree with their complete tensor data.')
     return arrays, record
+
+
+def load_many(root, manifests):
+    """Aggregate a bounded set of compatible training corpora, retaining each split."""
+    if isinstance(manifests, (str, Path)):
+        manifests = [manifests]
+    if not isinstance(manifests, (list, tuple)) or not 1 <= len(manifests) <= 4:
+        raise ValueError('Use one to four explicit owned training corpora.')
+    loaded = []; records = []; sources = []
+    for manifest in manifests:
+        path = Path(manifest).absolute()
+        if (path.resolve() != path or not path.is_relative_to(Path(root).absolute()/'benchmarks') or
+                path.stat().st_size > 128_000):
+            raise ValueError('Aggregate only bounded owned corpus manifests.')
+        before = hashlib.sha256(path.read_bytes()).hexdigest()
+        arrays, record = load(root, path)
+        if hashlib.sha256(path.read_bytes()).hexdigest() != before:
+            raise ValueError('A training corpus changed during aggregation.')
+        loaded.append(arrays); records.append(record)
+        sources.append(dict(manifest=str(path), manifestSha256=before, corpusSha256=record['corpusSha256']))
+    if len({record['corpusSha256'] for record in records}) != len(records):
+        raise ValueError('Duplicate corpora must not silently reweight the training set.')
+    if len(records) == 1:
+        return loaded[0], dict(records[0], corpusSources=sources, corpusIdentityKind='single-npz-sha256')
+    shared = ('teacher', 'rulesVersion', 'boardSize', 'openingEconomyVersion', 'observationVersion', 'actionVersion')
+    first = records[0]
+    sampling = lambda record: record.get('teacherSampling', dict(mode='Policy', settings=None))
+    if (any(first.get(key) is None for key in shared) or not isinstance(first['teacher'], dict) or
+            any(any(record.get(key) != first[key] for key in shared) or sampling(record) != sampling(first)
+                for record in records[1:])):
+        raise ValueError('Aggregate only the same teacher, sampler, rules, board and tensor contract.')
+    arrays = {name:np.concatenate([part[name] for part in loaded]) for name in FIELDS}
+    summary = validate(arrays, aggregate=True)
+    identity = hashlib.sha256(json.dumps(sources, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    metadata = {key:first[key] for key in shared}
+    metadata.update(summary, corpusSha256=identity, corpusIdentityKind='ordered-source-manifest-and-corpus-sha256-list',
+                    corpusSources=sources, teacherSampling=sampling(first))
+    return arrays, metadata
