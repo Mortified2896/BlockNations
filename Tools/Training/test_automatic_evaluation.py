@@ -57,6 +57,36 @@ class AutomaticEvaluationTests(unittest.TestCase):
         self.write(self.run / 'board-7-progress.json', dict(version=2, boardSize=7, decisions=-1))
         with self.assertRaises(ValueError): decisions(self.run)
 
+    def test_benchmark_worker_pin_requires_an_existing_absolute_file(self):
+        for worker in ('relative-worker', False, None, str(self.root), str(self.root/'missing')):
+            with self.subTest(worker=worker):
+                self.config['worker'] = worker
+                self.write(self.run / CONFIG, self.config)
+                with self.assertRaisesRegex(ValueError, 'benchmark worker'):
+                    settings(self.run)
+        self.config['worker'] = str(self.worker)
+        self.write(self.run / CONFIG, self.config)
+        self.assertEqual(settings(self.run)['worker'], str(self.worker))
+
+    @patch('automatic_evaluation.subprocess.Popen')
+    @patch('automatic_evaluation.latest_checkpoint')
+    @patch('automatic_evaluation.ready', return_value=True)
+    def test_scheduler_uses_benchmark_worker_instead_of_changed_learning_worker(self, ready_mock, latest, launch):
+        benchmark_worker = self.root/'benchmark-worker'
+        benchmark_worker.write_bytes(b'pinned benchmark')
+        scheduler = Scheduler(self.run, self.worker)
+        # A configuration repair must apply even after the scheduler was started.
+        self.config['worker'] = str(benchmark_worker)
+        self.write(self.run / CONFIG, self.config)
+        latest.return_value = self.root/'BlockNationsSeatV2-77.pt'
+        launch.return_value.poll.return_value = None
+        scheduler.tick()
+        command = launch.call_args.args[0]
+        self.assertEqual(command[command.index('--worker')+1], str(benchmark_worker))
+        self.assertEqual(scheduler.worker, self.worker)
+        self.assertFalse((self.run/'stop.request').exists())
+        scheduler.close()
+
     def test_pauses_stale_supervisors_and_storage_pressure_do_not_start_evaluation(self):
         with patch('automatic_evaluation.shutil.disk_usage', return_value=Mock(free=30_000_000_000)):
             self.assertTrue(ready(self.run, self.supervisor))
@@ -228,6 +258,8 @@ class AutomaticEvaluationTests(unittest.TestCase):
         with self.assertRaises(ValueError):settings(self.run)
 
     def test_population_rejection_preserves_champion_and_skips_the_direct_challenge(self):
+        benchmark_worker = self.root/'benchmark-worker'
+        benchmark_worker.write_bytes(b'pinned benchmark')
         for accepted in (False,True):
             with self.subTest(populationAccepted=accepted):
                 source=self.root/'BlockNationsSeatV2-77.pt';source.write_bytes(b'fixture')
@@ -235,7 +267,7 @@ class AutomaticEvaluationTests(unittest.TestCase):
                 manifest=folder/'manifest.json';self.write(manifest,{})
                 self.write(self.run/'trainer.yaml',{});self.write(self.run/'training-opponents.json',{})
                 self.write(self.run/'playtest-champion.json',dict(candidateManifest='old.json',suiteId='fixed',checkpoint='old'))
-                self.config.update(headToHeadPromotion=True,populationPromotion=True,playtestSelectionMode='Hard');self.write(self.run/CONFIG,self.config)
+                self.config.update(headToHeadPromotion=True,populationPromotion=True,playtestSelectionMode='Hard',worker=str(benchmark_worker));self.write(self.run/CONFIG,self.config)
                 job_dir=self.run/'evaluations/automatic'/str(accepted);job_dir.mkdir(parents=True)
                 job_path=job_dir/'job.json';self.write(job_path,dict(owner=OWNER,runId='saved'))
                 evidence={label:job_dir/(label+'.json') for label in ('primary','confirmation')}
@@ -245,22 +277,30 @@ class AutomaticEvaluationTests(unittest.TestCase):
                         patch('playtest_champion.resolve_champion'), \
                         patch('automatic_evaluation.latest_checkpoint',return_value=source), \
                         patch('evaluate_milestone.freeze',return_value=manifest), \
-                        patch('evaluate_suite.run',return_value=dict(results=[dict(games=64)],suiteId='fixed')), \
+                        patch('evaluate_suite.run',return_value=dict(results=[dict(games=64)],suiteId='fixed')) as evaluate, \
                         patch('population_promotion.review',return_value=dict(accepted=accepted,reasons=['fixture'],candidateConfirmationGames=64)) as population, \
                         patch('champion_matches.challenge',return_value=evidence) as challenge, \
                         patch('reference_score.publish'), \
                         patch('playtest_champion.select',return_value=dict(checkpoint='new')) as select:
                     result=perform_job(self.run,self.worker,job_path)
                 population.assert_called_once()
+                self.assertEqual(evaluate.call_args.args[2], benchmark_worker)
+                self.assertEqual(population.call_args.args[3], benchmark_worker)
+                self.assertEqual(result['worker'], str(benchmark_worker))
                 self.assertEqual(result['state'],'promoted' if accepted else 'retained')
                 self.assertEqual(result['games'],640 if accepted else 128)
                 if accepted:
                     challenge.assert_called_once();select.assert_called_once_with(self.run,manifest,job_dir/'results/suite.json',head_to_head=evidence,required_modes=('Hard',))
+                    self.assertEqual(challenge.call_args.args[4], benchmark_worker)
                 else:
                     challenge.assert_not_called();select.assert_not_called()
                     self.assertEqual((self.run/'playtest-champion.json').read_bytes(),before)
 
     def test_source_change_refreshes_same_champion_before_candidate_evaluation(self):
+        benchmark_worker = self.root/'benchmark-worker'
+        benchmark_worker.write_bytes(b'pinned benchmark')
+        self.config['worker'] = str(benchmark_worker)
+        self.write(self.run / CONFIG, self.config)
         source = self.root/'BlockNationsSeatV2-77.pt';source.write_bytes(b'fixture')
         folder = self.run/'frozen-evaluations/fixture-77';folder.mkdir(parents=True)
         manifest = folder/'manifest.json';self.write(manifest, {})
@@ -282,6 +322,8 @@ class AutomaticEvaluationTests(unittest.TestCase):
             result = perform_job(self.run, self.worker, job_path)
         baseline.assert_called_once();refresh.assert_called_once_with(self.run, receipt)
         evaluate.assert_called_once()
+        self.assertEqual(baseline.call_args.args[3], benchmark_worker)
+        self.assertEqual(evaluate.call_args.args[2], benchmark_worker)
         self.assertEqual(result['state'], 'retained')
 
     @patch('automatic_evaluation.subprocess.Popen')

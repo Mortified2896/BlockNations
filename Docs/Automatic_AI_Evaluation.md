@@ -66,11 +66,21 @@ Configuration is an optional generated file in the owned run:
   "runId": "mac-7x7-core3-gentle-20261011",
   "enabled": true,
   "intervalDecisions": 2000000,
+  "worker": "/absolute/path/to/the/benchmark/BlockNations.TrainingWorker",
   "suite": "/absolute/path/inside/the/training/root/to/fixed-suite.json"
 }
 ```
 
 The explicit suite is source-pinned and must match the incumbent's benchmark. Changing evaluator/worker/reference identity requires re-evaluating both candidates under a new compatible pack, rather than comparing incompatible results. Other boards and observation contracts are not automatically activated.
+
+The optional `worker` pins evaluation independently of the learner's worker. It
+must be an absolute path to an existing built worker; the suite's fingerprint
+check still verifies its executable and managed companions before any games run.
+Without this setting, evaluation uses the `--worker` supplied by its supervisor or
+standalone launcher. Each job reads the setting afresh and records the effective
+worker path, so an installed pin also applies to an already-running scheduler.
+Training-worker updates must preserve this benchmark worker, or explicitly create
+a new benchmark and refresh the incumbent under the same worker as its challengers.
 
 `automatic-evaluation-status.json` reports the current candidate, job path, last result/reason, cumulative decision milestone and next trigger. Each job retains full match records and an `evaluations/automatic/<id>/job.json` receipt. The scheduler uses an exclusive OS file lock, runs one job at a time, coalesces missed milestones rather than creating a backlog, and avoids repeating the same checkpoint. Recent three completed jobs plus selected evidence are retained; only explicitly marked automatic artifacts are eligible for its cleanup. Manual, pinned and selected models remain protected.
 

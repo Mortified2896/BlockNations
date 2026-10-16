@@ -59,6 +59,10 @@ def settings(run):
     if (type(config.get('populationPromotion', False)) is not bool or
             config.get('populationPromotion', False) and not config.get('headToHeadPromotion', False)):
         raise ValueError('Population promotion supplements the replicated direct-incumbent gate.')
+    if 'worker' in config:
+        worker = config['worker']
+        if not isinstance(worker, str) or not Path(worker).is_absolute() or not Path(worker).is_file():
+            raise ValueError('The benchmark worker must be an absolute path to a built C# worker.')
     mode=config.get('playtestSelectionMode','HardAndPolicy')
     if mode not in ('Hard','HardAndPolicy') or mode == 'Hard' and not config.get('populationPromotion',False):
         raise ValueError('Hard selection requires its replicated population and direct gates.')
@@ -109,6 +113,10 @@ def perform_job(run, worker, job_path):
         raise ValueError('Evaluation job belongs to a different run.')
     try:
         config = settings(run)
+        # Resolve on every job, including jobs launched by an already-running
+        # supervisor/scheduler that still passes its learning worker as fallback.
+        worker = Path(config.get('worker', worker))
+        job['worker'] = str(worker)
         incumbent = read_json(run / 'playtest-champion.json')
         resolve_champion(run)
         _, _, _, definition = prepare(run / incumbent['candidateManifest'], Path(config['suite']))
@@ -308,8 +316,9 @@ class Scheduler:
         folder.mkdir(parents=True, exist_ok=False)
         self.job_path = folder / 'job.json'
         atomic_json(self.job_path, dict(owner=OWNER, runId=self.run.name, state='queued', decisions=count))
+        worker = Path(config.get('worker', self.worker))
         command = [sys.executable, str(Path(__file__).absolute()), '--run', str(self.run),
-                   '--worker', str(self.worker), '--job', str(self.job_path)]
+                   '--worker', str(worker), '--job', str(self.job_path)]
         if sys.platform == 'darwin':
             command = ['/usr/bin/nice', '-n', '10'] + command
         self.log = (folder / 'evaluation.log').open('wb')
