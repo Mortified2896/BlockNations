@@ -36,6 +36,9 @@ def policy(root):
     if not value['enabled']:
         return None
     result = dict(DEFAULTS, **value)
+    result.setdefault('mode', 'idle')
+    if result['mode'] not in ('idle', 'background'):
+        raise ValueError('Resource mode must be idle or background.')
     for key in DEFAULTS.keys() - {'owner', 'enabled'}:
         if type(result[key]) not in (int, float) or not math.isfinite(result[key]):
             raise ValueError('Invalid numeric resource policy: ' + key)
@@ -84,7 +87,7 @@ def sample_host():
 
 
 def assess(root, state, running, now=None, sample=None):
-    """Update the caller's persisted gate; require sustained headroom to resume.
+    """Gate idle-only work or allow paced background progress under ordinary load.
 
     Unknown/malformed readings defer work and clear the healthy interval, rather
     than converting a temporary busy machine into a permanent learner fault.
@@ -96,7 +99,7 @@ def assess(root, state, running, now=None, sample=None):
             state.clear()
             state.update(enabled=False, allowed=True, reason='')
             return state
-        if (sample is None and state.get('running') == running and
+        if (sample is None and state.get('mode') == config['mode'] and state.get('running') == running and
                 0 <= now - state.get('sampledUnix', -1e10) < config['sampleSeconds']):
             return state
         current = sample_host() if sample is None else sample
@@ -129,15 +132,25 @@ def assess(root, state, running, now=None, sample=None):
             reasons.append('cpu_busy')
         if swap_rate is not None and swap_rate >= config['maxSwapMBps']:
             reasons.append('active_swapping')
+        warnings = []
+        if config['mode'] == 'background':
+            # nice 19, passive I/O and WorkBudget yield CPU time to other work.
+            # Whole-host load and warning-level memory pressure can persist for
+            # hours; using them as start/stop gates would starve the learner.
+            warnings = [reason for reason in reasons if reason in ('cpu_busy', 'active_swapping') or
+                        reason == 'memory_pressure' and current['memoryPressure'] == 2]
+            reasons = [reason for reason in reasons if reason not in warnings]
         if not fresh:
             state.pop('healthySinceUnix', None)
         if reasons:
             state.pop('healthySinceUnix', None)
         else:
             state.setdefault('healthySinceUnix', now)
-        allowed = not reasons and (running or fresh and now - state['healthySinceUnix'] >= config['idleSeconds'])
-        state.update(enabled=True, running=running, sampledUnix=now, sample=current,
+        allowed = not reasons and (running or fresh and
+                  (config['mode'] == 'background' or now - state['healthySinceUnix'] >= config['idleSeconds']))
+        state.update(enabled=True, mode=config['mode'], running=running, sampledUnix=now, sample=current,
                      cpuBusyPercent=busy, swapMBps=swap_rate, allowed=bool(allowed),
+                     warnings=', '.join(warnings),
                      reason=', '.join(reasons) if reasons else '' if allowed else 'waiting_for_idle_capacity')
     except (OSError, ValueError, TypeError, KeyError, RuntimeError, subprocess.SubprocessError) as error:
         state.pop('healthySinceUnix', None)

@@ -45,6 +45,60 @@ class ResourcePolicyTests(unittest.TestCase):
         self.assertFalse(assess(self.root,{},False,15,sample(15,busy=55))['allowed'])
         self.assertFalse(assess(self.root,state,True,30,sample(30,busy=75))['allowed'])
 
+    def background_mode(self):
+        (self.root/'resource-policy.json').write_text(json.dumps(dict(DEFAULTS,mode='background')))
+
+    def test_background_progress_survives_hours_of_ordinary_host_pressure(self):
+        self.background_mode()
+        state={}
+        self.assertFalse(assess(self.root,state,False,0,sample(memory=2,load=24))['allowed'])
+        for now in range(15,7201,15):
+            result=assess(self.root,state,now>15,now,
+                          sample(now,busy=80,memory=2,load=24,swap=now*2_000_000))
+            self.assertTrue(result['allowed'],result)
+            self.assertEqual(result['reason'],'')
+            self.assertEqual(set(result['warnings'].split(', ')),
+                             {'cpu_busy','memory_pressure','active_swapping'})
+
+    def test_background_keeps_critical_memory_thermal_and_unknown_reading_guards(self):
+        self.background_mode()
+        for reading,reason in ((sample(15,memory=4),'memory_pressure'),
+                               (sample(15,thermal=1),'thermal_pressure'),
+                               ({},'resource_reading_unavailable')):
+            for running in (False,True):
+                state={};assess(self.root,state,running,0,sample())
+                result=assess(self.root,state,running,15,reading)
+                self.assertFalse(result['allowed']);self.assertIn(reason,result['reason'])
+        state={};assess(self.root,state,False,0,sample())
+        self.assertFalse(assess(self.root,state,False,200,sample(200))['allowed'])
+
+    def test_switch_from_idle_mode_rechecks_cached_gate(self):
+        with patch('resource_policy.sample_host',return_value=sample(memory=2,load=24)) as probe:
+            state={};assess(self.root,state,False,0)
+            self.background_mode()
+            result=assess(self.root,state,False,2)
+            self.assertEqual(probe.call_count,2)
+            self.assertTrue(result['allowed']);self.assertEqual(result['mode'],'background')
+
+    def test_background_controller_resumes_and_still_stops_on_battery(self):
+        self.background_mode()
+        command=['python','supervisor.py','--root',str(self.root),'--run-id','saved','--resume']
+        config=dict(root=str(self.root),runId='saved',command=command,enabled=True)
+        processes={};signals=[];launches=[]
+        def launch(cmd):
+            launches.append(cmd);processes[12]=cmd
+            (self.root/'supervisor.lock').write_text('12')
+            return 12
+        state={}
+        for now in (0,15,30):
+            state=tick(config,state,True,80,now,processes.get,signals.append,launch,
+                       resources=sample(now,busy=80,memory=2,load=24,swap=now*2_000_000))
+        self.assertEqual(launches,[command]);self.assertEqual(state['state'],'running')
+        state=tick(config,state,False,80,45,processes.get,signals.append,launch,
+                   resources=sample(45,busy=80,memory=2,load=24))
+        self.assertEqual(state['state'],'saving');self.assertEqual(signals,[12])
+        self.assertEqual(state['stopReason'],'unplugged')
+
     def test_memory_warmth_and_active_swap_yield_immediately(self):
         for reading,reason in ((sample(15,memory=2),'memory_pressure'),(sample(15,memory=4),'memory_pressure'),
                                (sample(15,thermal=1),'thermal_pressure'),
@@ -64,7 +118,7 @@ class ResourcePolicyTests(unittest.TestCase):
         self.assertTrue(state['allowed']);self.assertNotIn('error',state)
 
     def test_policy_validation_is_bounded_and_missing_policy_is_opt_out(self):
-        for key,value in (('activeFraction',0),('pauseCpuPercent',10),('idleSeconds',float('nan')),('enabled','true')):
+        for key,value in (('activeFraction',0),('pauseCpuPercent',10),('idleSeconds',float('nan')),('enabled','true'),('mode','unknown')):
             (self.root/'resource-policy.json').write_text(json.dumps(dict(DEFAULTS,**{key:value})))
             with self.assertRaises(ValueError):policy(self.root)
             self.assertFalse(assess(self.root,{},True,0,sample())['allowed'])
