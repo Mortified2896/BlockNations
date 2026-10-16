@@ -113,6 +113,13 @@ export class AccessStore {
     const operation = new URL(request.url).pathname;
     if (request.method !== "POST") return new Response(null, { status: 405 });
     const input = await request.json();
+    if (operation === '/feedback-recipient') {
+      // Private DO/service-binding operation only. Public routes never forward
+      // arbitrary operation names or return reporter account identifiers.
+      if(typeof input.id !== 'string' || !/^[a-f0-9]{32}$/.test(input.id))return new Response(null,{status:400});
+      const report=this.sql.exec('SELECT uid AS owner FROM game_feedback WHERE id=?',input.id).toArray()[0];
+      return report?Response.json(report):new Response(null,{status:404});
+    }
     if (operation === '/feedback-export') {
       if(!Number.isSafeInteger(input.offset)||input.offset<0)return new Response(null,{status:400});
       return Response.json(this.feedbackExport(input.offset));
