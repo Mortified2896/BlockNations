@@ -8,6 +8,7 @@ const REVIEW_ORIGIN = "https://feedback.moneymattersmedia.com";
 export class AccessStore {
   constructor(ctx, env) {
     this.sql = ctx.storage.sql;
+    this.ctx = ctx;
     this.env = env;
     this.sql.exec(`CREATE TABLE IF NOT EXISTS game_testers (
       auth_user_id TEXT PRIMARY KEY, email TEXT NOT NULL, display_name TEXT NOT NULL,
@@ -33,7 +34,36 @@ export class AccessStore {
       screenshot TEXT NOT NULL, created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS game_feedback_created ON game_feedback(created_at);
-    CREATE INDEX IF NOT EXISTS game_feedback_user ON game_feedback(uid,created_at);`);
+    CREATE INDEX IF NOT EXISTS game_feedback_user ON game_feedback(uid,created_at);
+    CREATE TABLE IF NOT EXISTS feedback_hub_outbox(id TEXT PRIMARY KEY,attempts INTEGER NOT NULL DEFAULT 0,next_at INTEGER NOT NULL,state TEXT NOT NULL DEFAULT 'pending');`);
+  }
+
+  feedbackExport(offset = 0) {
+    const rows=this.sql.exec(`SELECT f.id,f.category,f.description,f.version,f.platform,f.screen,f.mode,f.turn,f.created_at,
+      (f.screenshot<>'') AS has_screenshot,t.display_name FROM game_feedback f LEFT JOIN game_testers t ON t.auth_user_id=f.uid
+      ORDER BY f.created_at,f.id LIMIT 51 OFFSET ?`,offset).toArray();
+    return {reports:rows.slice(0,50),hasMore:rows.length>50};
+  }
+  async scheduleFeedback() {
+    if(!this.env.FEEDBACK)return;
+    const next=this.sql.exec("SELECT MIN(next_at) AS at FROM feedback_hub_outbox WHERE state='pending'").toArray()[0]?.at;
+    if(next)await this.ctx.storage.setAlarm(Math.max(Date.now()+100,next));
+  }
+  async alarm() {
+    if(!this.env.FEEDBACK)return;
+    const pending=this.sql.exec("SELECT * FROM feedback_hub_outbox WHERE state='pending' AND next_at<=? ORDER BY next_at LIMIT 20",Date.now()).toArray();
+    for(const job of pending) {
+      const report=this.sql.exec(`SELECT f.id,f.category,f.description,f.version,f.platform,f.screen,f.mode,f.turn,f.created_at,
+        (f.screenshot<>'') AS has_screenshot,t.display_name FROM game_feedback f LEFT JOIN game_testers t ON t.auth_user_id=f.uid WHERE f.id=?`,job.id).toArray()[0];
+      try {
+        if(report){const response=await this.env.FEEDBACK.fetch('https://feedback-internal.invalid/internal/blocknations-feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(report)});if(!response.ok)throw Error('Hub unavailable');}
+        this.sql.exec("UPDATE feedback_hub_outbox SET state='sent' WHERE id=?",job.id);
+      } catch {
+        const attempts=job.attempts+1;
+        this.sql.exec('UPDATE feedback_hub_outbox SET attempts=?,next_at=?,state=? WHERE id=?',attempts,Date.now()+Math.min(3600000,30000*2**Math.min(attempts,7)),'pending',job.id);
+      }
+    }
+    await this.scheduleFeedback();
   }
 
   tester(uid) {
@@ -83,17 +113,22 @@ export class AccessStore {
     const operation = new URL(request.url).pathname;
     if (request.method !== "POST") return new Response(null, { status: 405 });
     const input = await request.json();
+    if (operation === '/feedback-export') {
+      if(!Number.isSafeInteger(input.offset)||input.offset<0)return new Response(null,{status:400});
+      return Response.json(this.feedbackExport(input.offset));
+    }
     if (operation === "/feedback-submit") {
       // First successful write wins; retrying an acknowledged or timed-out send
       // cannot silently replace its contents or attach a second screenshot.
       const existing = this.sql.exec("SELECT uid FROM game_feedback WHERE id=?", input.id).toArray()[0];
-      if (existing) return Response.json({ limited: existing.uid !== input.uid });
+      if (existing) { if(existing.uid===input.uid&&this.env.FEEDBACK){this.sql.exec('INSERT OR IGNORE INTO feedback_hub_outbox(id,next_at) VALUES(?,?)',input.id,Date.now());await this.scheduleFeedback();}return Response.json({ limited: existing.uid !== input.uid }); }
       const since = new Date(Date.now() - 3600000).toISOString();
       const recent = this.sql.exec("SELECT COUNT(*) count FROM game_feedback WHERE uid=? AND created_at>?", input.uid, since).toArray()[0].count;
       if (recent >= 10) return Response.json({ limited: true });
       this.sql.exec("INSERT INTO game_feedback VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", input.id, input.uid, input.origin,
         input.category, input.description, input.version, input.platform, input.screen, input.mode, input.turn,
         input.screenshot, new Date().toISOString());
+      if(this.env.FEEDBACK){this.sql.exec('INSERT OR IGNORE INTO feedback_hub_outbox(id,next_at) VALUES(?,?)',input.id,Date.now());await this.scheduleFeedback();}
       return Response.json({ saved: true });
     }
     if (operation === "/feedback-list") {
