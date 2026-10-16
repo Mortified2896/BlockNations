@@ -12,6 +12,7 @@ import time
 from model_catalog import OWNER, discover, read
 from playtest import PlaytestSession, atomic_json
 from power_controller import command_for, read_power
+from resource_policy import assess
 
 
 class Selector:
@@ -102,14 +103,18 @@ class Selector:
             ac,percent=read_power();self.last_power=(ac,percent)
         except (OSError,subprocess.SubprocessError,ValueError):ac,percent=False,-1
         self.state.update(acPower=ac,batteryPercent=percent,activeRun=active or '')
+        capacity=assess(self.root,self.state.setdefault('resources',{}),active in self.commands)
         desired=self.state.get('desiredRun','')
-        if self.state.get('managesTraining') and active in self.commands and (not ac or percent<=75):
+        if self.state.get('managesTraining') and active in self.commands and (not ac or percent<=75 or not capacity['allowed']):
             (self.root/'runs'/active/'stop.request').touch();self.power_stopping=True;self.state['stoppingRun']=active
-            self.state['message']='Saving training; waiting for AC power and 80% battery.'
+            self.state['message']=('Saving training; waiting for spare capacity: '+capacity['reason'] if not capacity['allowed'] else
+                                   'Saving training; waiting for AC power and 80% battery.')
         if self.process is not None and self.process.poll() is not None:
             final=read(self.root/'runs'/self.state.get('launchedRun','')/'supervisor-status.json')
             if self.training_log:self.training_log.close();self.training_log=None
             self.process=None
+            if final.get('stopReason')=='host_resources':
+                self.power_stopping=True;self.state['observedRun']=''
             if final.get('state')!='stopped' or final.get('exitCode')!=0:
                 self.state.update(desiredRun='',error='Trainer exited without a verified saved shutdown. Review its run logs.',message='Training stopped with an error.')
             elif not self.power_stopping and desired==self.state.get('launchedRun'):
@@ -126,10 +131,13 @@ class Selector:
             self.state['observedRun']=''
         if desired and not active and self.process is None and self.state.get('observedRun')==desired:
             final=read(self.root/'runs'/desired/'supervisor-status.json')
-            self.state.update(desiredRun='',message='Training session finished and saved.' if final.get('state')=='stopped' and final.get('exitCode')==0 else 'Training ended unexpectedly; review its run logs.')
-            desired=''
+            if final.get('state')=='stopped' and final.get('exitCode')==0 and final.get('stopReason')=='host_resources':
+                self.state['observedRun']=''
+            else:
+                self.state.update(desiredRun='',message='Training session finished and saved.' if final.get('state')=='stopped' and final.get('exitCode')==0 else 'Training ended unexpectedly; review its run logs.')
+                desired=''
         if desired and not active and self.process is None:
-            if ac and percent>=80:
+            if ac and percent>=80 and capacity['allowed']:
                 run=self.root/'runs'/desired
                 control=read(run/'training-control.json');atomic_json(run/'training-control.json',dict(control,paused=False))
                 # The existing supervisor owns the root lock, storage reserve and final save.
@@ -138,8 +146,10 @@ class Selector:
                 self.training_log=log.open('ab')
                 self.process=subprocess.Popen(self.commands[desired],stdin=subprocess.DEVNULL,stdout=self.training_log,
                     stderr=subprocess.STDOUT,start_new_session=True)
+                self.power_stopping=False
                 self.state.update(launchedRun=desired,message='Starting saved training: '+desired)
-            else:self.state['message']='Selected '+desired+'; waiting for AC power and at least 80% battery.'
+            else:self.state['message']=('Selected '+desired+'; waiting for spare capacity: '+capacity['reason'] if not capacity['allowed'] else
+                                        'Selected '+desired+'; waiting for AC power and at least 80% battery.')
         elif desired and active and active!=desired:self.state['message']='Saving '+active+' before starting '+desired
         if time.monotonic()>=self.next_catalog:
             self.next_catalog=time.monotonic()+5;self.catalog=discover(self.root)

@@ -21,6 +21,7 @@ from training_contract import (RULES_VERSION, OBSERVATIONS, ACTIONS, OPENING_ECO
                                POLICY_CATALOG, CORE_THREE_RULES, validate_opening_economy, validate_rules_version)
 from training_opponents import TrainingOpponents
 from model_contract import SIZES, behavior, names, spec, validate_schema
+from resource_policy import ROOT_ENV, WorkBudget
 
 BEHAVIOR = 'BlockNationsSeatV2'
 NAMES = [BEHAVIOR + '?team=' + str(seat) for seat in (0, 1)]
@@ -64,6 +65,7 @@ class DotNetEnvironment(BaseEnv):
         self.failure = ''
         self.next_status = 0
         self.started = time.monotonic()
+        self.work_budget = WorkBudget(os.environ.get(ROOT_ENV))
         self.responses = queue.Queue(maxsize=2)
         self.stderr_tail = ''
         executable = Path(executable).absolute()
@@ -116,6 +118,9 @@ class DotNetEnvironment(BaseEnv):
     def _exchange(self, request):
         if self.closed:
             raise RuntimeError('Simulation is closed.')
+        budget = getattr(self, 'work_budget', None)
+        if budget is not None and request['op'] in ('step', 'reference', 'reset'):
+            budget.pace()
         # A reference RPC computes bounded searches for several arenas in one
         # response. Keep ordinary steps fail-fast, but allow the larger batch
         # its own bounded deadline. Never retry an action with unknown outcome.

@@ -16,6 +16,7 @@ import time
 import uuid
 
 from playtest import atomic_json, read_json, latest_checkpoint
+from resource_policy import assess, policy, lower_compute_priority
 
 OWNER = 'BlockNations.AutomaticEvaluation.v1'
 CONFIG = 'automatic-evaluation.json'
@@ -256,9 +257,12 @@ class Scheduler:
         config = settings(self.run)
         supervisor = read_json(self.run / 'supervisor-status.json')
         running = config is not None and ready(self.run, supervisor)
+        capacity=assess(self.run.parent.parent,self.state.setdefault('resources',{}),bool(self.process))
+        resource_wait=not capacity['allowed']
+        timeout=1800/self.state.get('activeFraction',1)
         if self.process:
             cancelled = False
-            if not running or time.time() - self.state['startedUnix'] > 1800:
+            if not running or resource_wait or time.time() - self.state['startedUnix'] > timeout:
                 stop_process(self.process)
                 cancelled = True
             if self.process.poll() is None:
@@ -271,9 +275,14 @@ class Scheduler:
                            reason='Evaluation cancelled for pause, stop, storage headroom or timeout.' if cancelled else
                            'Evaluation process stopped before reporting a result.')
                 atomic_json(self.job_path, job)
+            retry_capacity=cancelled and job.get('state') == 'cancelled' and (resource_wait or supervisor.get('stopReason') == 'host_resources')
+            if retry_capacity:
+                # Preserve partial evidence and eligibility; capacity is not a failed benchmark.
+                self.state['lastEvaluatedDecisions']=self.state.pop('previousEvaluatedDecisions',0)
             self.state.update(state='waiting', lastOutcome=job.get('state', 'failed'),
                               lastReason=job.get('reason', 'Evaluation process stopped before reporting a result.'),
-                              lastCandidateStep=job.get('candidateStep', self.state['candidateStep']))
+                              lastCandidateStep=self.state.get('lastCandidateStep',0) if retry_capacity else
+                              job.get('candidateStep', self.state['candidateStep']))
             self.state['reviewRequired'] = job.get('review', {}).get('state') == 'review_required'
             self.state['stage'] = ''
             self.process = None
@@ -287,6 +296,10 @@ class Scheduler:
             return
         if not running:
             self.state.update(state='waiting', reason='Waiting for active training and storage headroom.')
+            self.publish()
+            return
+        if resource_wait:
+            self.state.update(state='waiting_for_resources',reason=capacity['reason'])
             self.publish()
             return
         count = decisions(self.run)
@@ -324,7 +337,10 @@ class Scheduler:
         self.log = (folder / 'evaluation.log').open('wb')
         self.process = subprocess.Popen(command, stdout=self.log, stderr=subprocess.STDOUT, start_new_session=True)
         request.unlink(missing_ok=True)
-        self.state.update(state='evaluating', candidateStep=step, lastEvaluatedDecisions=count,
+        resource_config=policy(self.run.parent.parent)
+        self.state.update(state='evaluating', candidateStep=step,
+                          activeFraction=resource_config['activeFraction'] if resource_config else 1,
+                          previousEvaluatedDecisions=self.state.get('lastEvaluatedDecisions',0),lastEvaluatedDecisions=count,
                           startedUnix=time.time(), job=str(self.job_path.relative_to(self.run)),
                           nextAtDecisions=count + config['intervalDecisions'])
         self.publish()
@@ -346,6 +362,7 @@ def main():
     run = args.run.absolute()
     settings(run)
     if args.job:
+        lower_compute_priority(run.parent.parent)
         with (run / 'automatic-evaluation-job.lock').open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             result = perform_job(run, args.worker, args.job)

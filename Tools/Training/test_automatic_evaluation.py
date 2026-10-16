@@ -100,6 +100,31 @@ class AutomaticEvaluationTests(unittest.TestCase):
     @patch('automatic_evaluation.subprocess.Popen')
     @patch('automatic_evaluation.latest_checkpoint')
     @patch('automatic_evaluation.ready', return_value=True)
+    def test_capacity_defers_benchmarks_and_cancelled_candidate_remains_eligible(self, ready_mock, latest, launch):
+        latest.return_value=self.root/'BlockNationsSeatV2-77000000.pt'
+        process=Mock();process.poll.return_value=None;launch.return_value=process
+        scheduler=Scheduler(self.run,self.worker)
+        with patch('automatic_evaluation.assess',return_value=dict(allowed=False,reason='memory_pressure')):
+            scheduler.tick();launch.assert_not_called()
+        with patch('automatic_evaluation.assess',return_value=dict(allowed=True)):
+            scheduler.tick();launch.assert_called_once()
+        original=scheduler.job_path
+        with patch('automatic_evaluation.assess',return_value=dict(allowed=False,reason='cpu_busy')), \
+                patch('automatic_evaluation.stop_process',side_effect=lambda p:setattr(p.poll,'return_value',0)):
+            scheduler.tick()
+        self.assertEqual(json.loads(original.read_text())['state'],'cancelled')
+        self.assertEqual(scheduler.state['lastEvaluatedDecisions'],0)
+        self.assertEqual(scheduler.state['lastCandidateStep'],0)
+        process.poll.return_value=None
+        with patch('automatic_evaluation.assess',return_value=dict(allowed=True)):
+            scheduler.tick()
+        self.assertEqual(launch.call_count,2);self.assertNotEqual(scheduler.job_path,original)
+        self.assertTrue(original.exists())
+        scheduler.close()
+
+    @patch('automatic_evaluation.subprocess.Popen')
+    @patch('automatic_evaluation.latest_checkpoint')
+    @patch('automatic_evaluation.ready', return_value=True)
     def test_single_job_and_persisted_milestone_survive_resume(self, ready_mock, latest, launch):
         latest.return_value = self.root / 'BlockNationsSeatV2-77000000.pt'
         process = Mock(); process.poll.return_value = None; launch.return_value = process

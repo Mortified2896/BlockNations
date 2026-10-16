@@ -8,6 +8,11 @@ from pathlib import Path
 import signal
 import time
 
+from resource_policy import ROOT_ENV, lower_compute_priority
+
+if os.environ.get(ROOT_ENV):
+    lower_compute_priority(os.environ[ROOT_ENV])
+
 import mlagents.trainers
 from mlagents.trainers import learn as sdk_learn
 from mlagents.trainers.ghost.trainer import GhostTrainer

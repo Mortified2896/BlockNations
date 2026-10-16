@@ -15,6 +15,7 @@ import subprocess
 import time
 
 from host_resources import thermal_state
+from resource_policy import assess
 
 
 def read(path):
@@ -111,7 +112,7 @@ def tick(config, state, ac, percent, now, inspect=command_for,
                                             stdout=subprocess.DEVNULL,
                                             stderr=subprocess.DEVNULL,
                                             start_new_session=True).pid,
-         thermal=None):
+         thermal=None, resources=None):
     root = Path(config['root'])
     command = config['command']
     if ('--resume' not in command or command[command.index('--root')+1] != str(root)
@@ -153,7 +154,11 @@ def tick(config, state, ac, percent, now, inspect=command_for,
         state.pop('lastPid', None)
         state.pop('launchPid', None)
     elif not running and (state.get('lastPid') or state.get('launchPid')):
-        if review_required:
+        final = read(root / 'runs' / config['runId'] / 'supervisor-status.json')
+        resource_stop = (final.get('supervisorPid') == (state.get('lastPid') or state.get('launchPid')) and
+                         final.get('state') == 'stopped' and final.get('exitCode') == 0 and
+                         final.get('stopReason') == 'host_resources')
+        if review_required or resource_stop:
             state.pop('lastPid', None)
             state.pop('launchPid', None)
         else:
@@ -164,6 +169,10 @@ def tick(config, state, ac, percent, now, inspect=command_for,
         state.pop('launchPid', None)
     decision = action(running, ac, percent, start, stop)
     resource_reason = ''
+    capacity = assess(root, state.setdefault('resources', {}), running, now, resources)
+    if not capacity['allowed'] and decision in ('start', 'keep'):
+        decision = 'stop' if running else 'resources'
+        resource_reason = capacity['reason']
     if config.get('thermalGuard', False):
         if type(thermal) is not int or thermal not in (0, 1, 2, 3):
             raise ValueError('Require a fresh valid thermal reading before managed training.')
@@ -198,6 +207,7 @@ def tick(config, state, ac, percent, now, inspect=command_for,
         state['state'] = ('benchmark_review_required' if decision == 'review' else
                           'waiting_for_cooling' if decision == 'cool' else
                           'waiting_for_study' if decision == 'study' else
+                          'waiting_for_resources' if decision == 'resources' else
                           'running' if running else 'waiting_for_power')
     return state
 

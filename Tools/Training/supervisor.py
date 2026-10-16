@@ -12,6 +12,7 @@ from playtest import PlaytestSession
 from decoupled_runtime import configure as configure_decoupled, ViewerSession
 from bounded_log import BoundedLog
 from automatic_evaluation_session import AutomaticEvaluationSession
+from resource_policy import assess, compute_environment
 from training_contract import (OPENING_ECONOMY_VERSION, LEGACY_OPENING_ECONOMY_VERSION,
                                RULES_VERSION, SUPPORTED_RULES, validate_opening_economy, run_rules_version)
 import json
@@ -460,6 +461,7 @@ def main() -> int:
     if contract.get('diagnosticOnly'):
         environment['BLOCKNATIONS_HUMAN_IMITATION'] = 'disabled'
     configure_decoupled(args, run, environment)
+    compute_environment(root, environment)
     try:
         entrypoint = trainer_script(run, args.backend)
     except ValueError:
@@ -528,6 +530,7 @@ def main() -> int:
             used, free = inventory['usedBytes'], shutil.disk_usage(root).free
             state.update({"state": "running", "elapsedSeconds": elapsed, "usedBytes": used, "freeBytes": free,
                           "removedArtifacts": removed[-20:], "updatedUtc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+            capacity = assess(root, state.setdefault('resources', {}), True)
             resident = process_tree_rss(process.pid)
             if resident is not None:
                 state["peakResidentBytes"] = max(state.get("peakResidentBytes", 0), resident)
@@ -552,6 +555,8 @@ def main() -> int:
                 reason = "user_stop"
             elif limit_reason := limits.stop_reason(elapsed, used, free):
                 reason = limit_reason
+            elif not capacity['allowed']:
+                reason = 'host_resources'
             elif arena.get("failure"):
                 reason = "arena_failure"
             elif rating_wait_started is not None and time.monotonic() - rating_wait_started > 30 and rating_session not in read_json(run / "match-elo.json").get("sequences", {}):

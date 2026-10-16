@@ -1,5 +1,9 @@
 # Power-controlled local training
 
+The [idle-capacity policy](Idle_Capacity_Training.md) now adds CPU, memory, swap
+and thermal headroom checks plus conservative compute scheduling. Its limits
+apply in addition to the battery thresholds below.
+
 Installed on this Mac on 2026-10-13 for the existing V2 run
 `mac-7x7-core3-gentle-20261011`. This does not select an overnight study actor,
 change the training recipe, or change macOS charging settings.

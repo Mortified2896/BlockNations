@@ -35,12 +35,19 @@ class CommunicationDeadlineTests(unittest.TestCase):
             env = object.__new__(DotNetEnvironment)
             env.closed = False; env.stderr_tail = ''
             env.process = Mock(); env.responses = Mock(); env.responses.get.side_effect = queue.Empty
+            env.work_budget = Mock()
+            order = Mock()
+            order.attach_mock(env.work_budget.pace, 'pace')
+            order.attach_mock(env.process.stdin.write, 'send')
+            order.attach_mock(env.responses.get, 'receive')
             env._publish_status = Mock()
             with self.assertRaisesRegex(RuntimeError, f'during {operation}'):
                 env._exchange(dict(op=operation))
             env.responses.get.assert_called_once_with(timeout=seconds)
             env.process.stdin.write.assert_called_once()
             env._publish_status.assert_called_once()
+            calls=[call[0] for call in order.mock_calls]
+            self.assertEqual(calls,['pace','send','receive'] if operation!='status' else ['send','receive'])
 
 
 @unittest.skipUnless(WORKER.is_file(), 'Build the actual shared C# worker first.')

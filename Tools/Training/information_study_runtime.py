@@ -9,6 +9,7 @@ import uuid
 from power_controller import read_power
 from host_resources import thermal_state
 from supervisor import atomic_json
+from resource_policy import ROOT_ENV, assess, lower_compute_priority
 
 
 class PowerPause(RuntimeError):
@@ -18,6 +19,9 @@ class PowerPause(RuntimeError):
 class PowerGuard:
     def __init__(self, enabled):
         self.enabled, self.running, self.next_check = enabled, False, 0
+        self.resources={}
+        self.resource_root=os.environ.get(ROOT_ENV)
+        if enabled and self.resource_root:lower_compute_priority(self.resource_root)
 
     def check(self):
         if not self.enabled or time.monotonic() < self.next_check:
@@ -35,6 +39,9 @@ class PowerGuard:
             raise PowerPause('Thermal pressure unavailable; saved study waits for a valid reading.') from error
         if thermal >= 2 or not self.running and thermal > 0:
             raise PowerPause('Study saved and paused until macOS reports nominal thermal pressure.')
+        capacity=assess(self.resource_root,self.resources,True)
+        if not capacity['allowed']:
+            raise PowerPause('Study saved and paused for spare capacity: '+capacity['reason'])
         self.running = True
 
 

@@ -9,6 +9,8 @@ import time
 from power_controller import command_for, read_power
 from host_resources import thermal_state
 from supervisor import atomic_json, read_json
+from resource_policy import assess, compute_environment
+import os
 
 
 def tick(config_path):
@@ -61,9 +63,14 @@ def tick(config_path):
         status['thermalState']=thermal
         if thermal != 0:
             status['state']='waiting_for_cooling';atomic_json(status_path,status);return
+        root=Path(command[command.index('--root')+1]) if '--root' in command else None
+        capacity=assess(root,status.setdefault('resources',{}),False)
+        if not capacity['allowed']:
+            status['state']='waiting_for_resources';atomic_json(status_path,status);return
         launch=command+(['--resume'] if receipt else [])
         process=subprocess.Popen(launch,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,
-                                 stderr=subprocess.DEVNULL,start_new_session=True)
+                                 stderr=subprocess.DEVNULL,start_new_session=True,
+                                 env=compute_environment(root,os.environ.copy()))
         status.update(state='starting',studyPid=process.pid);atomic_json(status_path,status)
 
 

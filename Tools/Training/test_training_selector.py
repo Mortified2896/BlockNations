@@ -99,3 +99,19 @@ class SelectorTests(unittest.TestCase):
         with patch('training_selector.read_power',return_value=(True,80)),patch('training_selector.subprocess.Popen') as launch:
             selector.tick();launch.assert_not_called()
         self.assertEqual(selector.state['desiredRun'],'')
+
+    def test_capacity_pause_preserves_selected_run_and_waits_before_resuming(self):
+        selector=Selector(self.root,self.config)
+        selector.state.update(desiredRun='full-run',observedRun='full-run',managesTraining=True)
+        atomic_json(self.full/'supervisor-status.json',dict(state='stopped',exitCode=0,stopReason='host_resources'))
+        with patch('training_selector.read_power',return_value=(True,80)), \
+                patch('training_selector.assess',return_value=dict(allowed=False,reason='memory_pressure')), \
+                patch('training_selector.subprocess.Popen') as launch:
+            selector.tick();launch.assert_not_called()
+        self.assertEqual(selector.state['desiredRun'],'full-run')
+        self.assertIn('spare capacity',selector.state['message'])
+        with patch('training_selector.read_power',return_value=(True,80)), \
+                patch('training_selector.assess',return_value=dict(allowed=True)), \
+                patch('training_selector.subprocess.Popen') as launch:
+            selector.tick();launch.assert_called_once()
+        if selector.training_log:selector.training_log.close()
