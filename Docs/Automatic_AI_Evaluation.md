@@ -1,5 +1,37 @@
 # Automatic private AI evaluations
 
+## Independent benchmark worker repair, 2026-10-16
+
+The main learner's overnight worker update had also changed the worker passed to
+automatic evaluation. The fixed suite still pinned its earlier executable and
+managed companions, so every new job failed with `Worker differs from the fixed
+benchmark definition.` before playing any games. Learning continued, while the
+displayed strength score remained at its October 15 result.
+
+Evaluation now has an explicit optional `worker` setting, resolved again inside
+every job. The installed setting points to a preserved copy of the exact original
+benchmark worker under the shared training root. Its fingerprint matches the
+unchanged suite. Existing and future supervisors can keep using the newer learning
+worker independently. The repair took effect in the existing scheduler without
+restarting the supervisor, learner or training arenas. Prior failed receipts and
+configuration were preserved under `benchmarks/evaluation-worker-repair-20261016/`.
+
+Validation passed 50 Python checks across scheduling, worker identity, population
+and direct promotion gates, champion preservation and score publication. One
+optional worker integration check was skipped; the installed full evaluation job
+provides the real-worker verification.
+
+The repaired job refreshed both incumbent baselines and evaluated checkpoint
+233,199,978 on both fixed-population packs. It won **491/512 (95.9%)** and
+**501/512 (97.9%)**, versus the incumbent's **463/512** and **462/512**. It also won
+**103/128** and **100/128** direct Hard games against the incumbent; raw Policy
+diagnostics were **75/128** and **79/128**. All 2,560 games, including refreshed
+baselines, completed without interruption. The existing population and direct
+gates promoted this checkpoint, published fresh strength scores, and left the
+same eight-arena learner running. The scheduler remains enabled every 2,000,000
+cumulative decisions. Full receipts remain under the run's
+`evaluations/automatic/233149967-dea570b3/` and the repair's benchmark directory.
+
 ## Direct champion selection correction, 2026-10-14
 
 The installed run now enables `headToHeadPromotion: true`. Champion selection uses
